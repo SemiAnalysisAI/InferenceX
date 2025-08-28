@@ -1,0 +1,55 @@
+name: LLaMA 70B TRT-LLM Template
+
+on:
+  workflow_call:
+    inputs:
+      exp-name:
+        required: true
+        type: string
+      isl:
+        required: true
+        type: string
+      osl:
+        required: true
+        type: string
+      max-model-len:
+        required: true
+        type: string
+      random-range-ratio:
+        required: true
+        type: string
+      timeout:
+        required: false
+        type: number
+        default: 180
+
+jobs:
+  find-latest-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the latest Docker image
+        run: echo "Hardcoding image tags for now."
+
+  bmk-b200-trt:
+    needs: find-latest-image
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      runner: b200-trt
+      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc0'
+      model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
+      tp-list: '[1, 2, 4, 8]'
+      timeout: ${{ inputs.timeout }}
+
+  collect-results:
+    needs: [bmk-b200-trt]
+    if: ${{ always() && !cancelled() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: ${{ inputs.exp-name }}

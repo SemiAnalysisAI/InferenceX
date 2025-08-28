@@ -26,7 +26,7 @@ jobs:
 
   _70b-trt-1k1k:
     needs: cleanup
-    uses: ./.github/workflows/70b-tmpl.yml
+    uses: ./.github/workflows/70b-trt-tmpl.yml
     secrets: inherit
     with:
       exp-name: '70b-trt_1k1k'
@@ -59,7 +59,7 @@ jobs:
 
   _70b-trt-8k1k:
     needs: cleanup
-    uses: ./.github/workflows/70b-tmpl.yml
+    uses: ./.github/workflows/70b-trt-tmpl.yml
     secrets: inherit
     with:
       exp-name: '70b-trt_8k1k'
@@ -93,7 +93,7 @@ jobs:
 
   _70b-trt-1k8k:
     needs: cleanup
-    uses: ./.github/workflows/70b-tmpl.yml
+    uses: ./.github/workflows/70b-trt-tmpl.yml
     secrets: inherit
     with:
       exp-name: '70b-trt_1k8k'
