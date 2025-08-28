@@ -43,7 +43,6 @@ env:
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   IMAGE: ${{ inputs.image }}
-  RUNNER_LABEL: ${{ inputs.runner }}
 
 jobs:
   benchmark:
@@ -75,6 +74,7 @@ jobs:
       - name: Launch job script
         run: |
           RUNNER_NAME=${{ runner.name }}
+          RUNNER_LABEL=${{ inputs.runner }}
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh ${{ inputs.exp-name }}
 
       - name: Process result
