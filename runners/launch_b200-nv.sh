@@ -18,6 +18,6 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${MODEL_CODE}_b200_slurm.sh
+bash benchmarks/${MODEL_CODE}_${RUNNER_LABEL}_slurm.sh
 
 scancel $JOB_ID

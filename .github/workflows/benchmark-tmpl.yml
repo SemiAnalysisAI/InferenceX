@@ -43,6 +43,7 @@ env:
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   IMAGE: ${{ inputs.image }}
+  RUNNER_LABEL: ${{ inputs.runner }}
 
 jobs:
   benchmark:
