@@ -69,7 +69,7 @@ jobs:
 
       - name: Set result filename
         run: |
-          RESULT_FILENAME=${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ runner.name }}
+          RESULT_FILENAME=${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
       - name: Launch job script
@@ -78,10 +78,12 @@ jobs:
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh ${{ inputs.exp-name }}
 
       - name: Process result
-        run: python3 utils/process_result.py ${{ inputs.runner }} ${{ env.TP }} ${{ env.RESULT_FILENAME }}
+        run: |
+          RESULT_FILENAME=${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}
+          python3 utils/process_result.py ${{ inputs.runner }} ${{ env.TP }} $RESULT_FILENAME
 
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}.json
+          name: ${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}
+          path: agg_${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}.json
