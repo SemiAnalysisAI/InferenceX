@@ -95,7 +95,7 @@ jobs:
           else
             FRAMEWORK="${{ inputs.runner }}"
           fi
-          python3 utils/process_result.py $FRAMEWORK ${{ env.TP }} $RESULT_FILENAME
+          python3 utils/process_result.py $FRAMEWORK ${{ env.TP }} $RESULT_FILENAME ${{ env.PRECISION }}
 
       - name: Upload result
         uses: actions/upload-artifact@v4

@@ -6,6 +6,7 @@ from pathlib import Path
 framework = sys.argv[1]  # First arg is the framework (TRT-LLM, vLLM, SGLang, etc.)
 tp_size = int(sys.argv[2])
 result_filename = sys.argv[3]
+precision = sys.argv[4] if len(sys.argv) > 4 else 'fp8'  # Fourth arg is precision, default to fp8
 
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
@@ -24,6 +25,7 @@ else:
 data = {
     'hw': hw,           # Hardware (B200, H200, etc.)
     'framework': framework,  # Framework (TRT-LLM, vLLM, SGLang, etc.)
+    'precision': precision,  # Precision (fp8, fp4, etc.)
     'tp': tp_size,
     'conc': int(bmk_result['max_concurrency']),
     'model': bmk_result['model_id'],
