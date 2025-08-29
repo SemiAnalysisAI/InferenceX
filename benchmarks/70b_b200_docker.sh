@@ -33,7 +33,7 @@ docker run --rm -d --network $network_name --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HOME_DIR/hf_hub_cache/:$HF_HUB_CACHE \
 -e HF_TOKEN=$HF_TOKEN -e HF_HUB_CACHE=$HF_HUB_CACHE -e TORCH_CUDA_ARCH_LIST="10.0" \
--e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
+-e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" -e VLLM_ATTENTION_BACKEND=FLASHINFER \
 --entrypoint=/bin/bash \
 $IMAGE \
 -lc "python3 -m pip uninstall nvidia-nccl-cu12 -y && python3 -m pip install --no-deps nvidia-nccl-cu12==2.26.2.post1 && \

@@ -27,14 +27,19 @@ for result_path in results_dir.rglob(f'*.json'):
 def plot_tput_vs_e2el():
     fig, ax = plt.subplots()
 
-    # Group by hardware and precision
+    # Group by hardware, framework, and precision
     for hw in set(result['hw'] for result in results):
-        for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw):
-            xs = [result.get('e2el', result.get('median_e2el', 0)) for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
-            ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
-            if xs and ys:
-                label = f"{hw.upper()}-{precision.upper()}"
-                ax.scatter(xs, ys, label=label, alpha=0.7)
+        for framework in set(result.get('framework', 'vLLM') for result in results if result['hw'] == hw):
+            for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework):
+                xs = [result.get('e2el', result.get('median_e2el', 0)) for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework and result.get('precision', 'fp8') == precision]
+                ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework and result.get('precision', 'fp8') == precision]
+                if xs and ys:
+                    # Only add framework label for TRT-LLM, keep vLLM simple
+                    if framework == 'TRT-LLM':
+                        label = f"{hw.upper()}-{framework}-{precision.upper()}"
+                    else:
+                        label = f"{hw.upper()}-{precision.upper()}"
+                    ax.scatter(xs, ys, label=label, alpha=0.7)
 
     for result in results:
         x = result.get('e2el', result.get('median_e2el', 0))
@@ -53,14 +58,19 @@ def plot_tput_vs_e2el():
 def plot_tput_vs_intvty():
     fig, ax = plt.subplots()
 
-    # Group by hardware and precision
+    # Group by hardware, framework, and precision
     for hw in set(result['hw'] for result in results):
-        for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw):
-            xs = [result.get('intvty', result.get('median_intvty', 0)) for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
-            ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
-            if xs and ys:
-                label = f"{hw.upper()}-{precision.upper()}"
-                ax.scatter(xs, ys, label=label, alpha=0.7)
+        for framework in set(result.get('framework', 'vLLM') for result in results if result['hw'] == hw):
+            for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework):
+                xs = [result.get('intvty', result.get('median_intvty', 0)) for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework and result.get('precision', 'fp8') == precision]
+                ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('framework', 'vLLM') == framework and result.get('precision', 'fp8') == precision]
+                if xs and ys:
+                    # Only add framework label for TRT-LLM, keep vLLM simple
+                    if framework == 'TRT-LLM':
+                        label = f"{hw.upper()}-{framework}-{precision.upper()}"
+                    else:
+                        label = f"{hw.upper()}-{precision.upper()}"
+                    ax.scatter(xs, ys, label=label, alpha=0.7)
 
     for result in results:
         x = result.get('intvty', result.get('median_intvty', 0))
