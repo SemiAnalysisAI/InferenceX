@@ -9,6 +9,7 @@ exp_name = sys.argv[2]
 hw_color = {
     'h100': 'lightgreen',
     'h200': 'green',
+    'h200-trt': 'darkgreen',
     'b200': 'black',
     'b200-trt': 'darkblue',
     'mi300x': 'pink',
