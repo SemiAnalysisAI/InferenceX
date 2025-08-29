@@ -5,7 +5,7 @@ export HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
 export PORT_OFFSET=${USER: -1}
 
 PARTITION="dgx-h200"
-SQUASH_FILE="/raid/image_${MODEL_CODE}_${RUNNER_LABEL}.sqsh"
+SQUASH_FILE="/raid/image_${MODEL_CODE}_${RUNNER_LABEL}-2.sqsh"
 
 salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | tail -1)
