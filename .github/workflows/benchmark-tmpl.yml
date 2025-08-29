@@ -100,5 +100,5 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ runner.name }}
+          name: ${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ env.PRECISION }}_${{ runner.name }}
           path: agg_${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}.json

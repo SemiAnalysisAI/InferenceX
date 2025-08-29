@@ -27,15 +27,19 @@ for result_path in results_dir.rglob(f'*.json'):
 def plot_tput_vs_e2el():
     fig, ax = plt.subplots()
 
-    for hw, color in hw_color.items():
-        xs = [result['median_e2el'] for result in results if result['hw'] == hw]
-        ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw]
-        if xs and ys:
-            ax.scatter(xs, ys, label=hw.upper(), color=color)
+    # Group by hardware and precision
+    for hw in set(result['hw'] for result in results):
+        for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw):
+            xs = [result.get('e2el', result.get('median_e2el', 0)) for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
+            ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
+            if xs and ys:
+                label = f"{hw.upper()}-{precision.upper()}"
+                ax.scatter(xs, ys, label=label, alpha=0.7)
 
     for result in results:
-        x, y = result['median_e2el'], result['tput_per_gpu']
-        ax.annotate(str(result['tp']), (x, y), textcoords='offset points', xytext=(3, 3), ha='left', fontsize=8)
+        x = result.get('e2el', result.get('median_e2el', 0))
+        y = result['tput_per_gpu']
+        ax.annotate(f"{result['tp']}-{result.get('precision', 'fp8').upper()}", (x, y), textcoords='offset points', xytext=(3, 3), ha='left', fontsize=8)
 
     ax.set_xlabel('End-to-end Latency (s)')
     ax.set_ylabel('Throughput per GPU (tok/s)')
@@ -49,15 +53,19 @@ def plot_tput_vs_e2el():
 def plot_tput_vs_intvty():
     fig, ax = plt.subplots()
 
-    for hw, color in hw_color.items():
-        xs = [result['median_intvty'] for result in results if result['hw'] == hw]
-        ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw]
-        if xs and ys:
-            ax.scatter(xs, ys, label=hw.upper(), color=color)
+    # Group by hardware and precision
+    for hw in set(result['hw'] for result in results):
+        for precision in set(result.get('precision', 'fp8') for result in results if result['hw'] == hw):
+            xs = [result.get('intvty', result.get('median_intvty', 0)) for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
+            ys = [result['tput_per_gpu'] for result in results if result['hw'] == hw and result.get('precision', 'fp8') == precision]
+            if xs and ys:
+                label = f"{hw.upper()}-{precision.upper()}"
+                ax.scatter(xs, ys, label=label, alpha=0.7)
 
     for result in results:
-        x, y = result['median_intvty'], result['tput_per_gpu']
-        ax.annotate(str(result['tp']), (x, y), textcoords='offset points', xytext=(3, 3), ha='left', fontsize=8)
+        x = result.get('intvty', result.get('median_intvty', 0))
+        y = result['tput_per_gpu']
+        ax.annotate(f"{result['tp']}-{result.get('precision', 'fp8').upper()}", (x, y), textcoords='offset points', xytext=(3, 3), ha='left', fontsize=8)
 
     ax.set_xlabel('Interactivity (tok/s/user)')
     ax.set_ylabel('Throughput per GPU (tok/s)')
