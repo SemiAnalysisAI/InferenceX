@@ -40,7 +40,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      runner: b200-nv
+      runner: b200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc0'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
       tp-list: '[2]'
@@ -56,7 +56,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      runner: h200-nv
+      runner: h200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc0'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
       tp-list: '[2]'
