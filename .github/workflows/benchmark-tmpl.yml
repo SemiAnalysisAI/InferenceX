@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         tp: ${{ fromJson(inputs.tp-list) }}
-        conc: [4, 8, 16, 32, 64]
+        conc: [4]
     name: '${{ inputs.runner }} (tp${{ matrix.tp }} , conc${{ matrix.conc }})'
 
     env:
