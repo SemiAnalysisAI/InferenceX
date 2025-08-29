@@ -59,7 +59,7 @@ jobs:
       runner: h200
       image: 'kedarpotdar147/vllm0.1:latest'
       model: 'nvidia/Llama-3.1-70B-Instruct-FP8'
-      tp-list: '[1, 2, 4, 8]'
+      tp-list: '[2]'
       timeout: ${{ inputs.timeout }}
 
   bmk-b200:
@@ -75,7 +75,7 @@ jobs:
       runner: b200
       image: 'kedarpotdar147/vllm0.1:latest'
       model: 'nvidia/Llama-3.1-70B-Instruct-FP8'
-      tp-list: '[1, 2, 4, 8]'
+      tp-list: '[2]'
       timeout: ${{ inputs.timeout }}
 
   bmk-mi300x:
