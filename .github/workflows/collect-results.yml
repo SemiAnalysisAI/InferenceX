@@ -22,7 +22,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: results/
-          pattern: ${{ inputs.exp-name }}_*
+          pattern: ${{ inputs.exp-name }}*
+      
+      - name: Download TRT artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results/
+          pattern: 70b-trt*
 
       - name: Print summary
         run: python3 utils/summarize.py results/ ${{ inputs.exp-name }} >> $GITHUB_STEP_SUMMARY
