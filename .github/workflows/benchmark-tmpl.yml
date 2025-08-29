@@ -29,6 +29,10 @@ on:
       tp-list:
         required: true
         type: string
+      precision:
+        required: false
+        type: string
+        default: 'fp8'
       timeout:
         required: true
         type: number
@@ -44,6 +48,7 @@ env:
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   IMAGE: ${{ inputs.image }}
   RUNNER_LABEL: ${{ inputs.runner }}
+  PRECISION: ${{ inputs.precision }}
 
 jobs:
   benchmark:
