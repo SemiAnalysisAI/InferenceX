@@ -164,7 +164,7 @@ jobs:
 
 
   collect-results:
-    needs: [bmk-b200, bmk-b200-trt, bmk-h200-trt, bmk-b200-trt-fp4]
+    needs: [bmk-b200,  bmk-h200-trt, bmk-b200-trt-fp4]
     if: ${{ always() && !cancelled() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
