@@ -18,10 +18,19 @@ summary_header = f'''\
 print(summary_header)
 
 for result in results:
-    # Extract framework from experiment name or runner
-    framework = 'vLLM'  # default
-    if 'trt' in result.get('exp_name', '').lower() or 'trt' in result.get('runner', '').lower():
-        framework = 'TRT-LLM'
+    # Extract framework - prefer explicit framework field, fallback to detection
+    framework = result.get('framework', 'vLLM')  # default to vLLM if not specified
+    
+    # If no explicit framework field, try to detect from other fields
+    if framework == 'vLLM':
+        exp_name = result.get('exp_name', '')
+        runner = result.get('runner', '')
+        
+        # Check for TRT-LLM indicators
+        if ('trt' in exp_name.lower() or 'trt' in runner.lower() or 
+            'trt-llm' in exp_name.lower() or 'trt-llm' in runner.lower() or
+            'tensorrt' in exp_name.lower() or 'tensorrt' in runner.lower()):
+            framework = 'TRT-LLM'
     
     print(
         f"| {result['hw'].upper()} "
