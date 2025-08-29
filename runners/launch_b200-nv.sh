@@ -8,7 +8,7 @@ PARTITION="dgx-b200"
 SQUASH_FILE="/raid/image_${MODEL_CODE}_${RUNNER_LABEL}.sqsh"
 
 salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
-JOB_ID=$(squeue -u $USER -h -o %A)
+JOB_ID=$(squeue -u $USER -h -o %A | tail -1)
 
 set -x
 srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
