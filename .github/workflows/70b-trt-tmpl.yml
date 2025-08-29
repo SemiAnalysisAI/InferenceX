@@ -43,7 +43,7 @@ jobs:
       runner: b200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc1'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
-      tp-list: '[2]'
+      tp-list: '[1, 2, 4, 8]'
       precision: 'fp8'
       timeout: ${{ inputs.timeout }}
 
@@ -60,11 +60,10 @@ jobs:
       runner: h200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc1'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
-      tp-list: '[2]'
+      tp-list: '[1, 2, 4, 8]'
       precision: 'fp8'
       timeout: ${{ inputs.timeout }}
 
-  # FP4 variants
   bmk-b200-trt-fp4:
     needs: find-latest-image
     uses: ./.github/workflows/benchmark-tmpl.yml
@@ -78,7 +77,7 @@ jobs:
       runner: b200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc1'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP4'
-      tp-list: '[2]'
+      tp-list: '[1, 2, 4, 8]'
       precision: 'fp4'
       timeout: ${{ inputs.timeout }}
 
