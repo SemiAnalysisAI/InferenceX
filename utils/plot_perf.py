@@ -8,10 +8,8 @@ results_dir = Path(sys.argv[1])
 exp_name = sys.argv[2]
 hw_color = {
     'h100': 'lightgreen',
-    'h200': 'green',
-    'h200-trt': 'darkgreen',
+    'h200': 'darkgreen',
     'b200': 'black',
-    'b200-trt': 'darkblue',
     'mi300x': 'pink',
     'mi325x': 'red',
     'mi355x': 'purple'
@@ -36,10 +34,11 @@ def plot_tput_vs_e2el():
                 if xs and ys:
                     # Only add framework label for TRT-LLM, keep vLLM simple
                     if framework == 'TRT-LLM':
-                        label = f"{hw.upper()}-{framework}-{precision.upper()}"
+                        label = f"{hw.upper()}-TRT-{precision.upper()}"
                     else:
                         label = f"{hw.upper()}-{precision.upper()}"
-                    ax.scatter(xs, ys, label=label, alpha=0.7)
+                    color = hw_color.get(hw.lower(), 'blue')
+                    ax.scatter(xs, ys, label=label, color=color, alpha=0.7)
 
     for result in results:
         x = result.get('e2el', result.get('median_e2el', 0))
@@ -67,10 +66,11 @@ def plot_tput_vs_intvty():
                 if xs and ys:
                     # Only add framework label for TRT-LLM, keep vLLM simple
                     if framework == 'TRT-LLM':
-                        label = f"{hw.upper()}-{framework}-{precision.upper()}"
+                        label = f"{hw.upper()}-TRT-{precision.upper()}"
                     else:
                         label = f"{hw.upper()}-{precision.upper()}"
-                    ax.scatter(xs, ys, label=label, alpha=0.7)
+                    color = hw_color.get(hw.lower(), 'blue')
+                    ax.scatter(xs, ys, label=label, color=color, alpha=0.7)
 
     for result in results:
         x = result.get('intvty', result.get('median_intvty', 0))
