@@ -80,7 +80,17 @@ jobs:
       - name: Process result
         run: |
           RESULT_FILENAME=${{ env.EXP_NAME }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ inputs.runner }}
-          python3 utils/process_result.py ${{ inputs.runner }} ${{ env.TP }} $RESULT_FILENAME
+          # Determine framework based on image
+          if [[ "${{ inputs.image }}" == *"tensorrt-llm"* ]]; then
+            FRAMEWORK="TRT-LLM"
+          elif [[ "${{ inputs.image }}" == *"vllm"* ]]; then
+            FRAMEWORK="vLLM"
+          elif [[ "${{ inputs.image }}" == *"sglang"* ]]; then
+            FRAMEWORK="SGLang"
+          else
+            FRAMEWORK="${{ inputs.runner }}"
+          fi
+          python3 utils/process_result.py $FRAMEWORK ${{ env.TP }} $RESULT_FILENAME
 
       - name: Upload result
         uses: actions/upload-artifact@v4
