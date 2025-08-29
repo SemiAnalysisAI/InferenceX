@@ -21,13 +21,15 @@ hf download $MODEL
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
+pip uninstall -y nvidia-nccl-cu12
+pip install nvidia-nccl-cu12==2.26.2.post1
+
 export TORCH_CUDA_ARCH_LIST="10.0"
-export VLLM_ATTENTION_BACKEND=FLASHINFER
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code --quantization modelopt --kv-cache-dtype fp8 --gpu-memory-utilization 0.9 \
 --pipeline-parallel-size 1 --tensor-parallel-size $TP --max-num-seqs $CONC --max-num-batched-tokens 8192 --max-model-len $MAX_MODEL_LEN \
 --enable-chunked-prefill --async-scheduling --no-enable-prefix-caching \
---compilation-config '{"pass_config":{"enable_fi_allreduce_fusion":true,"enable_attn_fusion":true,"enable_noop":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}' \
+--compilation-config '{"pass_config": {"enable_fi_allreduce_fusion": true}, "custom_ops": ["+rms_norm"], "level": 3}' \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 set +x
