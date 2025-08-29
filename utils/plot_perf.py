@@ -10,6 +10,7 @@ hw_color = {
     'h100': 'lightgreen',
     'h200': 'green',
     'b200': 'black',
+    'b200-trt': 'darkblue',
     'mi300x': 'pink',
     'mi325x': 'red',
     'mi355x': 'purple'
