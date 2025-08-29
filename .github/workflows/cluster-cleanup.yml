@@ -24,7 +24,7 @@ jobs:
           - 'h200-nv_2'
           - 'h200-nv_3'
           - 'b200-nv_0'
-          #- 'b200-nv_1' temp disable
+          - 'b200-nv_1' 
           - 'mi325x-tw_0'
           - 'mi325x-tw_1'
           - 'mi325x-tw_2'
