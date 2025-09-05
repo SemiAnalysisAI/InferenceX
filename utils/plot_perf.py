@@ -23,7 +23,11 @@ for result_path in results_dir.rglob(f'*.json'):
         result = json.load(f)
     # Create combined hw+framework identifier for plotting
     if result.get('framework') == 'trt':
-        result['hw_label'] = f"{result['hw']}-trt"
+        # Check if hardware name already contains framework suffix
+        if result['hw'].endswith('-trt'):
+            result['hw_label'] = result['hw']
+        else:
+            result['hw_label'] = f"{result['hw']}-trt"
     else:
         result['hw_label'] = result['hw']
     results.append(result)
