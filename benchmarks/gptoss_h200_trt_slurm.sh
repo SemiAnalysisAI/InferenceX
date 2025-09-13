@@ -53,7 +53,7 @@ EOF
 
 
 #mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
-mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --max_batch_size $CONC --max_num_tokens 20000 --backend pytorch --extra_llm_api_options gptoss-config.yml  --ep_size 1 --trust_remote_code --gpus_per_node 8 --host 0.0.0.0 --port 8000 --tp_size=$TP --pp_size=1 > $SERVER_LOG 2>&1 &
+mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --max_batch_size $CONC --max_num_tokens 20000 --backend pytorch --extra_llm_api_options gptoss-config.yml  --ep_size 1 --trust_remote_code --gpus_per_node 8 --host 0.0.0.0 --port $PORT --tp_size=$TP --pp_size=1 > $SERVER_LOG 2>&1 &
 
 
 set +x
