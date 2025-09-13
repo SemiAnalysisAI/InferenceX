@@ -31,7 +31,7 @@ pip install -r python/requirements.txt          # build-time dependencies
 pip install wheel build
 python3 setup.py bdist_wheel
 pip install ./dist/*.whl
-export TRITON_ROOT=/app/tensorrt_llm/triton
+export TRITON_ROOT=/workspace/triton
 export ENABLE_PDL=1 
 
 set -x
