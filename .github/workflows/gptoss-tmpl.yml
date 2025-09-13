@@ -58,6 +58,24 @@ jobs:
       framework: 'vllm'
       precision: 'fp4'
 
+  bmk-h200-trt:
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      runner: h200-trt
+      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
+      model: 'openai/gpt-oss-120b'
+      tp-list: '[1, 2, 4, 8]'  
+      timeout: ${{ inputs.timeout }}
+      framework: 'trt'
+      precision: 'fp4'
+
+
   # bmk-mi355x:
   #   uses: ./.github/workflows/benchmark-tmpl.yml
   #   secrets: inherit
