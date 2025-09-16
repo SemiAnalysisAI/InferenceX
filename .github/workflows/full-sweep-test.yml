@@ -51,7 +51,7 @@ jobs:
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
 
-  agg-success-rate:
+  calc-success-rate:
     needs: mega-test-run
     runs-on: ubuntu-latest
 
