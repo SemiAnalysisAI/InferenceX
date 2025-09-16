@@ -53,6 +53,7 @@ jobs:
 
   agg-success-rate:
     needs: mega-test-run
+    runs-on: ubuntu-latest
 
     env:
       RESULTS_DIR: "results/"
