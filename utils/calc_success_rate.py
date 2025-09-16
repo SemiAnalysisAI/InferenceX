@@ -2,15 +2,15 @@ import sys
 import json
 from pathlib import Path
 
-n_iosl = 3  # [1k1k, 8k1k, 1k8k]
+n_iosl = 3   # [1k1k, 8k1k, 1k8k]
 n_concs = 5  # [4, 8, 16, 32, 64]
 total_runs = {
-    'h100': (3 + 4) * n_iosl * n_concs,  # 70b-tp: [2, 4, 8], gptoss-tp: [1, 2, 4, 8]
-    'h200': (4 + 1 + 4) * 2 * n_iosl * n_concs, # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]) x [vllm/sglang, trt]
+    'h100': (3 + 4) * n_iosl * n_concs,                # 70b-tp: [2, 4, 8], gptoss-tp: [1, 2, 4, 8]
+    'h200': (4 + 1 + 4) * 2 * n_iosl * n_concs,        # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]) x [vllm/sglang, trt]
     'b200': ((2 + 1) * 2 + 2) * 2 * n_iosl * n_concs,  # ((70b-tp: [1, 2], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2]) x [vllm/sglang, trt]
-    'mi300x': (4 + 1 + 4) * n_iosl * n_concs,  # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi325x': (4 + 1 + 4) * n_iosl * n_concs,  # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi355x': ((2 + 1) * 2 + 2) * n_iosl * n_concs,  # (70b-tp: [1, 2], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2]
+    'mi300x': (4 + 1 + 4) * n_iosl * n_concs,          # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
+    'mi325x': (4 + 1 + 4) * n_iosl * n_concs,          # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
+    'mi355x': ((2 + 1) * 2 + 2) * n_iosl * n_concs,    # (70b-tp: [1, 2], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2]
 }
 success_runs = {'h100': 0, 'h200': 0, 'b200': 0, 'mi300x': 0, 'mi325x': 0, 'mi355x': 0}
 

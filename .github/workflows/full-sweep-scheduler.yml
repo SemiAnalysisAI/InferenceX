@@ -23,3 +23,31 @@ jobs:
       use_mi300x: true
       use_mi325x: true
       use_mi355x: false
+
+  calc-success-rate:
+    needs: mega-run
+    runs-on: ubuntu-latest
+
+    env:
+      RESULTS_DIR: "results/"
+      STATS_FILENAME: "run_stats"
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Download results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ env.RESULTS_DIR }}
+          pattern: results_*
+
+      - name: Calculate success rate
+        run: python3 utils/calc_success_rate.py $RESULTS_DIR $STATS_FILENAME
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "run-stats"
+          path: ${{ env.STATS_FILENAME }}.json
