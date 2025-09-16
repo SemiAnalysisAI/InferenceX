@@ -50,3 +50,30 @@ jobs:
       use_mi300x: ${{ inputs.use_mi300x }}
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
+
+  agg-success-rate:
+    needs: mega-test-run
+
+    env:
+      RESULTS_DIR: "results/"
+      STATS_FILENAME: "run_stats"
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Download results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ env.RESULTS_DIR }}
+          pattern: results_*
+
+      - name: Calculate success rate
+        run: python3 utils/calc_success_rate.py $RESULTS_DIR $STATS_FILENAME
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "run-stats"
+          path: ${{ env.STATS_FILENAME }}.json
