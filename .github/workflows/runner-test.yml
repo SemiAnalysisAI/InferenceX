@@ -31,6 +31,7 @@ on:
           - 'mi300x-amd_3'
           - 'mi300x-amd_4'
           - 'mi300x-cr_0'
+          - 'mi300x-oci_0'
           - 'mi325x-amd_0'
           - 'mi325x-tw_0'
           - 'mi325x-tw_1'
