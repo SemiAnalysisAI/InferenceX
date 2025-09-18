@@ -122,11 +122,11 @@ jobs:
       osl: 1024
       max-model-len: 2048
       random-range-ratio: 0.8
-      use_h200: false
-      use_b200: false
-      use_mi300x: false
-      use_mi325x: false
-      use_mi355x: false
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
       use_gb200: ${{ inputs.use_gb200 }}
       mtp-mode: 'on'
 
@@ -222,11 +222,11 @@ jobs:
       osl: 1024
       max-model-len: 9216
       random-range-ratio: 0.8
-      use_h200: false
-      use_b200: false
-      use_mi300x: false
-      use_mi325x: false
-      use_mi355x: false
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
       use_gb200: ${{ inputs.use_gb200 }}
       mtp-mode: 'off'
 
@@ -248,11 +248,11 @@ jobs:
       osl: 1024
       max-model-len: 9216
       random-range-ratio: 0.8
-      use_h200: false
-      use_b200: false
-      use_mi300x: false
-      use_mi325x: false
-      use_mi355x: false
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
       use_gb200: ${{ inputs.use_gb200 }}
       mtp-mode: 'on'
 
