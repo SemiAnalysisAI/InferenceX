@@ -131,17 +131,19 @@ for result_subdir in $RESULT_SUBDIRS; do
     if [ -d "$RESULTS_SUBDIR" ]; then
         echo "Processing results from: $RESULTS_SUBDIR"
 
-        # Find all concurrency result files
-        CONCURRENCY_FILES=$(find "$RESULTS_SUBDIR" -name "results_concurrency_*.json")
+        # Find all concurrency result files with new format
+        CONCURRENCY_FILES=$(find "$RESULTS_SUBDIR" -name "results_concurrency_*_gpus_*.json")
 
         for result_file in $CONCURRENCY_FILES; do
             if [ -f "$result_file" ]; then
-                # Extract concurrency from filename
-                concurrency=$(basename "$result_file" | sed 's/results_concurrency_\([0-9]*\)\.json/\1/')
-                echo "Processing concurrency $concurrency: $result_file"
+                # Extract concurrency and GPU count from filename
+                filename=$(basename "$result_file")
+                concurrency=$(echo "$filename" | sed 's/results_concurrency_\([0-9]*\)_gpus_.*\.json/\1/')
+                gpus=$(echo "$filename" | sed 's/results_concurrency_.*_gpus_\([0-9]*\)\.json/\1/')
+                echo "Processing concurrency $concurrency with $gpus GPUs: $result_file"
 
                 # Copy the result file to workspace with a unique name
-                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}.json"
+                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus${gpus}.json"
                 cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
                 echo "Copied result file to: $WORKSPACE_RESULT_FILE"
