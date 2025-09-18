@@ -11,15 +11,54 @@
 
 echo "JOB $SLURM_JOB_ID running on NODE $SLURMD_NODENAME"
 
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+
+# ========= Determine EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+EP_SIZE=""
+MOE_BACKEND="TRTLLM"
+
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+    if [[ $CONC -lt 16 ]]; then
+        EP_SIZE=""
+        echo "ISL/OSL=1k/1k, CONC<$CONC: No EP_SIZE"
+    else
+        EP_SIZE="$TP"
+        echo "ISL/OSL=1k/1k, CONC>=$CONC: EP_SIZE=$TP"
+    fi
+elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+    if [[ $CONC -lt 32 ]]; then
+        EP_SIZE=""
+        echo "ISL/OSL=1k/8k, CONC<$CONC: No EP_SIZE"
+    else
+        EP_SIZE="$TP"
+        echo "ISL/OSL=1k/8k, CONC>=$CONC: EP_SIZE=$TP"
+    fi
+elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+    if [[ $CONC -lt 64 ]]; then
+        EP_SIZE="$TP"
+        echo "ISL/OSL=8k/1k, CONC<$CONC: EP_SIZE=$TP"
+    else
+        EP_SIZE="$TP"
+        MOE_BACKEND="CUTLASS"
+        echo "ISL/OSL=8k/1k, CONC>=$CONC: EP_SIZE=$TP, MOE_BACKEND=CUTLASS"
+    fi
+else
+    # Default behavior for other combinations
+    EP_SIZE="$TP"
+    echo "Other ISL/OSL combination: EP_SIZE=$TP (default)"
+fi
+
+echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND'"
+
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
-EXTRA_CONFIG_FILE="dsr1-fp4-dep.yml"
+EXTRA_CONFIG_FILE="dsr1-fp4-tep.yml"
 
-cat > $EXTRA_CONFIG_FILE << 'EOF'
+cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 1024
-enable_attention_dp: true
+    max_batch_size: 512
+enable_attention_dp: false
 print_iter_log: true
 kv_cache_config:
     dtype: fp8
@@ -27,19 +66,31 @@ kv_cache_config:
     enable_block_reuse: false 
 stream_interval: 10
 moe_config:
-    backend: CUTLASS
+    backend: $MOE_BACKEND
 EOF
 
 set -x
-mpirun -n 1 --oversubscribe --allow-run-as-root \
-trtllm-serve $MODEL --port=$PORT \
---trust_remote_code \
---backend=pytorch \
---max_seq_len=2200 \
---max_num_tokens=2200 \
---tp_size=8 --ep_size=8 \
---extra_llm_api_options=$EXTRA_CONFIG_FILE \
-> $SERVER_LOG 2>&1 &
+if [[ -n "$EP_SIZE" ]]; then
+    mpirun -n 1 --oversubscribe --allow-run-as-root \
+    trtllm-serve $MODEL --port=$PORT \
+    --trust_remote_code \
+    --backend=pytorch \
+    --max_seq_len=2200 \
+    --max_num_tokens=2200 \
+    --tp_size=$TP --ep_size=$EP_SIZE \
+    --extra_llm_api_options=$EXTRA_CONFIG_FILE \
+    > $SERVER_LOG 2>&1 &
+else
+    mpirun -n 1 --oversubscribe --allow-run-as-root \
+    trtllm-serve $MODEL --port=$PORT \
+    --trust_remote_code \
+    --backend=pytorch \
+    --max_seq_len=2200 \
+    --max_num_tokens=2200 \
+    --tp_size=$TP \
+    --extra_llm_api_options=$EXTRA_CONFIG_FILE \
+    > $SERVER_LOG 2>&1 &
+fi
 
 set +x
 while IFS= read -r line; do
