@@ -30,9 +30,17 @@ if [[ "$TP" == "4" ]]; then
         if [[ $CONC -gt 32 ]]; then
             EP_SIZE="$TP"
         fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
     elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
         if [[ $CONC -gt 32 ]]; then
             EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
         fi
     elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
         if [[ $CONC -gt 32 ]]; then
@@ -46,9 +54,17 @@ elif [[ "$TP" == "8" ]]; then
         if [[ $CONC -gt 8 ]]; then
             EP_SIZE="$TP"
         fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
     elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
         if [[ $CONC -gt 16 ]]; then
             EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
         fi
     elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
         if [[ $CONC -gt 32 ]]; then
