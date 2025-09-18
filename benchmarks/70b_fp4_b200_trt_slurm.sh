@@ -32,7 +32,7 @@ cuda_graph_config:
 kv_cache_config: 
   dtype: fp8 
   enable_block_reuse: false 
-stream_interval: 4
+stream_interval: 10
 EOF
 
 # Launch TRT-LLM server

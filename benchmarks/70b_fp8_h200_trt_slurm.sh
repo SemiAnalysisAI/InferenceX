@@ -29,7 +29,7 @@ cuda_graph_config:
 kv_cache_config: 
   dtype: fp8 
   enable_block_reuse: false 
-stream_interval: 4
+stream_interval: 10
 EOF
 
 mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
