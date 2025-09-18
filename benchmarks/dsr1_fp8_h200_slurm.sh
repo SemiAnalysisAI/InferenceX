@@ -22,11 +22,27 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
-python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---disable-radix-cache --decode-log-interval 1 --max-running-requests 512 \
---cuda-graph-bs 4 8 16 32 64 128 256 --cuda-graph-max-bs 256 \
-> $SERVER_LOG 2>&1 &
+if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
+    # Special configuration for ISL=1024 and OSL=1024
+    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    --host 0.0.0.0 --port $PORT --trust-remote-code \
+    --tensor-parallel-size=$TP --data-parallel-size=1 \
+    --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
+    --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
+    --attention-backend flashinfer --stream-interval 10 \
+    --decode-log-interval 1 \
+    > $SERVER_LOG 2>&1 &
+else:
+    # Default configuration for other ISL/OSL combinations
+    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODE \
+    --host 0.0.0.0 --port $PORT --trust-remote-code \
+    --tensor-parallel-size=$TP --data-parallel-size=1 \
+    --disable-radix-cache --max-running-requests 256 --cuda-graph-max-bs 256 \
+    --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
+    --attention-backend flashinfer --stream-interval 10 \
+     --decode-log-interval 1 \
+    > $SERVER_LOG 2>&1 &
+fi
 
 set +x
 while IFS= read -r line; do
