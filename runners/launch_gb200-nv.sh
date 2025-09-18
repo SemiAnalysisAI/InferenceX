@@ -45,12 +45,34 @@ generate_benchmark_configs() {
     local mtp_mode="$3"
 
     if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
-        if [ "$mtp_mode" = "off" ]; then
+        if [ "$mtp_mode" = "on" ]; then
+            echo "Running 1k/1k MTP=ON configurations"
+
+            echo "Running DEP 2ctx-16GPU configuration..."
+            ./submit_disagg.sh "mtp=on" "dep" 2 1 16 128 256 "0.7" 1 0 "2150"
+        else
             echo "Running 1k/1k MTP=OFF configurations"
 
-            # TEP configuration
             echo "Running TEP configuration..."
-            ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4"
+            ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
+
+            echo "Running DEP 2ctx-16GPU configuration..."
+            ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
+        fi
+    elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
+        if [ "$mtp_mode" = "on" ]; then
+            echo "Running 8k/1k MTP=ON configurations"
+
+            echo "Running TEP configuration..."
+            ./submit_disagg.sh "mtp=on" "tep" 1 3 8 16 64 "0.9" 3 0 "1 2 4 8 18"
+        else
+            echo "Running 8k/1k MTP=OFF configurations"
+
+            echo "Running DEP 4ctx-32GPU configuration..."
+            ./submit_disagg.sh "mtp=off" "dep" 4 1 32 16 16 "0.7" 0 0 "256 538"
+
+            echo "Running DEP 6ctx-16GPU configuration..."
+            ./submit_disagg.sh "mtp=off" "dep" 6 1 16 64 64 "0.75" 0 0 "1075"
         fi
     else
         echo "Unsupported ISL/OSL combination: $isl/$osl"
