@@ -16,6 +16,7 @@ on:
           - 'mi300x'
           - 'mi325x'
           - 'mi355x'
+          - 'gb200'
 
       image:
         description: 'Docker Image'
@@ -281,8 +282,25 @@ jobs:
       tp-list: '[8]'
       conc-list: '[1]'
 
+  bmk_gb200:
+    if: ${{ inputs.runner == 'gb200' }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'docker.io/tanmayv25/dynamo-trtllm:v4'
+      model: 'deepseek-r1-fp4'
+      framework: 'dynamo-trtllm'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      mtp-mode: 'off'
+
   collect-test-results:
-    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x ]
+    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x, bmk_gb200 ]
     if: ${{ always() && !cancelled() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit

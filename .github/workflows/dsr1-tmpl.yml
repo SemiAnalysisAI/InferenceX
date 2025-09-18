@@ -34,6 +34,14 @@ on:
       use_mi355x:
         type: boolean
         required: true
+      use_gb200:
+        type: boolean
+        required: false
+        default: false
+      mtp-mode:
+        type: string
+        required: false
+        default: 'off'
 
 jobs:
   bmk-h200-fp8:
@@ -172,3 +180,20 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
+
+  bmk-gb200-fp4-multinode:
+    if: ${{ inputs.use_gb200 }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'docker.io/tanmayv25/dynamo-trtllm:v4'
+      model: 'deepseek-r1-fp4'
+      framework: 'dynamo-trtllm'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      mtp-mode: ${{ inputs.mtp-mode }}
