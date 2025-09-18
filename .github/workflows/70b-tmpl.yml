@@ -122,7 +122,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'  
+      tp-list: '[1, 2, 4, 8]'  
 
   bmk-mi300x-fp8:
     if: ${{ inputs.use_mi300x }}
