@@ -87,6 +87,58 @@ jobs:
     with:
       exp-name: 'dsr1_1k1k'
 
+  dsr1-multinode-1k1k-mtp-off:
+    if: ${{ inputs.run_1k1k && inputs.use_gb200 }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_1k1k_mtp_off'
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      use_h200: false
+      use_b200: false
+      use_mi300x: false
+      use_mi325x: false
+      use_mi355x: false
+      use_gb200: ${{ inputs.use_gb200 }}
+      mtp-mode: 'off'
+
+  collect-dsr1-multinode-1k1k-mtp-off-results:
+    needs: dsr1-multinode-1k1k-mtp-off
+    if: ${{ inputs.run_1k1k && inputs.use_gb200 && (success() || failure()) }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_1k1k_mtp_off'
+
+  dsr1-multinode-1k1k-mtp-on:
+    if: ${{ inputs.run_1k1k && inputs.use_gb200 }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_1k1k_mtp_on'
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
+      mtp-mode: 'on'
+
+  collect-dsr1-multinode-1k1k-mtp-on-results:
+    needs: dsr1-multinode-1k1k-mtp-on
+    if: ${{ inputs.run_1k1k && inputs.use_gb200 && (success() || failure()) }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_1k1k_mtp_on'
+
   gptoss-1k1k:
     if: ${{ inputs.run_1k1k }}
     uses: ./.github/workflows/gptoss-tmpl.yml
@@ -162,6 +214,61 @@ jobs:
     with:
       exp-name: 'dsr1_8k1k'
 
+<<<<<<< HEAD
+=======
+  dsr1-multinode-8k1k-mtp-off:
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_mtp_off'
+      isl: 8192
+      osl: 1024
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
+      mtp-mode: 'off'
+
+  collect-dsr1-multinode-8k1k-mtp-off-results:
+    needs: dsr1-multinode-8k1k-mtp-off
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 && (success() || failure()) }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_mtp_off'
+
+  dsr1-multinode-8k1k-mtp-on:
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_mtp_on'
+      isl: 8192
+      osl: 1024
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
+      mtp-mode: 'on'
+
+  collect-dsr1-multinode-8k1k-mtp-on-results:
+    needs: dsr1-multinode-8k1k-mtp-on
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 && (success() || failure()) }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_mtp_on'
+
+>>>>>>> 7983b38 (Add additional gb200 configs)
   gptoss-8k1k:
     if: ${{ inputs.run_8k1k }}
     uses: ./.github/workflows/gptoss-tmpl.yml
