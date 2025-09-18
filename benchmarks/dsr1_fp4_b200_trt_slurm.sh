@@ -84,8 +84,8 @@ if [[ -n "$EP_SIZE" ]]; then
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
     --backend=pytorch \
-    --max_seq_len=2200 \
-    --max_num_tokens=2200 \
+    --max_seq_len=$MAX_MODEL_LEN \
+    --max_num_tokens=$MAX_MODEL_LEN \
     --tp_size=$TP --ep_size=$EP_SIZE \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
@@ -94,8 +94,8 @@ else
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
     --backend=pytorch \
-    --max_seq_len=2200 \
-    --max_num_tokens=2200 \
+    --max_seq_len=$MAX_MODEL_LEN \
+    --max_num_tokens=$MAX_MODEL_LEN \
     --tp_size=$TP \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
