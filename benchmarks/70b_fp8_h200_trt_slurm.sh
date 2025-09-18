@@ -22,7 +22,6 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 
 # Create llama-config.yml inline
 cat > llama-config.yml << 'EOF'
-enable_attention_dp: false 
 cuda_graph_config: 
   enable_padding: true 
   max_batch_size: 1024 
