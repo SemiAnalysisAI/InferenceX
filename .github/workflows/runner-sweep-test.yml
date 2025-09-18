@@ -46,6 +46,7 @@ on:
           - 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview'
           - 'deepseek-ai/DeepSeek-R1-0528'
           - 'nvidia/DeepSeek-R1-0528-FP4'
+          - 'nvidia/DeepSeek-R1-0528-FP4-v2'
           - 'amd/DeepSeek-R1-0528-MXFP4-Preview'
           - 'openai/gpt-oss-120b'
 
