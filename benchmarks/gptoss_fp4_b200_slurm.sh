@@ -26,7 +26,7 @@ cat > config.yaml << EOF
 compilation-config: '{"pass_config":{"enable_fi_allreduce_fusion":true,"enable_attn_fusion":true,"enable_noop":true},"custom_ops":["+rms_norm"],"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 async-scheduling: true
 no-enable-prefix-caching: true
-cuda-graph-sizes: 512
+cuda-graph-sizes: 2048
 max-num-batched-tokens: 8192
 max-model-len: 10240
 EOF

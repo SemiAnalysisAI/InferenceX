@@ -24,7 +24,7 @@ pip install datasets pandas
 cat > config.yaml << EOF
 async-scheduling: true
 no-enable-prefix-caching: true
-cuda-graph-sizes: 1024
+cuda-graph-sizes: 2048
 max-num-batched-tokens: 8192
 max-model-len: 10240
 EOF
