@@ -298,7 +298,7 @@ jobs:
       framework: 'dynamo-trtllm'
       precision: 'fp4'
       exp-name: ${{ inputs.exp-name }}
-      isl: 8192
+      isl: 1024
       osl: 1024
       max-model-len: 2048
       random-range-ratio: 0.8
