@@ -42,7 +42,7 @@ jobs:
     secrets: inherit
     with:
       runner: h200
-      image: 'lmsysorg/sglang:v0.4.9.post1-cu126'
+      image: 'lmsysorg/sglang:v0.5.2rc2.cu126'
       model: 'deepseek-ai/DeepSeek-R1-0528'
       framework: 'sglang'
       precision: 'fp8'
