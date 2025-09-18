@@ -154,6 +154,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
+      conc-list: '[4, 8, 16, 32, 64, 128]'  # Custom concurrency values for this job
 
   bmk-mi355x-fp4:
     if: ${{ inputs.use_mi355x }}
