@@ -23,7 +23,6 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
-    # Special configuration for ISL=1024 and OSL=1024
     python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
