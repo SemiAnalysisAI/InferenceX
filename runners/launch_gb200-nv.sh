@@ -102,7 +102,7 @@ fi
 echo "Found logs directory: $LOGS_DIR"
 
 # Find all result subdirectories in this logs directory
-RESULT_SUBDIRS=$(find "$LOGS_DIR" -name "ctx*_gen*_tep*_batch*_eplb*_mtp*" -type d)
+RESULT_SUBDIRS=$(find "$LOGS_DIR" -name "ctx*_gen*_[td]ep*_batch*_eplb*_mtp*" -type d)
 
 if [ -z "$RESULT_SUBDIRS" ]; then
     echo "No result subdirectories found in $LOGS_DIR"
