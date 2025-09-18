@@ -32,7 +32,6 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --decode-log-interval 1 \
     > $SERVER_LOG 2>&1 &
 else:
-    # Default configuration for other ISL/OSL combinations
     python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODE \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
