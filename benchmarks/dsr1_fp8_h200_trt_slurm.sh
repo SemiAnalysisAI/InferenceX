@@ -48,7 +48,7 @@ EXTRA_CONFIG_FILE="dsr1-fp8.yml"
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 512
+    max_batch_size: 128
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
