@@ -24,6 +24,8 @@ on:
           - 'h200-nv_3'
           - 'b200-nv_0'
           - 'b200-nv_1'
+          - 'b200-nvd_0'
+          - 'b200-nvd_1'
           - 'b200-tg_0'
           - 'mi300x-amd_0'
           - 'mi300x-amd_1'
@@ -46,31 +48,30 @@ on:
         type: choice
         options:
           - 'kedarpotdar147/vllm0.1:latest'
-          - 'kedarpotdar147/vllm:05'
-          - 'vllm/vllm-openai:v0.10.2'
-          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_vllm_0.10.1_instinct_rc1'
-          - 'rocm/vllm-dev:open-mi300-08052025'
-          - 'rocm/vllm-dev:open-mi355-08052025'
           - 'lmsysorg/sglang:v0.4.9.post1-cu126'
           - 'lmsysorg/sglang:v0.5.0rc1-cu128-b200'
-          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_sgl-dev-v0.5.2rc2-mi30x_rc1'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
+          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_vllm_0.10.1_instinct_rc1'
+          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_sgl-dev-v0.5.2rc2-mi30x_rc1'
+          - 'rocm/vllm-dev:open-mi300-08052025'
+          - 'rocm/vllm-dev:open-mi355-08052025'
+          - 'vllm/vllm-openai:v0.10.2'
 
       model:
         description: 'Model'
         required: true
         type: choice
         options:
-          - 'nvidia/Llama-3.3-70B-Instruct-FP8'
-          - 'nvidia/Llama-3.3-70B-Instruct-FP4'
+          - 'amd/DeepSeek-R1-0528-MXFP4-Preview'
           - 'amd/Llama-3.3-70B-Instruct-FP8-KV'
           - 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview'
           - 'deepseek-ai/DeepSeek-R1-0528'
+          - 'nvidia/Llama-3.3-70B-Instruct-FP8'
+          - 'nvidia/Llama-3.3-70B-Instruct-FP4'
           - 'nvidia/DeepSeek-R1-0528-FP4'
           - 'nvidia/DeepSeek-R1-0528-FP4-v2'
-          - 'amd/DeepSeek-R1-0528-MXFP4-Preview'
           - 'openai/gpt-oss-120b'
 
       framework:
