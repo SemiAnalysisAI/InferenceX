@@ -3,7 +3,7 @@
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
+PORT=8888
 huggingface-cli download $MODEL
 
 # Reference
