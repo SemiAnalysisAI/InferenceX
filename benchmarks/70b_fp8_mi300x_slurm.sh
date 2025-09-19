@@ -43,7 +43,7 @@ vllm serve $MODEL --port=$PORT \
 --max-model-len=$MAX_MODEL_LEN \
 --max-seq-len-to-capture=$MAX_MODEL_LEN \
 --max-num-seqs=$CONC \
---max-num-batched-tokens=$(( $CONC * 128 )) \
+--max-num-batched-tokens=131072 \
 --no-enable-prefix-caching \
 --async-scheduling \
 --disable-log-requests \

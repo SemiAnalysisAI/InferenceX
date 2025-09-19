@@ -20,86 +20,106 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 hf download $MODEL
 
-# ========= Determine EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
-EP_SIZE=""
+# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+EP_SIZE="1"
 MOE_BACKEND="TRTLLM"
+DP_ATTENTION=false
 
-if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -lt 16 ]]; then
-        EP_SIZE=""
-        echo "ISL/OSL=1k/1k, CONC<$CONC: No EP_SIZE"
-    else
-        EP_SIZE="$TP"
-        echo "ISL/OSL=1k/1k, CONC>=$CONC: EP_SIZE=$TP"
+if [[ "$TP" == "4" ]]; then
+    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            EP_SIZE="$TP"
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
     fi
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC -lt 32 ]]; then
-        EP_SIZE=""
-        echo "ISL/OSL=1k/8k, CONC<$CONC: No EP_SIZE"
-    else
-        EP_SIZE="$TP"
-        echo "ISL/OSL=1k/8k, CONC>=$CONC: EP_SIZE=$TP"
+elif [[ "$TP" == "8" ]]; then
+    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 8 ]]; then
+            EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+        if [[ $CONC -gt 16 ]]; then
+            EP_SIZE="$TP"
+        fi
+        if [[ $CONC -ge 256 ]]; then
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            EP_SIZE="$TP"
+            DP_ATTENTION=true
+            MOE_BACKEND="CUTLASS"
+        fi
     fi
-elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -lt 64 ]]; then
-        EP_SIZE="$TP"
-        echo "ISL/OSL=8k/1k, CONC<$CONC: EP_SIZE=$TP"
-    else
-        EP_SIZE="$TP"
-        MOE_BACKEND="CUTLASS"
-        echo "ISL/OSL=8k/1k, CONC>=$CONC: EP_SIZE=$TP, MOE_BACKEND=CUTLASS"
-    fi
-else
-    # Default behavior for other combinations
-    EP_SIZE="$TP"
-    echo "Other ISL/OSL combination: EP_SIZE=$TP (default)"
 fi
 
-echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND'"
+echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_ATTENTION='$DP_ATTENTION'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
-EXTRA_CONFIG_FILE="dsr1-fp4-tep.yml"
+EXTRA_CONFIG_FILE="dsr1-fp4.yml"
 
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
     max_batch_size: 512
-enable_attention_dp: false
+enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
     dtype: fp8
-    free_gpu_memory_fraction: 0.9
+    free_gpu_memory_fraction: 0.8
     enable_block_reuse: false 
 stream_interval: 10
 moe_config:
     backend: $MOE_BACKEND
 EOF
 
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    cat << EOF >> $EXTRA_CONFIG_FILE
+attention_dp_config:
+    batching_wait_iters: 0
+    enable_balance: true
+    timeout_iters: 60
+EOF
+fi
+
 set -x
 
+MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
+
 # Launch TRT-LLM server
-if [[ -n "$EP_SIZE" ]]; then
-    mpirun -n 1 --oversubscribe --allow-run-as-root \
+mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
     --backend=pytorch \
     --max_seq_len=$MAX_MODEL_LEN \
-    --max_num_tokens=$MAX_MODEL_LEN \
+    --max_num_tokens=$MAX_NUM_TOKENS \
     --tp_size=$TP --ep_size=$EP_SIZE \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
-else
-    mpirun -n 1 --oversubscribe --allow-run-as-root \
-    trtllm-serve $MODEL --port=$PORT \
-    --trust_remote_code \
-    --backend=pytorch \
-    --max_seq_len=$MAX_MODEL_LEN \
-    --max_num_tokens=$MAX_MODEL_LEN \
-    --tp_size=$TP \
-    --extra_llm_api_options=$EXTRA_CONFIG_FILE \
-    > $SERVER_LOG 2>&1 &
-fi
+
 
 set +x
 while IFS= read -r line; do

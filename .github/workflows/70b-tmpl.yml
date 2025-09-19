@@ -79,7 +79,7 @@ jobs:
     secrets: inherit
     with:
       runner: h200-trt
-      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2'
+      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
       framework: 'trt'
       precision: 'fp8'
@@ -89,6 +89,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[1, 2, 4, 8]'  
+      conc-list: '[4, 8, 16, 32, 64, 128]'  # H200 can achieve TPS/User >= 30 with larger concurrency till 128
 
   bmk-b200-fp8:
     if: ${{ inputs.use_b200 }}
@@ -113,7 +114,7 @@ jobs:
     secrets: inherit
     with:
       runner: b200-trt
-      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
+      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
       framework: 'trt'
       precision: 'fp8'
@@ -122,7 +123,8 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'  
+      tp-list: '[1, 2, 4, 8]'  
+      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # B200 can achieve TPS/User >= 30 with larger concurrency till 256
 
   bmk-mi300x-fp8:
     if: ${{ inputs.use_mi300x }}
@@ -208,6 +210,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[1, 2, 4, 8]'  
+      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # B200 can achieve TPS/User >= 30 with larger concurrency till 256
 
   bmk-mi355x-fp4:
     if: ${{ inputs.use_mi355x }}

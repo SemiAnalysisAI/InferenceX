@@ -22,11 +22,11 @@ hf download $MODEL
 
 # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
 EP_SIZE="$TP"
-MOE_BACKEND="DEEPGEMM"
+MOE_BACKEND="CUTLASS"
 DP_ATTENTION=false
 
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -gt 32 ]]; then
+    if [[ $CONC -gt 64 ]]; then
         DP_ATTENTION=true
     fi
 elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
@@ -34,7 +34,7 @@ elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
         DP_ATTENTION=true
     fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -gt 64 ]]; then
+    if [[ $CONC -gt 32 ]]; then
         DP_ATTENTION=true
     fi
 fi
@@ -48,12 +48,12 @@ EXTRA_CONFIG_FILE="dsr1-fp8.yml"
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 256
+    max_batch_size: 128
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
     dtype: fp8
-    free_gpu_memory_fraction: 0.8
+    free_gpu_memory_fraction: 0.75
     enable_block_reuse: false 
 stream_interval: 10
 moe_config:
