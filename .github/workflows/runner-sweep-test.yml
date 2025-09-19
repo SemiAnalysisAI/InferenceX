@@ -288,7 +288,7 @@ jobs:
       conc-list: '[1]'
 
   bmk_gb200:
-    if: ${{ inputs.runner == 'gb200' }}
+    if: ${{ inputs.runner == 'gb200' && inputs.framework == 'trt' }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
@@ -305,7 +305,7 @@ jobs:
       mtp-mode: 'off'
 
   bmk_gb200-sgl:
-    if: ${{ inputs.runner == 'gb200' }}
+    if: ${{ inputs.runner == 'gb200' && inputs.framework == 'sglang' }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
