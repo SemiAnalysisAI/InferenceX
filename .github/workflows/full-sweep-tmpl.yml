@@ -165,6 +165,32 @@ jobs:
     with:
       exp-name: 'dsr1_multinode_1k1k_sglang'
 
+  dsr1-multinode-8k1k-sglang:
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_sglang'
+      isl: 8192
+      osl: 1024
+      max-model-len: 2048 # NA for sgl
+      random-range-ratio: 0.8 # NA for sgl
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
+      mtp-mode: 'SGL-NA'
+
+  collect-dsr1-multinode-8k1k-sglang-results:
+    needs: dsr1-multinode-8k1k-sglang
+    if: ${{ inputs.run_8k1k && inputs.use_gb200 && (success() || failure()) }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_multinode_8k1k_sglang'
+
   gptoss-1k1k:
     if: ${{ inputs.run_1k1k }}
     uses: ./.github/workflows/gptoss-tmpl.yml
