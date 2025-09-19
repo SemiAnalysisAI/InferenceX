@@ -153,8 +153,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[8]'
-
+      
   bmk-b200-trt-fp4:
     if: ${{ inputs.use_b200 }}
     uses: ./.github/workflows/benchmark-tmpl.yml
