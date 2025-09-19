@@ -15,7 +15,6 @@
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
-export HF_HUB_OFFLINE=1
 export VLLM_ROCM_USE_AITER=1
 export VLLM_USE_AITER_UNIFIED_ATTENTION=1 
 export VLLM_ROCM_USE_AITER_MHA=0
