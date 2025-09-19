@@ -42,5 +42,5 @@ fi
 
 set -x
 # Launch TRT-LLM server
-trtllm-serve $MODEL --tp_size $TP --trust_remote_code \
+mpirun -n 1 --allow-run-as-root --oversubscribe trtllm-serve $MODEL --tp_size $TP --trust_remote_code \
 --max_seq_len $MAX_MODEL_LEN --max_num_tokens 16384 --extra_llm_api_options llama-config.yml --port $PORT
