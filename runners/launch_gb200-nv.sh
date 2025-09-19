@@ -19,6 +19,16 @@ export OSL="$OSL"
 DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
 PERFORMANCE_SWEEPS_PATH="$DYNAMO_PATH/components/backends/trtllm/performance_sweeps"
 
+# Overview:
+# The Dynamo repository contains the bench_serving repository as a submodule.
+# The submit_disagg.sh script, located at $PERFORMANCE_SWEEPS_PATH, orchestrates the entire benchmarking workflow:
+#   1. Launches the Dynamo inference service with the specified configuration.
+#   2. Waits for the service to become healthy.
+#   3. Initiates benchmarking using the bench_serving tools.
+#   4. Monitors all jobs until completion.
+#   5. Collects and processes the results.
+
+
 # Always clone and setup Dynamo
 echo "Cloning Dynamo repository..."
 rm -rf "$DYNAMO_PATH"
@@ -68,8 +78,6 @@ generate_benchmark_configs() {
     #   gen_mtp_size: Multi-Token Prediction size (0 for mtp=off, 1-3 for mtp=on)
     #   gen_eplb_num_slots: Expert load balancing slots (0, 256, 288)
     #   gen_concurrency_list: Concurrency values (space-separated, quoted)
-
-
 
     if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
         if [ "$mtp_mode" = "on" ]; then
