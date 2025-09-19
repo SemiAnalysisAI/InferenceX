@@ -179,12 +179,10 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
 
     # Launch jobs based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        # concurrency_list="4x64x256x1024x2048x4096x5120x6144"
-        concurrency_list="4x64x256"
+        concurrency_list="4x64x256x1024x2048x4096x5120x6144"
         bash ./submit_disagg.sh 6 3 12 1 8 $ISL $OSL $concurrency_list inf
     elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
-        # concurrency_list="4x16x128x256x320x384x448x512x1024"
-        concurrency_list="4x16x128"
+        concurrency_list="4x16x128x256x320x384x448x512x1024"
         bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
     else
         echo "Unsupported ISL/OSL combination: $ISL/$OSL"
@@ -266,9 +264,6 @@ else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | head -1)
     if [ -z "$LOGS_DIR" ]; then
         echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
-        # debug
-        ls -al .
-        ls -al ./logs/
         exit 1
     fi
 
@@ -277,7 +272,7 @@ else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
 
     # Result JSON are contained within the result directory
     for result_file in $(find $LOGS_DIR -type f); do
-        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R.json
+        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpusN.json
         file_name=$(basename $result_file)
         if [ -f $result_file ]; then
             # Copy the result file to workspace with a unique name
