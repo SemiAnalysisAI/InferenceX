@@ -16,11 +16,13 @@
 export HF_HUB_OFFLINE=1
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
 export SGLANG_USE_AITER=1
+
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
 python3 -m sglang.launch_server \
     --model-path $MODEL \
+    --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \

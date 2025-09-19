@@ -14,10 +14,9 @@
 
 export SGLANG_USE_AITER=1
 
-USE_FASTSAFETENSOR=1 \
-SAFETENSORS_FAST_GPU=1 \
 python3 -m sglang.launch_server \
     --model-path $MODEL \
+    --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \
