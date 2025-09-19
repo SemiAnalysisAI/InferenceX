@@ -73,6 +73,9 @@ attention_dp_config:
 EOF
 fi
 
+echo "Generated config file contents:"
+cat $EXTRA_CONFIG_FILE
+
 set -x
 
 MAX_NUM_TOKENS=20000
