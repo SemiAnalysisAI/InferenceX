@@ -18,7 +18,7 @@ docker run --rm -d --network $network_name --name $server_name \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e PORT=$PORT \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 --entrypoint=/bin/bash \
-${IMAGE/\#/\/} \
+$(echo "$IMAGE" | sed 's/#/\//') \
 benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_docker.sh"
 
 set +x
@@ -36,7 +36,7 @@ docker run --rm --network $network_name --name $client_name \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
 --entrypoint=/bin/bash \
-${IMAGE/\#/\/} \
+$(echo "$IMAGE" | sed 's/#/\//') \
 -lc "pip install -q datasets pandas && \
 python3 bench_serving/benchmark_serving.py \
 --model $MODEL  --backend vllm --base-url http://$server_name:$PORT \
