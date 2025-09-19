@@ -91,6 +91,7 @@ jobs:
           - 'h100-cr_1'
           - 'h100-cw_0'
           - 'h100-cw_1'
+
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
@@ -150,6 +151,8 @@ jobs:
         runner:
           - 'b200-nv_0'
           - 'b200-nv_1'
+          - 'b200-nvd_0'
+          - 'b200-nvd_1'
           - 'b200-tg_0'
 
     name: '${{ matrix.runner }}'
@@ -262,6 +265,8 @@ jobs:
         runner:
           - 'mi355x-amd_0'
           - 'mi355x-amd_1'
+          - 'mi355x-amd_2'
+          - 'mi355x-amd_3'
 
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
