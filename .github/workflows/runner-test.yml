@@ -41,6 +41,8 @@ on:
           - 'mi325x-tw_3'
           - 'mi355x-amd_0'
           - 'mi355x-amd_1'
+          - 'mi355x-amd_2'
+          - 'mi355x-amd_3'
 
       image:
         description: 'Docker Image'
