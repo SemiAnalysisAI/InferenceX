@@ -15,7 +15,7 @@
 # HF_TOKEN
 
 MODEL_CODE="${EXP_NAME%%_*}"
-HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache/"
+HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-${USER: -1}/"
 
 set -x
 srun --partition=compute --exclusive \
