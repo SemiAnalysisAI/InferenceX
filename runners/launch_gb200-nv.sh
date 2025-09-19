@@ -6,6 +6,8 @@
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
+# The original Docker image is available at: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
+# This path is to a pre-built squash file from the above image.
 export IMAGE="/mnt/lustre01/users/sa-shared/images/dynamo-trtllm_v5.sqsh"
 export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
 export SERVED_MODEL_NAME="deepseek-r1-fp4"
@@ -29,6 +31,10 @@ git submodule update --init --recursive
 cd "$PERFORMANCE_SWEEPS_PATH"
 
 # Set up environment variables based on ISL/OSL
+#
+# 1. CACHE_TRANSCEIVER_MAX_NUM_TOKENS controls the max_tokens_in_buffer value
+# in cache_transceiver_config of TensorRT-LLM context and generation workers.
+# Specifically, it is the max number of tokens the transfer buffer can fit.
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     export CACHE_TRANSCEIVER_MAX_NUM_TOKENS=4608
 elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
@@ -43,6 +49,27 @@ generate_benchmark_configs() {
     local isl="$1"
     local osl="$2"
     local mtp_mode="$3"
+
+    # Usage: 
+    # ./submit_disagg.sh <mtp_mode> <mode> [ctx_num] [gen_num] [gen_tp_size] [gen_batch_size] [gen_max_num_tokens] [gen_gpu_memory_fraction] [gen_eplb_num_slots] [gen_mtp_size] [gen_concurrency_list]"
+    # MTP Modes:
+    #   mtp=off - Run without Multi-Token Prediction (gen_mtp_size=0)
+    #   mtp=on  - Run with Multi-Token Prediction (gen_mtp_size=1,2,3)
+    # Execution Modes:
+    #   tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    #   dep - Run Data-Expert Parallel mode (attention_dp=true)
+    # Parameters for tep/dep modes:
+    #   ctx_num: Number of context nodes
+    #   gen_num: Number of generation nodes
+    #   gen_tp_size: Generation tensor parallel size
+    #   gen_batch_size: Generation batch size
+    #   gen_max_num_tokens: Generation max number of tokens
+    #   gen_gpu_memory_fraction: GPU memory fraction (0.7-0.95)
+    #   gen_mtp_size: Multi-Token Prediction size (0 for mtp=off, 1-3 for mtp=on)
+    #   gen_eplb_num_slots: Expert load balancing slots (0, 256, 288)
+    #   gen_concurrency_list: Concurrency values (space-separated, quoted)
+
+
 
     if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
         if [ "$mtp_mode" = "on" ]; then
