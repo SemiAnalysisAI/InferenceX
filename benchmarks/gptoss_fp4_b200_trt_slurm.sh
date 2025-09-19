@@ -14,6 +14,9 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
+# GPTOSS TRTLLM Deployment Guide:
+# https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
+
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
@@ -27,6 +30,9 @@ EP_SIZE="1"
 MOE_BACKEND="TRTLLM"
 DP_ATTENTION=false
 
+# Lower concurrencies: Concurrency < 256
+# MoE backend=TRTLLM
+# Use TP Attention; Switch to MoE Expert parallel for conurrency >=16 (1k1k and 1k8k)
 TEP_REQUIRED=false
 if [[ "$TP" == "4" || "$TP" == "8" ]]; then 
     if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
@@ -39,6 +45,9 @@ if [[ "$TEP_REQUIRED" == "true" && $CONC -ge 16 ]]; then
     EP_SIZE="$TP"
 fi
 
+# Higher concurrencies: Concurrency >= 256
+#   MoE Backend = CUTLASS
+#   Use DP attention with expert parallel MoE
 if [[ $CONC -ge 256 ]]; then
     EP_SIZE="$TP"
     DP_ATTENTION=true
