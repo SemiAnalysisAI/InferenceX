@@ -18,7 +18,7 @@ MODEL_CODE="${EXP_NAME%%_*}"
 HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache/"
 
 set -x
-srun --reservation=compute --exclusive \
+srun --partition=compute --exclusive \
 --gres=gpu:$TP --cpus-per-task=256 --ntasks-per-node=1 --time=180 \
 --container-image=$IMAGE \
 --container-name="${MODEL_CODE}_container" \
