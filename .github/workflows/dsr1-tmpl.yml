@@ -232,3 +232,20 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       mtp-mode: ${{ inputs.mtp-mode }}
+
+  bmk-gb200-fp8-multinode:
+    if: ${{ inputs.use_gb200 }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1'
+      model: 'deepseek-ai/DeepSeek-R1-0528'
+      framework: 'dynamo-sglang'
+      precision: 'fp8'
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      mtp-mode: 'sglang-not-applicable'

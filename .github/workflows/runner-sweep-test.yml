@@ -309,8 +309,25 @@ jobs:
       random-range-ratio: 0.8
       mtp-mode: 'off'
 
+  bmk_gb200-sgl:
+    if: ${{ inputs.runner == 'gb200' }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1'
+      model: 'deepseek-ai/DeepSeek-R1-0528'
+      framework: 'dynamo-sglang'
+      precision: 'fp8'
+      exp-name: ${{ inputs.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      mtp-mode: 'sgl-na'
+
   collect-test-results:
-    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x, bmk_gb200 ]
+    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x, bmk_gb200, bmk_gb200-sgl ]
     if: ${{ always() && !cancelled() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
