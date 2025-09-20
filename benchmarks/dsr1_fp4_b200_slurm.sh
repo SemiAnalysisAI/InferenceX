@@ -8,11 +8,16 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 set -x
 PORT=$(( 8888 + $PORT_OFFSET ))
 
+
+# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
+
 SCHEDULER_RECV_INTERVAL=10
 
 if [[ $CONC -ge 16 ]]; then
     SCHEDULER_RECV_INTERVAL=30
 fi
+
+
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
