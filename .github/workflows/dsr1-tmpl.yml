@@ -153,7 +153,9 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      
+      tp-list: '[4, 8]'
+      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # Custom concurrency values for this job
+
   bmk-b200-trt-fp4:
     if: ${{ inputs.use_b200 }}
     uses: ./.github/workflows/benchmark-tmpl.yml
