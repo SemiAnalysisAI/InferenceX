@@ -8,20 +8,6 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 set -x
 PORT=$(( 8888 + $PORT_OFFSET ))
 
-TP = ''
-if [[ $CONC -eq 4 || $CONC -eq 8 || $CONC -eq 128 || $CONC -eq 256 ]]; then
-    TP = 8
-elif [[ $CONC -eq 16 || $CONC -eq 32 || $CONC -eq 64 ]]; then
-    TP = 4
-fi
-
-if [[ $TP == '' ]]; then
-    echo "Error: TP is not set"
-    exit 1
-fi
-
-echo "TP: $TP, CONC: $CONC"
-
 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
 --cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
