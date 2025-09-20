@@ -57,6 +57,7 @@ done < <(tail -n +1 -F "$SERVER_LOG")
 set -x
 git clone https://github.com/kimbochen/bench_serving.git
 
+# warmup for JIT kernels
 python3 bench_serving/benchmark_serving.py \
 --model $MODEL --backend vllm \
 --base-url http://0.0.0.0:$PORT \
