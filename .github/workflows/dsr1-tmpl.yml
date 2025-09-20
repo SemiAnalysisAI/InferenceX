@@ -143,7 +143,7 @@ jobs:
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
     with:
-      runner: b200
+      runner: b200-trt
       image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
       model: 'nvidia/DeepSeek-R1-0528-FP4'
       framework: 'sglang'
