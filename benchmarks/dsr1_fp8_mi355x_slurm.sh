@@ -14,13 +14,23 @@
 # RESULT_FILENAME
 
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
+export SGLANG_USE_AITER=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
-python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tp $TP --cuda-graph-max-bs $CONC --disable-radix-cache \
-> $SERVER_LOG 2>&1 &
+python3 -m sglang.launch_server \
+    --model-path $MODEL \
+    --host=0.0.0.0 \
+    --port $PORT \
+    --tensor-parallel-size $TP \
+    --trust-remote-code \
+    --chunked-prefill-size 196608 \
+    --mem-fraction-static 0.8 \
+    --disable-radix-cache \
+    --num-continuous-decode-steps 4 \
+    --max-prefill-tokens 196608 \
+    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
 
 set +x
 while IFS= read -r line; do

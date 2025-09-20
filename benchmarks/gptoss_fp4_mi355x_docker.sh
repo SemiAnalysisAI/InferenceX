@@ -4,23 +4,28 @@
 # HF_TOKEN
 # HF_HUB_CACHE
 # MODEL
-# MAX_MODEL_LEN
+# PORT
 # TP
 # CONC
-# PORT
+# MAX_MODEL_LEN
 
+export HSA_NO_SCRATCH_RECLAIM=1
+export NCCL_MIN_NCHANNELS=112
 export VLLM_ROCM_USE_AITER=1
-export VLLM_USE_AITER_UNIFIED_ATTENTION=1 
+export VLLM_USE_AITER_UNIFIED_ATTENTION=1
 export VLLM_ROCM_USE_AITER_MHA=0
-export VLLM_USE_AITER_TRITON_FUSED_SPLIT_QKV_ROPE=1 
-export VLLM_USE_AITER_TRITON_FUSED_ADD_RMSNORM_PAD=1
-export TRITON_HIP_PRESHUFFLE_SCALES=1
-export VLLM_USE_AITER_TRITON_GEMM=1
+export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
+export ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
---compilation-config='{"compile_sizes": [1, 2, 4, 8, 16, 24, 32, 64], "full_cuda_graph": true}' \
+--gpu-memory-utilization 0.95 \
+--max-model-len $MAX_MODEL_LEN \
+--max-seq-len-to-capture $MAX_MODEL_LEN \
+--compilation-config  '{"cudagraph_mode": "FULL_AND_PIECEWISE"}' \
 --block-size=64 \
 --no-enable-prefix-caching \
---disable-log-requests
+--disable-log-requests \
+--async-scheduling
