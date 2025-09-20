@@ -24,7 +24,6 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-vllm-llama-3.3-70b-fp8.html#run-the-inference-benchmark
 
-export HF_HUB_OFFLINE=1
 export VLLM_USE_V1=1
 export VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1
 export AMDGCN_USE_BUFFER_OPS=1

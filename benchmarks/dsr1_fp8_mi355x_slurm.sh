@@ -13,7 +13,6 @@
 # PORT
 # RESULT_FILENAME
 
-export HF_HUB_OFFLINE=1
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
 export SGLANG_USE_AITER=1
 
