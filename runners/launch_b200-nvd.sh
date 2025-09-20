@@ -1,24 +1,22 @@
 #!/usr/bin/bash
 
 HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
+FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 PORT=8888
 
-network_name="bmk-net"
 server_name="bmk-server"
 client_name="bmk-client"
 
-docker network create $network_name
-
 set -x
-docker run --rm -d --network $network_name --name $server_name \
+docker run --rm -d --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e PORT=$PORT \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 --entrypoint=/bin/bash \
-$IMAGE \
-benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200_docker.sh"
+$(echo "$IMAGE" | sed 's/#/\//') \
+benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_docker.sh"
 
 set +x
 while IFS= read -r line; do
@@ -31,14 +29,14 @@ done < <(docker logs -f --tail=0 $server_name 2>&1)
 git clone https://github.com/kimbochen/bench_serving.git
 
 set -x
-docker run --rm --network $network_name --name $client_name \
+docker run --rm --network host --name $client_name \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
 --entrypoint=/bin/bash \
-$IMAGE \
+$(echo "$IMAGE" | sed 's/#/\//') \
 -lc "pip install -q datasets pandas && \
 python3 bench_serving/benchmark_serving.py \
---model $MODEL  --backend vllm --base-url http://$server_name:$PORT \
+--model $MODEL  --backend vllm --base-url http://localhost:$PORT \
 --dataset-name random \
 --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
 --num-prompts $(( $CONC * 10 )) \
@@ -49,6 +47,5 @@ python3 bench_serving/benchmark_serving.py \
 
 while [ -n "$(docker ps -aq)" ]; do
     docker stop $server_name
-    docker network rm $network_name
     sleep 5
 done
