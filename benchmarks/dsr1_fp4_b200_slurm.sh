@@ -8,11 +8,9 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 set -x
 PORT=$(( 8888 + $PORT_OFFSET ))
 
-SCHEDULER_RECV_INTERVAL=''
+SCHEDULER_RECV_INTERVAL=10
 
-if [[ "$CONC" -lt 16 ]]; then
-    SCHEDULER_RECV_INTERVAL=10
-elif [[ "$CONC" -gte 16 ]]; then
+if [[ "$CONC" -gte 16 ]]; then
     SCHEDULER_RECV_INTERVAL=30
 fi
 
