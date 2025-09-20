@@ -10,7 +10,7 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 
 SCHEDULER_RECV_INTERVAL=10
 
-if [[ "$CONC" -gte 16 ]]; then
+if [[ "$CONC" -ge 16 ]]; then
     SCHEDULER_RECV_INTERVAL=30
 fi
 
