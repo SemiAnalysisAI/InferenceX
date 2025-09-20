@@ -14,7 +14,8 @@ hw_color = {
     'b200-trt': 'gray',      # B200 TRT-LLM
     'mi300x': 'pink',
     'mi325x': 'red',
-    'mi355x': 'purple'         
+    'mi355x': 'purple',
+    'gb200': 'orange',          # GB200 TRT-LLM
 }
 
 results = []
