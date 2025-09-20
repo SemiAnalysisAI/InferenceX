@@ -52,7 +52,7 @@ python3 bench_serving/benchmark_serving.py \
 --dataset-name random \
 --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
 --num-prompts $CONC --max-concurrency $CONC \
---request-rate inf --ignore-eos \
+--request-rate inf --ignore-eos
 
 python3 bench_serving/benchmark_serving.py \
 --model $MODEL --backend vllm \
