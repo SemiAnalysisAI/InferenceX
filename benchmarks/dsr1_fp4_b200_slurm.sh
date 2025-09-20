@@ -10,28 +10,13 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 
 SCHEDULER_RECV_INTERVAL=''
 
-if [[ "$ISL" == "1024" && "$OSL" == "1024" || "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+if [[ "$CONC" -lt 16 ]]; then
     SCHEDULER_RECV_INTERVAL=10
-
-    if [[ "$CONC" -gte 16 ]]; then
-        SCHEDULER_RECV_INTERVAL=30
-    fi
-
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    SCHEDULER_RECV_INTERVAL=10
-
-    if [[ "$CONC" -gte 32 ]]; then
-        SCHEDULER_RECV_INTERVAL=30
-    fi
-
+elif [[ "$CONC" -gte 16 ]]; then
+    SCHEDULER_RECV_INTERVAL=30
 fi
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
-
-if [[ "$SCHEDULER_RECV_INTERVAL" == '' ]]; then
-    echo "Error: SCHEDULER_RECV_INTERVAL is not set"
-    exit 1
-fi
 
 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
