@@ -14,8 +14,6 @@
 # RESULT_FILENAME
 # HF_TOKEN
 
-sudo sh -c 'echo 0 > /proc/sys/kernel/numa_balancing'
-
 HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-${USER: -1}/"
 PORT=8888
 
