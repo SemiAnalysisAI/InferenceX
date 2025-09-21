@@ -14,7 +14,7 @@
 # RESULT_FILENAME
 # HF_TOKEN
 
-HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-${USER: -1}/"
+HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-1/"  # Temp solution
 PORT=8888
 
 network_name="bmk-net"
