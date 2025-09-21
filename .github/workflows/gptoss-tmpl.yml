@@ -69,7 +69,7 @@ jobs:
       runner: b200
       image: 'vllm/vllm-openai:v0.10.2'
       model: 'openai/gpt-oss-120b'
-      tp-list: '[1, 2, 4, 8]'
+      tp-list: '[1, 8]'
       framework: 'vllm'
       precision: 'fp4'
 
@@ -86,7 +86,7 @@ jobs:
       runner: b200-trt
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
       model: 'openai/gpt-oss-120b'
-      tp-list: '[1, 2, 4, 8]'
+      tp-list: '[1, 8]'
       framework: 'trt'
       precision: 'fp4'
 
