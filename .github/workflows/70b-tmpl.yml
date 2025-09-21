@@ -106,7 +106,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'  
+      tp-list: '[1, 2, 4, 8]'  
 
   bmk-b200-trt-fp8:
     if: ${{ inputs.use_b200 }}
@@ -175,7 +175,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'
+      tp-list: '[1, 2, 4, 8]'
 
   bmk-b200-fp4:
     if: ${{ inputs.use_b200 }}
@@ -192,7 +192,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'  
+      tp-list: '[1, 2, 4, 8]'  
 
   bmk-b200-trt-fp4:
     if: ${{ inputs.use_b200 }}
@@ -227,4 +227,4 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[1, 2]'
+      tp-list: '[1, 2, 4, 8]'
