@@ -180,7 +180,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[4, 8]'
-      conc-list: '[4, 8, 16, 32, 64, 128, 256, 512]'  # Custom concurrency values for this job
+      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # DPA4EP4 is already 30 tok/s/user and DPA8EP8 is already 35tok/s/user. 512 conc would be too much so we skipping it
 
   bmk-mi355x-fp4:
     if: ${{ inputs.use_mi355x }}

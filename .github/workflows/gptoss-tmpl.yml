@@ -154,6 +154,6 @@ jobs:
       runner: mi355x
       image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915'
       model: 'openai/gpt-oss-120b'
-      tp-list: '[1, 2]'
+      tp-list: '[1, 2, 4, 8]'
       framework: 'vllm'
       precision: 'fp4'
