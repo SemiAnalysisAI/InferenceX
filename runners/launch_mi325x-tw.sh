@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 
-MODEL_CODE="${EXP_NAME%%_*}"
 export HF_HUB_CACHE_MOUNT="/home/hf_hub_cache/"
 export PORT_OFFSET=${USER: -1}
 
 PARTITION="gpuworker"
-SQUASH_FILE="/home/.tw/slinky/.cache/squash/image_${MODEL_CODE}_mi325x.sqsh"
+SQUASH_FILE="/home/.tw/slinky/.cache/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 set -x
 salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell
@@ -20,6 +19,6 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${MODEL_CODE}_${PRECISION}_mi325x_slurm.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x_slurm.sh
 
 scancel $JOB_ID
