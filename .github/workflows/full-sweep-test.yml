@@ -35,6 +35,9 @@ on:
       use_mi355x:
         type: boolean
         required: false
+      use_gb200:
+        type: boolean
+        required: false
 
 jobs:
   mega-test-run:
@@ -50,6 +53,7 @@ jobs:
       use_mi300x: ${{ inputs.use_mi300x }}
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
 
   calc-success-rate:
     needs: mega-test-run

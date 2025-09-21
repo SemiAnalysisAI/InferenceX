@@ -1,0 +1,115 @@
+name: Template - Multi-Node Benchmark
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      model:
+        required: true
+        type: string
+      framework:
+        required: true
+        type: string
+      precision:
+        required: true
+        type: string
+      exp-name:
+        required: true
+        type: string
+      isl:
+        required: true
+        type: string
+      osl:
+        required: true
+        type: string
+      max-model-len:
+        required: true
+        type: string
+      random-range-ratio:
+        required: true
+        type: string
+      mtp-mode:
+        required: true
+        type: string
+
+env:
+  EXP_NAME: ${{ inputs.exp-name }}
+  FRAMEWORK: ${{ inputs.framework }}
+  PRECISION: ${{ inputs.precision }}
+  ISL: ${{ inputs.isl }}
+  OSL: ${{ inputs.osl }}
+  MAX_MODEL_LEN: ${{ inputs.max-model-len }}
+  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
+  MTP_MODE: ${{ inputs.mtp-mode }}
+
+jobs:
+  benchmark:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 480
+    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} mtp-${{ inputs.mtp-mode }}'
+
+    steps:
+      - name: Resource cleanup
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
+          fi
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up resources ..."
+            scancel -u $USER
+            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+              squeue -u $USER
+              sleep 5
+            done
+          fi
+
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Launch multi-node job script
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_${{ runner.name }}
+        run: |
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          # Check if at least one result file was created
+          if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
+            echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+            echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+          else
+            echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
+            exit 1
+          fi
+
+      - name: Process results
+        run: |
+          # Process each result file
+          for result_file in ${RESULT_FILENAME}_*.json; do
+            if [ -f "$result_file" ]; then
+              echo "Processing $result_file"
+              # Extract GPU count from filename for tp_size calculation
+              gpus=$(echo "$result_file" | sed "s/.*_gpus\([0-9]*\)\.json/\1/")
+              if [ -n "$gpus" ]; then
+                python3 utils/process_result.py ${{ inputs.runner }} $gpus ${result_file%.json} $FRAMEWORK $PRECISION
+              fi
+            fi
+          done
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.RESULT_FILENAME }}
+          path: agg_${{ env.RESULT_FILENAME }}_*.json

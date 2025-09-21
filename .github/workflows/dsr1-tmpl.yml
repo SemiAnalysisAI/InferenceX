@@ -34,6 +34,14 @@ on:
       use_mi355x:
         type: boolean
         required: true
+      use_gb200:
+        type: boolean
+        required: false
+        default: false
+      mtp-mode:
+        type: string
+        required: false
+        default: 'off'
 
 jobs:
   bmk-h200-fp8:
@@ -143,8 +151,8 @@ jobs:
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
     with:
-      runner: b200
-      image: 'lmsysorg/sglang:v0.5.0rc1-cu128-b200'
+      runner: b200-trt
+      image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
       model: 'nvidia/DeepSeek-R1-0528-FP4'
       framework: 'sglang'
       precision: 'fp4'
@@ -154,6 +162,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
+      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # Custom concurrency values for this job
 
   bmk-b200-trt-fp4:
     if: ${{ inputs.use_b200 }}
@@ -189,3 +198,20 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
+
+  bmk-gb200-fp4-multinode:
+    if: ${{ inputs.use_gb200 }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'docker.io/tanmayv25/dynamo-trtllm:v4'
+      model: 'deepseek-r1-fp4'
+      framework: 'dynamo-trtllm'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      mtp-mode: ${{ inputs.mtp-mode }}

@@ -113,7 +113,7 @@ jobs:
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
     with:
-      runner: b200-trt
+      runner: b200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP8'
       framework: 'trt'
@@ -199,7 +199,7 @@ jobs:
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
     with:
-      runner: b200-trt
+      runner: b200
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
       model: 'nvidia/Llama-3.3-70B-Instruct-FP4'
       framework: 'trt'

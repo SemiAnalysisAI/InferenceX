@@ -22,7 +22,7 @@ jobs:
       use_b200: true
       use_mi300x: true
       use_mi325x: true
-      use_mi355x: false
+      use_mi355x: true
 
   calc-success-rate:
     needs: mega-run

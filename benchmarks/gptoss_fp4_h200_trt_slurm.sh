@@ -32,7 +32,7 @@ pip install wheel build
 python3 setup.py bdist_wheel
 pip install ./dist/*.whl
 export TRITON_ROOT=/workspace/triton
-export ENABLE_PDL=1 
+export TRTLLM_ENABLE_PDL=1 
 
 set -x
 cat > gptoss-config.yml << EOF

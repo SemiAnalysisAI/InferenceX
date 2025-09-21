@@ -16,6 +16,7 @@ on:
           - 'mi300x'
           - 'mi325x'
           - 'mi355x'
+          - 'gb200'
 
       image:
         description: 'Docker Image'
@@ -32,9 +33,13 @@ on:
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
           - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_vllm_0.10.1_instinct_rc1'
+          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_sgl-dev-v0.5.2rc2-mi30x_rc1'
+          - 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915'
+          - 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915'
           - 'rocm/vllm-dev:open-mi300-08052025'
           - 'rocm/vllm-dev:open-mi355-08052025'
           - 'vllm/vllm-openai:v0.10.2'
+          - 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
 
       model:
         description: 'Model'
@@ -93,6 +98,7 @@ jobs:
           - 'h100-cr_1'
           - 'h100-cw_0'
           - 'h100-cw_1'
+
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
     secrets: inherit
@@ -152,6 +158,8 @@ jobs:
         runner:
           - 'b200-nv_0'
           - 'b200-nv_1'
+          - 'b200-nvd_0'
+          - 'b200-nvd_1'
           - 'b200-tg_0'
 
     name: '${{ matrix.runner }}'
@@ -264,6 +272,8 @@ jobs:
         runner:
           - 'mi355x-amd_0'
           - 'mi355x-amd_1'
+          - 'mi355x-amd_2'
+          - 'mi355x-amd_3'
 
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
@@ -282,8 +292,25 @@ jobs:
       tp-list: '[8]'
       conc-list: '[1]'
 
+  bmk_gb200:
+    if: ${{ inputs.runner == 'gb200' }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
+      model: 'deepseek-r1-fp4'
+      framework: 'dynamo-trtllm'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      mtp-mode: 'off'
+
   collect-test-results:
-    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x ]
+    needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x, bmk_gb200 ]
     if: ${{ always() && !cancelled() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
