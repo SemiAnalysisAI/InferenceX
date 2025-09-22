@@ -4,14 +4,21 @@ from pathlib import Path
 
 n_iosl = 3   # [1k1k, 8k1k, 1k8k]
 n_concs = 5  # [4, 8, 16, 32, 64]
+
+# H200: (70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]) x [vllm/sglang, trt] + 70b-tp x trt extra conc: [128]
+h200_runs = (4 + 1 + 4) * 2 * n_iosl * n_concs + 4 * n_iosl * 1
+
+# B200: ((70b-tp: [1, 8], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 8]) x [vllm/sglang, trt] + 7b-tp x trt extra conc: [128, 256]
+b200_runs = ((2 + 1) * 2 + 2) * 2 * n_iosl * n_concs + 2 * n_iosl * 2
+
 total_runs = {
-    'h100': (3 + 4) * n_iosl * n_concs,                # 70b-tp: [2, 4, 8], gptoss-tp: [1, 2, 4, 8]
-    'h200': (4 + 1 + 4) * 2 * n_iosl * n_concs,        # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]) x [vllm/sglang, trt]
-    'b200': ((2 + 1) * 2 + 2) * 2 * n_iosl * n_concs,  # ((70b-tp: [1, 2], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2]) x [vllm/sglang, trt]
-    'mi300x': (4 + 1 + 4) * n_iosl * n_concs,          # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi325x': (4 + 1 + 4) * n_iosl * n_concs,          # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi355x': ((2 + 1) * 2 + 2) * n_iosl * n_concs,    # (70b-tp: [1, 2], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2]
-    'gb200': 45,                                       # 45 runs in complete sweep for gb200 dsr1 fp4 trtllm
+    'h100': (3 + 4) * n_iosl * n_concs,              # 70b-tp: [2, 4, 8], gptoss-tp: [1, 2, 4, 8]
+    'h200': h200_runs,
+    'b200': b200_runs,
+    'mi300x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
+    'mi325x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
+    'mi355x': ((4 + 1) * 2 + 2) * n_iosl * n_concs,  # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2, 4, 8]
+    'gb200': 45,                                     # 45 runs in complete sweep for gb200 dsr1 fp4 trtllm
 }
 success_runs = {'h100': 0, 'h200': 0, 'b200': 0, 'mi300x': 0, 'mi325x': 0, 'mi355x': 0, 'gb200': 0}
 
