@@ -15,7 +15,7 @@ hw_color = {
     'mi300x': 'pink',
     'mi325x': 'red',
     'mi355x': 'purple',
-    'gb200': 'orange',          # GB200 TRT-LLM
+    'gb200': 'orange',          # GB200 TRT-LLM and SGlang
 }
 
 results = []
