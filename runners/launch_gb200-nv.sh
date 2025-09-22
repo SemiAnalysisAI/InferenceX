@@ -12,6 +12,10 @@ SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@
 if [ ! -f "$SQUASH_FILE" ]; then
     srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 fi
+if [ ! -f "$SQUASH_FILE" ]; then
+    echo "Image not imported: $IMAGE"
+    exit 1
+fi
 # Update the IMAGE variable to the squash file
 export IMAGE=$SQUASH_FILE
 export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"

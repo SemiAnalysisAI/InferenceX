@@ -31,6 +31,7 @@ on:
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
+          - 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
           - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_vllm_0.10.1_instinct_rc1'
           - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_sgl-dev-v0.5.2rc2-mi30x_rc1'
           - 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915'
@@ -297,7 +298,7 @@ jobs:
     secrets: inherit
     with:
       runner: gb200
-      image: 'nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
+      image: 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
       model: 'deepseek-r1-fp4'
       framework: 'dynamo-trtllm'
       precision: 'fp4'

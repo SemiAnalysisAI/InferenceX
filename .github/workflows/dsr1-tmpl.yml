@@ -205,7 +205,7 @@ jobs:
     secrets: inherit
     with:
       runner: gb200
-      image: 'nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
+      image: 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
       model: 'deepseek-r1-fp4'
       framework: 'dynamo-trtllm'
       precision: 'fp4'
