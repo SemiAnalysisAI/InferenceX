@@ -31,6 +31,8 @@ git clone https://github.com/kimbochen/bench_serving.git
 # warmup for JIT kernels - only for DeepSeek-R1-0528-FP4 model
 if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" ]]; then
     echo "Running warmup for DeepSeek-R1-0528-FP4 model..."
+    WARMUP_PROMPTS=$(( $CONC * 5 ))
+    echo "Warmup prompts: $WARMUP_PROMPTS"
     docker run --rm --network host --name warmup-client \
     -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
     -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
@@ -41,7 +43,7 @@ if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" ]]; then
     --model $MODEL --backend vllm --base-url http://localhost:$PORT \
     --dataset-name random \
     --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
-    --num-prompts $(( $CONC * 5 )) --max-concurrency $CONC \
+    --num-prompts $WARMUP_PROMPTS --max-concurrency $CONC \
     --request-rate inf --ignore-eos"
 fi
 
