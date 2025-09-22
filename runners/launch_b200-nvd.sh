@@ -28,6 +28,23 @@ done < <(docker logs -f --tail=0 $server_name 2>&1)
 
 git clone https://github.com/kimbochen/bench_serving.git
 
+# warmup for JIT kernels - only for DeepSeek-R1-0528-FP4 model
+if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" ]]; then
+    echo "Running warmup for DeepSeek-R1-0528-FP4 model..."
+    docker run --rm --network host --name warmup-client \
+    -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
+    -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
+    --entrypoint=/bin/bash \
+    $(echo "$IMAGE" | sed 's/#/\//') \
+    -lc "pip install -q datasets pandas && \
+    python3 bench_serving/benchmark_serving.py \
+    --model $MODEL --backend vllm --base-url http://localhost:$PORT \
+    --dataset-name random \
+    --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
+    --num-prompts $CONC --max-concurrency $CONC \
+    --request-rate inf --ignore-eos"
+fi
+
 set -x
 docker run --rm --network host --name $client_name \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \

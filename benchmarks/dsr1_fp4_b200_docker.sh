@@ -15,3 +15,4 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.
 --chunked-prefill-size 16384 \
 --enable-ep-moe --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
 --enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --enable-flashinfer-trtllm-moe --stream-interval 10
+
