@@ -39,6 +39,7 @@ on:
 
 env:
   EXP_NAME: ${{ inputs.exp-name }}
+  IMAGE: ${{ inputs.image }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   ISL: ${{ inputs.isl }}

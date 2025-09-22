@@ -2,13 +2,18 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+
 # Set up environment variables for SLURM
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
-# The original Docker image is available at: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
-# This path is to a pre-built squash file from the above image.
-export IMAGE="/mnt/lustre01/users/sa-shared/images/dynamo-trtllm_v5.sqsh"
+# Import the image if it is not already imported
+SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+if [ ! -f "$SQUASH_FILE" ]; then
+    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+fi
+# Update the IMAGE variable to the squash file
+export IMAGE=$SQUASH_FILE
 export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
 export SERVED_MODEL_NAME="deepseek-r1-fp4"
 
