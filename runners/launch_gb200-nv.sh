@@ -7,17 +7,13 @@
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
-# Import the image if it is not already imported
+
 SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-if [ ! -f "$SQUASH_FILE" ]; then
-    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-fi
-if [ ! -f "$SQUASH_FILE" ]; then
-    echo "Image not imported: $IMAGE"
-    exit 1
-fi
+srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
 # Update the IMAGE variable to the squash file
 export IMAGE=$SQUASH_FILE
+
 export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
 export SERVED_MODEL_NAME="deepseek-r1-fp4"
 
