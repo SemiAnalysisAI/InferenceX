@@ -12,7 +12,7 @@
 # CONC
 # PORT
 # RESULT_FILENAME
-
+export SGLANG_USE_AITER=1
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
@@ -24,7 +24,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --disable-radix-cache \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=196608 \
---cuda-graph-max-bs=$CONC \
+--cuda-graph-max-bs=128 \
 > $SERVER_LOG 2>&1 &
 
 set +x
@@ -46,3 +46,4 @@ python3 bench_serving/benchmark_serving.py \
 --request-rate inf --ignore-eos \
 --save-result --percentile-metrics "ttft,tpot,itl,e2el" \
 --result-dir /workspace/ --result-filename $RESULT_FILENAME.json
+

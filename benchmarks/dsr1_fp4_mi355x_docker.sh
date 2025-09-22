@@ -9,6 +9,7 @@
 # TP
 # CONC
 # PORT
+export SGLANG_USE_AITER=1
 
 set -x
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
@@ -19,4 +20,5 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --disable-radix-cache \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=196608 \
---cuda-graph-max-bs=$CONC
+--cuda-graph-max-bs=128
+
