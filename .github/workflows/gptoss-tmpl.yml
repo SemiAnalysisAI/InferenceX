@@ -118,7 +118,7 @@ jobs:
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
       runner: h200-trt
-      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
+      image: 'nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev'
       model: 'openai/gpt-oss-120b'
       tp-list: '[1, 2, 4, 8]'
       framework: 'trt'
