@@ -179,10 +179,10 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
 
     # Launch jobs based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="4x64x256x1024x2048x4096x4608x4864x5120x5376x5632x6144"
+        concurrency_list="4x64x256x1024x2048x4096x4608x4864x4992x5120x5376x5632x6144x8192"
         bash ./submit_disagg.sh 6 3 12 1 8 $ISL $OSL $concurrency_list inf
     elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="4x16x128x256x320x384x448x512x1024"
+        concurrency_list="4x16x128x256x320x384x448x512x576x640x768x1024"
         bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
     else
         echo "Unsupported ISL/OSL combination: $ISL/$OSL"
