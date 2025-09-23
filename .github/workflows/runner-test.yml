@@ -49,7 +49,6 @@ on:
         required: true
         type: choice
         options:
-          - 'kedarpotdar147/vllm0.1:latest'
           - 'lmsysorg/sglang:v0.4.9.post1-cu126'
           - 'lmsysorg/sglang:v0.5.0rc1-cu128-b200'
           - 'lmsysorg/sglang:v0.5.2rc2-cu126'
@@ -57,13 +56,9 @@ on:
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post1'
           - 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
-          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_vllm_0.10.1_instinct_rc1'
-          - 'rocm/7.0-preview:rocm7.0_preview_ubuntu_22.04_sgl-dev-v0.5.2rc2-mi30x_rc1'
           - 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915'
           - 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915'
           - 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915'
-          - 'rocm/vllm-dev:open-mi300-08052025'
-          - 'rocm/vllm-dev:open-mi355-08052025'
           - 'vllm/vllm-openai:v0.10.2'
       model:
         description: 'Model'
