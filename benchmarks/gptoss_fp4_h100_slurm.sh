@@ -17,15 +17,14 @@
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 cat > config.yaml << EOF
-kv-cache-dtype: fp8
 async-scheduling: true
 no-enable-prefix-caching: true
+cuda-graph-sizes: 2048
 max-num-batched-tokens: 8192
 max-model-len: 10240
 EOF
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-
 export TORCH_CUDA_ARCH_LIST="9.0"
 
 set -x
