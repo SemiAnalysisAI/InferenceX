@@ -25,6 +25,11 @@ while IFS= read -r line; do
     fi
 done < <(docker logs -f --tail=0 $server_name 2>&1)
 
+if ! docker ps --format "{{.Names}}" | grep -q "$server_name"; then
+    echo "Server container launch failed."
+    exit 1
+fi
+
 git clone https://github.com/kimbochen/bench_serving.git
 
 set -x
