@@ -23,15 +23,6 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 
 set +x
 
-git clone https://github.com/triton-lang/triton.git
-cd triton
-# Specific commit verified with TensorRT-LLM
-git checkout f3067cd3bd0c29065fa4ecdb724b6f29cbabea5f
-pip install -r python/requirements.txt          # build-time dependencies
-pip install wheel build
-python3 setup.py bdist_wheel
-pip install ./dist/*.whl
-export TRITON_ROOT=/workspace/triton
 export TRTLLM_ENABLE_PDL=1 
 
 set -x
