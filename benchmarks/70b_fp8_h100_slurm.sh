@@ -16,8 +16,6 @@
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-pip install -q datasets pandas
-
 cat > config.yaml << EOF
 kv-cache-dtype: fp8
 async-scheduling: true
@@ -29,10 +27,9 @@ EOF
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 export TORCH_CUDA_ARCH_LIST="9.0"
-export PYTHONNOUSERSITE=1
 
 set -x
-vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
+PYTHONNOUSERSITE=1 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --config=config.yaml \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
@@ -47,6 +44,7 @@ while IFS= read -r line; do
     fi
 done < <(tail -F -n0 "$SERVER_LOG")
 
+pip install -q datasets pandas
 git clone https://github.com/kimbochen/bench_serving.git
 set -x
 python3 bench_serving/benchmark_serving.py \
