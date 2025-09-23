@@ -38,10 +38,6 @@ on:
         type: boolean
         required: false
         default: false
-      mtp-mode:
-        type: string
-        required: false
-        default: 'off'
 
 jobs:
   bmk-h200-fp8:
@@ -214,9 +210,9 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[4,8]'
+      tp-list: '[4, 8]'
 
-  bmk-gb200-fp4-multinode:
+  bmk-gb200-fp4-multinode-mtp-off:
     if: ${{ inputs.use_gb200 }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
@@ -231,4 +227,21 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      mtp-mode: ${{ inputs.mtp-mode }}
+      mtp-mode: 'off'
+
+  bmk-gb200-fp4-multinode-mtp-on:
+    if: ${{ inputs.use_gb200 }}
+    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    secrets: inherit
+    with:
+      runner: gb200
+      image: 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3'
+      model: 'deepseek-r1-fp4'
+      framework: 'dynamo-trtllm'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      mtp-mode: 'on'

@@ -57,23 +57,12 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-          if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up resources ..."
-            scancel -u $USER
-            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-              squeue -u $USER
-              sleep 5
-            done
-          fi
+          echo "[Slurm] Cleaning up resources ..."
+          scancel -u $USER
+          while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+            squeue -u $USER
+            sleep 5
+          done
 
       - uses: actions/checkout@v3
         with:
