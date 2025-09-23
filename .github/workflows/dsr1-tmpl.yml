@@ -217,7 +217,7 @@ jobs:
       tp-list: '[4,8]'
 
   bmk-gb200-fp4-multinode:
-    if: ${{ inputs.use_gb200 }}
+    if: ${{ inputs.use_gb200 && (inputs.mtp-mode == 'off' || inputs.mtp-mode == 'on') }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
@@ -234,7 +234,7 @@ jobs:
       mtp-mode: ${{ inputs.mtp-mode }}
 
   bmk-gb200-fp8-multinode:
-    if: ${{ inputs.use_gb200 }}
+    if: ${{ inputs.use_gb200 && inputs.mtp-mode == 'SGL-NA' }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
@@ -248,4 +248,4 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      mtp-mode: 'sglang-not-applicable'
+      mtp-mode: 'SGL-NA'

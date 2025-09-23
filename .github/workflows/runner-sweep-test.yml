@@ -324,7 +324,7 @@ jobs:
       osl: 1024
       max-model-len: 2048
       random-range-ratio: 0.8
-      mtp-mode: 'sgl-na'
+      mtp-mode: 'SGL-NA'
 
   collect-test-results:
     needs: [ bmk_h100, bmk_h200, bmk_b200, bmk_b200-trt, bmk_mi300x, bmk_mi325x, bmk_mi355x, bmk_gb200, bmk_gb200-sgl ]
