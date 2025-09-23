@@ -16,42 +16,47 @@
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-set -x
-hf download $MODEL
+pip install -q datasets pandas
+
+cat > config.yaml << EOF
+kv-cache-dtype: fp8
+async-scheduling: true
+no-enable-prefix-caching: true
+max-num-batched-tokens: 8192
+max-model-len: 10240
+EOF
+
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
 
 export TORCH_CUDA_ARCH_LIST="9.0"
-vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---trust-remote-code --quantization modelopt --gpu-memory-utilization 0.9 \
---pipeline-parallel-size 1 --tensor-parallel-size $TP --max-num-seqs $CONC --max-num-batched-tokens 8192 --max-model-len $MAX_MODEL_LEN \
---enable-chunked-prefill --async-scheduling --no-enable-prefix-caching \
---compilation-config '{"pass_config": {"enable_fi_allreduce_fusion": true}, "custom_ops": ["+rms_norm"], "level": 3}' \
+export PYTHONNOUSERSITE=1
+
+set -x
+vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
+--config=config.yaml \
+--gpu-memory-utilization=0.9 \
+--tensor-parallel-size=$TP \
+--max-num-seqs=$CONC  \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 set +x
 while IFS= read -r line; do
     printf '%s\n' "$line"
-    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]]; then
-		sleep 5
-		tail -n100 $SERVER_LOG
-        echo "JOB $SLURM_JOB_ID ran on NODE $SLURMD_NODENAME"
-        exit 1
-    fi
     if [[ "$line" == *"Application startup complete"* ]]; then
         break
     fi
 done < <(tail -F -n0 "$SERVER_LOG")
 
-set -x
 git clone https://github.com/kimbochen/bench_serving.git
+set -x
 python3 bench_serving/benchmark_serving.py \
---model $MODEL --backend vllm \
---base-url http://0.0.0.0:$PORT \
---dataset-name random \
---random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
---num-prompts $(( $CONC * 10 )) --max-concurrency $CONC \
---request-rate inf --ignore-eos \
---save-result --percentile-metrics 'ttft,tpot,itl,e2el' \
---result-dir /workspace/ \
---result-filename $RESULT_FILENAME.json
+--model=$MODEL \
+--backend=vllm \
+--base-url="http://0.0.0.0:$PORT" \
+--dataset-name=random \
+--random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
+--num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
+--request-rate=inf --ignore-eos \
+--save-result --percentile-metrics='ttft,tpot,itl,e2el' \
+--result-dir=/workspace/ \
+--result-filename=$RESULT_FILENAME.json
