@@ -28,9 +28,9 @@ done < <(docker logs -f --tail=0 $server_name 2>&1)
 
 git clone https://github.com/kimbochen/bench_serving.git
 
-# warmup for JIT kernels - only for DeepSeek-R1-0528-FP4 model
-if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" ]]; then
-    echo "Running warmup for DeepSeek-R1-0528-FP4 model..."
+# warmup for JIT kernels - only for DeepSeek-R1-0528 models
+if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
+    echo "Running JIT kernel warmup for DeepSeek-R1-0528 model..."
     WARMUP_PROMPTS=$(( $CONC * 10 ))
     echo "Warmup prompts: $WARMUP_PROMPTS"
     docker run --rm --network host --name warmup-client \

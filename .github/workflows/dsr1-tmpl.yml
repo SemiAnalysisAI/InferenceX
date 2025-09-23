@@ -84,7 +84,7 @@ jobs:
     secrets: inherit
     with:
       runner: b200
-      image: 'lmsysorg/sglang:v0.5.0rc1-cu128-b200'
+      image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
       model: 'deepseek-ai/DeepSeek-R1-0528'
       framework: 'sglang'
       precision: 'fp8'
@@ -178,7 +178,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[8]'
+      tp-list: '[4,8]'
       conc-list: '[4, 8, 16, 32, 64, 128]'  # Custom concurrency values for this job
 
   bmk-b200-trt-fp4:
