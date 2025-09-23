@@ -22,6 +22,9 @@ data = {
     'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size
 }
 
+if len(sys.argv) == 7:  # MTP
+    data['mtp'] = sys.argv[6]
+
 for key, value in bmk_result.items():
     if key.endswith('ms'):
         data[key.replace('_ms', '')] = float(value) / 1000.0

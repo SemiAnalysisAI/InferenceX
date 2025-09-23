@@ -77,6 +77,7 @@ jobs:
       use_mi300x: ${{ inputs.use_mi300x }}
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
 
   collect-dsr1-1k1k-results:
     needs: dsr1-1k1k
@@ -151,6 +152,7 @@ jobs:
       use_mi300x: ${{ inputs.use_mi300x }}
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
 
   collect-dsr1-8k1k-results:
     needs: dsr1-8k1k
@@ -225,6 +227,7 @@ jobs:
       use_mi300x: ${{ inputs.use_mi300x }}
       use_mi325x: ${{ inputs.use_mi325x }}
       use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
 
   collect-dsr1-1k8k-results:
     needs: dsr1-1k8k
