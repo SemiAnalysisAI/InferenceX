@@ -39,6 +39,23 @@ on:
         required: true
 
 jobs:
+  bmk-h100:
+    if: ${{ inputs.use_h100 }}
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      runner: h100
+      image: 'vllm/vllm-openai:v0.10.2'
+      model: 'openai/gpt-oss-120b'
+      tp-list: '[2, 4, 8]'
+      framework: 'vllm'
+      precision: 'fp4'
+
   bmk-h200:
     if: ${{ inputs.use_h200 }}
     uses: ./.github/workflows/benchmark-tmpl.yml
