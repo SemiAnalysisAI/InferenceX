@@ -197,7 +197,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[8]'
+      tp-list: '[4,8]'
 
   bmk-gb200-fp4-multinode:
     if: ${{ inputs.use_gb200 }}
