@@ -5,7 +5,7 @@ PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
 export PORT_OFFSET=${USER: -1}
-export ENROOT_CACHE_PATH="/mnt/image-storage/enroot-${USER: -1}"
+export ENROOT_DATA_PATH="/mnt/image-storage/enroot-${USER: -1}"
 
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
