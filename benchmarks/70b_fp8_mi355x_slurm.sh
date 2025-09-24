@@ -29,11 +29,11 @@ export TRITON_HIP_ASYNC_FAST_SWIZZLE=1
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_RMSNORM=1
 
-if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=0
-elif [[ "$isl" == "1024" && "$osl" == "8192" ]]; then
+elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=0
-elif [[ "$isl" == "8192" && "$osl" == "1024" ]]; then
+elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=1
 fi
 
