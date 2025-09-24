@@ -22,7 +22,7 @@ total_runs = {
     'mi300x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
     'mi325x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
     'mi355x': ((4 + 1) * 2 + 2) * n_iosl * n_concs,  # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2, 4, 8]
-    'gb200': 66,                                     # 45 runs (trtllm) + 21 runs (sglang)
+    'gb200': 65,                                     # 45 runs (trtllm) + 20 runs (sglang)
 }
 success_runs = {'h100': 0, 'h200': 0, 'b200': 0, 'mi300x': 0, 'mi325x': 0, 'mi355x': 0, 'gb200': 0}
 
