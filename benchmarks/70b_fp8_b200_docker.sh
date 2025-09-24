@@ -34,5 +34,5 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=512 \
---config=config.yaml \
+--config config.yaml \
 --disable-log-requests

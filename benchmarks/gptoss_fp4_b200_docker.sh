@@ -26,6 +26,7 @@ EOF
 export TORCH_CUDA_ARCH_LIST="10.0"
 export VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB='{"2":32,"4":32,"8":8}'
 export PYTHONNOUSERSITE=1
+export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
