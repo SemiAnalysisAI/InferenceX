@@ -4,6 +4,9 @@ HF_HUB_CACHE_MOUNT="/root/hf_hub_cache-${USER: -1}/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
+export PORT_OFFSET=${USER: -1}
+export ENROOT_CACHE_PATH="/mnt/image-storage/enroot-${USER: -1}"
+
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
 --container-image=$IMAGE \
@@ -11,5 +14,5 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-mount-home \
 --container-workdir=/workspace/ \
---no-container-entrypoint --export=ALL,PORT_OFFSET=${USER: -1} \
+--no-container-entrypoint --export=ALL \
 bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh
