@@ -12,16 +12,9 @@
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-vllm-llama-3.3-70b-fp8.html#run-the-inference-benchmark
 
-export VLLM_USE_V1=1
-export VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1
-export AMDGCN_USE_BUFFER_OPS=1
-export VLLM_USE_AITER_TRITON_ROPE=1
-export TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1
-export TRITON_HIP_USE_ASYNC_COPY=1
-export TRITON_HIP_USE_BLOCK_PINGPONG=1
-export TRITON_HIP_ASYNC_FAST_SWIZZLE=1
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_RMSNORM=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=0
@@ -44,3 +37,4 @@ vllm serve $MODEL --port=$PORT \
 --no-enable-prefix-caching \
 --async-scheduling \
 --disable-log-requests
+
