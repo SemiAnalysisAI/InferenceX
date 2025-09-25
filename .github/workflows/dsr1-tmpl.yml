@@ -213,7 +213,7 @@ jobs:
       tp-list: '[4, 8]'
 
   bmk-gb200-fp4-multinode-mtp-off:
-    if: ${{ inputs.use_gb200 }}
+    if: ${{ inputs.use_gb200 && !(inputs.isl == '1k' && inputs.osl == '8k') }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
@@ -230,7 +230,7 @@ jobs:
       mtp-mode: 'off'
 
   bmk-gb200-fp4-multinode-mtp-on:
-    if: ${{ inputs.use_gb200 }}
+    if: ${{ inputs.use_gb200 && !(inputs.isl == '1k' && inputs.osl == '8k') }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
@@ -247,7 +247,7 @@ jobs:
       mtp-mode: 'on'
 
   bmk-gb200-fp8-multinode:
-    if: ${{ inputs.use_gb200 }}
+    if: ${{ inputs.use_gb200 && !(inputs.isl == '1k' && inputs.osl == '8k') }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
