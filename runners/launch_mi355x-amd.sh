@@ -61,11 +61,6 @@ bench_serving/benchmark_serving.py \
 --save-result --percentile-metrics="ttft,tpot,itl,e2el" \
 --result-dir=/workspace/ --result-filename=$RESULT_FILENAME.json
 
-if [[ -f "gpucore.*" ]]; then
-    echo "Caught the config!!!"
-    exit 1
-fi
-
 rm -f gpucore.*  # Remove the mysterious file dump
 
 while [ -n "$(docker ps -aq)" ]; do
