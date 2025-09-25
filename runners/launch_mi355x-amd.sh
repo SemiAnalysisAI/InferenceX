@@ -66,6 +66,8 @@ if [[ -f "gpucore.*" ]]; then
     exit 1
 fi
 
+rm -f gpucore.*  # Remove the mysterious file dump
+
 while [ -n "$(docker ps -aq)" ]; do
     docker stop $server_name
     docker network rm $network_name
