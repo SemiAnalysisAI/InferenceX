@@ -260,8 +260,8 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
 
 else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory
-    # we do "head -1" here since only the latest job will yield the result
-    LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | head -1)
+    # we do "tail -1" here since only the latest job will yield the result
+    LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | sort -V | tail -1)
     if [ -z "$LOGS_DIR" ]; then
         echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
         exit 1
