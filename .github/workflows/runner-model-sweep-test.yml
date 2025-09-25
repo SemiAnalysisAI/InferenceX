@@ -13,7 +13,6 @@ on:
           - 'h200-trt'
           - 'b200'
           - 'b200-trt'
-          - 'gb200'
           - 'mi300x'
           - 'mi325x'
           - 'mi355x'
@@ -300,32 +299,3 @@ jobs:
       random-range-ratio: 0.8
       tp-list: '[8]'
       conc-list: '[1]'
-
-  bmk-gb200:
-    if: ${{ inputs.runner == 'gb200' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - 'gb200-nv_0'
-        config:
-          - { image: 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3', model: 'deepseek-r1-fp4', framework: 'dynamo-trtllm', precision: 'fp4', exp-name: 'dsr1_test' }
-          - { image: 'nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'dynamo-sglang', precision: 'fp8', exp-name: 'dsr1_test' }
-
-    name: '${{ matrix.runner }}'
-    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-    secrets: inherit
-    with:
-      runner: ${{ matrix.runner }}
-      image: ${{ matrix.config.image }}
-      model: ${{ matrix.config.model }}
-      framework: ${{ matrix.config.framework }}
-      precision: ${{ matrix.config.precision }}
-      exp-name: ${{ matrix.config.exp-name }}
-      isl: 1024
-      osl: 1024
-      max-model-len: 2048
-      random-range-ratio: 0.8
-      tp-list: '[8]'
-      conc-list: '[1]'
-      mtp-mode: 'off'
