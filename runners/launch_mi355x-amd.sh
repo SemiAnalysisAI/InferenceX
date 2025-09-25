@@ -61,6 +61,11 @@ bench_serving/benchmark_serving.py \
 --save-result --percentile-metrics="ttft,tpot,itl,e2el" \
 --result-dir=/workspace/ --result-filename=$RESULT_FILENAME.json
 
+if [[ -f "gpucore.*" ]]; then
+    echo "Caught the config!!!"
+    exit 1
+fi
+
 while [ -n "$(docker ps -aq)" ]; do
     docker stop $server_name
     docker network rm $network_name
