@@ -20,6 +20,8 @@ else
 fi
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
+ps aux
+
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
