@@ -53,3 +53,113 @@ jobs:
       random-range-ratio: 0.8
       tp-list: '[8]'
       conc-list: '[1]'
+
+  bmk-h200:
+    if: ${{ inputs.runner == 'h200' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - 'h200-cw_0'
+          - 'h200-cw_1'
+          - 'h200-nb_0'
+          - 'h200-nb_1'
+          - 'h200-nb_2'
+          - 'h200-nb_3'
+          - 'h200-nv_0'
+          - 'h200-nv_1'
+          - 'h200-nv_2'
+          - 'h200-nv_3'
+        config:
+          - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP8', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
+          - { image: 'lmsysorg/sglang:v0.5.2rc2-cu126', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'vllm/vllm-openai:v0.10.2', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
+
+    name: '${{ matrix.runner }}'
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      runner: ${{ matrix.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      exp-name: ${{ matrix.config.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      tp-list: '[8]'
+      conc-list: '[1]'
+
+  bmk-h200-trt:
+    if: ${{ inputs.runner == 'h200-trt' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - 'h200-cw_0'
+          - 'h200-cw_1'
+          - 'h200-nb_0'
+          - 'h200-nb_1'
+          - 'h200-nb_2'
+          - 'h200-nb_3'
+          - 'h200-nv_0'
+          - 'h200-nv_1'
+          - 'h200-nv_2'
+          - 'h200-nv_3'
+        config:
+          - { image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2', model: 'nvidia/Llama-3.3-70B-Instruct-FP8', framework: 'trt', precision: 'fp8', exp-name: '70b_test' }
+          - { image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'trt', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2', model: 'openai/gpt-oss-120b', framework: 'trt', precision: 'fp4', exp-name: 'gptoss_test' }
+
+    name: '${{ matrix.runner }}'
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      runner: ${{ matrix.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      exp-name: ${{ matrix.config.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      tp-list: '[8]'
+      conc-list: '[1]'
+
+  bmk-b200:
+    if: ${{ inputs.runner == 'b200' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - 'b200-nvd_0'
+          - 'b200-nvd_1'
+          - 'b200-nvd_2'
+          - 'b200-tg_0'
+        config:
+          - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP8', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
+          - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP4', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
+          - { image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200', model: 'nvidia/DeepSeek-R1-0528-FP4', framework: 'sglang', precision: 'fp4', exp-name: 'dsr1_test' }
+          - { image: 'vllm/vllm-openai:v0.10.2', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
+
+    name: '${{ matrix.runner }}'
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      runner: ${{ matrix.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      exp-name: ${{ matrix.config.exp-name }}
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      tp-list: '[8]'
+      conc-list: '[1]'
