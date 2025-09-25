@@ -261,4 +261,4 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      mtp-mode: 'SGL-NA'
+      mtp-mode: 'off'
