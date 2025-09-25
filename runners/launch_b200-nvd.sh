@@ -65,6 +65,7 @@ python3 bench_serving/benchmark_serving.py \
 --result-dir /workspace/ --result-filename $RESULT_FILENAME.json"
 
 while [ -n "$(docker ps -aq)" ]; do
+    docker exec $server_name pkill python3
     docker stop $server_name
     sleep 5
 done
