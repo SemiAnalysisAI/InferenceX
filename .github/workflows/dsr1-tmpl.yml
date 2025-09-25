@@ -159,23 +159,23 @@ jobs:
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
 
-  # bmk-b200-fp4:
-  #   if: ${{ inputs.use_b200 }}
-  #   uses: ./.github/workflows/benchmark-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     runner: b200
-  #     image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
-  #     model: 'nvidia/DeepSeek-R1-0528-FP4'
-  #     framework: 'sglang'
-  #     precision: 'fp4'
-  #     exp-name: ${{ inputs.exp-name }}
-  #     isl: ${{ inputs.isl }}
-  #     osl: ${{ inputs.osl }}
-  #     max-model-len: ${{ inputs.max-model-len }}
-  #     random-range-ratio: ${{ inputs.random-range-ratio }}
-  #     tp-list: '[4,8]'
-  #     conc-list: '[4, 8, 16, 32, 64, 128]'  # Custom concurrency values for this job
+  bmk-b200-fp4:
+    if: ${{ inputs.use_b200 }}
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      runner: b200
+      image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200'
+      model: 'nvidia/DeepSeek-R1-0528-FP4'
+      framework: 'sglang'
+      precision: 'fp4'
+      exp-name: ${{ inputs.exp-name }}
+      isl: ${{ inputs.isl }}
+      osl: ${{ inputs.osl }}
+      max-model-len: ${{ inputs.max-model-len }}
+      random-range-ratio: ${{ inputs.random-range-ratio }}
+      tp-list: '[4,8]'
+      conc-list: '[4, 8, 16, 32, 64, 128]'  # Custom concurrency values for this job
 
   bmk-b200-trt-fp4:
     if: ${{ inputs.use_b200 }}
