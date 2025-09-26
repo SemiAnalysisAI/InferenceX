@@ -52,4 +52,5 @@ vllm serve $MODEL \
 --max-seq-len-to-capture $MAX_MODEL_LEN \
 --max-num-batched-tokens 131072 \
 --no-enable-prefix-caching \
+--disable-log-requests \
 --async-scheduling
