@@ -14,6 +14,8 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
+sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
+
 cat > config.yaml << EOF
 compilation-config: '{"pass_config":{"enable_fi_allreduce_fusion":true,"enable_attn_fusion":true,"enable_noop":true},"custom_ops":["+rms_norm"],"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 async-scheduling: true
