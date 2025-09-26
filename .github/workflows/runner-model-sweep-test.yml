@@ -155,8 +155,8 @@ jobs:
       framework: ${{ matrix.config.framework }}
       precision: ${{ matrix.config.precision }}
       exp-name: ${{ matrix.config.exp-name }}
-      isl: 1024
-      osl: 8192
+      isl: 8192
+      osl: 1024
       max-model-len: 9216
       random-range-ratio: 0.8
       tp-list: '[8]'
