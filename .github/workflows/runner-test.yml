@@ -100,6 +100,15 @@ on:
           - '70b_test'
           - 'dsr1_test'
           - 'gptoss_test'
+
+      mtp-mode:
+        description: 'MTP Mode'
+        required: true
+        type: choice
+        options:
+          - 'off'
+          - 'on'
+        default: 'off'
         
 jobs:
   runner-test:
@@ -118,6 +127,7 @@ jobs:
       random-range-ratio: 0.8
       tp-list: '[8]'
       conc-list: '[1]'
+      mtp-mode: ${{ inputs.mtp-mode }}
 
   collect-test-results:
     needs: runner-test
