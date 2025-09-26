@@ -4,6 +4,10 @@ HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 PORT=8888
 
+# Create unique cache directory based on model parameters
+MODEL_NAME=$(basename "$MODEL")
+CACHE_DIR="/raid/flashinfer_cache/${MODEL_NAME}_${PRECISION}${FRAMEWORK_SUFFIX}_isl${ISL}_osl${OSL}_tp${TP}_conc${CONC}"
+
 server_name="bmk-server"
 client_name="bmk-client"
 
@@ -11,8 +15,10 @@ set -x
 docker run --rm -d --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+-v $CACHE_DIR:/workspace/flashinfer_cache \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e ISL -e OSL -e PORT=$PORT \
+-e FLASHINFER_WORKSPACE_BASE=/workspace/flashinfer_cache \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
@@ -34,8 +40,10 @@ if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/Deep
     WARMUP_PROMPTS=$(( $CONC * 10 ))
     echo "Warmup prompts: $WARMUP_PROMPTS"
     docker run --rm --network host --name warmup-client \
+    -v $CACHE_DIR:/workspace/flashinfer_cache \
     -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
     -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
+    -e FLASHINFER_WORKSPACE_BASE=/workspace/flashinfer_cache \
     --entrypoint=/bin/bash \
     $(echo "$IMAGE" | sed 's/#/\//') \
     -lc "pip install -q datasets pandas && \
@@ -49,8 +57,10 @@ fi
 
 set -x
 docker run --rm --network host --name $client_name \
+-v $CACHE_DIR:/workspace/flashinfer_cache \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
+-e FLASHINFER_WORKSPACE_BASE=/workspace/flashinfer_cache \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
 -lc "pip install -q datasets pandas && \
