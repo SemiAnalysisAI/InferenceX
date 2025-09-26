@@ -213,7 +213,7 @@ jobs:
       tp-list: '[4, 8]'
 
   bmk-gb200-fp4-multinode-mtp-off:
-    if: ${{ inputs.use_gb200 && !(inputs.isl == '1k' && inputs.osl == '8k') }}
+    if: ${{ inputs.use_gb200 && !(inputs.isl == '1024' && inputs.osl == '8192') }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
     secrets: inherit
     with:
