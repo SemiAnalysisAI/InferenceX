@@ -106,7 +106,7 @@ jobs:
 
   collect-gptoss-1k1k-results:
     needs: gptoss-1k1k
-    if: ${{ inputs.run_1k1k && (success() || failure()) }}
+    if: ${{ inputs.run_1k1k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -131,7 +131,7 @@ jobs:
 
   collect-70b-8k1k-results:
     needs: _70b-8k1k
-    if: ${{ inputs.run_8k1k && (success() || failure()) }}
+    if: ${{ inputs.run_8k1k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -156,7 +156,7 @@ jobs:
 
   collect-dsr1-8k1k-results:
     needs: dsr1-8k1k
-    if: ${{ inputs.run_8k1k && (success() || failure()) }}
+    if: ${{ inputs.run_8k1k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -181,7 +181,7 @@ jobs:
 
   collect-gptoss-8k1k-results:
     needs: gptoss-8k1k
-    if: ${{ inputs.run_8k1k && (success() || failure()) }}
+    if: ${{ inputs.run_8k1k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -206,7 +206,7 @@ jobs:
 
   collect-70b-1k8k-results:
     needs: _70b-1k8k
-    if: ${{ inputs.run_1k8k && (success() || failure()) }}
+    if: ${{ inputs.run_1k8k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -231,7 +231,7 @@ jobs:
 
   collect-dsr1-1k8k-results:
     needs: dsr1-1k8k
-    if: ${{ inputs.run_1k8k && (success() || failure()) }}
+    if: ${{ inputs.run_1k8k && always() }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
@@ -256,7 +256,7 @@ jobs:
 
   collect-gptoss-1k8k-results:
     needs: gptoss-1k8k
-    if: ${{ inputs.run_1k8k && (success() || failure()) }}
+    if: ${{ inputs.run_1k8k && always()) }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
     with:
