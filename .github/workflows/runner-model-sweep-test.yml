@@ -139,11 +139,11 @@ jobs:
           - 'b200-nvd_1'
           - 'b200-nvd_2'
         config:
-          - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP8', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
-          - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP4', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
-          - { image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          # - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP8', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
+          # - { image: 'vllm/vllm-openai:v0.10.2', model: 'nvidia/Llama-3.3-70B-Instruct-FP4', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
+          # - { image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
           - { image: 'lmsysorg/sglang:v0.5.3rc1-cu129-b200', model: 'nvidia/DeepSeek-R1-0528-FP4', framework: 'sglang', precision: 'fp4', exp-name: 'dsr1_test' }
-          - { image: 'vllm/vllm-openai:v0.10.2', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
+          # - { image: 'vllm/vllm-openai:v0.10.2', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
@@ -156,11 +156,11 @@ jobs:
       precision: ${{ matrix.config.precision }}
       exp-name: ${{ matrix.config.exp-name }}
       isl: 1024
-      osl: 1024
-      max-model-len: 2048
+      osl: 8192
+      max-model-len: 9216
       random-range-ratio: 0.8
       tp-list: '[8]'
-      conc-list: '[1]'
+      conc-list: '[4]'
 
   bmk-b200-trt:
     if: ${{ inputs.runner == 'b200-trt' }}
