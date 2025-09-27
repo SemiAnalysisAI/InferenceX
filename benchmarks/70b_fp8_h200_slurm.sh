@@ -20,13 +20,22 @@ set -x
 hf download $MODEL
 pip install datasets pandas
 
+# Calculate max-model-len based on ISL and OSL
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
+elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
+    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 200))
+else
+    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}  
+fi
+
 # Create config.yaml
 cat > config.yaml << EOF
 kv-cache-dtype: fp8
 async-scheduling: true
 no-enable-prefix-caching: true
 max-num-batched-tokens: 8192
-max-model-len: 10240
+max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)

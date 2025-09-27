@@ -18,13 +18,22 @@ nvidia-smi
 
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
+# Calculate max-model-len based on ISL and OSL
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
+elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
+    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 200))
+else
+    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}  
+fi
+
 cat > config.yaml << EOF
 kv-cache-dtype: fp8
 compilation-config: '{"pass_config":{"enable_fi_allreduce_fusion":true,"enable_attn_fusion":true,"enable_noop":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}'
 async-scheduling: true
 no-enable-prefix-caching: true
 max-num-batched-tokens: 8192
-max-model-len: 10240
+max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
 
 export TORCH_CUDA_ARCH_LIST="10.0"
