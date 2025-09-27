@@ -132,7 +132,7 @@ jobs:
     secrets: inherit
     with:
       runner: mi300x
-      image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915'
+      image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1'
       model: 'amd/Llama-3.3-70B-Instruct-FP8-KV'
       framework: 'vllm'
       precision: 'fp8'
