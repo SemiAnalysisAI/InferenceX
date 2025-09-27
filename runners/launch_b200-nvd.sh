@@ -13,6 +13,11 @@ client_name="bmk-client"
 
 nvidia-smi
 
+# GPUs must be idle
+if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
+  echo "[ERROR] GPU busy from previous run"; nvidia-smi; exit 1
+fi
+
 set -x
 docker run --rm -d --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
@@ -76,10 +81,20 @@ python3 bench_serving/benchmark_serving.py \
 --save-result --percentile-metrics 'ttft,tpot,itl,e2el' \
 --result-dir /workspace/ --result-filename $RESULT_FILENAME.json"
 
-while [ -n "$(docker ps -aq)" ]; do
-    docker exec $server_name pkill python3
-    docker stop $server_name
-    sleep 5
-done
+# Try graceful first
+docker stop -t 90 "$server_name" || true
+# Wait until it's really dead
+docker wait "$server_name" >/dev/null 2>&1 || true
+# Force remove if anything lingers
+docker rm -f "$server_name" >/dev/null 2>&1 || true
+
+# Give a moment for GPU processes to fully terminate
+sleep 2
+# Verify GPUs are now idle; if not, print diag and (optionally) reset
+if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
+  echo "[WARN] After stop, GPU still busy:"; nvidia-smi
+  # Last resort if driver allows and GPUs appear idle otherwise:
+  #nvidia-smi --gpu-reset -i 0,1,2,3,4,5,6,7 2>/dev/null || true
+fi
 
 nvidia-smi
