@@ -16,8 +16,6 @@
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=8888
 
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_RMSNORM=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then

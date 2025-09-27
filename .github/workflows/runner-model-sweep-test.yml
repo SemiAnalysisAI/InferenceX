@@ -243,9 +243,9 @@ jobs:
           - 'mi325x-tw_2'
           - 'mi325x-tw_3'
         config:
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
+          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
+          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
@@ -275,11 +275,11 @@ jobs:
           - 'mi355x-amd_2'
           - 'mi355x-amd_3'
         config:
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915', model: 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
+          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
+          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915', model: 'amd/DeepSeek-R1-0528-MXFP4-Preview', framework: 'sglang', precision: 'fp4', exp-name: 'dsr1_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250915', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
+          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
     name: '${{ matrix.runner }}'
     uses: ./.github/workflows/benchmark-tmpl.yml
