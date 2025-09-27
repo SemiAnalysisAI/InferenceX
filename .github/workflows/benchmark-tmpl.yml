@@ -72,13 +72,43 @@ jobs:
       - name: Resource cleanup
         run: |
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
+            host=$(hostname)
+
+            if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
+              echo "[INFO] Running container-by-container cleanup on $host"
+
+              for cid in $(docker ps -aq); do
+                echo "[INFO] Cleaning container $cid"
+
+                # Try graceful first
+                docker stop -t 90 "$cid" || true
+
+                # Wait until it's really dead
+                docker wait "$cid" >/dev/null 2>&1 || true
+
+                # Force remove if anything lingers
+                docker rm -f "$cid" >/dev/null 2>&1 || true
+              done
+
+              # Give a moment for GPU processes to fully terminate
+              sleep 2
+
+              # Verify GPUs are now idle
+              if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
+                echo "[WARN] After stop, GPU still busy:"
+                nvidia-smi
+                # Last resort if driver allows and GPUs appear idle otherwise:
+                # nvidia-smi --gpu-reset -i 0,1,2,3,4,5,6,7 2>/dev/null || true
+              fi
+            else
+              echo "[Docker] Cleaning up resources ..."
+              docker ps -aq | xargs -r docker rm -f
+              docker network prune -f
+              while [ -n "$(docker ps -aq)" ]; do
+                docker ps -a
+                sleep 5
+              done
+            fi
           fi
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up resources ..."
