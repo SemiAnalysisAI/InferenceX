@@ -106,6 +106,7 @@ jobs:
       tp-list: '[1, 2, 4, 8]'
       framework: 'trt'
       precision: 'fp4'
+      conc-list: '[4, 8, 16, 32, 64, 128, 256, 512]'
 
   bmk-h200-trt:
     if: ${{ inputs.use_h200 }}
