@@ -15,8 +15,8 @@ jobs:
     secrets: inherit
     with:
       run_1k1k: true
-      run_8k1k: true
-      run_1k8k: true
+      run_8k1k: false
+      run_1k8k: false
       use_h100: true
       use_h200: true
       use_b200: true
