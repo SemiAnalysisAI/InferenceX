@@ -45,6 +45,8 @@ elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     fi
 fi
 
+# In this specific case, float16 performs better than the datatype
+# picked by vllm when using auto for --dtype (bfloat16).
 set -x
 vllm serve $MODEL --port=$PORT \
 --swap-space=64 \
