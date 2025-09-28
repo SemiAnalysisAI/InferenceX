@@ -26,7 +26,7 @@ set -x
 vllm serve $MODEL --port=$PORT \
 --swap-space=64 \
 --gpu-memory-utilization=0.94 \
---dtype=auto --kv-cache-dtype=fp8 \
+--dtype=float16 --kv-cache-dtype=fp8 \
 --distributed-executor-backend=mp --tensor-parallel-size=$TP \
 --max-model-len=$MAX_MODEL_LEN \
 --max-seq-len-to-capture=$MAX_MODEL_LEN \
