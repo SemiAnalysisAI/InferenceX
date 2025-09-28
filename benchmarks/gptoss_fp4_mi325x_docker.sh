@@ -9,6 +9,16 @@
 # CONC
 # MAX_MODEL_LEN
 
+# If the machine runs a MEC FW older than 177, RCCL
+# cannot reclaim some memory.
+# Disable that features to avoid crashes.
+# This is related to the changes in the driver at:
+# https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
+version=`rocm-smi --showfw | grep MEC | head -n 1 |  awk '{print $NF}'`
+if [[ "$version" == "" || $version -lt 177 ]]; then
+  export HSA_NO_SCRATCH_RECLAIM=1
+fi
+
 export VLLM_USE_AITER_UNIFIED_ATTENTION=1
 export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
