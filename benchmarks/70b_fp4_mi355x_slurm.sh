@@ -33,11 +33,16 @@ elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
                 export VLLM_TRITON_FP4_GEMM_USE_ASM=1
         fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ "$CONC" -gt "16" ]]; then
-                export VLLM_ROCM_USE_AITER_MHA=1
-        else
-                export VLLM_ROCM_USE_AITER_MHA=0
-        fi
+	if [[ "$CONC" -gt "16" ]]; then
+		export VLLM_ROCM_USE_AITER_MHA=1
+	else
+		export VLLM_ROCM_USE_AITER_MHA=0
+	fi
+	if [[ "$CONC" -lt "16" && "$TP" -gt "1" ]]; then
+		export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
+	else
+		export VLLM_TRITON_FP4_GEMM_USE_ASM=1
+	fi
 fi
 
 
