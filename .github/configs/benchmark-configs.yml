@@ -1,0 +1,55 @@
+models:
+  llama:
+    name: llama
+    template: 70b-tmpl.yml
+    display_name: LLaMA 70B
+    supported_gpus:
+    - h100
+    - h200
+    - b200
+    - mi300x
+    - mi325x
+    - mi355x
+
+  dsr1:
+    name: dsr1
+    template: dsr1-tmpl.yml
+    display_name: DeepSeek R1
+    supported_gpus:
+    - h200
+    - b200
+    - mi300x
+    - mi325x
+    - mi355x
+
+  gptoss:
+    name: gptoss
+    template: gptoss-tmpl.yml
+    display_name: GPT-OSS
+    supported_gpus:
+    - h100
+    - h200
+    - b200
+    - mi300x
+    - mi325x
+    - mi355x
+
+gpus:
+  h100:
+    name: h100
+    display_name: H100
+  h200:
+    name: h200
+    display_name: H200
+  b200:
+    name: b200
+    display_name: B200
+  mi300x:
+    name: mi300x
+    display_name: MI300X
+  mi325x:
+    name: mi325x
+    display_name: MI325X
+  mi355x:
+    name: mi355x
+    display_name: MI355X
