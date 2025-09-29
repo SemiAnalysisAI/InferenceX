@@ -13,10 +13,7 @@ salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 set -x
-# Skip squash file download for openai/gpt-oss-120b model with trt framework
-if [[ "$MODEL" != "openai/gpt-oss-120b" || "$FRAMEWORK" != "trt" ]]; then
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-fi
+srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
