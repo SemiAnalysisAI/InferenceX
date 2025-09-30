@@ -22,6 +22,12 @@ elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     fi
 fi
 
+# Patch the aiter config script to deal
+# with weird strings reported by /opt/rocm/llvm/bin/amdgpu-arch.
+file_to_patch='/opt/venv/lib/python3.10/site-packages/aiter_meta/csrc/cpp_itfs/utils.py'
+sed -i'' -e 's#archs = \[arch.strip() for arch in archs\]#archs = \[arch.strip().split(":")\[0\] for arch in archs\]#'  $file_to_patch
+
+
 # In this specific case, float16 performs better than the datatype
 # picked by vllm when using auto for --dtype (bfloat16).
 set -x
