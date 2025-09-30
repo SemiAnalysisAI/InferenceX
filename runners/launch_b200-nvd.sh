@@ -19,6 +19,9 @@ if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; 
 fi
 
 set -x
+# Use --init flag to run an init process (PID 1) inside container for better signal handling and zombie process cleanup
+# https://www.paolomainardi.com/posts/docker-run-init/
+
 docker run --rm -d --init --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
