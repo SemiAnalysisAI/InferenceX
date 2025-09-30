@@ -17,7 +17,7 @@ srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
---container-mount-home \
+--no-container-mount-home --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
 bash benchmarks/${MODEL_CODE}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh
