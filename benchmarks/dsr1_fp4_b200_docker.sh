@@ -2,7 +2,8 @@
 
 nvidia-smi
 
-
+# To improve CI stability, we patch this helper function to preent a race condition that
+# happens 1% of the time. ref: https://github.com/flashinfer-ai/flashinfer/pull/1779
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
