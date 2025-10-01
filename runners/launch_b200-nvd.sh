@@ -20,7 +20,12 @@ fi
 
 set -x
 # Use --init flag to run an init process (PID 1) inside container for better signal handling and zombie process cleanup
-# https://www.paolomainardi.com/posts/docker-run-init/
+# Ref: https://www.paolomainardi.com/posts/docker-run-init/
+
+# NCCL_GRAPH_REGISTER tries to automatically enable user buffer registration with CUDA Graphs. 
+# Disabling it can reduce perf but will improve CI stability. i.e. we won't see vLLM/Sglang crashes.
+# Ref: https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-register
+
 
 docker run --rm -d --init --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
