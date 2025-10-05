@@ -67,10 +67,8 @@ git clone https://github.com/kimbochen/bench_serving.git
 
 set -x
 docker run --rm --network host --name $client_name \
--v $CACHE_DIR:/workspace/flashinfer_cache \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
--e FLASHINFER_WORKSPACE_BASE=/workspace/flashinfer_cache \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
 -lc "pip install -q datasets pandas && \
