@@ -76,8 +76,11 @@ jobs:
           path: ${{ env.RESULTS_DIR }}
           pattern: results_*
 
+      - name: Install python dependencies
+        run: pip install PyGithub
+
       - name: Calculate success rate
-        run: python3 utils/calc_success_rate.py $RESULTS_DIR $STATS_FILENAME
+        run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
       - uses: actions/upload-artifact@v4
         with:
