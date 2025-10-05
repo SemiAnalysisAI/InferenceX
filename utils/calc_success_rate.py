@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+from enum import Enum
 
 from github import Auth, Github
 
@@ -9,6 +10,12 @@ GPU_SKUS = ["h100", "h200", "gb200", "mi300x", "mi325x", "mi355x", "b200"]
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 RUN_ID = os.environ.get("GITHUB_RUN_ID")
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
+
+class JobStates(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
 
 
 def extract_gpu_from_name(job_name):
@@ -48,16 +55,16 @@ def calculate_gpu_success_rates():
 
     for job in run.jobs():
         job_name = job.name
-        conclusion = job.conclusion  # skipped, failed, success
+        conclusion = job.conclusion  # success, failure, cancelled, or skipped
         gpu = extract_gpu_from_name(job_name)
 
         if gpu:
-            if conclusion == "skipped":
+            if conclusion == JobStates.SKIPPED:
                 continue
 
             total_runs[gpu] += 1
 
-            if conclusion == "success":
+            if conclusion in [JobStates.SUCCESS]:
                 success_runs[gpu] += 1
 
     success_rates = {}
