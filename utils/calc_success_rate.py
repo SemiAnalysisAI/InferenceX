@@ -59,12 +59,12 @@ def calculate_gpu_success_rates():
         gpu = extract_gpu_from_name(job_name)
 
         if gpu:
-            if conclusion == JobStates.SKIPPED:
+            if conclusion == JobStates.SKIPPED.value:
                 continue
 
             total_runs[gpu] += 1
 
-            if conclusion in [JobStates.SUCCESS]:
+            if conclusion == JobStates.SUCCESS.value:
                 success_runs[gpu] += 1
 
     success_rates = {}

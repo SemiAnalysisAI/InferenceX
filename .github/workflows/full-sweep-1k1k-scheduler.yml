@@ -33,6 +33,7 @@ jobs:
     env:
       RESULTS_DIR: "results/"
       STATS_FILENAME: "run_stats"
+      GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
     steps:
       - uses: actions/checkout@v3
