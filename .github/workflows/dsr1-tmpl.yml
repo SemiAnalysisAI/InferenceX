@@ -91,22 +91,22 @@ jobs:
       random-range-ratio: ${{ inputs.random-range-ratio }}
       tp-list: '[8]'
 
-  bmk-b200-trt-fp8:
-    if: ${{ inputs.use_b200 }}
-    uses: ./.github/workflows/benchmark-tmpl.yml
-    secrets: inherit
-    with:
-      runner: b200-trt
-      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
-      model: 'deepseek-ai/DeepSeek-R1-0528'
-      framework: 'trt'
-      precision: 'fp8'
-      exp-name: ${{ inputs.exp-name }}
-      isl: ${{ inputs.isl }}
-      osl: ${{ inputs.osl }}
-      max-model-len: ${{ inputs.max-model-len }}
-      random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[8]'
+  # bmk-b200-trt-fp8:
+  #   if: ${{ inputs.use_b200 }}
+  #   uses: ./.github/workflows/benchmark-tmpl.yml
+  #   secrets: inherit
+  #   with:
+  #     runner: b200-trt
+  #     image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
+  #     model: 'deepseek-ai/DeepSeek-R1-0528'
+  #     framework: 'trt'
+  #     precision: 'fp8'
+  #     exp-name: ${{ inputs.exp-name }}
+  #     isl: ${{ inputs.isl }}
+  #     osl: ${{ inputs.osl }}
+  #     max-model-len: ${{ inputs.max-model-len }}
+  #     random-range-ratio: ${{ inputs.random-range-ratio }}
+  #     tp-list: '[8]'
 
   bmk-mi300x-fp8:
     if: ${{ inputs.use_mi300x }}
@@ -177,23 +177,23 @@ jobs:
       tp-list: '[4,8]'
       conc-list: '[4, 8, 16, 32, 64, 128]'  # Custom concurrency values for this job
 
-  bmk-b200-trt-fp4:
-    if: ${{ inputs.use_b200 }}
-    uses: ./.github/workflows/benchmark-tmpl.yml
-    secrets: inherit
-    with:
-      runner: b200-trt
-      image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
-      model: 'nvidia/DeepSeek-R1-0528-FP4-v2'
-      framework: 'trt'
-      precision: fp4
-      exp-name: ${{ inputs.exp-name }}
-      isl: ${{ inputs.isl }}
-      osl: ${{ inputs.osl }}
-      max-model-len: ${{ inputs.max-model-len }}
-      random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[4, 8]'
-      conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # DPA4EP4 is already 30 tok/s/user and DPA8EP8 is already 35tok/s/user. 512 conc would be too much so we skipping it
+  # bmk-b200-trt-fp4:
+  #   if: ${{ inputs.use_b200 }}
+  #   uses: ./.github/workflows/benchmark-tmpl.yml
+  #   secrets: inherit
+  #   with:
+  #     runner: b200-trt
+  #     image: 'nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2'
+  #     model: 'nvidia/DeepSeek-R1-0528-FP4-v2'
+  #     framework: 'trt'
+  #     precision: fp4
+  #     exp-name: ${{ inputs.exp-name }}
+  #     isl: ${{ inputs.isl }}
+  #     osl: ${{ inputs.osl }}
+  #     max-model-len: ${{ inputs.max-model-len }}
+  #     random-range-ratio: ${{ inputs.random-range-ratio }}
+  #     tp-list: '[4, 8]'
+  #     conc-list: '[4, 8, 16, 32, 64, 128, 256]'  # DPA4EP4 is already 30 tok/s/user and DPA8EP8 is already 35tok/s/user. 512 conc would be too much so we skipping it
 
   bmk-mi355x-fp4:
     if: ${{ inputs.use_mi355x }}
