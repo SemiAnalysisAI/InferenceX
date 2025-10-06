@@ -33,6 +33,7 @@ jobs:
     env:
       RESULTS_DIR: "results/"
       STATS_FILENAME: "run_stats"
+      GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
     steps:
       - uses: actions/checkout@v3
@@ -46,8 +47,11 @@ jobs:
           path: ${{ env.RESULTS_DIR }}
           pattern: results_*
 
+      - name: Install python dependencies
+        run: pip install PyGithub
+
       - name: Calculate success rate
-        run: python3 utils/calc_success_rate.py $RESULTS_DIR $STATS_FILENAME
+        run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
       - uses: actions/upload-artifact@v4
         with:

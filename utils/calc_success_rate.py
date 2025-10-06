@@ -1,42 +1,106 @@
-import sys
 import json
-from pathlib import Path
+import os
+import re
+import sys
+from enum import Enum
 
-n_iosl = 3   # [1k1k, 8k1k, 1k8k]
-n_concs = 5  # [4, 8, 16, 32, 64]
+from github import Auth, Github
 
-# H200: (70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]) x [vllm/sglang, trt] + 70b-tp x trt extra conc: [128]
-h200_runs = (4 + 1 + 4) * 2 * n_iosl * n_concs + 4 * n_iosl * 1
+GPU_SKUS = ["h100", "h200", "gb200", "mi300x", "mi325x", "mi355x", "b200"]
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+RUN_ID = os.environ.get("GITHUB_RUN_ID")
+REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
 
-# B200:
-# 70b = [tp1, tp8] x [fp4, fp8] x n_concs
-# 70b-trt = [tp1, tp8] x [fp4, fp8] x conc:[4, 8, 16, 32, 64, 128, 256]
-# dsr1 = [tp8] x (fp8: n_concs + fp4: [4, 8, 16, 32, 64, 128, 256])
-# dsr1-trt = fp8: ([tp8] x n_concs) + fp4: ([tp4, tp8] x conc:[4, 8, 16, 32, 64, 128, 256])
-b200_runs = (2 * 2 * n_concs + 2 * 2 * 7 + 1 * (n_concs + 7) + (1 * n_concs + 2 * 7)) * n_iosl
-
-total_runs = {
-    'h100': (3 + 4) * n_iosl * n_concs,              # 70b-tp: [2, 4, 8], gptoss-tp: [1, 2, 4, 8]
-    'h200': h200_runs,
-    'b200': b200_runs,
-    'mi300x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi325x': (4 + 1 + 4) * n_iosl * n_concs,        # 70b-tp: [1, 2, 4, 8], dsr1-tp: [8], gptoss-tp: [1, 2, 4, 8]
-    'mi355x': ((4 + 1) * 2 + 2) * n_iosl * n_concs,  # (70b-tp: [1, 2, 4, 8], dsr1-tp: [8]) x [fp4, fp8], gptoss-tp: [1, 2, 4, 8]
-    'gb200': 65,                                     # 45 runs (trtllm) + 20 runs (sglang)
-}
-success_runs = {'h100': 0, 'h200': 0, 'b200': 0, 'mi300x': 0, 'mi325x': 0, 'mi355x': 0, 'gb200': 0}
+class JobStates(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
 
 
-for results_filepath in Path(sys.argv[1]).rglob('*.json'):
-    with open(results_filepath) as f:
-        results = json.load(f)
+def extract_gpu_from_name(job_name):
+    job_lower = job_name.lower()
+    
+    for gpu in GPU_SKUS:
+        # Match GPU name followed by word boundary or hyphen
+        # This matches 'b200', 'b200-trt', 'b200-fp8' but not 'gb200'
+        if re.search(rf'\b{gpu}(?:-|\b)', job_lower):
+            return gpu
 
-    for result in results:
-        hw_type = result['hw'].replace('-trt', '')
-        success_runs[hw_type] += 1
 
-run_stats = {}
-for hw, n_success in success_runs.items():
-    run_stats[hw] = {'n_success': n_success, 'total': total_runs[hw]}
-with open(f'{sys.argv[2]}.json', 'w') as f:
-    json.dump(run_stats, f, indent=2)
+def calculate_gpu_success_rates():
+    auth = Auth.Token(GITHUB_TOKEN)
+    g = Github(auth=auth)
+
+    try:
+        user = g.get_user().login
+        print(f"Authenticated as user: {user}")
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        return None
+
+    try:
+        repo = g.get_repo(REPO_NAME)
+        print(f"Found repo: {repo.full_name}")
+
+        run = repo.get_workflow_run(int(RUN_ID))
+        print(f"Found run: {run.id} - {run.name}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
+
+    success_runs = {sku: 0 for sku in GPU_SKUS}
+    total_runs = {sku: 0 for sku in GPU_SKUS}
+
+    for job in run.jobs():
+        job_name = job.name
+        conclusion = job.conclusion  # success, failure, cancelled, or skipped
+        gpu = extract_gpu_from_name(job_name)
+
+        if gpu:
+            if conclusion == JobStates.SKIPPED.value:
+                continue
+
+            total_runs[gpu] += 1
+
+            if conclusion == JobStates.SUCCESS.value:
+                success_runs[gpu] += 1
+
+    success_rates = {}
+    for gpu in success_runs.keys():
+        success_rates[gpu] = {
+            "n_success": success_runs[gpu],
+            "total": total_runs[gpu],
+        }
+
+    return success_rates
+
+
+def print_success_rates(success_rates):
+    """Pretty print the success rates."""
+    if success_rates is None:
+        print("No data to display")
+        return
+
+    print("\n" + "=" * 60)
+    print("GPU Success Rates")
+    print("=" * 60)
+    print(f"{'GPU':<10} {'Success':<10} {'Total':<10} {'Rate':<10}")
+    print("-" * 60)
+
+    for gpu, stats in sorted(success_rates.items()):
+        if stats["total"] > 0:
+            rate = (stats["n_success"] / stats["total"]) * 100
+            print(
+                f"{gpu:<10} {stats['n_success']:<10} {stats['total']:<10} {rate:<10.2f}%"
+            )
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    run_stats = calculate_gpu_success_rates()
+    print_success_rates(run_stats)
+
+    with open(f"{sys.argv[1]}.json", "w") as f:
+        json.dump(run_stats, f, indent=2)
