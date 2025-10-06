@@ -210,6 +210,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
+      # These tensor parallelism settings are not necessary as they cannot mathematically fall on the Pareto frontier - we remove them to save CI time.
       tp-list: ${{ inputs.isl == 1024 && inputs.osl == 1024 && '[4, 8]' || '[8]' }}
 
   bmk-gb200-fp4-multinode-mtp-off:
