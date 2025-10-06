@@ -210,7 +210,8 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      tp-list: '[4, 8]'
+      tp-list: ${{ inputs.isl == 1024 && inputs.osl == 1024 && '[4, 8]' || '[8]' }}
+
 
   bmk-gb200-fp4-multinode-mtp-off:
     if: ${{ inputs.use_gb200 && !(inputs.isl == '1024' && inputs.osl == '8192') }}
