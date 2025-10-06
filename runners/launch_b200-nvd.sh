@@ -47,12 +47,11 @@ done < <(docker logs -f --tail=0 $server_name 2>&1)
 
 git clone https://github.com/kimbochen/bench_serving.git
 
-if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
+if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   NUM_PROMPTS=$(( CONC * 50 ))
 else
   NUM_PROMPTS=$(( CONC * 10 ))
 fi
-
 
 set -x
 docker run --rm --network host --name $client_name \

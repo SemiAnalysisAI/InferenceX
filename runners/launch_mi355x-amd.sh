@@ -43,7 +43,7 @@ while IFS= read -r line; do
     fi
 done < <(docker logs -f --tail=0 $server_name 2>&1)
 
-if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
+if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   NUM_PROMPTS=$(( CONC * 50 ))
 else
   NUM_PROMPTS=$(( CONC * 10 ))
