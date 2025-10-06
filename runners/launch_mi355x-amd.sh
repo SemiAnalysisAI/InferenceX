@@ -43,6 +43,12 @@ while IFS= read -r line; do
     fi
 done < <(docker logs -f --tail=0 $server_name 2>&1)
 
+if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
+  NUM_PROMPTS=$(( CONC * 50 ))
+else
+  NUM_PROMPTS=$(( CONC * 10 ))
+fi
+
 git clone https://github.com/kimbochen/bench_serving.git
 
 set -x
@@ -55,7 +61,7 @@ bench_serving/benchmark_serving.py \
 --model=$MODEL --backend=vllm --base-url="http://$server_name:$PORT" \
 --dataset-name=random \
 --random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
---num-prompts=$(( $CONC * 10 )) \
+--num-prompts=$NUM_PROMPTS \
 --max-concurrency=$CONC \
 --request-rate=inf --ignore-eos \
 --save-result --percentile-metrics="ttft,tpot,itl,e2el" \

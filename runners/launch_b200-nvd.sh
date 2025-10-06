@@ -47,23 +47,12 @@ done < <(docker logs -f --tail=0 $server_name 2>&1)
 
 git clone https://github.com/kimbochen/bench_serving.git
 
-# if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
-#     echo "Running warmup"
-#     WARMUP_PROMPTS=$(( $CONC * 5 ))
-#     echo "Warmup prompts: $WARMUP_PROMPTS"
-#     docker run --rm --network host --name warmup-client \
-#     -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
-#     -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
-#     --entrypoint=/bin/bash \
-#     $(echo "$IMAGE" | sed 's/#/\//') \
-#     -lc "pip install -q datasets pandas && \
-#     python3 bench_serving/benchmark_serving.py \
-#     --model $MODEL --backend vllm --base-url http://localhost:$PORT \
-#     --dataset-name random \
-#     --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
-#     --num-prompts $WARMUP_PROMPTS --max-concurrency $CONC \
-#     --request-rate inf --ignore-eos"
-# fi
+if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
+  NUM_PROMPTS=$(( CONC * 50 ))
+else
+  NUM_PROMPTS=$(( CONC * 10 ))
+fi
+
 
 set -x
 docker run --rm --network host --name $client_name \
@@ -76,7 +65,7 @@ python3 bench_serving/benchmark_serving.py \
 --model $MODEL  --backend vllm --base-url http://localhost:$PORT \
 --dataset-name random \
 --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
---num-prompts $(( $CONC * 60 )) \
+--num-prompts $NUM_PROMPTS \
 --max-concurrency $CONC \
 --request-rate inf --ignore-eos \
 --save-result --percentile-metrics 'ttft,tpot,itl,e2el' \
