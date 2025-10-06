@@ -37,30 +37,30 @@ on:
         default: false
 
 jobs:
-  # _70b-1k1k:
-  #   if: ${{ inputs.run_1k1k }}
-  #   uses: ./.github/workflows/70b-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_1k1k'
-  #     isl: 1024
-  #     osl: 1024
-  #     max-model-len: 2048
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  _70b-1k1k:
+    if: ${{ inputs.run_1k1k }}
+    uses: ./.github/workflows/70b-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_1k1k'
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-70b-1k1k-results:
-  #   needs: _70b-1k1k
-  #   if: ${{ inputs.run_1k1k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_1k1k'
+  collect-70b-1k1k-results:
+    needs: _70b-1k1k
+    if: ${{ inputs.run_1k1k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_1k1k'
 
   dsr1-1k1k:
     if: ${{ inputs.run_1k1k }}
@@ -87,55 +87,55 @@ jobs:
     with:
       exp-name: 'dsr1_1k1k'
 
-  # gptoss-1k1k:
-  #   if: ${{ inputs.run_1k1k }}
-  #   uses: ./.github/workflows/gptoss-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_1k1k'
-  #     isl: 1024
-  #     osl: 1024
-  #     max-model-len: 2048
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  gptoss-1k1k:
+    if: ${{ inputs.run_1k1k }}
+    uses: ./.github/workflows/gptoss-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_1k1k'
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-gptoss-1k1k-results:
-  #   needs: gptoss-1k1k
-  #   if: ${{ inputs.run_1k1k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_1k1k'
+  collect-gptoss-1k1k-results:
+    needs: gptoss-1k1k
+    if: ${{ inputs.run_1k1k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_1k1k'
 
-  # _70b-8k1k:
-  #   if: ${{ inputs.run_8k1k }}
-  #   uses: ./.github/workflows/70b-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_8k1k'
-  #     isl: 8192
-  #     osl: 1024
-  #     max-model-len: 9216
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  _70b-8k1k:
+    if: ${{ inputs.run_8k1k }}
+    uses: ./.github/workflows/70b-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_8k1k'
+      isl: 8192
+      osl: 1024
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-70b-8k1k-results:
-  #   needs: _70b-8k1k
-  #   if: ${{ inputs.run_8k1k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_8k1k'
+  collect-70b-8k1k-results:
+    needs: _70b-8k1k
+    if: ${{ inputs.run_8k1k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_8k1k'
 
   dsr1-8k1k:
     if: ${{ inputs.run_8k1k }}
@@ -162,55 +162,55 @@ jobs:
     with:
       exp-name: 'dsr1_8k1k'
 
-  # gptoss-8k1k:
-  #   if: ${{ inputs.run_8k1k }}
-  #   uses: ./.github/workflows/gptoss-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_8k1k'
-  #     isl: 8192
-  #     osl: 1024
-  #     max-model-len: 9216
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  gptoss-8k1k:
+    if: ${{ inputs.run_8k1k }}
+    uses: ./.github/workflows/gptoss-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_8k1k'
+      isl: 8192
+      osl: 1024
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-gptoss-8k1k-results:
-  #   needs: gptoss-8k1k
-  #   if: ${{ inputs.run_8k1k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_8k1k'
+  collect-gptoss-8k1k-results:
+    needs: gptoss-8k1k
+    if: ${{ inputs.run_8k1k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_8k1k'
 
-  # _70b-1k8k:
-  #   if: ${{ inputs.run_1k8k }}
-  #   uses: ./.github/workflows/70b-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_1k8k'
-  #     isl: 1024
-  #     osl: 8192
-  #     max-model-len: 9216
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  _70b-1k8k:
+    if: ${{ inputs.run_1k8k }}
+    uses: ./.github/workflows/70b-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_1k8k'
+      isl: 1024
+      osl: 8192
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-70b-1k8k-results:
-  #   needs: _70b-1k8k
-  #   if: ${{ inputs.run_1k8k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: '70b_1k8k'
+  collect-70b-1k8k-results:
+    needs: _70b-1k8k
+    if: ${{ inputs.run_1k8k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_1k8k'
 
   dsr1-1k8k:
     if: ${{ inputs.run_1k8k }}
@@ -237,27 +237,27 @@ jobs:
     with:
       exp-name: 'dsr1_1k8k'
 
-  # gptoss-1k8k:
-  #   if: ${{ inputs.run_1k8k }}
-  #   uses: ./.github/workflows/gptoss-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_1k8k'
-  #     isl: 1024
-  #     osl: 8192
-  #     max-model-len: 9216
-  #     random-range-ratio: 0.8
-  #     use_h100: ${{ inputs.use_h100 }}
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
+  gptoss-1k8k:
+    if: ${{ inputs.run_1k8k }}
+    uses: ./.github/workflows/gptoss-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_1k8k'
+      isl: 1024
+      osl: 8192
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h100: ${{ inputs.use_h100 }}
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
 
-  # collect-gptoss-1k8k-results:
-  #   needs: gptoss-1k8k
-  #   if: ${{ inputs.run_1k8k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'gptoss_1k8k'
+  collect-gptoss-1k8k-results:
+    needs: gptoss-1k8k
+    if: ${{ inputs.run_1k8k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_1k8k'
