@@ -1,62 +1,44 @@
-# InferenceMAX
+#  InferenceMAX™, Open Source Inference Frequent Benchmarking
+
+InferenceMAX™ runs our suite of benchmarks every night, continually re-benchmarking the world’s most popular open-source inference frameworks and models to track real performance in real time. As these software stacks improve, InferenceMAX™ captures that progress in near real-time, providing a live indicator of inference performance progress. A live dashboard is available for free publicly at https://inferencemax.ai/. 
 
 
-## System Design
+## Why?
 
-We hook GPU nodes into the GitHub Action of this repo as **runners**, and a GitHub Action **workflow** assigns work to the runners.
+InferenceMAX™, an open-source, under Apache2 license, automated benchmark designed to move at the same rapid speed as the software ecosystem itself, is built to address this challenge.
 
-- Benchmark template: The core logic of launching a single benchmark run
-- Model templates (LLaMA 70B, DeepSeek R1, gpt-oss): The logic for declaring GPUs and their benchmark run configs
-- Full sweep template: The workflow that contains the full benchmark sweep with configurations
-- Full sweep scheduler: The workflow that schedules launches the full benchmark sweep
-
-A runner loads code from this repo and executes them.
-- `benchmarks/`: Scripts of benchmark configs, including the benchmark server and the benchmark client setup
-- `runners/`: Scripts that launches the runners
-
-The flow of operations is as follows:
-1. GitHub Action workflow assigns a runner a config to benchmark, specified by the workflow YAML file.  
-   Config includes: GPU type, Model, ISL / OSL, TP
-1. The runner pulls the repo code and launchs the respective GPU node script in `runners/`,
-   specifying the benchmark config: Model, ISL / OSL, TP
-1. The script executes the corresponding script in `benchmarks/`, configuring it with the benchmark config
+LLM Inference performance is driven by two pillars, hardware and software. While hardware innovation drives step jumps in performance every year through the release of new GPUs/XPUs and new systems, software evolves every single day, delivering continuous performance gains on top of these step jumps. Speed is the Moat 🚀
+ 
+AI software like SGLang, vLLM, TensorRT-LLM, CUDA, ROCm and achieve this continuous improvement in performance through kernel-level optimizations, distributed inference strategies, and scheduling innovations that increase the pareto frontier of performance in incremental releases that can be just days apart.
+ 
+This pace of software advancement creates a challenge: benchmarks conducted at a fixed point in time quickly go stale and do not represent the performance that can be achieved with the latest software packages.
 
 
-## Benchmark Client Configuration
+## Acknowledgements & Supporters
+Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 
+We’re also grateful to Jensen Huang and Ian Buck for supporting this open source with access to a GB200 NVL72 rack (through OCI) and B200 GPUs. Thank you to the many NVIDIA contributors from the NVIDIA inference team, NVIDIA Dynamo team.
 
-| Parameter | Values |
-| :-: | :- |
-| (`ISL`, `OSL`) | (1024, 1024), (1024, 8192), (8192, 1024) |
-| `CONC` | 4, 8, 16, 32, 64 |
-| `RANDOM_RANGE_RATIO` | 0.8 |
+We also want to recognize the SGLang, vLLM, and TensorRT-LLM maintainers for building a world-class software stack and open sourcing it to the entire world.
+Finally, we’re grateful to Crusoe, CoreWeave, Nebius, TensorWave, Oracle and TogetherAI for supporting open-source innovation through compute resources, enabling this.
 
-```bash
-git clone https://github.com/kimbochen/bench_serving.git 
-python3 bench_serving/benchmark_serving.py \
---model $MODEL --backend vllm \
---base-url http://0.0.0.0:$PORT \
---dataset-name random \
---random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
---num-prompts $(( $CONC * 10 )) --max-concurrency $CONC \
---request-rate inf --ignore-eos \
---save-result --percentile-metrics 'ttft,tpot,itl,e2el'
-```
+"As we build systems at unprecedented scale, it's critical for the ML community to have open, transparent benchmarks that reflect how inference really performs across hardware and software. InferenceMAX™'s head-to-head benchmarks cut through the noise and provide a living picture of token throughput, performance per dollar, and tokens per Megawatt. This kind of open source effort strengthens the entire ecosystem and helps everyone, from researchers to operators of frontier datacenters, make smarter decisions." - Peter Hoeschele, VP of Infrastructure and Industrial Compute, OpenAI Stargate
 
+"The gap between theoretical peak and real-world inference throughput is often determined by systems software: inference engine, distributed strategies, and low-level kernels. InferenceMAX™ is valuable because it benchmarks the latest software showing how optimizations actually play out across various hardware. Open, reproducible results like these help the whole community move faster.” - Tri Dao, Chief Scientist of Together AI & Inventor of Flash Attention
 
-## Server Configurations
+“The industry needs many public, reproducible benchmarks of inference performance. We’re excited to collaborate with InferenceMAX™ from the vLLM team. More diverse workloads and scenarios that everyone can trust and reference will help the ecosystem move forward. Fair, transparent measurements drive progress across every layer of the stack, from model architectures to inference engines to hardware.” – Simon Mo, vLLM Project Co-Lead
 
-Server configurations evolve quickly.  
-Please checkout the scripts in `benchmarks/` for the most up-to-date configs.
+## SemiAnalysis is Hiring
 
+We are looking for an engineer to join our special projects team. This is a unique opportunity to work on high-visibility special projects such as InferenceMAX™ with support from many industry leaders and CEOs. If you’re passionate about performance engineering, system reliability, and want to work at the intersection of hardware and software, this is a rare chance to make industry wide impact.
+What you’ll work on:
+- Building and running large-scale benchmarks across multiple vendors (AMD, NVIDIA, TPU, Trainium, etc.
+- Designing reproducible CI/CD pipelines to automate benchmarking workflows
+- Ensuring reliability and scalability of systems used by industry partners
+- 
+What we’re looking for:
+- Strong skills in Python
+- Background in Site Reliability Engineering (SRE) or systems-level problem solving
+- Experience with CI/CD pipelines and modern DevOps practices
+- Curiosity about GPUs, TPUs, Trainium, multi-cloud, and performance benchmarking
+Link to apply: https://app.dover.com/apply/SemiAnalysis/2a9c8da5-6d59-4ac8-8302-3877345dbce1
 
-## Sponsors
-
-- SemiAnalysis
-- NVIDIA
-- AMD
-- Crusoe
-- Nebius
-- CoreWeave
-- TogetherAI
-- TensorWave
-- Oracle
