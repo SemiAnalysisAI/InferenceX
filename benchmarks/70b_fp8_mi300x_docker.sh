@@ -17,6 +17,11 @@
 # Disable that features to avoid crashes.
 # This is related to the changes in the driver at:
 # https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
+
+cat > config.yaml << EOF
+compilation-config: '{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'
+EOF
+
 version=`rocm-smi --showfw | grep MEC | head -n 1 |  awk '{print $NF}'`
 if [[ "$version" == "" || $version -lt 177 ]]; then
   export HSA_NO_SCRATCH_RECLAIM=1
@@ -49,5 +54,6 @@ vllm serve $MODEL --port=$PORT \
 --max-num-seqs=$CONC \
 --max-num-batched-tokens=131072 \
 --no-enable-prefix-caching \
+--config config.yaml \
 --async-scheduling \
 --disable-log-requests

@@ -24,6 +24,10 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-vllm-llama-3.3-70b-fp8.html#run-the-inference-benchmark
 
+cat > config.yaml << EOF
+compilation-config: '{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'
+EOF
+
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=0
 elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
@@ -55,6 +59,7 @@ vllm serve $MODEL --port=$PORT \
 --max-num-seqs=$CONC \
 --max-num-batched-tokens=131072 \
 --no-enable-prefix-caching \
+--config config.yaml \
 --async-scheduling \
 --disable-log-requests \
 > $SERVER_LOG 2>&1 &
