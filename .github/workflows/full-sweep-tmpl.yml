@@ -1,6 +1,11 @@
 name: Template - Full Sweep
 
 on:
+  pull_request:
+    types:
+      - opened
+    branches:
+      - 'main'
   workflow_call:
     inputs:
       run_1k1k:
