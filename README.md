@@ -34,7 +34,7 @@ What you’ll work on:
 - Building and running large-scale benchmarks across multiple vendors (AMD, NVIDIA, TPU, Trainium, etc.
 - Designing reproducible CI/CD pipelines to automate benchmarking workflows
 - Ensuring reliability and scalability of systems used by industry partners
-- 
+  
 What we’re looking for:
 - Strong skills in Python
 - Background in Site Reliability Engineering (SRE) or systems-level problem solving
