@@ -31,7 +31,7 @@ Finally, we’re grateful to Crusoe, CoreWeave, Nebius, TensorWave, Oracle and T
 
 We are looking for an engineer to join our special projects team. This is a unique opportunity to work on high-visibility special projects such as InferenceMAX™ with support from many industry leaders and CEOs. If you’re passionate about performance engineering, system reliability, and want to work at the intersection of hardware and software, this is a rare chance to make industry wide impact.
 What you’ll work on:
-- Building and running large-scale benchmarks across multiple vendors (AMD, NVIDIA, TPU, Trainium, etc.
+- Building and running large-scale benchmarks across multiple vendors (AMD, NVIDIA, TPU, Trainium, etc.)
 - Designing reproducible CI/CD pipelines to automate benchmarking workflows
 - Ensuring reliability and scalability of systems used by industry partners
   
