@@ -62,30 +62,30 @@ jobs:
     with:
       exp-name: '70b_1k1k'
 
-  dsr1-1k1k:
-    if: ${{ inputs.run_1k1k }}
-    uses: ./.github/workflows/dsr1-tmpl.yml
-    secrets: inherit
-    with:
-      exp-name: 'dsr1_1k1k'
-      isl: 1024
-      osl: 1024
-      max-model-len: 2048
-      random-range-ratio: 0.8
-      use_h200: ${{ inputs.use_h200 }}
-      use_b200: ${{ inputs.use_b200 }}
-      use_mi300x: ${{ inputs.use_mi300x }}
-      use_mi325x: ${{ inputs.use_mi325x }}
-      use_mi355x: ${{ inputs.use_mi355x }}
-      use_gb200: ${{ inputs.use_gb200 }}
+  # dsr1-1k1k:
+  #   if: ${{ inputs.run_1k1k }}
+  #   uses: ./.github/workflows/dsr1-tmpl.yml
+  #   secrets: inherit
+  #   with:
+  #     exp-name: 'dsr1_1k1k'
+  #     isl: 1024
+  #     osl: 1024
+  #     max-model-len: 2048
+  #     random-range-ratio: 0.8
+  #     use_h200: ${{ inputs.use_h200 }}
+  #     use_b200: ${{ inputs.use_b200 }}
+  #     use_mi300x: ${{ inputs.use_mi300x }}
+  #     use_mi325x: ${{ inputs.use_mi325x }}
+  #     use_mi355x: ${{ inputs.use_mi355x }}
+  #     use_gb200: ${{ inputs.use_gb200 }}
 
-  collect-dsr1-1k1k-results:
-    needs: dsr1-1k1k
-    if: ${{ inputs.run_1k1k && always() }}
-    uses: ./.github/workflows/collect-results.yml
-    secrets: inherit
-    with:
-      exp-name: 'dsr1_1k1k'
+  # collect-dsr1-1k1k-results:
+  #   needs: dsr1-1k1k
+  #   if: ${{ inputs.run_1k1k && always() }}
+  #   uses: ./.github/workflows/collect-results.yml
+  #   secrets: inherit
+  #   with:
+  #     exp-name: 'dsr1_1k1k'
 
   gptoss-1k1k:
     if: ${{ inputs.run_1k1k }}
@@ -137,30 +137,30 @@ jobs:
     with:
       exp-name: '70b_8k1k'
 
-  # dsr1-8k1k:
-  #   if: ${{ inputs.run_8k1k }}
-  #   uses: ./.github/workflows/dsr1-tmpl.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'dsr1_8k1k'
-  #     isl: 8192
-  #     osl: 1024
-  #     max-model-len: 9216
-  #     random-range-ratio: 0.8
-  #     use_h200: ${{ inputs.use_h200 }}
-  #     use_b200: ${{ inputs.use_b200 }}
-  #     use_mi300x: ${{ inputs.use_mi300x }}
-  #     use_mi325x: ${{ inputs.use_mi325x }}
-  #     use_mi355x: ${{ inputs.use_mi355x }}
-  #     use_gb200: ${{ inputs.use_gb200 }}
+  dsr1-8k1k:
+    if: ${{ inputs.run_8k1k }}
+    uses: ./.github/workflows/dsr1-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_8k1k'
+      isl: 8192
+      osl: 1024
+      max-model-len: 9216
+      random-range-ratio: 0.8
+      use_h200: ${{ inputs.use_h200 }}
+      use_b200: ${{ inputs.use_b200 }}
+      use_mi300x: ${{ inputs.use_mi300x }}
+      use_mi325x: ${{ inputs.use_mi325x }}
+      use_mi355x: ${{ inputs.use_mi355x }}
+      use_gb200: ${{ inputs.use_gb200 }}
 
-  # collect-dsr1-8k1k-results:
-  #   needs: dsr1-8k1k
-  #   if: ${{ inputs.run_8k1k && always() }}
-  #   uses: ./.github/workflows/collect-results.yml
-  #   secrets: inherit
-  #   with:
-  #     exp-name: 'dsr1_8k1k'
+  collect-dsr1-8k1k-results:
+    needs: dsr1-8k1k
+    if: ${{ inputs.run_8k1k && always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_8k1k'
 
   gptoss-8k1k:
     if: ${{ inputs.run_8k1k }}
