@@ -23,7 +23,7 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 vllm serve ${MODEL} \
     --host localhost \
-    --port 6000 \
+    --port $PORT \
     --swap-space 64 \
     --tensor-parallel-size $TP \
     --max-num-seqs ${max_num_seqs} \
