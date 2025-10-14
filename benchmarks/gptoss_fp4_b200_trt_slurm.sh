@@ -30,28 +30,12 @@ EP_SIZE="1"
 MOE_BACKEND="TRTLLM"
 DP_ATTENTION=false
 
-# Lower concurrencies: Concurrency < 256
-# MoE backend=TRTLLM
-# Use TP Attention; Switch to MoE Expert parallel for conurrency >=16 (1k1k and 1k8k)
-TEP_REQUIRED=false
-if [[ "$TP" == "4" || "$TP" == "8" ]]; then 
-    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-        TEP_REQUIRED=true
-    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-        TEP_REQUIRED=true
-    fi
-fi
-if [[ "$TEP_REQUIRED" == "true" && $CONC -ge 16 ]]; then
-    EP_SIZE="$TP"
-fi
-
 # Higher concurrencies: Concurrency >= 256
 #   MoE Backend = CUTLASS
 #   Use DP attention with expert parallel MoE
 if [[ $CONC -ge 256 ]]; then
     EP_SIZE="$TP"
     DP_ATTENTION=true
-    MOE_BACKEND="CUTLASS"
 fi
 
 echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_ATTENTION='$DP_ATTENTION'"
@@ -65,7 +49,7 @@ cuda_graph_config:
     max_batch_size: $CONC
 enable_attention_dp: $DP_ATTENTION
 kv_cache_config:
-    dtype: auto
+    dtype: fp8
     enable_block_reuse: false
     free_gpu_memory_fraction: 0.85
 print_iter_log: true
