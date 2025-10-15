@@ -45,7 +45,7 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
 elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
     export VLLM_ROCM_USE_AITER_MHA=0
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-    if [[ "$CONC" -gt "16" ]]; then
+    if [[ "$CONC" -ge "16" ]]; then
         export VLLM_ROCM_USE_AITER_MHA=1
     else
 		export VLLM_ROCM_USE_AITER_MHA=0

@@ -26,7 +26,7 @@ elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
 		export VLLM_TRITON_FP4_GEMM_USE_ASM=1
 	fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-	if [[ "$CONC" -gt "16" ]]; then
+	if [[ "$CONC" -ge "16" ]]; then
 		export VLLM_ROCM_USE_AITER_MHA=1
 	else
 		export VLLM_ROCM_USE_AITER_MHA=0
