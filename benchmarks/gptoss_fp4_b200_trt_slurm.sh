@@ -89,7 +89,7 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 set +x
 while IFS= read -r line; do
     printf '%s\n' "$line"
-    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]]; then
+    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]] && [[ ! "$line" =~ UserWarning ]]; then
         sleep 5
         tail -n100 $SERVER_LOG
         echo "JOB $SLURM_JOB_ID ran on NODE $SLURMD_NODENAME"
