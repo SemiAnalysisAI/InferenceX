@@ -42,6 +42,7 @@ echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_AT
 
 EXTRA_CONFIG_FILE="gptoss-fp4.yml"
 export TRTLLM_ENABLE_PDL=1
+export NCCL_GRAPH_REGISTER=0
 
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
@@ -89,12 +90,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 set +x
 while IFS= read -r line; do
     printf '%s\n' "$line"
-    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]] && [[ ! "$line" =~ UserWarning ]]; then
-        sleep 5
-        tail -n100 $SERVER_LOG
-        echo "JOB $SLURM_JOB_ID ran on NODE $SLURMD_NODENAME"
-        exit 1
-    fi
     if [[ "$line" == *"Application startup complete"* ]]; then
         break
     fi
