@@ -137,12 +137,12 @@ jobs:
             exit 1
           fi
 
-      - name: Process result
-        run: |
-          python3 utils/process_result.py ${{ inputs.runner }} $TP $RESULT_FILENAME $FRAMEWORK $PRECISION
+      # - name: Process result
+      #   run: |
+      #     python3 utils/process_result.py ${{ inputs.runner }} $TP $RESULT_FILENAME $FRAMEWORK $PRECISION
 
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.RESULT_FILENAME }}.json
