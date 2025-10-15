@@ -125,8 +125,8 @@ jobs:
       osl: 1024
       max-model-len: 2048
       random-range-ratio: 0.8
-      tp-list: '[1,4,8]'
-      conc-list: '[4,64]'
+      tp-list: '[1,2,4]'
+      conc-list: '[64]'
 
   collect-test-results:
     needs: runner-test
