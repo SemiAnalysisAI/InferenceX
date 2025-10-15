@@ -19,7 +19,8 @@ data = {
     'model': bmk_result['model_id'],
     'framework': framework,
     'precision': precision,
-    'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size
+    'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
+    'output_tput_per_gpu': float(bmk_result['output_token_throughput']) / tp_size
 }
 
 if len(sys.argv) == 7:  # MTP
