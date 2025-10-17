@@ -49,6 +49,7 @@ env:
 
 jobs:
   flatten-search-space-matrix:
+    timeout-minutes: 2
     runs-on: ubuntu-latest
     outputs:
       flattened-matrix: ${{ steps.flatten.outputs.flattened-matrix }}
@@ -64,7 +65,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     needs: flatten-search-space-matrix
-    timeout-minutes: 2
+    timeout-minutes: 180
 
     strategy:
       fail-fast: false
