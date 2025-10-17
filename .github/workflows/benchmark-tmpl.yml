@@ -80,9 +80,6 @@ jobs:
       DP_ATTENTION: ${{ matrix.config.dp_attention || 'false' }}
 
     steps:
-      - name: debug
-        run: echo "${{ matrix.config }}"
-
       - name: Resource cleanup
         run: |
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
