@@ -77,7 +77,6 @@ jobs:
       CONC: ${{ matrix.config.conc }}
       EP_SIZE: ${{ matrix.config.ep || 1 }}
       DP_ATTENTION: ${{ matrix.config.dp_attention || 'false' }}
-      MOE_BACKEND: ${{ matrix.config.moe_backend || 'NONE' }}
 
     steps:
       - name: debug

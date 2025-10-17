@@ -46,17 +46,25 @@ gptoss:
       - { tp: 1, conc: { start: 4, end: 64 } }
       - { tp: [ 2, 4, 8 ], conc: { start: 4, end: 64 } }
     b200-trt:
+      # NOTE: Regardless of TP, if CONC >= 256, DP_ATTENTION should be set
+      # to true and EP should be set to TP, i.e.,
+      # For lower concurrencies (CONC < 256), use TP Attention; Switch to 
+      # MoE Expert parallel for conurrency >=16 (1k1k and 1k8k)
       1k1k:
       - { tp: 1, conc: { start: 64, end: 64 } }
       - { tp: 2, conc: { start: 4, end: 64 } }
+      # EP=4 iff TP=4 and CONC >= 16
       - { tp: 4, conc: { start: 4, end: 8 } }
       - { tp: 4, ep: 4, conc: { start: 16, end: 64 } }
+      # EP=8 iff TP=8 and CONC >= 16
       - { tp: 8, conc: { start: 4, end: 8 } }
       1k8k:
       - { tp: 1, conc: { start: 64, end: 64 } }
       - { tp: 2, conc: { start: 4, end: 64 } }
+      # EP=4 iff TP=4 and CONC >= 16
       - { tp: 4, conc: { start: 4, end: 8 } }
       - { tp: 4, ep: 4, conc: { start: 16, end: 64 } }
+      # EP=8 iff TP=8 and CONC >= 16
       - { tp: 8, conc: { start: 4, end: 8 } }
       8k1k:
       - { tp: 1, conc: { start: 64, end: 64 } }
@@ -252,25 +260,45 @@ dsr1:
       - { tp: 4, conc: { start: 4, end: 128 } }
       - { tp: 8, conc: { start: 4, end: 16 } }
     b200-trt:
+      # Determine DP_ATTENTION, and EP_SIZE based on ISL, OSL, CONC
+      # For ISL/OSL = 1k/1k
       1k1k:
+      # If TP=4,
+      #   EP_SIZE=4 iff CONC > 32
+      #   DP_ATTENTION=true iff CONC >= 256
       - { tp: 4, conc: { start: 4, end: 32 } }
       - { tp: 4, ep: 4, conc: { start: 64, end: 128 } }
-      - { tp: 4, ep: 4, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 256, end: 256 } }
+      - { tp: 4, ep: 4, dp_attention: "true", conc: { start: 256, end: 256 } }
+      # If TP=8,
+      #   EP_SIZE=8 iff CONC > 8
+      #   DP_ATTENTION=true iff CONC >= 256
       - { tp: 8, conc: { start: 4, end: 8 } }
       - { tp: 8, ep: 8, conc: { start: 16, end: 128 } }
-      - { tp: 8, ep: 8, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 256, end: 256 } }
+      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 256, end: 256 } }
+      # For ISL/OSL = 1k/8k
       1k8k:
+      # If TP=4,
+      #   EP_SIZE=4 iff CONC > 32
+      #   DP_ATTENTION=true iff CONC >= 256
       - { tp: 4, conc: { start: 4, end: 32 } }
       - { tp: 4, ep: 4, conc: { start: 64, end: 128 } }
-      - { tp: 4, ep: 4, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 256, end: 256 } }
+      - { tp: 4, ep: 4, dp_attention: "true", conc: { start: 256, end: 256 } }
+      # If TP=8,
+      #   EP_SIZE=8 iff CONC > 16
+      #   DP_ATTENTION=true iff CONC >= 256
       - { tp: 8, conc: { start: 4, end: 16 } }
       - { tp: 8, ep: 8, conc: { start: 32, end: 128 } }
-      - { tp: 8, ep: 8, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 256, end: 256 } }
+      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 256, end: 256 } }
+      # For ISL/OSL = 8k/1k
       8k1k:
+      # If TP=4,
+      #   EP_SIZE=4 and DP_ATTENTION=true iff CONC > 32
       - { tp: 4, conc: { start: 4, end: 32 } }
-      - { tp: 4, ep: 4, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 64, end: 256 } }
+      - { tp: 4, ep: 4, dp_attention: "true", conc: { start: 64, end: 256 } }
+      # If TP=8,
+      #   EP_SIZE=8 and DP_ATTENTION=true iff CONC > 32
       - { tp: 8, conc: { start: 4, end: 32 } }
-      - { tp: 8, ep: 8, dp_attention: "true", moe_backend: "CUTLASS", conc: { start: 64, end: 256 } }
+      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 64, end: 256 } }
     gb200:
       1k1k:
       - { tp: 12, conc: { start: 4300, end: 4300 } }
@@ -321,13 +349,17 @@ dsr1:
       8k1k:
       - { tp: 8, conc: { start: 4, end: 64 } }
     h200-trt:
+      # Determine DP_ATTENTION and EP_SIZE based on ISL, OSL, CONC
+      # If ISL/OSL = 1k/1k, DP_ATTENTION=true iff CONC > 64
       1k1k:
-      - { tp: 8, conc: { start: 4, end: 64 } }
-      - { tp: 8, conc: { start: 4, end: 64 } }
+      - { tp: 8, ep: 8, conc: { start: 4, end: 64 } }
+      # If ISL/OSL = 1k/8k, DP_ATTENTION=true iff CONC > 64
       1k8k:
-      - { tp: 8, conc: { start: 4, end: 64 } }
+      - { tp: 8, ep: 8, conc: { start: 4, end: 64 } }
+      # If ISL/OSL = 8k/1k, DP_ATTENTION=true iff CONC > 32
       8k1k:
-      - { tp: 8, conc: { start: 4, end: 64 } }
+      - { tp: 8, ep: 8, conc: { start: 4, end: 32 } }
+      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 64, end: 64 } }
     b200:
       1k1k:
       - { tp: 8, conc: { start: 4, end: 64 } }
@@ -336,13 +368,17 @@ dsr1:
       8k1k:
       - { tp: 8, conc: { start: 4, end: 64 } }
     b200-trt:
+      # Determine DP_ATTENTION and EP_SIZE based on ISL, OSL, CONC
+      # If ISL/OSL = 1k/1k, DP_ATTENTION=true iff CONC > 32
       1k1k:
       - { tp: 8, ep: 8, conc: { start: 4, end: 32 } }
+      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 64, end: 64 } }
+      # If ISL/OSL = 1k/8k, DP_ATTENTION=true iff CONC > 64
       1k8k:
       - { tp: 8, ep: 8, conc: { start: 4, end: 64 } }
+      # If ISL/OSL = 8k/1k, DP_ATTENTION=true iff CONC > 64
       8k1k:
-      - { tp: 8, ep: 8, conc: { start: 4, end: 32 } }
-      - { tp: 8, ep: 8, dp_attention: "true", conc: { start: 64, end: 64 } }
+      - { tp: 8, ep: 8, conc: { start: 4, end: 64 } }
     gb200:
       1k1k:
       - { tp: 72, conc: { start: 8192, end: 8192 } }

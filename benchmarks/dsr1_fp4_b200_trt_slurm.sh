@@ -15,7 +15,6 @@
 # PORT_OFFSET
 # EP_SIZE
 # DP_ATTENTION
-# MOE_BACKEND
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
@@ -28,62 +27,41 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 hf download $MODEL
 
-# # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
-# EP_SIZE="1"
-# MOE_BACKEND="TRTLLM"
-# DP_ATTENTION=false
+# # ========= Determine MOE_BACKEND based on ISL, OSL, CONC =========
+# Default
+MOE_BACKEND="TRTLLM"
 
-# if [[ "$TP" == "4" ]]; then
-#     if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-#         if [[ $CONC -gt 32 ]]; then
-#             EP_SIZE="$TP"
-#         fi
-#         if [[ $CONC -ge 256 ]]; then
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-#         if [[ $CONC -gt 32 ]]; then
-#             EP_SIZE="$TP"
-#         fi
-#         if [[ $CONC -ge 256 ]]; then
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-#         if [[ $CONC -gt 32 ]]; then
-#             EP_SIZE="$TP"
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     fi
-# elif [[ "$TP" == "8" ]]; then
-#     if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-#         if [[ $CONC -gt 8 ]]; then
-#             EP_SIZE="$TP"
-#         fi
-#         if [[ $CONC -ge 256 ]]; then
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-#         if [[ $CONC -gt 16 ]]; then
-#             EP_SIZE="$TP"
-#         fi
-#         if [[ $CONC -ge 256 ]]; then
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-#         if [[ $CONC -gt 32 ]]; then
-#             EP_SIZE="$TP"
-#             DP_ATTENTION=true
-#             MOE_BACKEND="CUTLASS"
-#         fi
-#     fi
-# fi
+if [[ "$TP" == "4" ]]; then
+    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -ge 256 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+        if [[ $CONC -ge 256 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    fi
+elif [[ "$TP" == "8" ]]; then
+    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -ge 256 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+        if [[ $CONC -ge 256 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        if [[ $CONC -gt 32 ]]; then
+            MOE_BACKEND="CUTLASS"
+        fi
+    fi
+fi
 
-# echo "Final configuration: EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_ATTENTION='$DP_ATTENTION'"
+echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
