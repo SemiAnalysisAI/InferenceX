@@ -49,7 +49,8 @@ env:
 
 jobs:
   flatten-search-space-matrix:
-    timeout-minutes: 2
+    name: get search space ${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }}
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     outputs:
       flattened-matrix: ${{ steps.flatten.outputs.flattened-matrix }}
