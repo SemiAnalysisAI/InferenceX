@@ -64,7 +64,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     needs: flatten-search-space-matrix
-    timeout-minutes: 180
+    timeout-minutes: 2
 
     strategy:
       fail-fast: false
