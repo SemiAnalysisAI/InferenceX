@@ -21,7 +21,7 @@ export PYTHONNOUSERSITE=1
 
 set -x
 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
---config=config.yaml \
+--config config.yaml \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \

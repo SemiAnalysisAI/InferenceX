@@ -30,7 +30,7 @@ export TORCH_CUDA_ARCH_LIST="9.0"
 
 set -x
 PYTHONNOUSERSITE=1 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
---config=config.yaml \
+--config config.yaml \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \
