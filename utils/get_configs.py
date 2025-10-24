@@ -8,13 +8,14 @@ seq_len_stoi = {
 }
 
 def main():
-    if len(sys.argv) < 3:
-        print(f"Usage: python3 {sys.argv[0]} {{config-file}} {{isl-osl}} [step-size]")
+    if len(sys.argv) < 4:
+        print(f"Usage: python3 {sys.argv[0]} {{config-file}} {{isl-osl}} {{model-prefix}} [step-size]")
         exit(1)
-        
+
     config_file = sys.argv[1]
     seq_len = sys.argv[2]
-    step_size = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+    model_prefix = sys.argv[3]
+    step_size = int(sys.argv[4]) if len(sys.argv) > 4 else 2
     
     isl, osl = seq_len_stoi.get(seq_len) or (None, None)
     if not (isl or osl):
@@ -29,6 +30,10 @@ def main():
     
     matrix_values = []
     for key, val in config_data.items():
+        # Filter by model prefix
+        if not key.startswith(model_prefix):
+            continue
+
         seq_len_configs = val.get('seq-len-configs')
         assert seq_len_configs, f"Missing 'seq-len-configs' for key '{key}'"
         
