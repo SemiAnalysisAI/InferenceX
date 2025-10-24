@@ -53,6 +53,7 @@ jobs:
         config: ${{ fromJson(needs.get-70b-configs.outputs.search-space-config) }}
     secrets: inherit
     with:
+      exp-name: "70b_1k1k"
       isl: 1024
       osl: 1024
       runner: ${{ matrix.config.runner }}
@@ -60,7 +61,6 @@ jobs:
       model: ${{ matrix.config.model }}
       framework: ${{ matrix.config.framework }}
       precision: ${{ matrix.config.precision }}
-      exp-name: ${{ matrix.config.exp-name }}
       tp: ${{ matrix.config.tp }}
       conc: ${{ matrix.config.conc }}
 
@@ -73,6 +73,7 @@ jobs:
         config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
     secrets: inherit
     with:
+      exp-name: "dsr1_1k1k"
       isl: 1024
       osl: 1024
       runner: ${{ matrix.config.runner }}
@@ -80,7 +81,6 @@ jobs:
       model: ${{ matrix.config.model }}
       framework: ${{ matrix.config.framework }}
       precision: ${{ matrix.config.precision }}
-      exp-name: ${{ matrix.config.exp-name }}
       tp: ${{ matrix.config.tp }}
       conc: ${{ matrix.config.conc }}
 
@@ -93,6 +93,7 @@ jobs:
         config: ${{ fromJson(needs.get-gptoss-configs.outputs.search-space-config) }}
     secrets: inherit
     with:
+      exp-name: "gptoss_1k1k"
       isl: 1024
       osl: 1024
       runner: ${{ matrix.config.runner }}
@@ -100,7 +101,6 @@ jobs:
       model: ${{ matrix.config.model }}
       framework: ${{ matrix.config.framework }}
       precision: ${{ matrix.config.precision }}
-      exp-name: ${{ matrix.config.exp-name }}
       tp: ${{ matrix.config.tp }}
       conc: ${{ matrix.config.conc }}
 
