@@ -1,0 +1,37 @@
+name: '1K/1K Sweep'
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-1k1k-configs:
+    runs-on: ubuntu-latest
+    outputs:
+        search-space-config: ${{ steps.get-1k1k-configs.outputs.search-space-config }}
+    steps:
+      - id: get-1k1k-configs
+        run: python utils/print_configs_json.py configs.json 1k1k
+    
+  benchmark:
+    needs: get-1k1k-configs
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.get-1k1k-configs.outputs.search-space-config) }}
+    secrets: inherit
+    with:
+      isl: 1024
+      osl: 1024
+      runner: ${{ matrix.config.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      exp-name: ${{ matrix.config.exp-name }}
+      tp: ${{ matrix.config.tp }}
+      conc: ${{ matrix.config.conc }}
+
+#   collect-results:
+#     needs: benchmark
+#     steps:

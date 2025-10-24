@@ -11,10 +11,10 @@ on:
       model:
         required: true
         type: string
-      framework:
+      precision:
         required: true
         type: string
-      precision:
+      framework:
         required: true
         type: string
       exp-name:
@@ -26,18 +26,24 @@ on:
       osl:
         required: true
         type: string
-      max-model-len:
-        required: true
-        type: string
       random-range-ratio:
+        required: false
+        type: string
+        default: '0.2'
+      tp:
         required: true
         type: string
-      tp-list:
+      ep:
+        required: false
+        type: string
+        default: ''
+      dp-attn:
+        required: false
+        type: boolean
+        default: false
+      conc:
         required: true
         type: string
-      conc-list:
-        type: string
-        default: '[4, 8, 16, 32, 64]'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -46,69 +52,32 @@ env:
   MODEL: ${{ inputs.model }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
-  MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   IMAGE: ${{ inputs.image }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
+  TP: ${{ inputs.tp }}
+  EP_SIZE: ${{ inputs.ep }}
+  DP_ATTENTION: ${{ inputs.dp-attn }}
+  CONC: ${{ inputs.conc }}
 
 jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
-
-    strategy:
-      fail-fast: false
-      matrix:
-        tp: ${{ fromJson(inputs.tp-list) }}
-        conc: ${{ fromJson(inputs.conc-list) }}
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} tp${{ matrix.tp }} conc${{ matrix.conc }}'
-
-    env:
-      TP: ${{ matrix.tp }}
-      CONC: ${{ matrix.conc }}
+    name: '${{ inputs.runner }} ${{ inputs.exp-name }}-${{ inputs.precision }} tp${{ inputs.tp }} ep${{ inputs.ep }} dpa-${{ inputs.dp-attn }} conc${{ inputs.conc }}'
 
     steps:
       - name: Resource cleanup
         run: |
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            host=$(hostname)
-
-            if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
-              echo "[INFO] Running container-by-container cleanup on $host"
-
-              for cid in $(docker ps -aq); do
-                echo "[INFO] Cleaning container $cid"
-
-                # Try graceful first
-                docker stop -t 90 "$cid" || true
-
-                # Wait until it's really dead
-                docker wait "$cid" >/dev/null 2>&1 || true
-
-                # Force remove if anything lingers
-                docker rm -f "$cid" >/dev/null 2>&1 || true
-              done
-
-              # Give a moment for GPU processes to fully terminate
-              sleep 2
-
-              # Verify GPUs are now idle
-              if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
-                echo "[WARN] After stop, GPU still busy:"
-                nvidia-smi
-                # Last resort if driver allows and GPUs appear idle otherwise:
-                # nvidia-smi --gpu-reset -i 0,1,2,3,4,5,6,7 2>/dev/null || true
-              fi
-            else
-              echo "[Docker] Cleaning up resources ..."
-              docker ps -aq | xargs -r docker rm -f
-              docker network prune -f
-              while [ -n "$(docker ps -aq)" ]; do
-                docker ps -a
-                sleep 5
-              done
-            fi
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
           fi
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up resources ..."
@@ -127,7 +96,7 @@ jobs:
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_conc${{ env.CONC }}_${{ runner.name }}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP }}_conc${{ env.CONC }}_${{ runner.name }}
         run: |
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           if [ -f "$RESULT_FILENAME.json" ]; then
@@ -139,8 +108,7 @@ jobs:
 
       - name: Process result
         run: |
-          python3 utils/process_result.py ${{ inputs.runner }} $TP $RESULT_FILENAME $FRAMEWORK $PRECISION
-
+          python3 utils/process_result.py ${{ inputs.runner }}
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
