@@ -1,6 +1,7 @@
 name: '1K/1K Sweep'
 
 on:
+  pull_request:
   workflow_dispatch:
 
 jobs:
