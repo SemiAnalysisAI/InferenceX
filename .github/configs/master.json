@@ -2,6 +2,7 @@
   "70b-fp8-h100-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP8",
+    "runner": "h100",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -37,6 +38,7 @@
   "70b-fp8-h200-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP8",
+    "runner": "h200",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -75,6 +77,7 @@
   "70b-fp8-b200-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP8",
+    "runner": "b200",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -113,6 +116,7 @@
   "70b-fp8-h200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP8",
+    "runner": "h200-trt",
     "precision": "fp8",
     "framework": "trt",
     "seq-len-configs": [
@@ -150,6 +154,7 @@
   "70b-fp8-b200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP8",
+    "runner": "b200-trt",
     "precision": "fp8",
     "framework": "trt",
     "seq-len-configs": [
@@ -188,6 +193,7 @@
   "70b-fp8-mi300x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "amd/Llama-3.3-70B-Instruct-FP8-KV",
+    "runner": "mi300x",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -226,6 +232,7 @@
   "70b-fp8-mi325x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "amd/Llama-3.3-70B-Instruct-FP8-KV",
+    "runner": "mi325x",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -264,6 +271,7 @@
   "70b-fp8-mi355x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "amd/Llama-3.3-70B-Instruct-FP8-KV",
+    "runner": "mi355x",
     "precision": "fp8",
     "framework": "vllm",
     "seq-len-configs": [
@@ -302,6 +310,7 @@
   "70b-fp4-b200-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP4",
+    "runner": "b200",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -340,6 +349,7 @@
   "70b-fp4-b200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "nvidia/Llama-3.3-70B-Instruct-FP4",
+    "runner": "b200-trt",
     "precision": "fp4",
     "framework": "trt",
     "seq-len-configs": [
@@ -378,6 +388,7 @@
   "70b-fp4-mi355x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "amd/Llama-3.3-70B-Instruct-MXFP4-Preview",
+    "runner": "mi355x",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -416,6 +427,7 @@
   "dsr1-fp8-h200-sgl": {
     "image": "lmsysorg/sglang:v0.5.2rc2-cu126",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "h200",
     "precision": "fp8",
     "framework": "sglang",
     "seq-len-configs": [
@@ -445,6 +457,7 @@
   "dsr1-fp8-b200-sgl": {
     "image": "lmsysorg/sglang:v0.5.3rc1-cu129-b200",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "b200",
     "precision": "fp8",
     "framework": "sglang",
     "seq-len-configs": [
@@ -474,6 +487,7 @@
   "dsr1-fp8-h200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "h200-trt",
     "precision": "fp8",
     "framework": "trt",
     "seq-len-configs": [
@@ -504,6 +518,7 @@
   "dsr1-fp8-b200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "b200-trt",
     "precision": "fp8",
     "framework": "trt",
     "seq-len-configs": [
@@ -534,6 +549,7 @@
   "dsr1-fp8-mi300x-sgl": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "mi300x",
     "precision": "fp8",
     "framework": "sglang",
     "seq-len-configs": [
@@ -563,6 +579,7 @@
   "dsr1-fp8-mi325x-sgl": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "mi325x",
     "precision": "fp8",
     "framework": "sglang",
     "seq-len-configs": [
@@ -592,6 +609,7 @@
   "dsr1-fp8-mi355x-sgl": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915",
     "model": "deepseek-ai/DeepSeek-R1-0528",
+    "runner": "mi355x",
     "precision": "fp8",
     "framework": "sglang",
     "seq-len-configs": [
@@ -621,6 +639,7 @@
   "dsr1-fp4-b200-sgl": {
     "image": "lmsysorg/sglang:v0.5.3rc1-cu129-b200",
     "model": "nvidia/DeepSeek-R1-0528-FP4-V2",
+    "runner": "b200",
     "precision": "fp4",
     "framework": "sglang",
     "seq-len-configs": [
@@ -653,6 +672,7 @@
   "dsr1-fp4-b200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "nvidia/DeepSeek-R1-0528-FP4-V2",
+    "runner": "b200-trt",
     "precision": "fp4",
     "framework": "trt",
     "seq-len-configs": [
@@ -695,6 +715,7 @@
   "dsr1-fp4-mi355x-sgl": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915",
     "model": "amd/DeepSeek-R1-0528-MXFP4-Preview",
+    "runner": "mi355x",
     "precision": "fp4",
     "framework": "sglang",
     "seq-len-configs": [
@@ -725,6 +746,7 @@
   "gptoss-fp4-h100-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "openai/gpt-oss-120b",
+    "runner": "h100",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -760,6 +782,7 @@
   "gptoss-fp4-h200-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "openai/gpt-oss-120b",
+    "runner": "h200",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -798,6 +821,7 @@
   "gptoss-fp4-b200-vllm": {
     "image": "vllm/vllm-openai:v0.10.2",
     "model": "openai/gpt-oss-120b",
+    "runner": "b200",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -836,6 +860,7 @@
   "gptoss-fp4-h200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "openai/gpt-oss-120b",
+    "runner": "h200-trt",
     "precision": "fp4",
     "framework": "trt",
     "seq-len-configs": [
@@ -874,6 +899,7 @@
   "gptoss-fp4-b200-trt": {
     "image": "nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2",
     "model": "openai/gpt-oss-120b",
+    "runner": "b200-trt",
     "precision": "fp4",
     "framework": "trt",
     "seq-len-configs": [
@@ -914,6 +940,7 @@
   "gptoss-fp4-mi300x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "openai/gpt-oss-120b",
+    "runner": "mi300x",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -952,6 +979,7 @@
   "gptoss-fp4-mi325x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "openai/gpt-oss-120b",
+    "runner": "mi325x",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
@@ -990,6 +1018,7 @@
   "gptoss-fp4-mi355x-vllm": {
     "image": "rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1",
     "model": "openai/gpt-oss-120b",
+    "runner": "mi355x",
     "precision": "fp4",
     "framework": "vllm",
     "seq-len-configs": [
