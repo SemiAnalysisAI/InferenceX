@@ -37,11 +37,9 @@ def main():
         precision = val.get('precision')
         framework = val.get('framework')
         runner = val.get('runner')
-        bmk_space = val.get('bmk-space')
         
         assert None not in (image, model, precision, framework, runner), \
             f"Missing required fields for key '{key}'"
-        assert bmk_space, f"Missing 'bmk-space' for key '{key}'"
         
         # Check if this config has matching sequence lengths
         matching_seq_config = None
@@ -51,13 +49,17 @@ def main():
                 break
         
         if not matching_seq_config:
-            continue  # Skip this config if no matching sequence length
+            continue  # Skip this config if no matching sequence length, this is possible
         
-        # Now flatten the bmk-space
+        bmk_space = matching_seq_config.get('bmk-space')
+        assert bmk_space, f"Missing 'bmk-space' in matching seq-len-config for key '{key}'"
+        
         for bmk in bmk_space:
             tp = bmk.get('tp')
             conc_start = bmk.get('conc-start')
             conc_end = bmk.get('conc-end')
+            ep = bmk.get('ep')
+            dp_attn = bmk.get('dp-attn')
             
             assert None not in (tp, conc_start, conc_end), \
                 f"Missing 'tp', 'conc-start', or 'conc-end' in bmk-space for key '{key}'"
@@ -76,13 +78,20 @@ def main():
                     'tp': tp,
                     'conc': conc
                 }
+                
+                # Add optional fields if they exist
+                if ep is not None:
+                    entry['ep'] = ep
+                if dp_attn is not None:
+                    entry['dp-attn'] = dp_attn
+                
                 matrix_values.append(entry)
                 
                 if conc == conc_end:
                     break
                 conc *= step_size
                 if conc > conc_end:
-                    conc = conc_end  # Ensure we hit the end value
+                    conc = conc_end 
     
     print(json.dumps(matrix_values))
     return matrix_values

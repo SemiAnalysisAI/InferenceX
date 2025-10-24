@@ -9,8 +9,13 @@ jobs:
     outputs:
         search-space-config: ${{ steps.get-1k1k-configs.outputs.search-space-config }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - id: get-1k1k-configs
-        run: python utils/print_configs_json.py configs.json 1k1k
+        run: |
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/print_configs_json.py ${GITHUB_WORKSPACE}/.github/configs/master.json 1k1k)
+          echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
     
   benchmark:
     needs: get-1k1k-configs
