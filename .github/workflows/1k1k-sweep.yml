@@ -57,6 +57,7 @@ jobs:
       exp-name: "70b_1k1k"
       isl: 1024
       osl: 1024
+      max-model-len: 2048
       runner: ${{ matrix.config.runner }}
       image: ${{ matrix.config.image }}
       model: ${{ matrix.config.model }}
@@ -78,6 +79,7 @@ jobs:
       exp-name: "dsr1_1k1k"
       isl: 1024
       osl: 1024
+      max-model-len: 2048
       runner: ${{ matrix.config.runner }}
       image: ${{ matrix.config.image }}
       model: ${{ matrix.config.model }}
@@ -99,6 +101,7 @@ jobs:
       exp-name: "gptoss_1k1k"
       isl: 1024
       osl: 1024
+      max-model-len: 2048
       runner: ${{ matrix.config.runner }}
       image: ${{ matrix.config.image }}
       model: ${{ matrix.config.model }}
