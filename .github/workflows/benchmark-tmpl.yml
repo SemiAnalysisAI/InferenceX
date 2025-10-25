@@ -41,6 +41,9 @@ on:
         required: false
         type: boolean
         default: false
+      max-model-len:
+        required: true
+        type: string
       conc:
         required: true
         type: string
@@ -52,6 +55,7 @@ env:
   MODEL: ${{ inputs.model }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
+  MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   IMAGE: ${{ inputs.image }}
   FRAMEWORK: ${{ inputs.framework }}
