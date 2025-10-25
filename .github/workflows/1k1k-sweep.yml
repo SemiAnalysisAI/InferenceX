@@ -47,6 +47,7 @@ jobs:
   benchmark-70b:
     needs: get-70b-configs
     uses: ./.github/workflows/benchmark-tmpl.yml
+    name: 70b 1k1k
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +68,7 @@ jobs:
   benchmark-dsr1:
     needs: get-dsr1-configs
     uses: ./.github/workflows/benchmark-tmpl.yml
+    name: dsr1 1k1k
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +89,7 @@ jobs:
   benchmark-gptoss:
     needs: get-gptoss-configs
     uses: ./.github/workflows/benchmark-tmpl.yml
+    name: gptoss 1k1k
     strategy:
       fail-fast: false
       matrix:
