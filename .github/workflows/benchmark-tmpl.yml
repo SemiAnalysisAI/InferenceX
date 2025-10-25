@@ -36,7 +36,7 @@ on:
       ep:
         required: false
         type: string
-        default: ''
+        default: '1'
       dp-attn:
         required: false
         type: boolean
