@@ -111,7 +111,7 @@ jobs:
 
       - name: Process result
         run: |
-          python3 utils/process_result.py ${{ inputs.runner }}
+          python3 utils/process_result.py ${{ inputs.runner }} $TP $EP_SIZE $DP_ATTENTION $RESULT_FILENAME $FRAMEWORK $PRECISION
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
