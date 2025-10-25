@@ -909,8 +909,7 @@
         "bmk-space": [
           {"tp": 1, "ep": 1, "dp-attn": false, "conc-start": 64, "conc-end": 64},
           {"tp": 2, "ep": 2, "dp-attn": false, "conc-start": 4, "conc-end": 64},
-          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 4, "conc-end": 8},
-          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 16, "conc-end": 64},
+          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 4, "conc-end": 64},
           {"tp": 8, "ep": 8, "dp-attn": false, "conc-start": 4, "conc-end": 8}
         ]
       },
@@ -920,8 +919,7 @@
         "bmk-space": [
           {"tp": 1, "ep": 1, "dp-attn": false, "conc-start": 64, "conc-end": 64},
           {"tp": 2, "ep": 2, "dp-attn": false, "conc-start": 4, "conc-end": 64},
-          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 4, "conc-end": 8},
-          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 16, "conc-end": 64},
+          {"tp": 4, "ep": 4, "dp-attn": false, "conc-start": 4, "conc-end": 64},
           {"tp": 8, "ep": 8, "dp-attn": false, "conc-start": 4, "conc-end": 8}
         ]
       },
