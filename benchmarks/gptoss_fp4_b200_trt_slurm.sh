@@ -13,31 +13,24 @@
 # CONC
 # RESULT_FILENAME
 # PORT_OFFSET
-# EP_SIZE
 # DP_ATTENTION
+# EP_SIZE
 
 # GPTOSS TRTLLM Deployment Guide:
 # https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-MOE_BACKEND="TRTLLM"
-
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, DP_ATTENTION: $DP_ATTENTION, MOE_BACKEND: $MOE_BACKEND"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 hf download $MODEL
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+MOE_BACKEND="TRTLLM"
 
-# Higher concurrencies: Concurrency >= 256
-#   MoE Backend = CUTLASS
-#   Use DP attention with expert parallel MoE
-if [[ $CONC -ge 256 ]]; then
-    EP_SIZE="$TP"
-    DP_ATTENTION=true
-fi
+echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
 EXTRA_CONFIG_FILE="gptoss-fp4.yml"
 export TRTLLM_ENABLE_PDL=1

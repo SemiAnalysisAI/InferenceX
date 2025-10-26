@@ -1,4 +1,5 @@
 import json
+import yaml
 import sys
 
 seq_len_stoi = {
@@ -23,7 +24,7 @@ def main():
     
     try:
         with open(config_file, 'r') as f:
-            config_data = json.load(f)
+            config_data = yaml.safe_load(f)
             assert isinstance(config_data, dict)
     except FileNotFoundError:
         raise ValueError(f"Input file '{config_file}' does not exist.")

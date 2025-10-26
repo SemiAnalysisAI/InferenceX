@@ -13,19 +13,18 @@
 # CONC
 # RESULT_FILENAME
 # PORT_OFFSET
-# EP_SIZE
 # DP_ATTENTION
+# EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-# Default
-MOE_BACKEND="TRTLLM"
-
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION=$DP_ATTENTION, MOE_BACKEND=$MOE_BACKEND"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 hf download $MODEL
 
-# ========= Determine MOE_BACKEND based on ISL, OSL, CONC =========
+# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+MOE_BACKEND="TRTLLM"
+
 if [[ "$TP" == "4" ]]; then
     if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
         if [[ $CONC -ge 256 ]]; then
