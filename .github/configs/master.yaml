@@ -559,7 +559,7 @@ dsr1-fp8-mi355x-sgl:
 gptoss-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc0.post1
   model: openai/gpt-oss-120b
-  runner: b200-trt
+  runner: b200-nvs
   precision: fp4
   framework: trt
   # For all sequence lengths, if CONC >= 256, then EP=TP and DP_ATTN=true
