@@ -15,7 +15,7 @@ jobs:
 
       - id: get-70b-configs
         run: |
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.json 1k1k 70b)
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.yaml 1k1k 70b)
           echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
   get-dsr1-configs:
@@ -28,7 +28,7 @@ jobs:
 
       - id: get-dsr1-configs
         run: |
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.json 1k1k dsr1)
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.yaml 1k1k dsr1)
           echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
   get-gptoss-configs:
@@ -41,7 +41,7 @@ jobs:
 
       - id: get-gptoss-configs
         run: |
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.json 1k1k gptoss)
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py ${GITHUB_WORKSPACE}/.github/configs/master.yaml 1k1k gptoss)
           echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
   benchmark-70b:
