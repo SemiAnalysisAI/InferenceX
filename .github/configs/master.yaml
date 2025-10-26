@@ -642,7 +642,7 @@ gptoss-fp4-h100-vllm:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
 
 gptoss-fp4-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
   model: openai/gpt-oss-120b
   runner: h200-trt
   precision: fp4
