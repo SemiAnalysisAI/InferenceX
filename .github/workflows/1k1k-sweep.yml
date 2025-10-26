@@ -110,8 +110,26 @@ jobs:
       tp: ${{ matrix.config.tp }}
       conc: ${{ matrix.config.conc }}
 
-#   collect-results:
-#     needs: [benchmark-70b, benchmark-dsr1, benchmark-gptoss]
-#     uses: ./.github/workflows/collect-results.yml
-#     with:
-#       exp-name: 1k1k
+  collect-70b-results:
+    needs: benchmark-70b
+    if: ${{ always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: '70b_1k1k'
+
+  collect-dsr1-results:
+    needs: benchmark-dsr1
+    if: ${{ always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'dsr1_1k1k'
+
+  collect-gptoss-results:
+    needs: benchmark-gptoss
+    if: ${{ always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      exp-name: 'gptoss_1k1k'
