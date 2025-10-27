@@ -1,0 +1,280 @@
+70b-fp4-mi355x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: amd/Llama-3.3-70B-Instruct-MXFP4-Preview
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+
+70b-fp8-mi300x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: amd/Llama-3.3-70B-Instruct-FP8-KV
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 64, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+70b-fp8-mi325x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: amd/Llama-3.3-70B-Instruct-FP8-KV
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 32, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 64, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 16, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 32 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+70b-fp8-mi355x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: amd/Llama-3.3-70B-Instruct-FP8-KV
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp4-mi355x-sgl:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915
+  model: amd/DeepSeek-R1-0528-MXFP4-Preview
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-mi300x-sgl:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: mi300x
+  precision: fp8
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-mi325x-sgl:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-mi355x-sgl:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: mi355x
+  precision: fp8
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+gptoss-fp4-mi300x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: openai/gpt-oss-120b
+  runner: mi300x
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+
+gptoss-fp4-mi325x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: openai/gpt-oss-120b
+  runner: mi325x
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 64, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 8 }
+    - { tp: 4, conc-start: 4, conc-end: 8 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+
+gptoss-fp4-mi355x-vllm:
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: openai/gpt-oss-120b
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }

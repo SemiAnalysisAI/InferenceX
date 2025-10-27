@@ -1,0 +1,503 @@
+70b-fp4-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: nvidia/Llama-3.3-70B-Instruct-FP4
+  runner: b200-trt
+  precision: fp4
+  framework: trt
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 16, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 128 }
+    - { tp: 2, conc-start: 16, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+
+70b-fp4-b200-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: nvidia/Llama-3.3-70B-Instruct-FP4
+  runner: b200
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 16, conc-end: 64 }
+    - { tp: 2, conc-start: 16, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 32 }
+    - { tp: 8, conc-start: 4, conc-end: 8 }
+
+70b-fp8-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: nvidia/Llama-3.3-70B-Instruct-FP8
+  runner: b200-trt
+  precision: fp8
+  framework: trt
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 16, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 128 }
+    - { tp: 2, conc-start: 16, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+
+70b-fp8-b200-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: nvidia/Llama-3.3-70B-Instruct-FP8
+  runner: b200
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 64, conc-end: 64 }
+    - { tp: 4, conc-start: 16, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, conc-start: 16, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+
+70b-fp8-h100-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: nvidia/Llama-3.3-70B-Instruct-FP8
+  runner: h100
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 2, conc-start: 64, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 2, conc-start: 64, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+70b-fp8-h200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: nvidia/Llama-3.3-70B-Instruct-FP8
+  runner: h200-trt
+  precision: fp8
+  framework: trt
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 128, conc-end: 128 }
+    - { tp: 2, conc-start: 64, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 16, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+
+70b-fp8-h200-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: nvidia/Llama-3.3-70B-Instruct-FP8
+  runner: h200
+  precision: fp8
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 32, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 64, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, conc-start: 16, conc-end: 64 }
+    - { tp: 2, conc-start: 16, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp4-b200-sgl:
+  image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  runner: b200
+  precision: fp4
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+
+dsr1-fp4-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  runner: b200-trt
+  precision: fp4
+  framework: trt
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    # If TP=4, 
+    #   If CONC > 32, then EP=4
+    #   If CONC >= 256, DP_ATTN=true
+    - { tp: 4, conc-start: 4, conc-end: 32 }
+    - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
+    # If TP=8, 
+    #   If CONC > 8, then EP=8
+    #   If CONC >= 256, DP_ATTN=true
+    - { tp: 8, conc-start: 4, conc-end: 8 }
+    - { tp: 8, ep: 8, conc-start: 16, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    # If TP=4, 
+    #   If CONC > 32, then EP=4
+    #   If CONC >= 256, DP_ATTN=true
+    - { tp: 4, conc-start: 4, conc-end: 32 }
+    - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
+    # If TP=8, 
+    #   If CONC > 16, then EP=8
+    #   If CONC >= 256, DP_ATTN=true
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    # If TP=4, 
+    #   If CONC > 32, then EP=4 and DP_ATTN=true
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
+    # If TP=8, 
+    #   If CONC > 32, then EP=8 and DP_ATTN=true
+    - { tp: 8, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
+
+dsr1-fp8-b200-sgl:
+  image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: b200
+  precision: fp8
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: b200-trt
+  precision: fp8
+  framework: trt
+  seq-len-configs:
+  # For all sequence lengths, EP=TP
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    # If CONC > 32, then DP_ATTN=true
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    # If CONC > 64, then DP_ATTN=true
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    # If CONC > 64, then DP_ATTN=true
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-h200-sgl:
+  image: lmsysorg/sglang:v0.5.2rc2-cu126
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: h200
+  precision: fp8
+  framework: sglang
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-h200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  model: deepseek-ai/DeepSeek-R1-0528
+  runner: h200-trt
+  precision: fp8
+  framework: trt
+  # For all sequence lengths, EP=TP
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    # If CONC > 64, then DP_ATTN=true
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    # If CONC > 64, then DP_ATTN=true
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    # If CONC > 32, then DP_ATTN=true
+    bmk-space:
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
+
+gptoss-fp4-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc0.post1
+  model: openai/gpt-oss-120b
+  runner: b200-nvs
+  precision: fp4
+  framework: trt
+  # For all sequence lengths, if CONC >= 256, then EP=TP and DP_ATTN=true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+
+gptoss-fp4-b200-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: openai/gpt-oss-120b
+  runner: b200
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
+gptoss-fp4-h100-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: openai/gpt-oss-120b
+  runner: h100
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+
+gptoss-fp4-h200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
+  model: openai/gpt-oss-120b
+  runner: h200-trt
+  precision: fp4
+  framework: trt
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 32, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
+gptoss-fp4-h200-vllm:
+  image: vllm/vllm-openai:v0.10.2
+  model: openai/gpt-oss-120b
+  runner: h200
+  precision: fp4
+  framework: vllm
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    bmk-space:
+    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }

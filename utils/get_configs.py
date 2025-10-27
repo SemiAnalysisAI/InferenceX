@@ -1,6 +1,7 @@
 import json
 import yaml
 import sys
+import argparse
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
@@ -9,30 +10,60 @@ seq_len_stoi = {
 }
 
 def main():
-    if len(sys.argv) < 4:
-        print(f"Usage: python3 {sys.argv[0]} {{config-file}} {{isl-osl}} {{model-prefix}} [step-size]")
-        exit(1)
-
-    config_file = sys.argv[1]
-    seq_len = sys.argv[2]
-    model_prefix = sys.argv[3]
-    step_size = int(sys.argv[4]) if len(sys.argv) > 4 else 2
+    parser = argparse.ArgumentParser(
+        description='Generate benchmark matrix from configuration files'
+    )
+    parser.add_argument(
+        '--config-files',
+        nargs='+',
+        required=True,
+        help='One or more configuration files (YAML format)'
+    )
+    parser.add_argument(
+        '--seq-lens',
+        choices=list(seq_len_stoi.keys()),
+        required=True,
+        help=f"Sequence length configuration: {', '.join(seq_len_stoi.keys())}"
+    )
+    parser.add_argument(
+        '--model-prefix',
+        required=True,
+        help='Model prefix to filter configurations'
+    )
+    parser.add_argument(
+        '--step-size',
+        type=int,
+        default=2,
+        help='Step size for concurrency values (default: 2)'
+    )
     
-    isl, osl = seq_len_stoi.get(seq_len) or (None, None)
-    if not (isl or osl):
-        raise ValueError(f"Input 'isl-osl' must be one of '{', '.join(seq_len_stoi.keys())}'.")
+    args = parser.parse_args()
     
-    try:
-        with open(config_file, 'r') as f:
-            config_data = yaml.safe_load(f)
-            assert isinstance(config_data, dict)
-    except FileNotFoundError:
-        raise ValueError(f"Input file '{config_file}' does not exist.")
+    isl, osl = seq_len_stoi[args.seq_lens]
+    
+    all_config_data = {}
+    for config_file in args.config_files:
+        try:
+            with open(config_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+                assert isinstance(config_data, dict), f"Config file '{config_file}' must contain a dictionary"
+                
+                # Check for duplicate keys, shouldn't really be an issue but with NVIDIA and AMD 
+                # separate configs this will help against any possible confusion
+                duplicate_keys = set(all_config_data.keys()) & set(config_data.keys())
+                if duplicate_keys:
+                    raise ValueError(
+                        f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
+                    )
+                
+                all_config_data.update(config_data)
+        except FileNotFoundError:
+            raise ValueError(f"Input file '{config_file}' does not exist.")
     
     matrix_values = []
-    for key, val in config_data.items():
-        # Filter by model prefix
-        if not key.startswith(model_prefix):
+    for key, val in all_config_data.items():
+        # Filter by model prefix i.e., 
+        if not key.startswith(args.model_prefix):
             continue
 
         seq_len_configs = val.get('seq-len-configs')
@@ -95,7 +126,7 @@ def main():
                 
                 if conc == conc_end:
                     break
-                conc *= step_size
+                conc *= args.step_size
                 if conc > conc_end:
                     conc = conc_end 
     
