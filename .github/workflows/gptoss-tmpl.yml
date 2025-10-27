@@ -100,7 +100,7 @@ jobs:
       osl: ${{ inputs.osl }}
       max-model-len: ${{ inputs.max-model-len }}
       random-range-ratio: ${{ inputs.random-range-ratio }}
-      runner: b200-nvs
+      runner: b200-trt
       image: 'nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc0.post1'
       model: 'openai/gpt-oss-120b'
       tp-list: '[1, 2, 4, 8]'
