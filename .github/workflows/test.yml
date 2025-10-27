@@ -1,0 +1,147 @@
+name: Test - Full Sweep
+
+concurrency:
+    group: benchmark-lock
+    cancel-in-progress: false
+
+on:
+    pull_request:
+    workflow_dispatch:
+        inputs:
+            name:
+                description: "Name of benchmark from master configs"
+                required: true
+                type: string
+                default: 70b-fp4-mi355x-vllm
+
+            run_1k1k:
+                description: "Run ISL/OSL 1k/1k"
+                type: boolean
+                required: true
+            run_1k8k:
+                description: "Run ISL/OSL 1k/8k"
+                type: boolean
+                required: true
+            run_8k1k:
+                description: "Run ISL/OSL 8k/1k"
+                type: boolean
+                required: true
+
+            runner:
+                description: "Specific runner node to run on"
+                required: false
+                type: choice
+                options:
+                    - "h100-cr_0"
+                    - "h100-cr_1"
+                    - "h100-cw_0"
+                    - "h100-cw_1"
+                    - "h200-cw_0"
+                    - "h200-cw_1"
+                    - "h200-nb_0"
+                    - "h200-nb_1"
+                    - "h200-nb_2"
+                    - "h200-nb_3"
+                    - "h200-nv_0"
+                    - "h200-nv_1"
+                    - "h200-nv_2"
+                    - "h200-nv_3"
+                    - "b200-nv_0"
+                    - "b200-nv_1"
+                    - "b200-nb_0"
+                    - "b200-nb_1"
+                    - "b200-nvd_0"
+                    - "b200-nvd_1"
+                    - "b200-nvd_2"
+                    - "b200-nvd_3"
+                    - "b200-tg_0"
+                    - "mi300x-amd_0"
+                    - "mi300x-amd_1"
+                    - "mi300x-amd_2"
+                    - "mi300x-amd_3"
+                    - "mi300x-amd_4"
+                    - "mi300x-cr_0"
+                    - "mi300x-oci_0"
+                    - "mi325x-amd_0"
+                    - "mi325x-tw_0"
+                    - "mi325x-tw_1"
+                    - "mi325x-tw_2"
+                    - "mi325x-tw_3"
+                    - "mi355x-amd_0"
+                    - "mi355x-amd_1"
+                    - "mi355x-amd_2"
+                    - "mi355x-amd_3"
+
+jobs:
+    get-jobs:
+        runs-on: ubuntu-latest
+        outputs:
+            search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - id: get-jobs
+              run: |
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_test_sweep_configs.py \
+                    --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
+                    --key ${{ inputs.name }} \
+                    ${{ (inputs.run_1k1k || inputs.run_1k8k || inputs.run_8k1k) && format('--seq-lens{0}{1}{2}', inputs.run_1k1k && ' 1k1k' || '', inputs.run_1k8k && ' 1k8k' || '', inputs.run_8k1k && ' 8k1k' || '') || '' }})
+                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+    test-sweep:
+        needs: get-jobs
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: test sweep - ${{ inputs.name }}
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k1k"
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ inputs.runner != '' && inputs.runner || matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep || 1 }}
+            dp-attn: ${{ matrix.config.dp-attn || false }}
+            conc: ${{ matrix.config.conc }}
+
+    calc-success-rate:
+        needs: test-sweep
+        if: ${{ always() }}
+        runs-on: ubuntu-latest
+
+        env:
+            RESULTS_DIR: "results/"
+            STATS_FILENAME: "run_stats"
+            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  token: ${{ secrets.REPO_PAT }}
+                  fetch-depth: 0
+
+            - name: Download results artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ${{ env.RESULTS_DIR }}
+                  pattern: results_*
+
+            - name: Install python dependencies
+              run: pip install PyGithub
+
+            - name: Calculate success rate
+              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: "run-stats"
+                  path: ${{ env.STATS_FILENAME }}.json
