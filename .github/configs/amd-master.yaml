@@ -205,24 +205,24 @@ gptoss-fp4-mi300x-vllm:
   - isl: 1024
     osl: 1024
     bmk-space:
-    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
   - isl: 1024
     osl: 8192
     bmk-space:
-    - { tp: 1, ep: 1, conc-start: 64, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
   - isl: 8192
     osl: 1024
     bmk-space:
-    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
@@ -234,10 +234,10 @@ gptoss-fp4-mi325x-vllm:
   - isl: 1024
     osl: 1024
     bmk-space:
-    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     bmk-space:
