@@ -1,12 +1,14 @@
 name: "1K/1K Sweep"
 
 concurrency:
-  group: benchmark-lock-1k1k
-  cancel-in-progress: false
+    group: benchmark-lock-1k1k
+    cancel-in-progress: false
 
 on:
     pull_request:
     workflow_dispatch:
+#   schedule:
+#     - cron: '0 23 * * *'
 
 jobs:
     get-70b-configs:

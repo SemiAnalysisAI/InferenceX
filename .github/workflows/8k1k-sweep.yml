@@ -7,6 +7,8 @@ concurrency:
 on:
     # pull_request:
     workflow_dispatch:
+#   schedule:
+#     - cron: '0 23 * * *'
 
 jobs:
     get-70b-configs:

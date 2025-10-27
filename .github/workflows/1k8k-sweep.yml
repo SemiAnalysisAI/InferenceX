@@ -5,6 +5,11 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 23 * * *'
+
+on:
     # pull_request:
     workflow_dispatch:
 
