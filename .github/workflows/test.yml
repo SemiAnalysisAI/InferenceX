@@ -84,6 +84,7 @@ jobs:
               run: |
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_test_sweep_configs.py \
                     --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
+                    --test-mode \
                     --key ${{ inputs.name }} \
                     ${{ (inputs.run_1k1k || inputs.run_1k8k || inputs.run_8k1k) && format('--seq-lens{0}{1}{2}', inputs.run_1k1k && ' 1k1k' || '', inputs.run_1k8k && ' 1k8k' || '', inputs.run_8k1k && ' 8k1k' || '') || '' }})
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT

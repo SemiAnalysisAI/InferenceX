@@ -37,6 +37,11 @@ def main():
         default=2,
         help='Step size for concurrency values (default: 2)'
     )
+    parser.add_argument(
+        '--test-mode',
+        action='store_true',
+        help='Generate only the lowest concurrency value for each TP level'
+    )
     
     args = parser.parse_args()
     
@@ -117,9 +122,8 @@ def main():
             assert None not in (tp, conc_start, conc_end), \
                 f"Missing 'tp', 'conc-start', or 'conc-end' in bmk-space for key '{args.key}'"
             
-            # Generate entries for each concurrency value in the range
-            conc = conc_start
-            while conc <= conc_end:
+            # In test mode, only use the lowest concurrency (conc_start)
+            if args.test_mode:
                 entry = {
                     'image': image,
                     'model': model,
@@ -130,7 +134,7 @@ def main():
                     'isl': isl,
                     'osl': osl,
                     'tp': tp,
-                    'conc': conc,
+                    'conc': conc_start,
                     'max-model-len': isl + osl,
                 }
                 
@@ -141,12 +145,37 @@ def main():
                     entry['dp-attn'] = dp_attn
                 
                 matrix_values.append(entry)
-                
-                if conc == conc_end:
-                    break
-                conc *= args.step_size
-                if conc > conc_end:
-                    conc = conc_end
+            else:
+                # Generate entries for each concurrency value in the range
+                conc = conc_start
+                while conc <= conc_end:
+                    entry = {
+                        'image': image,
+                        'model': model,
+                        'model-code': model_code,
+                        'precision': precision,
+                        'framework': framework,
+                        'runner': runner,
+                        'isl': isl,
+                        'osl': osl,
+                        'tp': tp,
+                        'conc': conc,
+                        'max-model-len': isl + osl,
+                    }
+                    
+                    # Add optional fields if they exist
+                    if ep is not None:
+                        entry['ep'] = ep
+                    if dp_attn is not None:
+                        entry['dp-attn'] = dp_attn
+                    
+                    matrix_values.append(entry)
+                    
+                    if conc == conc_end:
+                        break
+                    conc *= args.step_size
+                    if conc > conc_end:
+                        conc = conc_end
     
     print(json.dumps(matrix_values))
     return matrix_values
