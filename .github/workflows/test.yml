@@ -5,7 +5,9 @@ concurrency:
     cancel-in-progress: false
 
 on:
-    pull_request:
+    push:
+        branches:
+            - initial-refactor
     workflow_dispatch:
         inputs:
             name:
