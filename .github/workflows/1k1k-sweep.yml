@@ -44,53 +44,53 @@ jobs:
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/get_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    benchmark-70b:
-        needs: get-70b-configs
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: 70b 1k1k
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-70b-configs.outputs.search-space-config) }}
-        secrets: inherit
-        with:
-            exp-name: "70b_1k1k"
-            isl: 1024
-            osl: 1024
-            max-model-len: 2048
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep || 1 }}
-            dp-attn: ${{ matrix.config.dp-attn || false }}
-            conc: ${{ matrix.config.conc }}
+    # benchmark-70b:
+    #     needs: get-70b-configs
+    #     uses: ./.github/workflows/benchmark-tmpl.yml
+    #     name: 70b 1k1k
+    #     strategy:
+    #         fail-fast: false
+    #         matrix:
+    #             config: ${{ fromJson(needs.get-70b-configs.outputs.search-space-config) }}
+    #     secrets: inherit
+    #     with:
+    #         exp-name: "70b_1k1k"
+    #         isl: 1024
+    #         osl: 1024
+    #         max-model-len: 2048
+    #         runner: ${{ matrix.config.runner }}
+    #         image: ${{ matrix.config.image }}
+    #         model: ${{ matrix.config.model }}
+    #         framework: ${{ matrix.config.framework }}
+    #         precision: ${{ matrix.config.precision }}
+    #         tp: ${{ matrix.config.tp }}
+    #         ep: ${{ matrix.config.ep || 1 }}
+    #         dp-attn: ${{ matrix.config.dp-attn || false }}
+    #         conc: ${{ matrix.config.conc }}
 
-    benchmark-dsr1:
-        needs: get-dsr1-configs
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: dsr1 1k1k
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
-        secrets: inherit
-        with:
-            exp-name: "dsr1_1k1k"
-            isl: 1024
-            osl: 1024
-            max-model-len: 2048
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep || 1 }}
-            dp-attn: ${{ matrix.config.dp-attn || false }}
-            conc: ${{ matrix.config.conc }}
+    # benchmark-dsr1:
+    #     needs: get-dsr1-configs
+    #     uses: ./.github/workflows/benchmark-tmpl.yml
+    #     name: dsr1 1k1k
+    #     strategy:
+    #         fail-fast: false
+    #         matrix:
+    #             config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
+    #     secrets: inherit
+    #     with:
+    #         exp-name: "dsr1_1k1k"
+    #         isl: 1024
+    #         osl: 1024
+    #         max-model-len: 2048
+    #         runner: ${{ matrix.config.runner }}
+    #         image: ${{ matrix.config.image }}
+    #         model: ${{ matrix.config.model }}
+    #         framework: ${{ matrix.config.framework }}
+    #         precision: ${{ matrix.config.precision }}
+    #         tp: ${{ matrix.config.tp }}
+    #         ep: ${{ matrix.config.ep || 1 }}
+    #         dp-attn: ${{ matrix.config.dp-attn || false }}
+    #         conc: ${{ matrix.config.conc }}
 
     benchmark-gptoss:
         needs: get-gptoss-configs
@@ -116,21 +116,21 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn || false }}
             conc: ${{ matrix.config.conc }}
 
-    collect-70b-results:
-        needs: benchmark-70b
-        if: ${{ always() }}
-        uses: ./.github/workflows/collect-results.yml
-        secrets: inherit
-        with:
-            exp-name: "70b_1k1k"
+    # collect-70b-results:
+    #     needs: benchmark-70b
+    #     if: ${{ always() }}
+    #     uses: ./.github/workflows/collect-results.yml
+    #     secrets: inherit
+    #     with:
+    #         exp-name: "70b_1k1k"
 
-    collect-dsr1-results:
-        needs: benchmark-dsr1
-        if: ${{ always() }}
-        uses: ./.github/workflows/collect-results.yml
-        secrets: inherit
-        with:
-            exp-name: "dsr1_1k1k"
+    # collect-dsr1-results:
+    #     needs: benchmark-dsr1
+    #     if: ${{ always() }}
+    #     uses: ./.github/workflows/collect-results.yml
+    #     secrets: inherit
+    #     with:
+    #         exp-name: "dsr1_1k1k"
 
     collect-gptoss-results:
         needs: benchmark-gptoss
