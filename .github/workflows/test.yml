@@ -98,7 +98,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
         secrets: inherit
         with:
-            exp-name: "test"
+            exp-name: ${{ matrix.config.model-code }}_test
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}

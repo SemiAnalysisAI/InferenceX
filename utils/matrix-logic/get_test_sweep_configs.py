@@ -72,6 +72,9 @@ def main():
             f"Available keys: {available_keys}"
         )
     
+    # Extract model code (everything before first hyphen)
+    model_code = args.key.split('-')[0]
+    
     val = all_config_data[args.key]
     
     # Validate required fields
@@ -120,6 +123,7 @@ def main():
                 entry = {
                     'image': image,
                     'model': model,
+                    'model-code': model_code,
                     'precision': precision,
                     'framework': framework,
                     'runner': runner,
