@@ -2,7 +2,7 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
+    - cron: '0 * * * *'  # Every hour
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.PAT_TOKEN }}
           fetch-depth: 0
 
       - name: Configure Git
@@ -29,7 +30,7 @@ jobs:
       - name: Sync upstream
         run: |
           echo "Starting branch synchronization..."
-          for branch in $(git branch -r | grep 'upstream/' | sed 's|upstream/||'); do
+          for branch in $(git branch -r | grep 'upstream/' | grep -v 'HEAD' | grep -v '\->' | sed 's|upstream/||'); do
             echo "Syncing branch: $branch"
             # Checkout or create local branch tracking origin
             git checkout $branch 2>/dev/null || git checkout -b $branch origin/$branch
