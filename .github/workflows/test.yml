@@ -1,4 +1,4 @@
-name: Test - Full Sweep
+name: Test Sweep
 
 concurrency:
     group: benchmark-lock
