@@ -1,11 +1,11 @@
-name: "1K/1K Sweep"
+name: "1K/8K Sweep"
 
 concurrency:
-  group: benchmark-lock-1k1k
+  group: benchmark-lock-1k8k
   cancel-in-progress: false
 
 on:
-    pull_request:
+    # pull_request:
     workflow_dispatch:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
 
             - id: get-70b-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix 70b)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix 70b)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-dsr1-configs:
@@ -32,7 +32,7 @@ jobs:
 
             - id: get-dsr1-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
@@ -45,20 +45,20 @@ jobs:
 
             - id: get-gptoss-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     benchmark-70b:
         needs: get-70b-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: 70b 1k1k
+        name: 70b 1k8k
         strategy:
             fail-fast: false
             matrix:
                 config: ${{ fromJson(needs.get-70b-configs.outputs.search-space-config) }}
         secrets: inherit
         with:
-            exp-name: "70b_1k1k"
+            exp-name: "70b_1k8k"
             isl: 1024
             osl: 1024
             max-model-len: 2048
@@ -75,14 +75,14 @@ jobs:
     benchmark-dsr1:
         needs: get-dsr1-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: dsr1 1k1k
+        name: dsr1 1k8k
         strategy:
             fail-fast: false
             matrix:
                 config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
         secrets: inherit
         with:
-            exp-name: "dsr1_1k1k"
+            exp-name: "dsr1_1k8k"
             isl: 1024
             osl: 1024
             max-model-len: 2048
@@ -99,14 +99,14 @@ jobs:
     benchmark-gptoss:
         needs: get-gptoss-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: gptoss 1k1k
+        name: gptoss 1k8k
         strategy:
             fail-fast: false
             matrix:
                 config: ${{ fromJson(needs.get-gptoss-configs.outputs.search-space-config) }}
         secrets: inherit
         with:
-            exp-name: "gptoss_1k1k"
+            exp-name: "gptoss_1k8k"
             isl: 1024
             osl: 1024
             max-model-len: 2048
@@ -126,7 +126,7 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "70b_1k1k"
+            exp-name: "70b_1k8k"
 
     collect-dsr1-results:
         needs: benchmark-dsr1
@@ -134,7 +134,7 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "dsr1_1k1k"
+            exp-name: "dsr1_1k8k"
 
     collect-gptoss-results:
         needs: benchmark-gptoss
@@ -142,4 +142,4 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "gptoss_1k1k"
+            exp-name: "gptoss_1k8k"
