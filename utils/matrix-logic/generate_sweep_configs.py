@@ -94,9 +94,16 @@ def generate_test_config(args, all_config_data):
             f"Available keys: {available_keys}"
         )
 
-    # Extract model code (everything before first hyphen)
+    # Extract model code from config key
     model_code = args.key.split('-')[0]
-
+    # Extract GPU from config key
+    config_gpu = args.key.split('-')[2]
+    runner_gpu = args.runner_node.split('-')[0] if args.runner_node else None
+    
+    # If user enters a runner not compatible with input GPU sku, error
+    if runner_gpu and config_gpu != runner_gpu:
+        raise ValueError(f"GPU '{config_gpu}' used in selected config '{args.key}' cannot run on selected runner node '{args.runner_node}'.")
+    
     val = all_config_data[args.key]
 
     # Validate required fields
@@ -107,7 +114,8 @@ def generate_test_config(args, all_config_data):
     model = val.get('model')
     precision = val.get('precision')
     framework = val.get('framework')
-    runner = val.get('runner')
+    # Use default runner or specific runner node if input by user
+    runner = val.get('runner') if not args.runner_node else args.runner_node
 
     assert None not in (image, model, precision, framework, runner), \
         f"Missing required fields (image, model, precision, framework, runner) for key '{args.key}'"
@@ -286,6 +294,11 @@ def main():
         '--key',
         required=True,
         help='Configuration key to use'
+    )
+    test_config_parser.add_argument(
+        '--runner-node',
+        required=False,
+        help='Specific runner node to use'
     )
     test_config_parser.add_argument(
         '--seq-lens',
