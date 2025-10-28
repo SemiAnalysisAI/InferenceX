@@ -93,6 +93,8 @@ jobs:
 
     get-jobs:
         runs-on: ubuntu-latest
+        needs: verify-compatible-runner
+        if: ${{ always() && (needs.verify-compatible-runner.result == 'success' || needs.verify-compatible-runner.result == 'skipped') }}
         outputs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
         steps:

@@ -5,7 +5,7 @@ concurrency:
     cancel-in-progress: false
 
 on:
-    pull_request:
+    # pull_request:
     workflow_dispatch:
 #   schedule:
 #     - cron: '0 23 * * *'
