@@ -149,7 +149,8 @@ def generate_full_sweep(args, all_config_data):
                     'osl': osl,
                     'tp': tp,
                     'conc': conc,
-                    'model_code': model_code,
+                    'model-code': model_code,
+                    'max-model-len': isl + osl,
                 }
 
                 # Add optional fields if they exist
@@ -324,6 +325,7 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 'tp': highest_tp,
                 'conc': lowest_conc,
                 'model-code': model_code,
+                'max-model-len': 2048,
             }
 
             # Add optional fields if they exist
