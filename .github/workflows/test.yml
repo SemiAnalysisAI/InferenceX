@@ -95,7 +95,7 @@ jobs:
     test-sweep:
         needs: get-jobs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: test ${{ inputs.name }}
+        name: ${{ inputs.generate-cli-command }}
         strategy:
             fail-fast: false
             matrix:
