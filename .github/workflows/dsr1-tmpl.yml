@@ -116,7 +116,7 @@ jobs:
       runner: mi300x
       image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915'
       model: 'deepseek-ai/DeepSeek-R1-0528'
-      framework: 'sglang'
+      framework: 'vllm'
       precision: 'fp8'
       exp-name: ${{ inputs.exp-name }}
       isl: ${{ inputs.isl }}

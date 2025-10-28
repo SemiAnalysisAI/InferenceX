@@ -6,21 +6,37 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=8888
 huggingface-cli download $MODEL
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
+max_model_len=16384            # Must be >= the input + output length
+max_seq_len_to_capture=10240   # Beneficial to set this to max_model_len
+max_num_seqs=1024
+max_num_batched_tokens=131072  # Smaller values may result in better TTFT but worse TPOT / Throughput
 
-export SGLANG_USE_AITER=1
+export VLLM_USE_V1=1
+export VLLM_USE_AITER_TRITON_ROPE=1
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_RMSNORM=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+
+
+export VLLM_ROCM_USE_AITER_TRITON_FUSED_RMSNORM_FP8_QUANT=1
+export VLLM_ROCM_USE_AITER_TRITON_FUSED_MUL_ADD=1
+export VLLM_ROCM_USE_AITER_TRITON_FUSED_SHARED_EXPERTS=0
 
 set -x
-python3 -m sglang.launch_server \
---model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
---tensor-parallel-size=$TP \
---mem-fraction-static=0.8 \
---cuda-graph-max-bs=128 \
---chunked-prefill-size=196608 \
---num-continuous-decode-steps=4 \
---max-prefill-tokens=196608 \
---disable-radix-cache \
+vllm serve ${MODEL} \
+    --host localhost \
+    --port $PORT \
+    --swap-space 64 \
+    --tensor-parallel-size $TP \
+    --max-num-seqs ${max_num_seqs} \
+    --no-enable-prefix-caching \
+    --max-num-batched-tokens ${max_num_batched_tokens} \
+    --max-model-len ${max_model_len} \
+    --block-size 1 \
+    --gpu-memory-utilization 0.95 \
+    --max-seq-len-to-capture ${max_seq_len_to_capture} \
+    --async-scheduling \
+    --kv-cache-dtype auto \
 > $SERVER_LOG 2>&1 &
 
 set +x
@@ -32,7 +48,7 @@ while IFS= read -r line; do
         echo "JOB $SLURM_JOB_ID ran on $SLURMD_NODENAME"
         exit 1
     fi
-    if [[ "$line" == *"The server is fired up and ready to roll"* ]]; then
+    if [[ "$line" =~ Application\ startup\ complete ]]; then
         break
     fi
 done < <(tail -F -n0 "$SERVER_LOG")

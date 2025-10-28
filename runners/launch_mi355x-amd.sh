@@ -13,6 +13,7 @@
 # GITHUB_WORKSPACE
 # RESULT_FILENAME
 # HF_TOKEN
+sudo sh -c 'echo 0 > /proc/sys/kernel/numa_balancing'
 
 HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-1/"  # Temp solution
 PORT=8888
