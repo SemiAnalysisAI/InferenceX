@@ -1,8 +1,8 @@
 name: Test Sweep
 
-concurrency:
-    group: benchmark-lock
-    cancel-in-progress: false
+# concurrency:
+#     group: benchmark-lock
+#     cancel-in-progress: false
 
 on:
     workflow_dispatch:
@@ -102,7 +102,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
         secrets: inherit
         with:
-            exp-name: ${{ matrix.config.model-code }}_test
+            exp-name: ${{ matrix.config.model-code }}_test_${{ matrix.config.isl }}_${{ matrix.config.osl }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
