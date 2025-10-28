@@ -289,6 +289,10 @@ def generate_runner_model_sweep_config(args, all_config_data):
         # Only consider configs with specified runner
         if val['runner'] != args.runner_type:
             continue
+        
+        # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
+        # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
+        model_code = key.split('-')[0]
 
         # Find 1k1k config
         target_config = None
@@ -318,7 +322,8 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 'isl': 1024,
                 'osl': 1024,
                 'tp': highest_tp,
-                'conc': lowest_conc
+                'conc': lowest_conc,
+                'model-code': model_code,
             }
 
             # Add optional fields if they exist
