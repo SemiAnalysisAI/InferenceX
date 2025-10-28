@@ -72,6 +72,25 @@ on:
                     - "mi355x-amd_3"
 
 jobs:
+    verify-compatible-runner:
+        runs-on: ubuntu-latest
+        if: ${{ inputs.runner != '' }}
+        steps:
+            - name: Verify runner compatible
+              shell: python
+              run: |
+                import re
+
+                inputs_name_re = re.match(r'^[^-]+-[^-]+-([^-]+)', ${{ inputs.name }})
+                if inputs_name_re:
+                    config_gpu = inputs_name_re.group(1)
+                inputs_runner_re = re.match(r'^([^-]+)', ${{ inputs.runner }})
+                if inputs_runner_re:
+                    runner_gpu = inputs_runner_re.group(1)
+
+                assert config_gpu == runner_gpu, f"Specified runner '${{ inputs.runner }})' is not compatible with config '${{ inputs.name }}'""
+
+
     get-jobs:
         runs-on: ubuntu-latest
         outputs:
