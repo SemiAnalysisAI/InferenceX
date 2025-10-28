@@ -8,8 +8,82 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
+def validate_master_configs_structure(all_config_data):
+    """Validate the structure of all master config entries.
+
+    This validates that all required fields are present, have correct types,
+    and no extra fields exist. Should be called once after loading config files.
+    """
+    for key, val in all_config_data.items():
+        # Check for required top-level fields and their types
+        required_fields = {
+            'image': str,
+            'model': str,
+            'precision': str,
+            'framework': str,
+            'runner': str,
+            'seq-len-configs': list
+        }
+
+        for field, expected_type in required_fields.items():
+            if field not in val or val[field] is None:
+                raise ValueError(f"Missing required field '{field}' for key '{key}'")
+            if not isinstance(val[field], expected_type):
+                raise ValueError(f"Field '{field}' must be {expected_type.__name__} for key '{key}', got {type(val[field]).__name__}")
+
+        seq_len_configs = val['seq-len-configs']
+        if len(seq_len_configs) == 0:
+            raise ValueError(f"'seq-len-configs' must be a non-empty list for key '{key}'")
+
+        # Validate each seq-len-config
+        for i, seq_config in enumerate(seq_len_configs):
+            # Check isl
+            if 'isl' not in seq_config or seq_config['isl'] is None:
+                raise ValueError(f"Missing 'isl' in seq-len-config[{i}] for key '{key}'")
+            if not isinstance(seq_config['isl'], int):
+                raise ValueError(f"'isl' must be int in seq-len-config[{i}] for key '{key}'")
+
+            # Check osl
+            if 'osl' not in seq_config or seq_config['osl'] is None:
+                raise ValueError(f"Missing 'osl' in seq-len-config[{i}] for key '{key}'")
+            if not isinstance(seq_config['osl'], int):
+                raise ValueError(f"'osl' must be int in seq-len-config[{i}] for key '{key}'")
+
+            bmk_space = seq_config.get('bmk-space')
+            if not bmk_space or not isinstance(bmk_space, list) or len(bmk_space) == 0:
+                raise ValueError(f"Missing or invalid 'bmk-space' in seq-len-config[{i}] for key '{key}'")
+
+            # Validate each benchmark in bmk-space
+            for j, bmk in enumerate(bmk_space):
+                # Define allowed fields
+                allowed_fields = {'tp', 'conc-start', 'conc-end', 'ep', 'dp-attn'}
+                required_bmk_fields = {'tp': int, 'conc-start': int, 'conc-end': int}
+                optional_bmk_fields = {'ep': int, 'dp-attn': bool}
+
+                # Check for extra fields
+                extra_fields = set(bmk.keys()) - allowed_fields
+                if extra_fields:
+                    raise ValueError(f"Extra fields {extra_fields} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+
+                # Validate required fields
+                for field, expected_type in required_bmk_fields.items():
+                    if field not in bmk or bmk[field] is None:
+                        raise ValueError(f"Missing '{field}' in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                    if not isinstance(bmk[field], expected_type):
+                        raise ValueError(f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+
+                # Validate optional fields if they exist
+                for field, expected_type in optional_bmk_fields.items():
+                    if field in bmk and bmk[field] is not None:
+                        if not isinstance(bmk[field], expected_type):
+                            raise ValueError(f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+
+
 def generate_full_sweep(args, all_config_data):
-    """Generate full sweep configurations based on model prefix and sequence lengths."""
+    """Generate full sweep configurations based on model prefix and sequence lengths.
+
+    Assumes all_config_data has been validated by validate_config_structure().
+    """
     isl, osl = seq_len_stoi[args.seq_lens]
 
     matrix_values = []
@@ -18,40 +92,31 @@ def generate_full_sweep(args, all_config_data):
         if not key.startswith(args.model_prefix):
             continue
 
-        seq_len_configs = val.get('seq-len-configs')
-        assert seq_len_configs, f"Missing 'seq-len-configs' for key '{key}'"
-
-        image = val.get('image')
-        model = val.get('model')
-        precision = val.get('precision')
-        framework = val.get('framework')
-        runner = val.get('runner')
-
-        assert None not in (image, model, precision, framework, runner), \
-            f"Missing required fields for key '{key}'"
+        seq_len_configs = val['seq-len-configs']
+        image = val['image']
+        model = val['model']
+        precision = val['precision']
+        framework = val['framework']
+        runner = val['runner']
 
         # Check if this config has matching sequence lengths
         matching_seq_config = None
         for slq in seq_len_configs:
-            if slq.get('isl') == isl and slq.get('osl') == osl:
+            if slq['isl'] == isl and slq['osl'] == osl:
                 matching_seq_config = slq
                 break
 
         if not matching_seq_config:
             continue  # Skip this config if no matching sequence length
 
-        bmk_space = matching_seq_config.get('bmk-space')
-        assert bmk_space, f"Missing 'bmk-space' in matching seq-len-config for key '{key}'"
+        bmk_space = matching_seq_config['bmk-space']
 
         for bmk in bmk_space:
-            tp = bmk.get('tp')
-            conc_start = bmk.get('conc-start')
-            conc_end = bmk.get('conc-end')
+            tp = bmk['tp']
+            conc_start = bmk['conc-start']
+            conc_end = bmk['conc-end']
             ep = bmk.get('ep')
             dp_attn = bmk.get('dp-attn')
-
-            assert None not in (tp, conc_start, conc_end), \
-                f"Missing 'tp', 'conc-start', or 'conc-end' in bmk-space for key '{key}'"
 
             # Generate entries for each concurrency value in the range
             conc = conc_start
@@ -84,41 +149,24 @@ def generate_full_sweep(args, all_config_data):
 
     return matrix_values
 
-def generate_test_config(args, all_config_data):
-    """Generate test configurations for a specific key."""
-    # Check if the key exists
-    if args.key not in all_config_data:
-        available_keys = ', '.join(sorted(all_config_data.keys()))
-        raise ValueError(
-            f"Key '{args.key}' not found in configuration files. "
-            f"Available keys: {available_keys}"
-        )
 
+def generate_test_config(args, all_config_data):
+    """Generate test configurations for a specific key.
+
+    Assumes all_config_data has been validated by validate_config_structure().
+    """
     # Extract model code from config key
     model_code = args.key.split('-')[0]
-    # Extract GPU from config key
-    config_gpu = args.key.split('-')[2]
-    runner_gpu = args.runner_node.split('-')[0] if args.runner_node else None
-    
-    # If user enters a runner not compatible with input GPU sku, error
-    if runner_gpu and config_gpu != runner_gpu:
-        raise ValueError(f"GPU '{config_gpu}' used in selected config '{args.key}' cannot run on selected runner node '{args.runner_node}'.")
-    
+
     val = all_config_data[args.key]
 
-    # Validate required fields
-    seq_len_configs = val.get('seq-len-configs')
-    assert seq_len_configs, f"Missing 'seq-len-configs' for key '{args.key}'"
-
-    image = val.get('image')
-    model = val.get('model')
-    precision = val.get('precision')
-    framework = val.get('framework')
+    seq_len_configs = val['seq-len-configs']
+    image = val['image']
+    model = val['model']
+    precision = val['precision']
+    framework = val['framework']
     # Use default runner or specific runner node if input by user
-    runner = val.get('runner') if not args.runner_node else args.runner_node
-
-    assert None not in (image, model, precision, framework, runner), \
-        f"Missing required fields (image, model, precision, framework, runner) for key '{args.key}'"
+    runner = val['runner'] if not args.runner_node else args.runner_node
 
     # Convert seq-lens to set of (isl, osl) tuples for filtering
     seq_lens_filter = None
@@ -129,28 +177,21 @@ def generate_test_config(args, all_config_data):
 
     # Process each sequence length configuration
     for seq_config in seq_len_configs:
-        isl = seq_config.get('isl')
-        osl = seq_config.get('osl')
-
-        assert None not in (isl, osl), \
-            f"Missing 'isl' or 'osl' in seq-len-config for key '{args.key}'"
+        isl = seq_config['isl']
+        osl = seq_config['osl']
 
         # Filter by sequence lengths if specified
         if seq_lens_filter and (isl, osl) not in seq_lens_filter:
             continue
 
-        bmk_space = seq_config.get('bmk-space')
-        assert bmk_space, f"Missing 'bmk-space' in seq-len-config for key '{args.key}'"
+        bmk_space = seq_config['bmk-space']
 
         for bmk in bmk_space:
-            tp = bmk.get('tp')
-            conc_start = bmk.get('conc-start')
-            conc_end = bmk.get('conc-end')
+            tp = bmk['tp']
+            conc_start = bmk['conc-start']
+            conc_end = bmk['conc-end']
             ep = bmk.get('ep')
             dp_attn = bmk.get('dp-attn')
-
-            assert None not in (tp, conc_start, conc_end), \
-                f"Missing 'tp', 'conc-start', or 'conc-end' in bmk-space for key '{args.key}'"
 
             # In test mode, only use the lowest concurrency (conc_start)
             if args.test_mode:
@@ -209,6 +250,68 @@ def generate_test_config(args, all_config_data):
 
     return matrix_values
 
+
+def generate_runner_model_sweep_config(args, all_config_data):
+    """Generate runner-model sweep configurations.
+
+    Assumes all_config_data has been validated by validate_config_structure().
+    """
+    with open(args.runner_config, 'r') as f:
+        runner_config = yaml.safe_load(f)
+
+    runner_nodes = runner_config.get(args.runner_type)
+    
+    if not runner_nodes:
+        raise ValueError(f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
+
+    matrix_values = []
+    for key, val in all_config_data.items():
+        # Only consider configs with specified runner
+        if val['runner'] != args.runner_type:
+            continue
+
+        # Find 1k1k config
+        target_config = None
+        for config in val['seq-len-configs']:
+            if config['isl'] == 1024 and config['osl'] == 1024:
+                target_config = config
+                break
+
+        highest_tp_bmk = max(target_config['bmk-space'], key=lambda x: x['tp'])
+        # Since we are just testing, pick the highest TP for this config and just test
+        # on that TP with the lowest concurrency available
+        highest_tp = highest_tp_bmk['tp']
+        lowest_conc = highest_tp_bmk['conc-start']
+
+        ep = highest_tp_bmk.get('ep')
+        dp_attn = highest_tp_bmk.get('dp-attn')
+
+        for node in runner_nodes:
+            entry = {
+                'image': val['image'],
+                'model': val['model'],
+                'precision': val['precision'],
+                'framework': val['framework'],
+                # Add one entry for each node under specified runner type
+                'runner': node,
+                # Again, just use 1k1k since this is just meant to smoke test all runners
+                'isl': 1024,
+                'osl': 1024,
+                'tp': highest_tp,
+                'conc': lowest_conc
+            }
+
+            # Add optional fields if they exist
+            if ep is not None:
+                entry['ep'] = ep
+            if dp_attn is not None:
+                entry['dp-attn'] = dp_attn
+
+            matrix_values.append(entry)
+
+    return matrix_values
+
+
 def load_config_files(config_files):
     """Load and merge configuration files."""
     all_config_data = {}
@@ -216,10 +319,13 @@ def load_config_files(config_files):
         try:
             with open(config_file, 'r') as f:
                 config_data = yaml.safe_load(f)
-                assert isinstance(config_data, dict), f"Config file '{config_file}' must contain a dictionary"
+                assert isinstance(
+                    config_data, dict), f"Config file '{config_file}' must contain a dictionary"
 
-                # Check for duplicate keys
-                duplicate_keys = set(all_config_data.keys()) & set(config_data.keys())
+                # Check for duplicate keys, this is only in place to prevent against the very unlikely
+                # case where an entry in one config accidentally/purposefully tries to override an entry in another config
+                duplicate_keys = set(all_config_data.keys()) & set(
+                    config_data.keys())
                 if duplicate_keys:
                     raise ValueError(
                         f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
@@ -230,6 +336,7 @@ def load_config_files(config_files):
             raise ValueError(f"Input file '{config_file}' does not exist.")
 
     return all_config_data
+
 
 def main():
     # Create parent parser with common arguments
@@ -324,21 +431,48 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: runner-model-sweep
+    test_config_parser = subparsers.add_parser(
+        'runner-model-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help='Sweep across all runner nodes and all compatible models for a given runner'
+    )
+    test_config_parser.add_argument(
+        '--runner-type',
+        required=True,
+        help='Runner type (e.g., h200-trt, h100)'
+    )
+    test_config_parser.add_argument(
+        '--runner-config',
+        required=True,
+        help='Configuration file holding runner information'
+    )
+    test_config_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     args = parser.parse_args()
 
-    # Load configuration files
+    # Load and validate configuration files
     all_config_data = load_config_files(args.config_files)
+    validate_master_configs_structure(all_config_data)
 
     # Route to appropriate function based on subcommand
     if args.command == 'full-sweep':
         matrix_values = generate_full_sweep(args, all_config_data)
     elif args.command == 'test-config':
         matrix_values = generate_test_config(args, all_config_data)
+    elif args.command == 'runner-model-sweep':
+        matrix_values = generate_runner_model_sweep_config(args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
 
     print(json.dumps(matrix_values))
     return matrix_values
+
 
 if __name__ == "__main__":
     main()

@@ -12,75 +12,9 @@ on:
                 required: true
                 type: string
 
-            runner:
-                description: "Specific runner node to run on"
-                required: false
-                type: choice
-                options:
-                    - "h100-cr_0"
-                    - "h100-cr_1"
-                    - "h100-cw_0"
-                    - "h100-cw_1"
-                    - "h200-cw_0"
-                    - "h200-cw_1"
-                    - "h200-nb_0"
-                    - "h200-nb_1"
-                    - "h200-nb_2"
-                    - "h200-nb_3"
-                    - "h200-nv_0"
-                    - "h200-nv_1"
-                    - "h200-nv_2"
-                    - "h200-nv_3"
-                    - "b200-nv_0"
-                    - "b200-nv_1"
-                    - "b200-nb_0"
-                    - "b200-nb_1"
-                    - "b200-nvd_0"
-                    - "b200-nvd_1"
-                    - "b200-nvd_2"
-                    - "b200-nvd_3"
-                    - "b200-tg_0"
-                    - "mi300x-amd_0"
-                    - "mi300x-amd_1"
-                    - "mi300x-amd_2"
-                    - "mi300x-amd_3"
-                    - "mi300x-amd_4"
-                    - "mi300x-cr_0"
-                    - "mi300x-oci_0"
-                    - "mi325x-amd_0"
-                    - "mi325x-tw_0"
-                    - "mi325x-tw_1"
-                    - "mi325x-tw_2"
-                    - "mi325x-tw_3"
-                    - "mi355x-amd_0"
-                    - "mi355x-amd_1"
-                    - "mi355x-amd_2"
-                    - "mi355x-amd_3"
-
 jobs:
-    # verify-compatible-runner:
-    #     runs-on: ubuntu-latest
-    #     if: ${{ inputs.runner != '' }}
-    #     steps:
-    #         - name: Verify runner compatible
-    #           shell: python
-    #           run: |
-    #             import re
-
-    #             inputs_name_re = re.match(r'^[^-]+-[^-]+-([^-]+)', '${{ inputs.name }}')
-    #             if inputs_name_re:
-    #                 config_gpu = inputs_name_re.group(1)
-    #             inputs_runner_re = re.match(r'^([^-]+)', '${{ inputs.runner }}')
-    #             if inputs_runner_re:
-    #                 runner_gpu = inputs_runner_re.group(1)
-
-    #             assert config_gpu == runner_gpu, f"Specified runner '${{ inputs.runner }})' is not compatible with config '${{ inputs.name }}'"
-
-
     get-jobs:
         runs-on: ubuntu-latest
-        # needs: verify-compatible-runner
-        # if: ${{ always() && (needs.verify-compatible-runner.result == 'success' || needs.verify-compatible-runner.result == 'skipped') }}
         outputs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
         steps:
@@ -89,7 +23,7 @@ jobs:
 
             - id: get-jobs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py test-config --test-mode ${{ inputs.generate-cli-command }})
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py ${{ inputs.generate-cli-command }})
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     test-sweep:
@@ -106,7 +40,7 @@ jobs:
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
-            runner: ${{ inputs.runner != '' && inputs.runner || matrix.config.runner }}
+            runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             framework: ${{ matrix.config.framework }}
