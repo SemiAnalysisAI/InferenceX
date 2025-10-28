@@ -7,24 +7,10 @@ concurrency:
 on:
     workflow_dispatch:
         inputs:
-            name:
-                description: "Name of benchmark from master configs"
+            generate-cli-command:
+                description: "Command passed to generate matrix script"
                 required: true
                 type: string
-                default: 70b-fp4-mi355x-vllm
-
-            run_1k1k:
-                description: "Run ISL/OSL 1k/1k"
-                type: boolean
-                required: true
-            run_1k8k:
-                description: "Run ISL/OSL 1k/8k"
-                type: boolean
-                required: true
-            run_8k1k:
-                description: "Run ISL/OSL 8k/1k"
-                type: boolean
-                required: true
 
             runner:
                 description: "Specific runner node to run on"
@@ -72,29 +58,29 @@ on:
                     - "mi355x-amd_3"
 
 jobs:
-    verify-compatible-runner:
-        runs-on: ubuntu-latest
-        if: ${{ inputs.runner != '' }}
-        steps:
-            - name: Verify runner compatible
-              shell: python
-              run: |
-                import re
+    # verify-compatible-runner:
+    #     runs-on: ubuntu-latest
+    #     if: ${{ inputs.runner != '' }}
+    #     steps:
+    #         - name: Verify runner compatible
+    #           shell: python
+    #           run: |
+    #             import re
 
-                inputs_name_re = re.match(r'^[^-]+-[^-]+-([^-]+)', '${{ inputs.name }}')
-                if inputs_name_re:
-                    config_gpu = inputs_name_re.group(1)
-                inputs_runner_re = re.match(r'^([^-]+)', '${{ inputs.runner }}')
-                if inputs_runner_re:
-                    runner_gpu = inputs_runner_re.group(1)
+    #             inputs_name_re = re.match(r'^[^-]+-[^-]+-([^-]+)', '${{ inputs.name }}')
+    #             if inputs_name_re:
+    #                 config_gpu = inputs_name_re.group(1)
+    #             inputs_runner_re = re.match(r'^([^-]+)', '${{ inputs.runner }}')
+    #             if inputs_runner_re:
+    #                 runner_gpu = inputs_runner_re.group(1)
 
-                assert config_gpu == runner_gpu, f"Specified runner '${{ inputs.runner }})' is not compatible with config '${{ inputs.name }}'"
+    #             assert config_gpu == runner_gpu, f"Specified runner '${{ inputs.runner }})' is not compatible with config '${{ inputs.name }}'"
 
 
     get-jobs:
         runs-on: ubuntu-latest
-        needs: verify-compatible-runner
-        if: ${{ always() && (needs.verify-compatible-runner.result == 'success' || needs.verify-compatible-runner.result == 'skipped') }}
+        # needs: verify-compatible-runner
+        # if: ${{ always() && (needs.verify-compatible-runner.result == 'success' || needs.verify-compatible-runner.result == 'skipped') }}
         outputs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
         steps:
@@ -103,17 +89,13 @@ jobs:
 
             - id: get-jobs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_test_sweep_configs.py \
-                    --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
-                    --test-mode \
-                    --key ${{ inputs.name }} \
-                    ${{ (inputs.run_1k1k || inputs.run_1k8k || inputs.run_8k1k) && format('--seq-lens{0}{1}{2}', inputs.run_1k1k && ' 1k1k' || '', inputs.run_1k8k && ' 1k8k' || '', inputs.run_8k1k && ' 8k1k' || '') || '' }})
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py test-config --test-mode ${{ inputs.generate-cli-command }})
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     test-sweep:
         needs: get-jobs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: test sweep - ${{ inputs.name }}
+        name: test ${{ inputs.name }}
         strategy:
             fail-fast: false
             matrix:

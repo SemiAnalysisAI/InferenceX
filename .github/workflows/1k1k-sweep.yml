@@ -21,7 +21,7 @@ jobs:
 
             - id: get-70b-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix 70b)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix 70b)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-dsr1-configs:
@@ -34,7 +34,7 @@ jobs:
 
             - id: get-dsr1-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
@@ -47,7 +47,7 @@ jobs:
 
             - id: get-gptoss-configs
               run: |
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     benchmark-70b:
