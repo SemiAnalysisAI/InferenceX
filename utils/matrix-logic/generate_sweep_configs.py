@@ -8,6 +8,7 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
+
 def validate_master_configs_structure(all_config_data):
     """Validate the structure of all master config entries.
 
@@ -27,56 +28,70 @@ def validate_master_configs_structure(all_config_data):
 
         for field, expected_type in required_fields.items():
             if field not in val or val[field] is None:
-                raise ValueError(f"Missing required field '{field}' for key '{key}'")
+                raise ValueError(
+                    f"Missing required field '{field}' for key '{key}'")
             if not isinstance(val[field], expected_type):
-                raise ValueError(f"Field '{field}' must be {expected_type.__name__} for key '{key}', got {type(val[field]).__name__}")
+                raise ValueError(
+                    f"Field '{field}' must be {expected_type.__name__} for key '{key}', got {type(val[field]).__name__}")
 
         seq_len_configs = val['seq-len-configs']
         if len(seq_len_configs) == 0:
-            raise ValueError(f"'seq-len-configs' must be a non-empty list for key '{key}'")
+            raise ValueError(
+                f"'seq-len-configs' must be a non-empty list for key '{key}'")
 
         # Validate each seq-len-config
         for i, seq_config in enumerate(seq_len_configs):
             # Check isl
             if 'isl' not in seq_config or seq_config['isl'] is None:
-                raise ValueError(f"Missing 'isl' in seq-len-config[{i}] for key '{key}'")
+                raise ValueError(
+                    f"Missing 'isl' in seq-len-config[{i}] for key '{key}'")
             if not isinstance(seq_config['isl'], int):
-                raise ValueError(f"'isl' must be int in seq-len-config[{i}] for key '{key}'")
+                raise ValueError(
+                    f"'isl' must be int in seq-len-config[{i}] for key '{key}'")
 
             # Check osl
             if 'osl' not in seq_config or seq_config['osl'] is None:
-                raise ValueError(f"Missing 'osl' in seq-len-config[{i}] for key '{key}'")
+                raise ValueError(
+                    f"Missing 'osl' in seq-len-config[{i}] for key '{key}'")
             if not isinstance(seq_config['osl'], int):
-                raise ValueError(f"'osl' must be int in seq-len-config[{i}] for key '{key}'")
+                raise ValueError(
+                    f"'osl' must be int in seq-len-config[{i}] for key '{key}'")
 
             bmk_space = seq_config.get('bmk-space')
             if not bmk_space or not isinstance(bmk_space, list) or len(bmk_space) == 0:
-                raise ValueError(f"Missing or invalid 'bmk-space' in seq-len-config[{i}] for key '{key}'")
+                raise ValueError(
+                    f"Missing or invalid 'bmk-space' in seq-len-config[{i}] for key '{key}'")
 
             # Validate each benchmark in bmk-space
             for j, bmk in enumerate(bmk_space):
                 # Define allowed fields
-                allowed_fields = {'tp', 'conc-start', 'conc-end', 'ep', 'dp-attn'}
-                required_bmk_fields = {'tp': int, 'conc-start': int, 'conc-end': int}
+                allowed_fields = {'tp', 'conc-start',
+                                  'conc-end', 'ep', 'dp-attn'}
+                required_bmk_fields = {'tp': int,
+                                       'conc-start': int, 'conc-end': int}
                 optional_bmk_fields = {'ep': int, 'dp-attn': bool}
 
                 # Check for extra fields
                 extra_fields = set(bmk.keys()) - allowed_fields
                 if extra_fields:
-                    raise ValueError(f"Extra fields {extra_fields} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                    raise ValueError(
+                        f"Extra fields {extra_fields} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
                 # Validate required fields
                 for field, expected_type in required_bmk_fields.items():
                     if field not in bmk or bmk[field] is None:
-                        raise ValueError(f"Missing '{field}' in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                        raise ValueError(
+                            f"Missing '{field}' in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
                     if not isinstance(bmk[field], expected_type):
-                        raise ValueError(f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                        raise ValueError(
+                            f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
                 # Validate optional fields if they exist
                 for field, expected_type in optional_bmk_fields.items():
                     if field in bmk and bmk[field] is not None:
                         if not isinstance(bmk[field], expected_type):
-                            raise ValueError(f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                            raise ValueError(
+                                f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
 
 def generate_full_sweep(args, all_config_data):
@@ -98,6 +113,9 @@ def generate_full_sweep(args, all_config_data):
         precision = val['precision']
         framework = val['framework']
         runner = val['runner']
+        # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
+        # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
+        model_code = key.split('-')[0]
 
         # Check if this config has matching sequence lengths
         matching_seq_config = None
@@ -130,7 +148,8 @@ def generate_full_sweep(args, all_config_data):
                     'isl': isl,
                     'osl': osl,
                     'tp': tp,
-                    'conc': conc
+                    'conc': conc,
+                    'model_code': model_code,
                 }
 
                 # Add optional fields if they exist
@@ -260,9 +279,10 @@ def generate_runner_model_sweep_config(args, all_config_data):
         runner_config = yaml.safe_load(f)
 
     runner_nodes = runner_config.get(args.runner_type)
-    
+
     if not runner_nodes:
-        raise ValueError(f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
+        raise ValueError(
+            f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
 
     matrix_values = []
     for key, val in all_config_data.items():
@@ -466,7 +486,8 @@ def main():
     elif args.command == 'test-config':
         matrix_values = generate_test_config(args, all_config_data)
     elif args.command == 'runner-model-sweep':
-        matrix_values = generate_runner_model_sweep_config(args, all_config_data)
+        matrix_values = generate_runner_model_sweep_config(
+            args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
 
