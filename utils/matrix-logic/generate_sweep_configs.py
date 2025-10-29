@@ -215,6 +215,26 @@ def generate_filtered_sweep(args, all_config_data):
 
     Assumes all_config_data has been validated by validate_config_structure().
     """
+    # Validate runner types if specified
+    if args.runner_type:
+        if not args.runner_config:
+            raise ValueError(
+                "--runner-config is required when --runner-type is specified")
+
+        try:
+            with open(args.runner_config, 'r') as f:
+                runner_config = yaml.safe_load(f)
+        except FileNotFoundError:
+            raise ValueError(
+                f"Runner config file '{args.runner_config}' does not exist.")
+
+        valid_runner_types = set(runner_config.keys())
+        invalid_runners = set(args.runner_type) - valid_runner_types
+        if invalid_runners:
+            raise ValueError(
+                f"Invalid runner type(s): {invalid_runners}. "
+                f"Valid runner types are: {', '.join(sorted(valid_runner_types))}")
+
     matrix_values = []
 
     # Convert seq-lens to set of (isl, osl) tuples for filtering
@@ -224,19 +244,20 @@ def generate_filtered_sweep(args, all_config_data):
 
     for key, val in all_config_data.items():
         # Filter by model prefix if specified
-        if args.model_prefix and not key.startswith(args.model_prefix):
-            continue
+        if args.model_prefix:
+            if not any(key.startswith(prefix) for prefix in args.model_prefix):
+                continue
 
         # Filter by precision if specified
-        if args.precision and val['precision'] != args.precision:
+        if args.precision and val['precision'] not in args.precision:
             continue
 
         # Filter by framework if specified
-        if args.framework and val['framework'] != args.framework:
+        if args.framework and val['framework'] not in args.framework:
             continue
 
         # Filter by runner type if specified
-        if args.runner_type and val['runner'] != args.runner_type:
+        if args.runner_type and val['runner'] not in args.runner_type:
             continue
 
         seq_len_configs = val['seq-len-configs']
@@ -330,15 +351,15 @@ def generate_filtered_sweep(args, all_config_data):
     if len(matrix_values) == 0:
         error_msg = "No configs found matching filters:"
         if args.model_prefix:
-            error_msg += f" model-prefix='{args.model_prefix}'"
+            error_msg += f" model-prefix={args.model_prefix}"
         if args.precision:
-            error_msg += f" precision='{args.precision}'"
+            error_msg += f" precision={args.precision}"
         if args.framework:
-            error_msg += f" framework='{args.framework}'"
+            error_msg += f" framework={args.framework}"
         if args.runner_type:
-            error_msg += f" runner-type='{args.runner_type}'"
+            error_msg += f" runner-type={args.runner_type}"
         if seq_lens_filter:
-            error_msg += f" seq-lens={list(args.seq_lens)}"
+            error_msg += f" seq-lens={args.seq_lens}"
         raise ValueError(error_msg)
 
     return matrix_values
@@ -752,23 +773,32 @@ def main():
     )
     filtered_sweep_parser.add_argument(
         '--model-prefix',
+        nargs='+',
         required=False,
-        help='Model prefix to filter configurations (optional)'
+        help='Model prefix(es) to filter configurations (optional, can specify multiple)'
     )
     filtered_sweep_parser.add_argument(
         '--precision',
+        nargs='+',
         required=False,
-        help='Precision to filter by (e.g., fp4, fp8) (optional)'
+        help='Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)'
     )
     filtered_sweep_parser.add_argument(
         '--framework',
+        nargs='+',
         required=False,
-        help='Framework to filter by (e.g., vllm, trt, sglang) (optional)'
+        help='Framework(s) to filter by (e.g., vllm, trt, sglang) (optional, can specify multiple)'
     )
     filtered_sweep_parser.add_argument(
         '--runner-type',
+        nargs='+',
         required=False,
-        help='Runner type to filter by (e.g., h200, h100) (optional)'
+        help='Runner type(s) to filter by (e.g., h200, h100) (optional, can specify multiple)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--runner-config',
+        required=False,
+        help='Configuration file holding runner information (required if --runner-type is specified)'
     )
     filtered_sweep_parser.add_argument(
         '--seq-lens',
