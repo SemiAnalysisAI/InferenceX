@@ -21,6 +21,7 @@ jobs:
 
             - id: get-70b-configs
               run: |
+                  pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix 70b)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
@@ -34,6 +35,7 @@ jobs:
 
             - id: get-dsr1-configs
               run: |
+                  pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
@@ -47,6 +49,7 @@ jobs:
 
             - id: get-gptoss-configs
               run: |
+                  pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
