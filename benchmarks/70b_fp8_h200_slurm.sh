@@ -14,8 +14,6 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
-set -x
-
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 if [ -n "$HF_TOKEN" ]; then
@@ -48,6 +46,8 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 export TORCH_CUDA_ARCH_LIST="9.0"
+export HF_TOKEN="${HF_TOKEN}"
+export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 
 PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
  --gpu-memory-utilization 0.9 --tensor-parallel-size $TP --max-num-seqs $CONC  \
