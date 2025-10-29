@@ -13,8 +13,6 @@
 # CONC
 # RESULT_FILENAME
 # PORT_OFFSET
-# DP_ATTENTION
-# EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
@@ -23,29 +21,36 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 
-set +x
-
-export TRTLLM_ENABLE_PDL=1 
-
 set -x
-cat > gptoss-config.yml << EOF
-cuda_graph_config:
-  enable_padding: true
-  max_batch_size: $CONC
-enable_attention_dp: $DP_ATTENTION
-kv_cache_config:
-  dtype: auto
-  enable_block_reuse: false
-  free_gpu_memory_fraction: 0.85
-moe_config:
-  backend: TRITON
-num_postprocess_workers: 4
-print_iter_log: true
-stream_interval: 20 
-EOF
 
-#mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
-mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --max_batch_size $CONC --max_num_tokens 20000 --backend pytorch --extra_llm_api_options gptoss-config.yml  --ep_size=$EP_SIZE --trust_remote_code --gpus_per_node 8 --host 0.0.0.0 --port $PORT --tp_size=$TP --pp_size=1 > $SERVER_LOG 2>&1 &
+# Create llama-config.yml inline
+# For 1k/1k, use batch_wait_max_tokens_ratio and batch_wait_timeout_iters will improve the performance, by default they are all zeros
+if [[ "$ISL" == "1024" && "$OSL" == "1024" && ${TP} -lt 8 ]]; then
+cat > llama-config.yml << 'EOF'
+batch_wait_max_tokens_ratio: 0.9
+batch_wait_timeout_iters: 20
+cuda_graph_config: 
+  enable_padding: true 
+  max_batch_size: 1024 
+kv_cache_config: 
+  dtype: fp8 
+  enable_block_reuse: false 
+stream_interval: 10
+EOF
+else 
+cat > llama-config.yml << 'EOF'
+cuda_graph_config: 
+  enable_padding: true 
+  max_batch_size: 1024 
+kv_cache_config: 
+  dtype: fp8 
+  enable_block_reuse: false 
+stream_interval: 10
+EOF
+fi
+
+# Launch TRT-LLM server
+mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens 16384 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
 
 
 set +x
