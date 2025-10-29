@@ -398,6 +398,7 @@ def generate_custom_test(args):
             'dp-attn': False,
             'conc': 4,
             'model-code': args.model,
+            'exp-name': args.exp_name,
             'max-model-len': 2048,
         }
     ]
