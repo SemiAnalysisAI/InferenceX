@@ -184,7 +184,7 @@ def generate_full_sweep(args, all_config_data):
                     'osl': osl,
                     'tp': tp,
                     'conc': conc,
-                    'max-model-len': isl + osl,
+                    'max-model-len': isl + osl + 200,
                     'ep': 1,  # Default
                     'dp-attn': False,  # Default
                     'exp-name': f"{model_code}_{isl}_{osl}_sweep",
@@ -203,6 +203,143 @@ def generate_full_sweep(args, all_config_data):
                 conc *= args.step_size
                 if conc > conc_end:
                     conc = conc_end
+
+    return matrix_values
+
+
+def generate_filtered_sweep(args, all_config_data):
+    """Generate sweep configurations with filtering options.
+
+    Allows filtering by model prefix, precision, framework, runner type, and sequence lengths.
+    Supports test mode to only run highest TP with lowest concurrency.
+
+    Assumes all_config_data has been validated by validate_config_structure().
+    """
+    matrix_values = []
+
+    # Convert seq-lens to set of (isl, osl) tuples for filtering
+    seq_lens_filter = None
+    if args.seq_lens:
+        seq_lens_filter = {seq_len_stoi[sl] for sl in args.seq_lens}
+
+    for key, val in all_config_data.items():
+        # Filter by model prefix if specified
+        if args.model_prefix and not key.startswith(args.model_prefix):
+            continue
+
+        # Filter by precision if specified
+        if args.precision and val['precision'] != args.precision:
+            continue
+
+        # Filter by framework if specified
+        if args.framework and val['framework'] != args.framework:
+            continue
+
+        # Filter by runner type if specified
+        if args.runner_type and val['runner'] != args.runner_type:
+            continue
+
+        seq_len_configs = val['seq-len-configs']
+        image = val['image']
+        model = val['model']
+        precision = val['precision']
+        framework = val['framework']
+        runner = val['runner']
+        model_code = key.split('-')[0]
+
+        for seq_config in seq_len_configs:
+            isl = seq_config['isl']
+            osl = seq_config['osl']
+
+            # Filter by sequence lengths if specified
+            if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+                continue
+
+            bmk_space = seq_config['search-space']
+
+            if args.test_mode:
+                # In test mode, use highest TP with lowest concurrency
+                highest_tp_bmk = max(bmk_space, key=lambda x: x['tp'])
+                tp = highest_tp_bmk['tp']
+                conc = highest_tp_bmk['conc-start']
+                ep = highest_tp_bmk.get('ep')
+                dp_attn = highest_tp_bmk.get('dp-attn')
+
+                entry = {
+                    'image': image,
+                    'model': model,
+                    'precision': precision,
+                    'framework': framework,
+                    'runner': runner,
+                    'isl': isl,
+                    'osl': osl,
+                    'tp': tp,
+                    'ep': 1,  # Default
+                    'dp-attn': False,  # Default
+                    'conc': conc,
+                    'max-model-len': isl + osl + 200,
+                    'exp-name': f"{model_code}_{isl}_{osl}_test",
+                }
+
+                if ep is not None:
+                    entry['ep'] = ep
+                if dp_attn is not None:
+                    entry['dp-attn'] = dp_attn
+
+                matrix_values.append(entry)
+            else:
+                # Full sweep mode
+                for bmk in bmk_space:
+                    tp = bmk['tp']
+                    conc_start = bmk['conc-start']
+                    conc_end = bmk['conc-end']
+                    ep = bmk.get('ep')
+                    dp_attn = bmk.get('dp-attn')
+
+                    conc = conc_start
+                    while conc <= conc_end:
+                        entry = {
+                            'image': image,
+                            'model': model,
+                            'precision': precision,
+                            'framework': framework,
+                            'runner': runner,
+                            'isl': isl,
+                            'osl': osl,
+                            'tp': tp,
+                            'conc': conc,
+                            'max-model-len': isl + osl + 200,
+                            'ep': 1,  # Default
+                            'dp-attn': False,  # Default
+                            'exp-name': f"{model_code}_{isl}_{osl}_sweep",
+                        }
+
+                        if ep is not None:
+                            entry['ep'] = ep
+                        if dp_attn is not None:
+                            entry['dp-attn'] = dp_attn
+
+                        matrix_values.append(entry)
+
+                        if conc == conc_end:
+                            break
+                        conc *= args.step_size
+                        if conc > conc_end:
+                            conc = conc_end
+
+    if len(matrix_values) == 0:
+        error_msg = "No configs found matching filters:"
+        if args.model_prefix:
+            error_msg += f" model-prefix='{args.model_prefix}'"
+        if args.precision:
+            error_msg += f" precision='{args.precision}'"
+        if args.framework:
+            error_msg += f" framework='{args.framework}'"
+        if args.runner_type:
+            error_msg += f" runner-type='{args.runner_type}'"
+        if seq_lens_filter:
+            error_msg += f" seq-lens={list(args.seq_lens)}"
+        raise ValueError(error_msg)
 
     return matrix_values
 
@@ -606,6 +743,57 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: filtered-sweep
+    filtered_sweep_parser = subparsers.add_parser(
+        'filtered-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help='Generate sweep configurations with optional filtering by model, precision, framework, runner type, and sequence lengths'
+    )
+    filtered_sweep_parser.add_argument(
+        '--model-prefix',
+        required=False,
+        help='Model prefix to filter configurations (optional)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--precision',
+        required=False,
+        help='Precision to filter by (e.g., fp4, fp8) (optional)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--framework',
+        required=False,
+        help='Framework to filter by (e.g., vllm, trt, sglang) (optional)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--runner-type',
+        required=False,
+        help='Runner type to filter by (e.g., h200, h100) (optional)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--seq-lens',
+        nargs='+',
+        choices=list(seq_len_stoi.keys()),
+        required=False,
+        help=f"Sequence length configurations to include: {', '.join(seq_len_stoi.keys())}. If not specified, all sequence lengths are included."
+    )
+    filtered_sweep_parser.add_argument(
+        '--step-size',
+        type=int,
+        default=2,
+        help='Step size for concurrency values (default: 2)'
+    )
+    filtered_sweep_parser.add_argument(
+        '--test-mode',
+        action='store_true',
+        help='Test mode: only run highest TP with lowest concurrency for each matching config'
+    )
+    filtered_sweep_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     # Subcommand: test-config
     test_config_parser = subparsers.add_parser(
         'test-config',
@@ -765,6 +953,8 @@ def main():
     # Route to appropriate function based on subcommand
     if args.command == 'full-sweep':
         matrix_values = generate_full_sweep(args, all_config_data)
+    elif args.command == 'filtered-sweep':
+        matrix_values = generate_filtered_sweep(args, all_config_data)
     elif args.command == 'test-config':
         matrix_values = generate_test_config(args, all_config_data)
     elif args.command == 'runner-model-sweep':
