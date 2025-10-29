@@ -151,8 +151,8 @@ def generate_full_sweep(args, all_config_data):
                     'conc': conc,
                     'model-code': model_code,
                     'max-model-len': isl + osl,
-                    'ep': 1, # Default
-                    'dp-attn': False, # Default
+                    'ep': 1,  # Default
+                    'dp-attn': False,  # Default
                 }
 
                 # Add optional fields if they exist
@@ -177,10 +177,26 @@ def generate_test_config(args, all_config_data):
 
     Assumes all_config_data has been validated by validate_config_structure().
     """
+    try:
+        with open(args.runner_config, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        raise ValueError(
+            f"Runner config file '{args.runner_config}' does not exist.")
+
     # Extract model code from config key
     model_code = args.key.split('-')[0]
 
-    val = all_config_data[args.key]
+    val = all_config_data.get(args.key)
+
+    if not val:
+        raise ValueError(
+            f"Specified key '{args.key}' does not exist in config files.")
+
+    runner_nodes = runner_config.get(val['runner'], [])
+    if args.runner_node not in runner_nodes:
+        raise ValueError(
+            f"Runner node '{args.runner_node}' is not compatible with config '{args.key}' which runs on runner type '{val['runner']}'. Available runner nodes for this config are '{', '.join(runner_nodes)}'.")
 
     seq_len_configs = val['seq-len-configs']
     image = val['image']
@@ -282,7 +298,8 @@ def generate_runner_model_sweep_config(args, all_config_data):
         with open(args.runner_config, 'r') as f:
             runner_config = yaml.safe_load(f)
     except FileNotFoundError as e:
-        raise ValueError(f"Runner config file '{args.runner_config}' does not exist.")
+        raise ValueError(
+            f"Runner config file '{args.runner_config}' does not exist.")
 
     runner_nodes = runner_config.get(args.runner_type)
 
@@ -344,6 +361,46 @@ def generate_runner_model_sweep_config(args, all_config_data):
     return matrix_values
 
 
+def generate_custom_test(args):
+    """Generate single 1k1k job for custom inputs.
+    """
+    try:
+        with open(args.runner_config, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        raise ValueError(
+            f"Runner config file '{args.runner_config}' does not exist.")
+    
+    found_runner_label = False
+    for runner_type, runner_nodes in runner_config.items():
+        if args.runner_label == runner_type or args.runner_label in runner_nodes:
+            found_runner_label = True
+    
+    if not found_runner_label:
+        raise ValueError(f"Unable to find specified runner label '{args.runner_label}'.")
+
+    if not runner_nodes:
+        raise ValueError(
+            f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
+
+    return [
+        {
+            'image': args.image,
+            'model': args.model,
+            'precision': args.precision,
+            'framework': args.framework,
+            'runner': args.runner_label,
+            # Again, just use 1k1k since this is just meant to smoke test all runners
+            'isl': 1024,
+            'osl': 1024,
+            'tp': 8,
+            'conc': 4,
+            'model-code': args.model,
+            'max-model-len': 2048,
+        }
+    ]
+
+
 def generate_runner_sweep_config(args, all_config_data):
     """Generate runner sweep configurations.
 
@@ -353,8 +410,8 @@ def generate_runner_sweep_config(args, all_config_data):
         with open(args.runner_config, 'r') as f:
             runner_config = yaml.safe_load(f)
     except FileNotFoundError as e:
-        raise ValueError(f"Runner config file '{args.runner_config}' does not exist.")
-
+        raise ValueError(
+            f"Runner config file '{args.runner_config}' does not exist.")
 
     matrix_values = []
     for key, val in all_config_data.items():
@@ -369,7 +426,7 @@ def generate_runner_sweep_config(args, all_config_data):
         # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
         # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
         model_code = key.split('-')[0]
-        
+
         runner_nodes = runner_config.get(val['runner'])
         if not runner_nodes:
             raise ValueError(
@@ -510,7 +567,12 @@ def main():
         'test-config',
         parents=[parent_parser],
         add_help=False,
-        help='Generate test configurations for a specific key'
+        help='Given a config key, run that configuration as specified. Optionally specify --test-mode to only run one parallelism-concurrency pair for the config.'
+    )
+    test_config_parser.add_argument(
+        '--runner-config',
+        required=True,
+        help='Configuration file holding runner information'
     )
     test_config_parser.add_argument(
         '--key',
@@ -551,7 +613,7 @@ def main():
         'runner-model-sweep',
         parents=[parent_parser],
         add_help=False,
-        help='Sweep across all runner nodes and all compatible models for a given runner'
+        help='Given a runner type, find all configurations matching the type, and run that configuration on all individual runner nodes for the specified runner type. This is meant to validate that all runner nodes work on all configurations for a runner type. For instance, to validate that all configs that specify an h200 runner successfully run across all h200 runner nodes.'
     )
     test_config_parser.add_argument(
         '--runner-type',
@@ -574,7 +636,7 @@ def main():
         'runner-sweep',
         parents=[parent_parser],
         add_help=False,
-        help='For a given model, run configurations on all compatible runners'
+        help='Given a model (and optionally a precision and framework), find all configurations matching the inputs, and run those configurations across all compatible runner nodes. This is meant to validate all runner nodes that should run a particular model can. For instance, this should be used to validate that all runners nodes that should run gptoss-120b actually do so successfully.'
     )
     test_config_parser.add_argument(
         '--model-prefix',
@@ -590,6 +652,54 @@ def main():
         '--framework',
         required=False,
         help='Framework to filter by (e.g., trt) (optional)'
+    )
+    test_config_parser.add_argument(
+        '--runner-config',
+        required=True,
+        help='Configuration file holding runner information'
+    )
+    test_config_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
+    # Subcommand: custom
+    test_config_parser = subparsers.add_parser(
+        'custom',
+        parents=[parent_parser],
+        add_help=False,
+        help='Enter custom values'
+    )
+    test_config_parser.add_argument(
+        '--runner-label',
+        required=True,
+        help='Label associated with runner on which to launch the corresponding job (e.g., h200, h200-nv_1, etc.)'
+    )
+    test_config_parser.add_argument(
+        '--image',
+        required=True,
+        help='Image to run the benchmark (e.g., openai/gpt-oss-120b)'
+    )
+    test_config_parser.add_argument(
+        '--model',
+        required=True,
+        help='Model to run (e.g., vllm/vllm-openai:latest)'
+    )
+    test_config_parser.add_argument(
+        '--framework',
+        required=True,
+        help='Framework to run on (e.g., vllm, trt, sglang)'
+    )
+    test_config_parser.add_argument(
+        '--precision',
+        required=True,
+        help='Precision to run (e.g., fp4, fp8)'
+    )
+    test_config_parser.add_argument(
+        '--exp-name',
+        required=True,
+        help='Experiment name (e.g., 70b_test)'
     )
     test_config_parser.add_argument(
         '--runner-config',
@@ -619,6 +729,8 @@ def main():
     elif args.command == 'runner-sweep':
         matrix_values = generate_runner_sweep_config(
             args, all_config_data)
+    elif args.command == 'custom':
+        matrix_values = generate_custom_test(args)
     else:
         parser.error(f"Unknown command: {args.command}")
 

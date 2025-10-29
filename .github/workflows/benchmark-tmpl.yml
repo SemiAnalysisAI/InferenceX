@@ -26,27 +26,25 @@ on:
       osl:
         required: true
         type: string
-      random-range-ratio:
-        required: false
-        type: string
-        default: '0.2'
       tp:
         required: true
         type: string
       ep:
-        required: false
+        required: true
         type: string
-        default: '1'
       dp-attn:
-        required: false
+        required: true
         type: boolean
-        default: false
       max-model-len:
         required: true
         type: string
       conc:
         required: true
         type: string
+      random-range-ratio:
+        required: false
+        type: string
+        default: '0.2'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}

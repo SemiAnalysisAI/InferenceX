@@ -46,8 +46,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep || 1 }}
-            dp-attn: ${{ matrix.config.dp-attn || false }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
     calc-success-rate:
