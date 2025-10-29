@@ -200,7 +200,7 @@ def generate_full_sweep(args, all_config_data):
                     'max-model-len': isl + osl + 200,
                     'ep': 1,  # Default
                     'dp-attn': False,  # Default
-                    'exp-name': f"{model_code}_{seq_len_str}_sweep",
+                    'exp-name': f"{model_code}_{seq_len_str}",
                 }
 
                 # Add optional fields if they exist
@@ -313,7 +313,7 @@ def generate_filtered_sweep(args, all_config_data):
                     'dp-attn': False,  # Default
                     'conc': conc,
                     'max-model-len': isl + osl + 200,
-                    'exp-name': f"{model_code}_{seq_len_str}_test",
+                    'exp-name': f"{model_code}_{seq_len_str}",
                 }
 
                 if ep is not None:
@@ -347,7 +347,7 @@ def generate_filtered_sweep(args, all_config_data):
                             'max-model-len': isl + osl + 200,
                             'ep': 1,  # Default
                             'dp-attn': False,  # Default
-                            'exp-name': f"{model_code}_{seq_len_str}_sweep",
+                            'exp-name': f"{model_code}_{seq_len_str}",
                         }
 
                         if ep is not None:
