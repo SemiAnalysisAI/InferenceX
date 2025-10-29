@@ -1,4 +1,4 @@
-name: Test Sweep
+name: End-to-End Tests
 
 # concurrency:
 #     group: benchmark-lock
