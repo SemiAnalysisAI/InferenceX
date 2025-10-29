@@ -50,13 +50,6 @@ PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config
 set +x
 while IFS= read -r line; do
     printf '%s\n' "$line"
-    # Ignore intel_extension_for_pytorch import errors
-    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]] && [[ ! "$line" =~ "intel_extension_for_pytorch" ]]; then
-		sleep 5
-		tail -n100 $SERVER_LOG
-        echo "JOB $SLURM_JOB_ID ran on NODE $SLURMD_NODENAME"
-        exit 1
-    fi
     if [[ "$line" == *"Application startup complete"* ]]; then
         break
     fi

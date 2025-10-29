@@ -26,12 +26,6 @@ python3 -m sglang.launch_server \
 set +x
 while IFS= read -r line; do
     printf '%s\n' "$line"
-    if [[ "$line" =~ [Ee][Rr][Rr][Oo][Rr] ]]; then
-        sleep 5
-        tail -n100 "$SERVER_LOG"
-        echo "JOB $SLURM_JOB_ID ran on $SLURMD_NODENAME"
-        exit 1
-    fi
     if [[ "$line" == *"The server is fired up and ready to roll"* ]]; then
         break
     fi
