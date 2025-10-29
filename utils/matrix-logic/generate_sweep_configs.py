@@ -1,12 +1,47 @@
 import json
 import yaml
 import argparse
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
+from typing import List
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
     "1k8k": (1024, 8192),
     "8k1k": (8192, 1024)
 }
+
+
+class MatrixEntry(BaseModel):
+    """Pydantic model for validating matrix entry structure."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    image: str
+    model: str
+    precision: str
+    framework: str
+    runner: str
+    isl: int
+    osl: int
+    tp: int
+    ep: int
+    dp_attn: bool = Field(alias='dp-attn')
+    conc: int
+    max_model_len: int = Field(alias='max-model-len')
+    exp_name: str = Field(alias='exp-name')
+
+
+def validate_matrix_output(matrix_values: List[dict]) -> List[dict]:
+    """Validate that matrix_values entries match the expected structure.
+
+    Raises ValueError if any entry fails validation.
+    Returns the original list if all entries are valid.
+    """
+    for i, entry in enumerate(matrix_values):
+        try:
+            MatrixEntry(**entry)
+        except ValidationError as e:
+            raise ValueError(f"Matrix entry at index {i} failed validation:\n{e}")
+    return matrix_values
 
 
 def validate_master_configs_structure(all_config_data):
@@ -57,12 +92,12 @@ def validate_master_configs_structure(all_config_data):
                 raise ValueError(
                     f"'osl' must be int in seq-len-config[{i}] for key '{key}'")
 
-            bmk_space = seq_config.get('bmk-space')
+            bmk_space = seq_config.get('search-space')
             if not bmk_space or not isinstance(bmk_space, list) or len(bmk_space) == 0:
                 raise ValueError(
-                    f"Missing or invalid 'bmk-space' in seq-len-config[{i}] for key '{key}'")
+                    f"Missing or invalid 'search-space' in seq-len-config[{i}] for key '{key}'")
 
-            # Validate each benchmark in bmk-space
+            # Validate each benchmark in search-space
             for j, bmk in enumerate(bmk_space):
                 # Define allowed fields
                 allowed_fields = {'tp', 'conc-start',
@@ -75,23 +110,23 @@ def validate_master_configs_structure(all_config_data):
                 extra_fields = set(bmk.keys()) - allowed_fields
                 if extra_fields:
                     raise ValueError(
-                        f"Extra fields {extra_fields} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                        f"Extra fields {extra_fields} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
                 # Validate required fields
                 for field, expected_type in required_bmk_fields.items():
                     if field not in bmk or bmk[field] is None:
                         raise ValueError(
-                            f"Missing '{field}' in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                            f"Missing '{field}' in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
                     if not isinstance(bmk[field], expected_type):
                         raise ValueError(
-                            f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                            f"'{field}' must be {expected_type.__name__} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
                 # Validate optional fields if they exist
                 for field, expected_type in optional_bmk_fields.items():
                     if field in bmk and bmk[field] is not None:
                         if not isinstance(bmk[field], expected_type):
                             raise ValueError(
-                                f"'{field}' must be {expected_type.__name__} in bmk-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                                f"'{field}' must be {expected_type.__name__} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
 
 
 def generate_full_sweep(args, all_config_data):
@@ -127,7 +162,7 @@ def generate_full_sweep(args, all_config_data):
         if not matching_seq_config:
             continue  # Skip this config if no matching sequence length
 
-        bmk_space = matching_seq_config['bmk-space']
+        bmk_space = matching_seq_config['search-space']
 
         for bmk in bmk_space:
             tp = bmk['tp']
@@ -149,10 +184,10 @@ def generate_full_sweep(args, all_config_data):
                     'osl': osl,
                     'tp': tp,
                     'conc': conc,
-                    'model-code': model_code,
                     'max-model-len': isl + osl,
                     'ep': 1,  # Default
                     'dp-attn': False,  # Default
+                    'exp-name': f"{model_code}_test",
                 }
 
                 # Add optional fields if they exist
@@ -222,7 +257,7 @@ def generate_test_config(args, all_config_data):
         if seq_lens_filter and (isl, osl) not in seq_lens_filter:
             continue
 
-        bmk_space = seq_config['bmk-space']
+        bmk_space = seq_config['search-space']
 
         for bmk in bmk_space:
             tp = bmk['tp']
@@ -236,15 +271,17 @@ def generate_test_config(args, all_config_data):
                 entry = {
                     'image': image,
                     'model': model,
-                    'model-code': model_code,
                     'precision': precision,
                     'framework': framework,
                     'runner': runner,
                     'isl': isl,
                     'osl': osl,
                     'tp': tp,
+                    'ep': 1, # Default,
+                    'dp-attn': False, # Default
                     'conc': conc_start,
                     'max-model-len': isl + osl,
+                    'exp-name': f"{model_code}_test",
                 }
 
                 # Add optional fields if they exist
@@ -261,13 +298,14 @@ def generate_test_config(args, all_config_data):
                     entry = {
                         'image': image,
                         'model': model,
-                        'model-code': model_code,
                         'precision': precision,
                         'framework': framework,
                         'runner': runner,
                         'isl': isl,
                         'osl': osl,
                         'tp': tp,
+                        'ep': 1, # Default,
+                        'dp-attn': False, # Default
                         'conc': conc,
                         'max-model-len': isl + osl,
                     }
@@ -324,7 +362,7 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 target_config = config
                 break
 
-        highest_tp_bmk = max(target_config['bmk-space'], key=lambda x: x['tp'])
+        highest_tp_bmk = max(target_config['search-space'], key=lambda x: x['tp'])
         # Since we are just testing, pick the highest TP for this config and just test
         # on that TP with the lowest concurrency available
         highest_tp = highest_tp_bmk['tp']
@@ -345,9 +383,11 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 'isl': 1024,
                 'osl': 1024,
                 'tp': highest_tp,
+                'ep': 1, # Default,
+                'dp-attn': False, # Default
                 'conc': lowest_conc,
-                'model-code': model_code,
                 'max-model-len': 2048,
+                'exp-name': f"{model_code}_test",
             }
 
             # Add optional fields if they exist
@@ -397,7 +437,6 @@ def generate_custom_test(args):
             'ep': 1,
             'dp-attn': False,
             'conc': 4,
-            'model-code': args.model,
             'exp-name': args.exp_name,
             'max-model-len': 2048,
         }
@@ -442,7 +481,7 @@ def generate_runner_sweep_config(args, all_config_data):
                 target_config = config
                 break
 
-        highest_tp_bmk = max(target_config['bmk-space'], key=lambda x: x['tp'])
+        highest_tp_bmk = max(target_config['search-space'], key=lambda x: x['tp'])
         # Since we are just testing, pick the highest TP for this config and just test
         # on that TP with the lowest concurrency available
         highest_tp = highest_tp_bmk['tp']
@@ -463,8 +502,10 @@ def generate_runner_sweep_config(args, all_config_data):
                 'isl': 1024,
                 'osl': 1024,
                 'tp': highest_tp,
+                'ep': 1, # Default,
+                'dp-attn': False, # Default
                 'conc': lowest_conc,
-                'model-code': model_code,
+                'exp-name': f"{model_code}_test",
                 'max-model-len': 2048,
             }
 
@@ -736,6 +777,9 @@ def main():
         matrix_values = generate_custom_test(args)
     else:
         parser.error(f"Unknown command: {args.command}")
+
+    # Validate output before printing
+    validate_matrix_output(matrix_values)
 
     print(json.dumps(matrix_values))
     return matrix_values

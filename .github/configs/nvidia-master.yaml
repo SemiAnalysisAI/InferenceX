@@ -7,21 +7,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 16, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 32, conc-end: 128 }
     - { tp: 2, conc-start: 16, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -36,21 +36,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 32, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 32, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 16, conc-end: 64 }
     - { tp: 2, conc-start: 16, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 32 }
@@ -65,21 +65,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 16, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 32, conc-end: 128 }
     - { tp: 2, conc-start: 16, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
@@ -94,21 +94,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 32, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 64, conc-end: 64 }
     - { tp: 4, conc-start: 16, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 32, conc-end: 64 }
     - { tp: 2, conc-start: 16, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -123,19 +123,19 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 64, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 64, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 32, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
@@ -149,21 +149,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, conc-start: 64, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 16, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
@@ -177,21 +177,21 @@
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 32, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 64, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 16, conc-end: 64 }
     - { tp: 2, conc-start: 16, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -206,17 +206,17 @@ dsr1-fp4-b200-sgl:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 128 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
@@ -229,7 +229,7 @@ dsr1-fp4-b200-trt:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     # If TP=4, 
     #   If CONC > 32, then EP=4
     #   If CONC >= 256, DP_ATTN=true
@@ -244,7 +244,7 @@ dsr1-fp4-b200-trt:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     # If TP=4, 
     #   If CONC > 32, then EP=4
     #   If CONC >= 256, DP_ATTN=true
@@ -259,7 +259,7 @@ dsr1-fp4-b200-trt:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     # If TP=4, 
     #   If CONC > 32, then EP=4 and DP_ATTN=true
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
@@ -278,15 +278,15 @@ dsr1-fp8-b200-sgl:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-b200-trt:
@@ -299,18 +299,18 @@ dsr1-fp8-b200-trt:
   # For all sequence lengths, EP=TP
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     # If CONC > 32, then DP_ATTN=true
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     # If CONC > 64, then DP_ATTN=true
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     # If CONC > 64, then DP_ATTN=true
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
@@ -323,15 +323,15 @@ dsr1-fp8-h200-sgl:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-h200-trt:
@@ -345,17 +345,17 @@ dsr1-fp8-h200-trt:
   - isl: 1024
     osl: 1024
     # If CONC > 64, then DP_ATTN=true
-    bmk-space:
+    search-space:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     # If CONC > 64, then DP_ATTN=true
-    bmk-space:
+    search-space:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     # If CONC > 32, then DP_ATTN=true
-    bmk-space:
+    search-space:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
 
@@ -369,21 +369,21 @@ gptoss-fp4-b200-trt:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -398,21 +398,21 @@ gptoss-fp4-b200-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -427,19 +427,19 @@ gptoss-fp4-h100-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
@@ -453,21 +453,21 @@ gptoss-fp4-h200-trt:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, ep: 1, conc-start: 32, conc-end: 64 }
     - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
@@ -482,21 +482,21 @@ gptoss-fp4-h200-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 4, conc-end: 16 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
-    bmk-space:
+    search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
