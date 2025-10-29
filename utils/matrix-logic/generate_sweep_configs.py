@@ -187,7 +187,7 @@ def generate_full_sweep(args, all_config_data):
                     'max-model-len': isl + osl,
                     'ep': 1,  # Default
                     'dp-attn': False,  # Default
-                    'exp-name': f"{model_code}_test",
+                    'exp-name': f"{model_code}_{isl}_{osl}_sweep",
                 }
 
                 # Add optional fields if they exist
