@@ -276,8 +276,11 @@ def generate_runner_model_sweep_config(args, all_config_data):
 
     Assumes all_config_data has been validated by validate_config_structure().
     """
-    with open(args.runner_config, 'r') as f:
-        runner_config = yaml.safe_load(f)
+    try:
+        with open(args.runner_config, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        raise ValueError(f"Runner config file '{args.runner_config}' does not exist.")
 
     runner_nodes = runner_config.get(args.runner_type)
 
@@ -290,7 +293,7 @@ def generate_runner_model_sweep_config(args, all_config_data):
         # Only consider configs with specified runner
         if val['runner'] != args.runner_type:
             continue
-        
+
         # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
         # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
         model_code = key.split('-')[0]
@@ -335,6 +338,89 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 entry['dp-attn'] = dp_attn
 
             matrix_values.append(entry)
+
+    return matrix_values
+
+
+def generate_runner_sweep_config(args, all_config_data):
+    """Generate runner sweep configurations.
+
+    Assumes all_config_data has been validated by validate_config_structure().
+    """
+    try:
+        with open(args.runner_config, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        raise ValueError(f"Runner config file '{args.runner_config}' does not exist.")
+
+
+    matrix_values = []
+    for key, val in all_config_data.items():
+        # Only consider configs with specified runner
+        if not key.startswith(args.model_prefix):
+            continue
+
+        # Optionally filter by precision and framework
+        if (args.precision and val['precision'] != args.precision) or (args.framework and val['framework'] != args.framework):
+            continue
+
+        # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
+        # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
+        model_code = key.split('-')[0]
+        
+        runner_nodes = runner_config.get(val['runner'])
+        if not runner_nodes:
+            raise ValueError(
+                f"Runner '{val['runner']}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
+
+        # Find 1k1k config
+        target_config = None
+        for config in val['seq-len-configs']:
+            if config['isl'] == 1024 and config['osl'] == 1024:
+                target_config = config
+                break
+
+        highest_tp_bmk = max(target_config['bmk-space'], key=lambda x: x['tp'])
+        # Since we are just testing, pick the highest TP for this config and just test
+        # on that TP with the lowest concurrency available
+        highest_tp = highest_tp_bmk['tp']
+        lowest_conc = highest_tp_bmk['conc-start']
+
+        ep = highest_tp_bmk.get('ep')
+        dp_attn = highest_tp_bmk.get('dp-attn')
+
+        for node in runner_nodes:
+            entry = {
+                'image': val['image'],
+                'model': val['model'],
+                'precision': val['precision'],
+                'framework': val['framework'],
+                # Add one entry for each node under specified runner type
+                'runner': node,
+                # Again, just use 1k1k since this is just meant to smoke test all runners
+                'isl': 1024,
+                'osl': 1024,
+                'tp': highest_tp,
+                'conc': lowest_conc,
+                'model-code': model_code,
+                'max-model-len': 2048,
+            }
+
+            # Add optional fields if they exist
+            if ep is not None:
+                entry['ep'] = ep
+            if dp_attn is not None:
+                entry['dp-attn'] = dp_attn
+
+            matrix_values.append(entry)
+
+    if len(matrix_values) == 0:
+        error_msg = f"No configs found matching model prefix '{args.model_prefix}'"
+        if args.precision:
+            error_msg += f", precision '{args.precision}'"
+        if args.framework:
+            error_msg += f", framework '{args.framework}'"
+        raise ValueError(error_msg + ".")
 
     return matrix_values
 
@@ -481,6 +567,39 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: runner-sweep
+    test_config_parser = subparsers.add_parser(
+        'runner-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help='For a given model, run configurations on all compatible runners'
+    )
+    test_config_parser.add_argument(
+        '--model-prefix',
+        required=True,
+        help='Model prefix (e.g., 70b)'
+    )
+    test_config_parser.add_argument(
+        '--precision',
+        required=False,
+        help='Precision to filter by (e.g., fp4) (optional)'
+    )
+    test_config_parser.add_argument(
+        '--framework',
+        required=False,
+        help='Framework to filter by (e.g., trt) (optional)'
+    )
+    test_config_parser.add_argument(
+        '--runner-config',
+        required=True,
+        help='Configuration file holding runner information'
+    )
+    test_config_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     args = parser.parse_args()
 
     # Load and validate configuration files
@@ -494,6 +613,9 @@ def main():
         matrix_values = generate_test_config(args, all_config_data)
     elif args.command == 'runner-model-sweep':
         matrix_values = generate_runner_model_sweep_config(
+            args, all_config_data)
+    elif args.command == 'runner-sweep':
+        matrix_values = generate_runner_sweep_config(
             args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
