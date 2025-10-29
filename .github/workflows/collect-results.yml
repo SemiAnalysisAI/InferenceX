@@ -35,16 +35,3 @@ jobs:
         with:
           name: results_${{ inputs.exp-name }}
           path: agg_${{ inputs.exp-name }}.json
-
-      - name: Plot performance
-        run: |
-          pip install -q matplotlib
-          python3 utils/plot_perf.py results/ ${{ inputs.exp-name }}
-
-      - name: Upload performance graphs
-        uses: actions/upload-artifact@v4
-        with:
-          name: graphs_${{ inputs.exp-name }}
-          path: |
-            tput_vs_intvty_*_${{ inputs.exp-name }}.png
-            tput_vs_e2el_*_${{ inputs.exp-name }}.png
