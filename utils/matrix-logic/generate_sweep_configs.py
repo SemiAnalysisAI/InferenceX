@@ -394,6 +394,8 @@ def generate_custom_test(args):
             'isl': 1024,
             'osl': 1024,
             'tp': 8,
+            'ep': 1,
+            'dp-attn': False,
             'conc': 4,
             'model-code': args.model,
             'max-model-len': 2048,
