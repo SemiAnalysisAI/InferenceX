@@ -10,6 +10,18 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
+# Reverse mapping for exp-name generation
+seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
+
+
+def seq_len_to_str(isl: int, osl: int) -> str:
+    """Convert sequence lengths to short string representation.
+
+    Returns the short name (e.g., '1k1k') if it exists in the mapping,
+    otherwise returns 'isl_osl' format.
+    """
+    return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
 
 class MatrixEntry(BaseModel):
     """Pydantic model for validating matrix entry structure."""
@@ -174,6 +186,7 @@ def generate_full_sweep(args, all_config_data):
             # Generate entries for each concurrency value in the range
             conc = conc_start
             while conc <= conc_end:
+                seq_len_str = seq_len_to_str(isl, osl)
                 entry = {
                     'image': image,
                     'model': model,
@@ -187,7 +200,7 @@ def generate_full_sweep(args, all_config_data):
                     'max-model-len': isl + osl + 200,
                     'ep': 1,  # Default
                     'dp-attn': False,  # Default
-                    'exp-name': f"{model_code}_{isl}_{osl}_sweep",
+                    'exp-name': f"{model_code}_{seq_len_str}_sweep",
                 }
 
                 # Add optional fields if they exist
@@ -286,6 +299,7 @@ def generate_filtered_sweep(args, all_config_data):
                 ep = highest_tp_bmk.get('ep')
                 dp_attn = highest_tp_bmk.get('dp-attn')
 
+                seq_len_str = seq_len_to_str(isl, osl)
                 entry = {
                     'image': image,
                     'model': model,
@@ -299,7 +313,7 @@ def generate_filtered_sweep(args, all_config_data):
                     'dp-attn': False,  # Default
                     'conc': conc,
                     'max-model-len': isl + osl + 200,
-                    'exp-name': f"{model_code}_{isl}_{osl}_test",
+                    'exp-name': f"{model_code}_{seq_len_str}_test",
                 }
 
                 if ep is not None:
@@ -319,6 +333,7 @@ def generate_filtered_sweep(args, all_config_data):
 
                     conc = conc_start
                     while conc <= conc_end:
+                        seq_len_str = seq_len_to_str(isl, osl)
                         entry = {
                             'image': image,
                             'model': model,
@@ -332,7 +347,7 @@ def generate_filtered_sweep(args, all_config_data):
                             'max-model-len': isl + osl + 200,
                             'ep': 1,  # Default
                             'dp-attn': False,  # Default
-                            'exp-name': f"{model_code}_{isl}_{osl}_sweep",
+                            'exp-name': f"{model_code}_{seq_len_str}_sweep",
                         }
 
                         if ep is not None:
