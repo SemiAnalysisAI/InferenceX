@@ -151,6 +151,8 @@ def generate_full_sweep(args, all_config_data):
                     'conc': conc,
                     'model-code': model_code,
                     'max-model-len': isl + osl,
+                    'ep': 1, # Default
+                    'dp-attn': False, # Default
                 }
 
                 # Add optional fields if they exist
