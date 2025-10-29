@@ -14,7 +14,13 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
+set -x
+
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+
+if [ -n "$HF_TOKEN" ]; then
+    echo "HF_TOKEN set and non-empty"
+fi
 
 set -x
 hf download $MODEL
