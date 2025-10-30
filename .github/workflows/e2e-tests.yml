@@ -10,8 +10,9 @@ on:
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
-                required: true
+                required: false
                 type: string
+                default: "filtered-sweep --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type h200 h200-trt"
 
 jobs:
     get-jobs:
