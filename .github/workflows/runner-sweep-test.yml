@@ -45,11 +45,7 @@ on:
         type: choice
         options:
           - 'amd/DeepSeek-R1-0528-MXFP4-Preview'
-          - 'amd/Llama-3.3-70B-Instruct-FP8-KV'
-          - 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview'
           - 'deepseek-ai/DeepSeek-R1-0528'
-          - 'nvidia/Llama-3.3-70B-Instruct-FP8'
-          - 'nvidia/Llama-3.3-70B-Instruct-FP4'
           - 'nvidia/DeepSeek-R1-0528-FP4'
           - 'nvidia/DeepSeek-R1-0528-FP4-v2'
           - 'openai/gpt-oss-120b'
@@ -76,7 +72,6 @@ on:
         required: true
         type: choice
         options:
-          - '70b_test'
           - 'dsr1_test'
           - 'gptoss_test'
 
