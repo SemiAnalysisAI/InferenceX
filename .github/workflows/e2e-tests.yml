@@ -6,6 +6,9 @@ name: End-to-End Tests
 
 on:
     pull_request:
+    push:
+        branches:
+        - initial-refactor
     workflow_dispatch:
         inputs:
             generate-cli-command:
