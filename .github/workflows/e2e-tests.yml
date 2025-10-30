@@ -5,17 +5,12 @@ name: End-to-End Tests
 #     cancel-in-progress: false
 
 on:
-    pull_request:
-    push:
-        branches:
-        - initial-refactor
     workflow_dispatch:
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
-                required: false
+                required: true
                 type: string
-                default: "filtered-sweep --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type h200 h200-trt"
 
 jobs:
     get-jobs:
