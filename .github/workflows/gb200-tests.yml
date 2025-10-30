@@ -1,0 +1,97 @@
+name: End-to-End Tests
+
+# concurrency:
+#     group: benchmark-lock
+#     cancel-in-progress: false
+
+on:
+    push:
+        branches:
+        - initial-refactor
+    workflow_dispatch:
+        inputs:
+            image:
+                description: "Docker Image"
+                required: true
+                type: choice
+                options:
+                    - "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1"
+                    - "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3"
+
+            model:
+                description: "Model"
+                required: true
+                type: choice
+                options:
+                    - "deepseek-ai/DeepSeek-R1-0528"
+                    - "deepseek-r1-fp4"
+
+            precision:
+                description: "Precision"
+                required: true
+                type: choice
+                options:
+                    - "fp4"
+                    - "fp8"
+
+            framework:
+                description: "Framework"
+                required: true
+                type: choice
+                options:
+                    - "dynamo-trtllm"
+                    - "dynamo-sglang"
+
+            mtp:
+                description: "Mtp On/Off"
+                required: true
+                type: choice
+                options:
+                    - "on"
+                    - "off"
+
+            isl:
+                description: "ISL"
+                required: true
+                type: string
+
+            osl:
+                description: "OSL"
+                required: true
+                type: string
+
+jobs:
+    pre-run:
+        runs-on: ubuntu-latest
+        outputs:
+            max-model-len: ${{ steps.calc.outputs.max-model-len }}
+        steps:
+            - id: calc
+              shell: python
+              run: |
+                  import os
+                  import sys
+                  try:
+                      isl = int("${{ inputs.isl }}")
+                      osl = int("${{ inputs.osl }}")
+                  except ValueError:
+                      print("Error: ISL and OSL must be integers")
+                      sys.exit(1)
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f"max-model-len={isl + osl}\n")
+
+    benchmark-gb200:
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 test
+        secrets: inherit
+        with:
+            runner: gb200
+            image: ${{ inputs.image }}
+            model: ${{ inputs.model }}
+            framework: ${{ inputs.framework }}
+            precision: ${{ inputs.precision }}
+            exp-name: dsr1_1k1k
+            isl: ${{ inputs.isl }}
+            osl: ${{ inputs.osl }}
+            max-model-len: ${{ needs.pre-run.outputs.max-model-len }}
+            mtp-mode: ${{ inputs.mtp }}
