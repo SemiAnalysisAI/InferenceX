@@ -85,6 +85,51 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
+    # This is a workaround until we can integrate GB200 into master configs.
+    benchmark-gb200:
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 1k1k sweep
+        strategy:
+            fail-fast: false
+            matrix:
+                config:
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "off",
+                      }
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "on",
+                      }
+                    - {
+                          "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
+                          "model": "deepseek-ai/DeepSeek-R1-0528",
+                          "model-prefix": "dsr1",
+                          "precision": "fp8",
+                          "framework": "dynamo-sglang",
+                          "mtp": "off",
+                      }
+        secrets: inherit
+        with:
+            runner: gb200
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.model-prefix }}_8k1k
+            isl: 8192
+            osl: 1024
+            max-model-len: 2048
+            mtp-mode: ${{ matrix.config.mtp }}
+
     collect-dsr1-results:
         needs: benchmark-dsr1
         if: ${{ always() }}
