@@ -31,8 +31,9 @@ on:
         required: true
         type: string
       random-range-ratio:
-        required: true
+        required: false
         type: string
+        default: '0.8'
       mtp-mode:
         required: true
         type: string
