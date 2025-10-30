@@ -5,9 +5,6 @@ name: GB200 Tests
 #     cancel-in-progress: false
 
 on:
-    push:
-        branches: 
-        - initial-refactor
     workflow_dispatch:
         inputs:
             image:
