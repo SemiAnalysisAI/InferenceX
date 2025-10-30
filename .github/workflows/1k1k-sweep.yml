@@ -90,7 +90,7 @@ jobs:
     # This is a workaround until we can integrate GB200 into master configs.
     benchmark-gb200:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gptoss 1k1k
+        name: gb200 1k1k sweep
         strategy:
             fail-fast: false
             matrix:
