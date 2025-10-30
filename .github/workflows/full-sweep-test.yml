@@ -1,0 +1,371 @@
+name: Test - Full Sweep
+
+concurrency:
+    group: benchmark-lock
+    cancel-in-progress: false
+
+on:
+    push:
+        branches:
+        - initial-refactor
+    workflow_dispatch:
+        inputs:
+            run_1k1k:
+                type: boolean
+                required: false
+            run_8k1k:
+                type: boolean
+                required: false
+            run_1k8k:
+                type: boolean
+                required: false
+
+            use_h100:
+                type: boolean
+                required: false
+            use_h200:
+                type: boolean
+                required: false
+            use_b200:
+                type: boolean
+                required: false
+            use_mi300x:
+                type: boolean
+                required: false
+            use_mi325x:
+                type: boolean
+                required: false
+            use_mi355x:
+                type: boolean
+                required: false
+            use_gb200:
+                type: boolean
+                required: false
+
+jobs:
+    get-configs:
+        runs-on: ubuntu-latest
+        outputs:
+            dsr1-1k1k: ${{ steps.generate-configs.outputs.dsr1-1k1k }}
+            dsr1-1k8k: ${{ steps.generate-configs.outputs.dsr1-1k8k }}
+            dsr1-8k1k: ${{ steps.generate-configs.outputs.dsr1-8k1k }}
+            gptoss-1k1k: ${{ steps.generate-configs.outputs.gptoss-1k1k }}
+            gptoss-1k8k: ${{ steps.generate-configs.outputs.gptoss-1k8k }}
+            gptoss-8k1k: ${{ steps.generate-configs.outputs.gptoss-8k1k }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - id: generate-configs
+              run: |
+                  pip install pydantic
+
+                  # Build runner type filter based on inputs
+                  RUNNER_TYPES=""
+                  if [ "${{ inputs.use_h100 }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES h100"
+                  fi
+                  if [ "${{ inputs.use_h200 }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES h200 h200-trt"
+                  fi
+                  if [ "${{ inputs.use_b200 }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES b200 b200-trt b200-nvs"
+                  fi
+                  if [ "${{ inputs.use_mi300x }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES mi300x"
+                  fi
+                  if [ "${{ inputs.use_mi325x }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES mi325x"
+                  fi
+                  if [ "${{ inputs.use_mi355x }}" = "true" ]; then
+                      RUNNER_TYPES="$RUNNER_TYPES mi355x"
+                  fi
+
+                  # Build runner filter argument if runner types specified
+                  RUNNER_FILTER=""
+                  if [ -n "$RUNNER_TYPES" ]; then
+                      RUNNER_FILTER="--runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml"
+                  fi
+
+                  # Generate dsr1 configs
+                  if [ "${{ inputs.run_1k1k }}" = "true" ]; then
+                      DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 $RUNNER_FILTER)
+                      echo "dsr1-1k1k=$DSR1_1K1K" >> $GITHUB_OUTPUT
+                  else
+                      echo "dsr1-1k1k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+                  if [ "${{ inputs.run_1k8k }}" = "true" ]; then
+                      DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 $RUNNER_FILTER)
+                      echo "dsr1-1k8k=$DSR1_1K8K" >> $GITHUB_OUTPUT
+                  else
+                      echo "dsr1-1k8k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+                  if [ "${{ inputs.run_8k1k }}" = "true" ]; then
+                      DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 $RUNNER_FILTER)
+                      echo "dsr1-8k1k=$DSR1_8K1K" >> $GITHUB_OUTPUT
+                  else
+                      echo "dsr1-8k1k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+                  # Generate gptoss configs
+                  if [ "${{ inputs.run_1k1k }}" = "true" ]; then
+                      GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss $RUNNER_FILTER)
+                      echo "gptoss-1k1k=$GPTOSS_1K1K" >> $GITHUB_OUTPUT
+                  else
+                      echo "gptoss-1k1k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+                  if [ "${{ inputs.run_1k8k }}" = "true" ]; then
+                      GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss $RUNNER_FILTER)
+                      echo "gptoss-1k8k=$GPTOSS_1K8K" >> $GITHUB_OUTPUT
+                  else
+                      echo "gptoss-1k8k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+                  if [ "${{ inputs.run_8k1k }}" = "true" ]; then
+                      GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss $RUNNER_FILTER)
+                      echo "gptoss-8k1k=$GPTOSS_8K1K" >> $GITHUB_OUTPUT
+                  else
+                      echo "gptoss-8k1k=[]" >> $GITHUB_OUTPUT
+                  fi
+
+    # DSR1 1K1K Benchmarks
+    benchmark-dsr1-1k1k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.dsr1-1k1k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.dsr1-1k1k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-dsr1-1k1k-results:
+        needs: benchmark-dsr1-1k1k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-1k1k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k1k"
+
+    # GPTOSS 1K1K Benchmarks
+    benchmark-gptoss-1k1k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.gptoss-1k1k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.gptoss-1k1k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-gptoss-1k1k-results:
+        needs: benchmark-gptoss-1k1k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-1k1k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k1k"
+
+    # DSR1 8K1K Benchmarks
+    benchmark-dsr1-8k1k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.dsr1-8k1k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.dsr1-8k1k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-dsr1-8k1k-results:
+        needs: benchmark-dsr1-8k1k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-8k1k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_8k1k"
+
+    # GPTOSS 8K1K Benchmarks
+    benchmark-gptoss-8k1k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.gptoss-8k1k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.gptoss-8k1k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-gptoss-8k1k-results:
+        needs: benchmark-gptoss-8k1k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-8k1k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_8k1k"
+
+    # DSR1 1K8K Benchmarks
+    benchmark-dsr1-1k8k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.dsr1-1k8k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.dsr1-1k8k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-dsr1-1k8k-results:
+        needs: benchmark-dsr1-1k8k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-1k8k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k8k"
+
+    # GPTOSS 1K8K Benchmarks
+    benchmark-gptoss-1k8k:
+        needs: get-configs
+        if: ${{ needs.get-configs.outputs.gptoss-1k8k != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-configs.outputs.gptoss-1k8k) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    collect-gptoss-1k8k-results:
+        needs: benchmark-gptoss-1k8k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-1k8k != '[]' }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k8k"
+
+    calc-success-rate:
+        needs:
+            [
+                collect-dsr1-1k1k-results,
+                collect-dsr1-1k8k-results,
+                collect-dsr1-8k1k-results,
+                collect-gptoss-1k1k-results,
+                collect-gptoss-1k8k-results,
+                collect-gptoss-8k1k-results,
+            ]
+        if: ${{ always() }}
+        runs-on: ubuntu-latest
+
+        env:
+            RESULTS_DIR: "results/"
+            STATS_FILENAME: "run_stats"
+            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  token: ${{ secrets.REPO_PAT }}
+                  fetch-depth: 0
+
+            - name: Download results artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ${{ env.RESULTS_DIR }}
+                  pattern: results_*
+
+            - name: Install python dependencies
+              run: pip install PyGithub
+
+            - name: Calculate success rate
+              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: "run-stats"
+                  path: ${{ env.STATS_FILENAME }}.json

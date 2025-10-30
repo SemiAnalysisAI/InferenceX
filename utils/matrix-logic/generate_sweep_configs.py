@@ -551,10 +551,18 @@ def generate_runner_sweep_config(args, all_config_data):
         raise ValueError(
             f"Runner config file '{args.runner_config}' does not exist.")
 
+    if not runner_config.get(args.runner_type):
+        raise ValueError(
+            f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
+
+
     matrix_values = []
     for key, val in all_config_data.items():
         # Only consider configs with specified runner
         if not key.startswith(args.model_prefix):
+            continue
+        
+        if not val['runner'] == args.runner_type:
             continue
 
         # Optionally filter by precision and framework
@@ -806,6 +814,11 @@ def main():
         parents=[parent_parser],
         add_help=False,
         help='Given a model (and optionally a precision and framework), find all configurations matching the inputs, and run those configurations across all compatible runner nodes. This is meant to validate all runner nodes that should run a particular model can. For instance, this should be used to validate that all runners nodes that should run gptoss-120b actually do so successfully.'
+    )
+    test_config_parser.add_argument(
+        '--runner-type',
+        required=True,
+        help='Runner type (e.g., h200-trt, h100)'
     )
     test_config_parser.add_argument(
         '--model-prefix',

@@ -1,14 +1,10 @@
 name: GB200 Tests
 
-# concurrency:
-#     group: benchmark-lock
-#     cancel-in-progress: false
-
 on:
     workflow_dispatch:
         inputs:
             image:
-                description: "Docker Image"
+                description: "Serving Image"
                 required: true
                 type: choice
                 options:
