@@ -24,6 +24,7 @@ def sample_master_config():
         "70b-fp8-vllm": {
             "image": "vllm/vllm-openai:v0.10.2",
             "model": "meta-llama/Llama-3-70b",
+            "model-prefix": "70b",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -48,6 +49,7 @@ def sample_master_config():
         "8b-fp4-trt": {
             "image": "nvcr.io/nvidia/tritonserver:24.01",
             "model": "meta-llama/Llama-3-8b",
+            "model-prefix": "8b",
             "precision": "fp4",
             "framework": "trt",
             "runner": "h100",
@@ -64,6 +66,7 @@ def sample_master_config():
         "gptoss-120b-fp8-vllm": {
             "image": "vllm/vllm-openai:latest",
             "model": "openai/gpt-oss-120b",
+            "model-prefix": "gptoss",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200-trt",
@@ -112,6 +115,7 @@ def invalid_master_config():
         "missing-field": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             # Missing precision, framework, runner, seq-len-configs
         }
     }
@@ -294,6 +298,7 @@ def test_validate_master_configs_structure_missing_field():
     config = {
         "test-key": {
             "image": "test:latest",
+            "model-prefix": "test",
             # Missing other required fields
         }
     }
@@ -307,6 +312,7 @@ def test_validate_master_configs_structure_wrong_type():
         "test-key": {
             "image": 123,  # Should be string
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -323,6 +329,7 @@ def test_validate_master_configs_structure_empty_seq_len_configs():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -339,6 +346,7 @@ def test_validate_master_configs_structure_invalid_search_space():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -363,6 +371,7 @@ def test_validate_master_configs_structure_missing_search_space():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -385,6 +394,7 @@ def test_validate_master_configs_structure_search_space_not_list():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -407,6 +417,7 @@ def test_validate_master_configs_structure_extra_fields_in_search_space():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -436,6 +447,7 @@ def test_validate_master_configs_structure_missing_isl():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -457,6 +469,7 @@ def test_validate_master_configs_structure_wrong_isl_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -479,6 +492,7 @@ def test_validate_master_configs_structure_missing_osl():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -500,6 +514,7 @@ def test_validate_master_configs_structure_wrong_osl_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -522,6 +537,7 @@ def test_validate_master_configs_structure_wrong_tp_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -544,6 +560,7 @@ def test_validate_master_configs_structure_wrong_conc_start_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -566,6 +583,7 @@ def test_validate_master_configs_structure_wrong_conc_end_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -588,6 +606,7 @@ def test_validate_master_configs_structure_wrong_ep_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -610,6 +629,7 @@ def test_validate_master_configs_structure_wrong_dp_attn_type():
         "test-key": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -784,6 +804,7 @@ def test_generate_full_sweep_seq_len_not_in_config(temp_config_files):
         "test-fp8-vllm": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -822,6 +843,7 @@ def test_generate_full_sweep_concurrency_overshoot(temp_config_files):
         "test-fp8-vllm": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -1010,6 +1032,7 @@ def test_generate_full_sweep_with_filters_concurrency_overshoot(temp_config_file
         "test-fp8-vllm": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",
@@ -1146,6 +1169,7 @@ def test_generate_test_config_concurrency_overshoot(temp_config_files):
         "test-fp8-vllm": {
             "image": "test:latest",
             "model": "test/model",
+            "model-prefix": "test",
             "precision": "fp8",
             "framework": "vllm",
             "runner": "h200",

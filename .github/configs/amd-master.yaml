@@ -1,6 +1,7 @@
-dsr1-fp4-mi355x-sgl:
+dsr1-fp4-mi355x-sglang:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
+  model-prefix: dsr1
   runner: mi355x
   precision: fp4
   framework: sglang
@@ -19,9 +20,10 @@ dsr1-fp4-mi355x-sgl:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
-dsr1-fp8-mi300x-sgl:
+dsr1-fp8-mi300x-sglang:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: mi300x
   precision: fp8
   framework: sglang
@@ -39,9 +41,10 @@ dsr1-fp8-mi300x-sgl:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
-dsr1-fp8-mi325x-sgl:
+dsr1-fp8-mi325x-sglang:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: mi325x
   precision: fp8
   framework: sglang
@@ -59,9 +62,10 @@ dsr1-fp8-mi325x-sgl:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
-dsr1-fp8-mi355x-sgl:
+dsr1-fp8-mi355x-sglang:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: mi355x
   precision: fp8
   framework: sglang
@@ -82,6 +86,7 @@ dsr1-fp8-mi355x-sgl:
 gptoss-fp4-mi300x-vllm:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: mi300x
   precision: fp4
   framework: vllm
@@ -111,6 +116,7 @@ gptoss-fp4-mi300x-vllm:
 gptoss-fp4-mi325x-vllm:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: mi325x
   precision: fp4
   framework: vllm
@@ -140,6 +146,7 @@ gptoss-fp4-mi325x-vllm:
 gptoss-fp4-mi355x-vllm:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: mi355x
   precision: fp4
   framework: vllm

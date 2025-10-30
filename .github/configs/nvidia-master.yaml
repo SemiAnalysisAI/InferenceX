@@ -1,6 +1,7 @@
-dsr1-fp4-b200-sgl:
+dsr1-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
   model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
   runner: b200
   precision: fp4
   framework: sglang
@@ -24,6 +25,7 @@ dsr1-fp4-b200-sgl:
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
   model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
   runner: b200-trt
   precision: fp4
   framework: trt
@@ -70,9 +72,10 @@ dsr1-fp4-b200-trt:
     - { tp: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
 
-dsr1-fp8-b200-sgl:
+dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: b200
   precision: fp8
   framework: sglang
@@ -93,6 +96,7 @@ dsr1-fp8-b200-sgl:
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: b200-trt
   precision: fp8
   framework: trt
@@ -115,9 +119,10 @@ dsr1-fp8-b200-trt:
     # If CONC > 64, then DP_ATTN=true
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
-dsr1-fp8-h200-sgl:
+dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.2rc2-cu126
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: h200
   precision: fp8
   framework: sglang
@@ -138,6 +143,7 @@ dsr1-fp8-h200-sgl:
 dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
   model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: h200-trt
   precision: fp8
   framework: trt
@@ -163,6 +169,7 @@ dsr1-fp8-h200-trt:
 gptoss-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc0.post1
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: b200-nvs
   precision: fp4
   framework: trt
@@ -193,6 +200,7 @@ gptoss-fp4-b200-trt:
 gptoss-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.10.2
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: b200
   precision: fp4
   framework: vllm
@@ -222,6 +230,7 @@ gptoss-fp4-b200-vllm:
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.10.2
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: h100
   precision: fp4
   framework: vllm
@@ -248,6 +257,7 @@ gptoss-fp4-h100-vllm:
 gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: h200-trt
   precision: fp4
   framework: trt
@@ -277,6 +287,7 @@ gptoss-fp4-h200-trt:
 gptoss-fp4-h200-vllm:
   image: vllm/vllm-openai:v0.10.2
   model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: h200
   precision: fp4
   framework: vllm

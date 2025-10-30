@@ -67,6 +67,7 @@ def validate_master_configs_structure(all_config_data):
         required_fields = {
             'image': str,
             'model': str,
+            'model-prefix': str,
             'precision': str,
             'framework': str,
             'runner': str,
@@ -202,7 +203,7 @@ def generate_full_sweep(args, all_config_data):
         precision = val['precision']
         framework = val['framework']
         runner = val['runner']
-        model_code = key.split('-')[0]
+        model_code = val['model-prefix']
 
         for seq_config in seq_len_configs:
             isl = seq_config['isl']
@@ -315,14 +316,14 @@ def generate_test_config(args, all_config_data):
         raise ValueError(
             f"Runner config file '{args.runner_config}' does not exist.")
 
-    # Extract model code from config key
-    model_code = args.key.split('-')[0]
-
     val = all_config_data.get(args.key)
 
     if not val:
         raise ValueError(
             f"Specified key '{args.key}' does not exist in config files.")
+
+    # Extract model code from config
+    model_code = val['model-prefix']
 
     runner_nodes = runner_config.get(val['runner'], [])
     if args.runner_node not in runner_nodes:
@@ -447,9 +448,8 @@ def generate_runner_model_sweep_config(args, all_config_data):
         if val['runner'] != args.runner_type:
             continue
 
-        # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
-        # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
-        model_code = key.split('-')[0]
+        # Get model code for exp_name
+        model_code = val['model-prefix']
 
         # Find 1k1k config
         target_config = None
@@ -561,9 +561,8 @@ def generate_runner_sweep_config(args, all_config_data):
         if (args.precision and val['precision'] != args.precision) or (args.framework and val['framework'] != args.framework):
             continue
 
-        # I.e., for 70b-fp4-... the model_code is 70b which is necessary for exp_name
-        # so that it can be bubbled down to bash script benchmarks... this is probably a FIXME
-        model_code = key.split('-')[0]
+        # Get model code for exp_name
+        model_code = val['model-prefix']
 
         runner_nodes = runner_config.get(val['runner'])
         if not runner_nodes:
