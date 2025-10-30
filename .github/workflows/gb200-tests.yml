@@ -1,10 +1,13 @@
-name: End-to-End Tests
+name: GB200 Tests
 
 # concurrency:
 #     group: benchmark-lock
 #     cancel-in-progress: false
 
 on:
+    push:
+        branches: 
+        - initial-refactor
     workflow_dispatch:
         inputs:
             image:
