@@ -67,7 +67,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} tp${{ inputs.tp }} ep${{ inputs.ep }} conc${{ inputs.conc }}'
+    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} tp${{ inputs.tp }} ep${{ inputs.ep }} dpa${{ inputs.dp-attn }} conc${{ inputs.conc }}'
     steps:
       - name: Resource cleanup
         run: |
