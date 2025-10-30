@@ -5,6 +5,7 @@ name: End-to-End Tests
 #     cancel-in-progress: false
 
 on:
+    pull_request:
     workflow_dispatch:
         inputs:
             generate-cli-command:
