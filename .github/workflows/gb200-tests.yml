@@ -5,9 +5,6 @@ name: End-to-End Tests
 #     cancel-in-progress: false
 
 on:
-    push:
-        branches:
-        - initial-refactor
     workflow_dispatch:
         inputs:
             image:
@@ -81,6 +78,7 @@ jobs:
                       f.write(f"max-model-len={isl + osl}\n")
 
     benchmark-gb200:
+        needs: pre-run
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: gb200 test
         secrets: inherit
