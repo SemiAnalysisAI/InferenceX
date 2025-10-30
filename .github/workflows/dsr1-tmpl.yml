@@ -114,7 +114,7 @@ jobs:
     secrets: inherit
     with:
       runner: mi300x
-      image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915'
+      image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029'
       model: 'deepseek-ai/DeepSeek-R1-0528'
       framework: 'vllm'
       precision: 'fp8'
@@ -131,7 +131,7 @@ jobs:
     secrets: inherit
     with:
       runner: mi325x
-      image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1'
+      image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029'
       model: 'deepseek-ai/DeepSeek-R1-0528'
       framework: 'vllm'
       precision: 'fp8'
@@ -148,7 +148,7 @@ jobs:
     secrets: inherit
     with:
       runner: mi355x
-      image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1'
+      image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029'
       model: 'deepseek-ai/DeepSeek-R1-0528'
       framework: 'vllm'
       precision: 'fp8'

@@ -212,7 +212,7 @@ jobs:
           - 'mi300x-oci_0'
         config:
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'vllm', precision: 'fp8', exp-name: 'dsr1_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
     name: '${{ matrix.runner }}'
@@ -245,7 +245,7 @@ jobs:
           - 'mi325x-tw_3'
         config:
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'vllm', precision: 'fp8', exp-name: 'dsr1_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
     name: '${{ matrix.runner }}'
@@ -278,7 +278,7 @@ jobs:
         config:
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-FP8-KV', framework: 'vllm', precision: 'fp8', exp-name: '70b_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'amd/Llama-3.3-70B-Instruct-MXFP4-Preview', framework: 'vllm', precision: 'fp4', exp-name: '70b_test' }
-          - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'sglang', precision: 'fp8', exp-name: 'dsr1_test' }
+          - { image: 'rocm/7.x-preview:rocm7.2_preview_ubuntu_22.04_vlm_0.10.1_instinct_20251029', model: 'deepseek-ai/DeepSeek-R1-0528', framework: 'vllm', precision: 'fp8', exp-name: 'dsr1_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915', model: 'amd/DeepSeek-R1-0528-MXFP4-Preview', framework: 'sglang', precision: 'fp4', exp-name: 'dsr1_test' }
           - { image: 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1', model: 'openai/gpt-oss-120b', framework: 'vllm', precision: 'fp4', exp-name: 'gptoss_test' }
 
