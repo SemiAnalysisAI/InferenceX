@@ -16,7 +16,6 @@ on:
             run_1k8k:
                 type: boolean
                 required: false
-
             use_h100:
                 type: boolean
                 required: false
@@ -56,7 +55,8 @@ jobs:
             - id: generate-configs
               run: |
                   pip install pydantic
-
+                  
+                  set -x 
                   # Build runner type filter based on inputs
                   RUNNER_TYPES=""
                   if [ "${{ inputs.use_h100 }}" = "true" ]; then
