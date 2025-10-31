@@ -1,9 +1,5 @@
 name: "Full Sweep Scheduler - 8k1k"
 
-concurrency:
-    group: benchmark-lock-8k1k
-    cancel-in-progress: false
-
 on:
     workflow_dispatch:
     schedule:

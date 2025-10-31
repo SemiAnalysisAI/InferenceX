@@ -1,9 +1,5 @@
 name: Test - Full Sweep
 
-concurrency:
-    group: benchmark-lock
-    cancel-in-progress: false
-
 on:
     workflow_dispatch:
         inputs:
