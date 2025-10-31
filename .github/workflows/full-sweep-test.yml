@@ -9,43 +9,33 @@ on:
         inputs:
             run_1k1k:
                 type: boolean
-                description: "When true, run 1k1k"
                 required: false
             run_8k1k:
                 type: boolean
-                description: "When true, run 8k1k"
                 required: false
             run_1k8k:
                 type: boolean
-                description: "When true, run 1k8k"
                 required: false
             use_h100:
                 type: boolean
-                description: "When true, run H100"
                 required: false
             use_h200:
                 type: boolean
-                description: "When true, run H200"
                 required: false
             use_b200:
                 type: boolean
-                description: "When true, run B200"
                 required: false
             use_mi300x:
                 type: boolean
-                description: "When true, run MI300X"
                 required: false
             use_mi325x:
                 type: boolean
-                description: "When true, run MI325X"
                 required: false
             use_mi355x:
                 type: boolean
-                description: "When true, run MI355X"
                 required: false
             use_gb200:
                 type: boolean
-                description: "When true, run GB200"
                 required: false
 
 jobs:
@@ -325,7 +315,7 @@ jobs:
     benchmark-gb200-1k8k:
         if: ${{ inputs.use_gb200 && inputs.run_1k8k }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 1k1k sweep
+        name: gb200 1k8k sweep
         strategy:
             fail-fast: false
             matrix:
@@ -346,7 +336,7 @@ jobs:
     benchmark-gb200-8k1k:
         if: ${{ inputs.use_gb200 && inputs.run_8k1k }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 1k1k sweep
+        name: gb200 8k1k sweep
         strategy:
             fail-fast: false
             matrix:
