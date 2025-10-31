@@ -44,7 +44,7 @@ on:
       random-range-ratio:
         required: false
         type: string
-        default: '0.2'
+        default: '0.8'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
