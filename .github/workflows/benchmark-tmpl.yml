@@ -139,7 +139,7 @@ jobs:
 
       - name: Process result
         run: |
-          python3 utils/process_result.py ${{ inputs.runner }}
+          python3 utils/process_result.py
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
