@@ -56,7 +56,6 @@ jobs:
             - id: generate-configs
               run: |
                   pip install pydantic
-                  set -x
 
                   # Build runner type filter based on inputs
                   RUNNER_TYPES=""
