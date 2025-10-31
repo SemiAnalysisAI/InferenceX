@@ -1236,6 +1236,7 @@ def test_generate_runner_sweep_config(sample_master_config, temp_config_files):
 
     class Args:
         model_prefix = "70b"
+        runner_type = "h200"
         precision = None
         framework = None
         runner_config = runner_file
@@ -1250,6 +1251,7 @@ def test_generate_runner_sweep_config_with_filters(sample_master_config, temp_co
 
     class Args:
         model_prefix = "70b"
+        runner_type = "h200"
         precision = "fp8"
         framework = "vllm"
         runner_config = runner_file
@@ -1265,6 +1267,7 @@ def test_generate_runner_sweep_config_no_matches(sample_master_config, temp_conf
 
     class Args:
         model_prefix = "nonexistent"
+        runner_type = "h200"
         precision = None
         framework = None
         runner_config = runner_file
@@ -1393,6 +1396,7 @@ def test_main_runner_sweep(temp_config_files):
         "runner-sweep",
         "--config-files", master_file,
         "--runner-config", runner_file,
+        "--runner-type", "h200",
         "--model-prefix", "70b"
     ]
 
