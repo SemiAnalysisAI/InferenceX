@@ -55,10 +55,10 @@ jobs:
             - id: generate-configs
               run: |
                   pip install pydantic
-                  
-                  set -x 
-                  # Build runner type filter based on inputs
+
+                  # Build runner type filters based on inputs
                   RUNNER_TYPES=""
+
                   if [ "${{ inputs.use_h100 }}" = "true" ]; then
                       RUNNER_TYPES="${RUNNER_TYPES} h100"
                   fi
@@ -84,76 +84,88 @@ jobs:
                   # Trim leading whitespace
                   RUNNER_TYPES=$(echo $RUNNER_TYPES | xargs)
 
-                  # DSR1 does not run on h100, so filter it out for dsr1 configs
+                  # DSR1 doesn't support H100, so exclude it
                   DSR1_RUNNER_TYPES=$(echo $RUNNER_TYPES | sed 's/\bh100\b//g' | xargs)
 
                   # Generate dsr1 configs
                   if [ "${{ inputs.run_1k1k }}" = "true" ]; then
                       if [ -n "$DSR1_RUNNER_TYPES" ]; then
                           DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                          echo "dsr1-1k1k=$DSR1_1K1K" >> $GITHUB_OUTPUT
                       else
-                          DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                          echo "dsr1-1k1k=[]" >> $GITHUB_OUTPUT
                       fi
-                      echo "dsr1-1k1k=$DSR1_1K1K" >> $GITHUB_OUTPUT
                   else
                       echo "dsr1-1k1k=[]" >> $GITHUB_OUTPUT
                   fi
 
-                  if [ "${{ inputs.run_1k8k }}" = "true" ]; then
-                      if [ -n "$DSR1_RUNNER_TYPES" ]; then
-                          DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                      else
-                          DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
-                      fi
-                      echo "dsr1-1k8k=$DSR1_1K8K" >> $GITHUB_OUTPUT
-                  else
-                      echo "dsr1-1k8k=[]" >> $GITHUB_OUTPUT
-                  fi
+                    # Generate dsr1 configs
+                    if [ "${{ inputs.run_1k1k }}" = "true" ]; then
+                        if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                            DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                        fi
+                        echo "dsr1-1k1k=$DSR1_1K1K" >> $GITHUB_OUTPUT
+                    else
+                        echo "dsr1-1k1k=[]" >> $GITHUB_OUTPUT
+                    fi
 
-                  if [ "${{ inputs.run_8k1k }}" = "true" ]; then
-                      if [ -n "$DSR1_RUNNER_TYPES" ]; then
-                          DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                      else
-                          DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1)
-                      fi
-                      echo "dsr1-8k1k=$DSR1_8K1K" >> $GITHUB_OUTPUT
-                  else
-                      echo "dsr1-8k1k=[]" >> $GITHUB_OUTPUT
-                  fi
+                    if [ "${{ inputs.run_1k8k }}" = "true" ]; then
+                        if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                            DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
+                        fi
+                        echo "dsr1-1k8k=$DSR1_1K8K" >> $GITHUB_OUTPUT
+                    else
+                        echo "dsr1-1k8k=[]" >> $GITHUB_OUTPUT
+                    fi
 
-                  # Generate gptoss configs
-                  if [ "${{ inputs.run_1k1k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                      else
-                          GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
-                      fi
-                      echo "gptoss-1k1k=$GPTOSS_1K1K" >> $GITHUB_OUTPUT
-                  else
-                      echo "gptoss-1k1k=[]" >> $GITHUB_OUTPUT
-                  fi
+                    if [ "${{ inputs.run_8k1k }}" = "true" ]; then
+                        if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                            DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1)
+                        fi
+                        echo "dsr1-8k1k=$DSR1_8K1K" >> $GITHUB_OUTPUT
+                    else
+                        echo "dsr1-8k1k=[]" >> $GITHUB_OUTPUT
+                    fi
 
-                  if [ "${{ inputs.run_1k8k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                      else
-                          GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
-                      fi
-                      echo "gptoss-1k8k=$GPTOSS_1K8K" >> $GITHUB_OUTPUT
-                  else
-                      echo "gptoss-1k8k=[]" >> $GITHUB_OUTPUT
-                  fi
+                    # Generate gptoss configs
+                    if [ "${{ inputs.run_1k1k }}" = "true" ]; then
+                        if [ -n "$RUNNER_TYPES" ]; then
+                            GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+                        fi
+                        echo "gptoss-1k1k=$GPTOSS_1K1K" >> $GITHUB_OUTPUT
+                    else
+                        echo "gptoss-1k1k=[]" >> $GITHUB_OUTPUT
+                    fi
 
-                  if [ "${{ inputs.run_8k1k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                      else
-                          GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss)
-                      fi
-                      echo "gptoss-8k1k=$GPTOSS_8K1K" >> $GITHUB_OUTPUT
-                  else
-                      echo "gptoss-8k1k=[]" >> $GITHUB_OUTPUT
-                  fi
+                    if [ "${{ inputs.run_1k8k }}" = "true" ]; then
+                        if [ -n "$RUNNER_TYPES" ]; then
+                            GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
+                        fi
+                        echo "gptoss-1k8k=$GPTOSS_1K8K" >> $GITHUB_OUTPUT
+                    else
+                        echo "gptoss-1k8k=[]" >> $GITHUB_OUTPUT
+                    fi
+
+                    if [ "${{ inputs.run_8k1k }}" = "true" ]; then
+                        if [ -n "$RUNNER_TYPES" ]; then
+                            GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                        else
+                            GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss)
+                        fi
+                        echo "gptoss-8k1k=$GPTOSS_8K1K" >> $GITHUB_OUTPUT
+                    else
+                        echo "gptoss-8k1k=[]" >> $GITHUB_OUTPUT
+                    fi
 
     # DSR1 1K1K Benchmarks
     benchmark-dsr1-1k1k:
