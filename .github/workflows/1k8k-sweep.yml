@@ -1,9 +1,9 @@
 name: "Full Sweep Scheduler - 1k8k"
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 23 * * *'
+    workflow_dispatch:
+    schedule:
+        - cron: "0 23 * * *"
 
 jobs:
     get-dsr1-configs:
@@ -16,6 +16,7 @@ jobs:
 
             - id: get-dsr1-configs
               run: |
+                  pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
