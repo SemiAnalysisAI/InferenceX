@@ -85,10 +85,13 @@ jobs:
                   # Trim leading whitespace
                   RUNNER_TYPES=$(echo $RUNNER_TYPES | xargs)
 
+                  # DSR1 does not run on h100, so filter it out for dsr1 configs
+                  DSR1_RUNNER_TYPES=$(echo $RUNNER_TYPES | sed 's/\bh100\b//g' | xargs)
+
                   # Generate dsr1 configs
                   if [ "${{ inputs.run_1k1k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                          DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                       else
                           DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
                       fi
@@ -98,8 +101,8 @@ jobs:
                   fi
 
                   if [ "${{ inputs.run_1k8k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                          DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                       else
                           DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
                       fi
@@ -109,8 +112,8 @@ jobs:
                   fi
 
                   if [ "${{ inputs.run_8k1k }}" = "true" ]; then
-                      if [ -n "$RUNNER_TYPES" ]; then
-                          DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      if [ -n "$DSR1_RUNNER_TYPES" ]; then
+                          DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                       else
                           DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1)
                       fi
