@@ -127,11 +127,11 @@ jobs:
             exp-name: ${{ matrix.config.model-prefix }}_1k8k
             isl: 1024
             osl: 8192
-            max-model-len: 2048
+            max-model-len: 9216
             mtp-mode: ${{ matrix.config.mtp }}
 
     collect-dsr1-results:
-        needs: benchmark-dsr1
+        needs: [benchmark-dsr1, benchmark-gb200]
         if: ${{ always() }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit

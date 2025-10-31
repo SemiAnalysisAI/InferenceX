@@ -55,7 +55,7 @@ jobs:
             - id: generate-configs
               run: |
                   pip install pydantic
-                  
+
                   set -x
                   # Build runner type filters based on inputs
                   RUNNER_TYPES=""
@@ -289,8 +289,96 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
+    # This is a workaround until we can integrate GB200 into master configs.
+    benchmark-gb200-1k1k:
+        if: ${{ inputs.use_gb200 && inputs.run_1k1k }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 1k1k sweep
+        strategy:
+            fail-fast: false
+            matrix:
+                config: &dsr1_static_configs
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "off",
+                      }
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "on",
+                      }
+                    - {
+                          "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
+                          "model": "deepseek-ai/DeepSeek-R1-0528",
+                          "model-prefix": "dsr1",
+                          "precision": "fp8",
+                          "framework": "dynamo-sglang",
+                          "mtp": "off",
+                      }
+        secrets: inherit
+        with:
+            runner: gb200
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.model-prefix }}_1k1k
+            isl: 1024
+            osl: 1024
+            max-model-len: 2048
+            mtp-mode: ${{ matrix.config.mtp }}
+
+    benchmark-gb200-1k8k:
+        if: ${{ inputs.use_gb200 && inputs.run_1k8k }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 1k1k sweep
+        strategy:
+            fail-fast: false
+            matrix:
+                config: *dsr1_static_configs
+        secrets: inherit
+        with:
+            runner: gb200
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.model-prefix }}_1k8k
+            isl: 1024
+            osl: 8192
+            max-model-len: 9216
+            mtp-mode: ${{ matrix.config.mtp }}
+
+    benchmark-gb200-8k1k:
+        if: ${{ inputs.use_gb200 && inputs.run_8k1k }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 1k1k sweep
+        strategy:
+            fail-fast: false
+            matrix:
+                config: *dsr1_static_configs
+        secrets: inherit
+        with:
+            runner: gb200
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.model-prefix }}_8k1k
+            isl: 1024
+            osl: 8192
+            max-model-len: 9216
+            mtp-mode: ${{ matrix.config.mtp }}
+
     collect-dsr1-1k8k-results:
-        needs: benchmark-dsr1-1k8k
+        needs: [benchmark-dsr1-1k8k, benchmark-gb200-1k1k, benchmark-gb200-1k8k, benchmark-gb200-8k1k]
         if: ${{ always() && needs.get-configs.outputs.dsr1-1k8k != '[]' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
