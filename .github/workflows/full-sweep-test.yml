@@ -60,26 +60,29 @@ jobs:
                   # Build runner type filter based on inputs
                   RUNNER_TYPES=""
                   if [ "${{ inputs.use_h100 }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES h100"
+                      RUNNER_TYPES="${RUNNER_TYPES} h100"
                   fi
                   if [ "${{ inputs.use_h200 }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES h200 h200-trt"
+                      RUNNER_TYPES="${RUNNER_TYPES} h200 h200-trt"
                   fi
                   if [ "${{ inputs.use_b200 }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES b200 b200-trt b200-nvs"
+                      RUNNER_TYPES="${RUNNER_TYPES} b200 b200-trt b200-nvs"
                   fi
                   if [ "${{ inputs.use_mi300x }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES mi300x"
+                      RUNNER_TYPES="${RUNNER_TYPES} mi300x"
                   fi
                   if [ "${{ inputs.use_mi325x }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES mi325x"
+                      RUNNER_TYPES="${RUNNER_TYPES} mi325x"
                   fi
                   if [ "${{ inputs.use_mi355x }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES mi355x"
+                      RUNNER_TYPES="${RUNNER_TYPES} mi355x"
                   fi
                   if [ "${{ inputs.use_gb200 }}" = "true" ]; then
-                      RUNNER_TYPES="$RUNNER_TYPES gb200"
+                      RUNNER_TYPES="${RUNNER_TYPES} gb200"
                   fi
+
+                  # Trim leading whitespace
+                  RUNNER_TYPES=$(echo $RUNNER_TYPES | xargs)
 
                   # Generate dsr1 configs
                   if [ "${{ inputs.run_1k1k }}" = "true" ]; then
