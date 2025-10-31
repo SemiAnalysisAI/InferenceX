@@ -1,10 +1,6 @@
 name: End-to-End Tests
 run-name: e2e Test - ${{ github.event.inputs.generate-cli-command }}
 
-# concurrency:
-#     group: benchmark-lock
-#     cancel-in-progress: false
-
 on:
     workflow_dispatch:
         inputs:
