@@ -33,6 +33,8 @@ Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter
 test-config --key dsr1-fp4-b200-sglang --seq-len 1k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
 
+Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986046399
+
 If we wanted to also test 1k8k or 8k1k scenarios, we would simply append `1k8k` or `8k1k` to `--seq-len`, respectively.
 
 Further, if we wanted to run that config on *one specific* runner node, we could specify that by appending `--runner-node` to the argument list. Note that if the specified runner node is not compatible with the specified config key (as dictated by `.github/configs/runners.yaml`), then the workflow will error:
@@ -43,12 +45,16 @@ test-config --config-files .github/configs/nvidia-master.yaml --runner-config .g
 ValueError: Runner node 'mi300x-amd_0' is not compatible with config 'dsr1-fp4-b200-sglang' which runs on runner type 'b200'. Available runner nodes for this config are 'b200-nb_0, b200-nb_1, b200-nvd_0, b200-nvd_1, b200-nvd_2, b200-nvd_3, b200-tg_0'.
 ```
 
+Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986053019/job/54229839736
+
 **Scenario 2**: I just made a change to the `benchmarks/dsr1_fp8_b200_docker.sh` and I need to verify that these changes work across all B200 runners.
 
 Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the text following command as the text input:
 ```
 runner-sweep --runner-type b200 --model-prefix dsr1 --precision fp8 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
+
+Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986283169
 
 This will run a test (just the highest available parallelism and lowest available concurrency) for each B200 runner node for each Deepseek config that runs on B200 with fp8 precision. I.e., this can be used to "sweep" across runners for a particular model to test that all runners still work with changes that have been made.
 
@@ -58,6 +64,8 @@ Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter
 ```
 runner-model-sweep --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
+
+Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986292917
 
 This will run a test (just the highest available parallelism and lowest available concurrency) for each configuration that specifies the `h200` runner type, across all H200 runner nodes defined in `.github/configs/runners.yaml`.
 
