@@ -58,7 +58,32 @@ jobs:
 
                   set -x
                   # Build runner type filters based on inputs
-                  RUNNER_TYPES="${{ inputs.use_h100 && 'h100' || '' }} ${{ inputs.use_h200 && 'h100' || '' }} ${{ inputs.use_h200 && 'h200 h200-trt' || '' }} ${{ inputs.use_b200 && 'b200 b200-trt' || '' }} ${{ inputs.use_mi300x && 'mi300x' || '' }} ${{ inputs.use_mi325x && 'mi325x' || '' }} ${{ inputs.use_mi355x && 'mi355x' || '' }}"
+                  RUNNER_TYPES=""
+
+                  if [ "${{ inputs.use_h100 }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} h100"
+                  fi
+                  if [ "${{ inputs.use_h200 }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} h200 h200-trt"
+                  fi
+                  if [ "${{ inputs.use_b200 }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} b200 b200-trt b200-nvs"
+                  fi
+                  if [ "${{ inputs.use_mi300x }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} mi300x"
+                  fi
+                  if [ "${{ inputs.use_mi325x }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} mi325x"
+                  fi
+                  if [ "${{ inputs.use_mi355x }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} mi355x"
+                  fi
+                  if [ "${{ inputs.use_gb200 }}" = "true" ]; then
+                      RUNNER_TYPES="${RUNNER_TYPES} gb200"
+                  fi
+
+                  # Trim leading whitespace
+                  RUNNER_TYPES=$(echo $RUNNER_TYPES | xargs)
 
                   # DSR1 doesn't support H100, so exclude it
                   DSR1_RUNNER_TYPES=$(echo $RUNNER_TYPES | sed 's/\bh100\b//g' | xargs)
@@ -353,13 +378,7 @@ jobs:
             mtp-mode: ${{ matrix.config.mtp }}
 
     collect-dsr1-1k8k-results:
-        needs:
-            [
-                benchmark-dsr1-1k8k,
-                benchmark-gb200-1k1k,
-                benchmark-gb200-1k8k,
-                benchmark-gb200-8k1k,
-            ]
+        needs: [benchmark-dsr1-1k8k, benchmark-gb200-1k1k, benchmark-gb200-1k8k, benchmark-gb200-8k1k]
         if: ${{ always() && needs.get-configs.outputs.dsr1-1k8k != '[]' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
