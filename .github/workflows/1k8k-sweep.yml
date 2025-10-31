@@ -1,4 +1,4 @@
-name: "1K/8K Sweep"
+name: "Full Sweep Scheduler - 1k8k"
 
 concurrency:
   group: benchmark-lock-1k8k
