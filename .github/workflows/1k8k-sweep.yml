@@ -1,14 +1,13 @@
 name: "Full Sweep Scheduler - 1k8k"
 
 concurrency:
-  group: benchmark-lock-1k8k
-  cancel-in-progress: false
+    group: benchmark-lock-1k8k
+    cancel-in-progress: false
 
 on:
-    # pull_request:
     workflow_dispatch:
-#   schedule:
-#     - cron: '0 23 * * *'
+    schedule:
+        - cron: "0 23 * * *"
 
 jobs:
     get-dsr1-configs:
