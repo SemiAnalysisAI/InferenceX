@@ -188,7 +188,7 @@ gptoss-fp4-b200-trt:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 8 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -208,14 +208,14 @@ gptoss-fp4-b200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
@@ -225,7 +225,7 @@ gptoss-fp4-b200-vllm:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.10.2
@@ -252,7 +252,7 @@ gptoss-fp4-h100-vllm:
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 32 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
@@ -261,28 +261,29 @@ gptoss-fp4-h200-trt:
   runner: h200-trt
   precision: fp4
   framework: trt
+  # For all sequence lengths, EP=TP, DP_ATTENTION=false
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 8 }
+    - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 1, ep: 1, conc-start: 32, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 1, ep: 1, conc-start: 4, conc-end: 64 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
   image: vllm/vllm-openai:v0.10.2
@@ -295,14 +296,14 @@ gptoss-fp4-h200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 1, conc-start: 4, conc-end: 4 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 1, conc-start: 4, conc-end: 4 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
