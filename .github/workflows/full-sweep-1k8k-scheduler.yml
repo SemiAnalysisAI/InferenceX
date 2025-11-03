@@ -17,7 +17,7 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
@@ -31,7 +31,7 @@ jobs:
             - id: get-gptoss-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/get_full_sweep_configs.py --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     benchmark-dsr1:
@@ -85,7 +85,7 @@ jobs:
     # This is a workaround until we can integrate GB200 into master configs.
     benchmark-gb200:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 1k1k sweep
+        name: gb200 1k8k sweep
         strategy:
             fail-fast: false
             matrix:
