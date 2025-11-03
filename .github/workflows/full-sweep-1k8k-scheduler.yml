@@ -1,59 +1,144 @@
-name: Full Sweep Scheduler - 1k8k
-
-concurrency:
-  group: benchmark-lock-1k8k
-  cancel-in-progress: true
+name: "Full Sweep Scheduler - 1k8k"
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 23 * * *'
+    workflow_dispatch:
+    schedule:
+        - cron: "0 3 * * *"
 
 jobs:
-  mega-run:
-    uses: ./.github/workflows/full-sweep-tmpl.yml
-    secrets: inherit
-    with:
-      run_1k1k: false
-      run_8k1k: false
-      run_1k8k: true
-      use_h100: true
-      use_h200: true
-      use_b200: true
-      use_mi300x: true
-      use_mi325x: true
-      use_mi355x: true
-      use_gb200: true
+    get-dsr1-configs:
+        runs-on: ubuntu-latest
+        outputs:
+            search-space-config: ${{ steps.get-dsr1-configs.outputs.search-space-config }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-  calc-success-rate:
-    needs: mega-run
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
+            - id: get-dsr1-configs
+              run: |
+                  pip install pydantic
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1)
+                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    env:
-      RESULTS_DIR: "results/"
-      STATS_FILENAME: "run_stats"
-      GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+    get-gptoss-configs:
+        runs-on: ubuntu-latest
+        outputs:
+            search-space-config: ${{ steps.get-gptoss-configs.outputs.search-space-config }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v3
+            - id: get-gptoss-configs
+              run: |
+                  pip install pydantic
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss)
+                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+    benchmark-dsr1:
+        needs: get-dsr1-configs
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: dsr1 1k8k
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
+        secrets: inherit
         with:
-          token: ${{ secrets.REPO_PAT }}
-          fetch-depth: 0
+            exp-name: "dsr1_1k8k"
+            isl: 1024
+            osl: 1024
+            max-model-len: 2048
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
 
-      - name: Download results artifacts
-        uses: actions/download-artifact@v4
+    benchmark-gptoss:
+        needs: get-gptoss-configs
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: gptoss 1k8k
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-gptoss-configs.outputs.search-space-config) }}
+        secrets: inherit
         with:
-          path: ${{ env.RESULTS_DIR }}
-          pattern: results_*
+            exp-name: "gptoss_1k8k"
+            isl: 1024
+            osl: 1024
+            max-model-len: 2048
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
 
-      - name: Install python dependencies
-        run: pip install PyGithub
-
-      - name: Calculate success rate
-        run: python3 utils/calc_success_rate.py $STATS_FILENAME
-
-      - uses: actions/upload-artifact@v4
+    # This is a workaround until we can integrate GB200 into master configs.
+    benchmark-gb200:
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gb200 1k8k sweep
+        strategy:
+            fail-fast: false
+            matrix:
+                config:
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "off",
+                      }
+                    - {
+                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+                          "model": "deepseek-r1-fp4",
+                          "model-prefix": "dsr1",
+                          "precision": "fp4",
+                          "framework": "dynamo-trtllm",
+                          "mtp": "on",
+                      }
+                    - {
+                          "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
+                          "model": "deepseek-ai/DeepSeek-R1-0528",
+                          "model-prefix": "dsr1",
+                          "precision": "fp8",
+                          "framework": "dynamo-sglang",
+                          "mtp": "off",
+                      }
+        secrets: inherit
         with:
-          name: "run-stats"
-          path: ${{ env.STATS_FILENAME }}.json
+            runner: gb200
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.model-prefix }}_1k8k
+            isl: 1024
+            osl: 8192
+            max-model-len: 9216
+            mtp-mode: ${{ matrix.config.mtp }}
+
+    collect-dsr1-results:
+        needs: [benchmark-dsr1, benchmark-gb200]
+        if: ${{ always() }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k8k"
+
+    collect-gptoss-results:
+        needs: benchmark-gptoss
+        if: ${{ always() }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k8k"

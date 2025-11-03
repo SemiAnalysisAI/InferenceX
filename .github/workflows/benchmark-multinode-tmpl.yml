@@ -31,8 +31,9 @@ on:
         required: true
         type: string
       random-range-ratio:
-        required: true
+        required: false
         type: string
+        default: '0.8'
       mtp-mode:
         required: true
         type: string
@@ -85,6 +86,8 @@ jobs:
           fi
 
       - name: Process results
+        env:
+          RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           # Process each result file
           for result_file in ${RESULT_FILENAME}_*.json; do
@@ -93,7 +96,7 @@ jobs:
               # Extract GPU count from filename for tp_size calculation
               gpus=$(echo "$result_file" | sed "s/.*_gpus\([0-9]*\)\.json/\1/")
               if [ -n "$gpus" ]; then
-                python3 utils/process_result.py ${{ inputs.runner }} $gpus ${result_file%.json} $FRAMEWORK $PRECISION $MTP_MODE
+                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false python3 utils/process_result.py
               fi
             fi
           done
