@@ -138,6 +138,8 @@ jobs:
           fi
 
       - name: Process result
+        env:
+          RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           python3 utils/process_result.py
       - name: Upload result

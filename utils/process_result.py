@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-hw = os.environ.get('RUNNER_NAME')
+hw = os.environ.get('RUNNER_TYPE')
 tp_size = int(os.environ.get('TP'))
 ep_size = int(os.environ.get('EP_SIZE'))
 dp_attention = os.environ.get('DP_ATTENTION')

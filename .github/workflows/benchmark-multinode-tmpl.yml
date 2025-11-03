@@ -86,6 +86,8 @@ jobs:
           fi
 
       - name: Process results
+        env:
+          RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           # Process each result file
           for result_file in ${RESULT_FILENAME}_*.json; do
