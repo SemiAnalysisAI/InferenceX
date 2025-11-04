@@ -110,6 +110,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.dsr1-1k1k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: dsr1 1k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -143,6 +144,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.gptoss-1k1k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: gptoss 1k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -176,6 +178,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.dsr1-8k1k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: dsr1 8k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -209,6 +212,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.gptoss-8k1k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: gptoss 8k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -242,6 +246,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.dsr1-1k8k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: dsr1 1k8k /
         strategy:
             fail-fast: false
             matrix:
@@ -369,6 +374,7 @@ jobs:
         needs: get-configs
         if: ${{ needs.get-configs.outputs.gptoss-1k8k != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: gptoss 1k8k /
         strategy:
             fail-fast: false
             matrix:
