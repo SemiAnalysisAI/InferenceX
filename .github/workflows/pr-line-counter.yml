@@ -41,20 +41,22 @@ jobs:
           BASE_REF="${{ github.event.pull_request.base.ref }}"
           # Fetch the base branch to ensure we have it
           git fetch origin "$BASE_REF" 2>/dev/null || true
-          if git show "origin/$BASE_REF:$TARGET_FILE" > /tmp/base_file.tmp 2>/dev/null; then
-            BASE_LINE_COUNT=$(wc -l < /tmp/base_file.tmp)
+          BASE_FILE_TMP=$(mktemp)
+          if git show "origin/$BASE_REF:$TARGET_FILE" > "$BASE_FILE_TMP" 2>/dev/null; then
+            BASE_LINE_COUNT=$(wc -l < "$BASE_FILE_TMP")
             # If the last character is not a newline, increment the count
-            if [ -n "$(tail -c 1 /tmp/base_file.tmp | tr -d '\n')" ]; then
+            if [ -n "$(tail -c 1 "$BASE_FILE_TMP" | tr -d '\n')" ]; then
               BASE_LINE_COUNT=$((BASE_LINE_COUNT + 1))
             fi
             echo "base_line_count=$BASE_LINE_COUNT" >> $GITHUB_OUTPUT
             echo "base_file_exists=true" >> $GITHUB_OUTPUT
-            rm /tmp/base_file.tmp
+            rm "$BASE_FILE_TMP"
 
             # Calculate line difference
             LINE_DIFF=$((LINE_COUNT - BASE_LINE_COUNT))
             echo "line_diff=$LINE_DIFF" >> $GITHUB_OUTPUT
           else
+            rm -f "$BASE_FILE_TMP"
             echo "base_file_exists=false" >> $GITHUB_OUTPUT
             echo "base_line_count=0" >> $GITHUB_OUTPUT
             echo "line_diff=0" >> $GITHUB_OUTPUT
