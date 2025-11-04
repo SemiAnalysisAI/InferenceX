@@ -59,7 +59,8 @@ jobs:
             rm -f "$BASE_FILE_TMP"
             echo "base_file_exists=false" >> $GITHUB_OUTPUT
             echo "base_line_count=0" >> $GITHUB_OUTPUT
-            echo "line_diff=0" >> $GITHUB_OUTPUT
+            # If base file doesn't exist, the diff is the full line count (new file)
+            echo "line_diff=$LINE_COUNT" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate summary
@@ -90,6 +91,11 @@ jobs:
               else
                 echo "**Change:** No change ➡️" >> $GITHUB_STEP_SUMMARY
               fi
+            else
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Base Lines:** 0 (new file)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "⚠️ **File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
@@ -121,6 +127,9 @@ jobs:
                 } else {
                   commentBody += `\n\n**Change:** No change ➡️`;
                 }
+              } else {
+                commentBody += `\n\n**Base Lines:** 0 (new file)`;
+                commentBody += `\n\n**Change:** +${lineDiff} lines 📈`;
               }
             } else {
               commentBody = `## 📊 Line Count Report\n\n⚠️ **File not found:** \`${targetFile}\``;
