@@ -7,6 +7,8 @@ on:
 jobs:
   count-lines:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       TARGET_FILE: utils/matrix-logic/generate_sweep_configs.py
 
