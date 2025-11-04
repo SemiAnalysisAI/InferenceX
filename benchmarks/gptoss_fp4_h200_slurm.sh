@@ -31,6 +31,7 @@ fi
 
 # Create config.yaml
 cat > config.yaml << EOF
+compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
 async-scheduling: true
 no-enable-prefix-caching: true
 cuda-graph-sizes: 2048
