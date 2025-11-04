@@ -37,7 +37,7 @@ jobs:
     benchmark-dsr1:
         needs: get-dsr1-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: dsr1 1k1k
+        name: dsr1 1k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -61,7 +61,7 @@ jobs:
     benchmark-gptoss:
         needs: get-gptoss-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: gptoss 1k1k
+        name: gptoss 1k1k /
         strategy:
             fail-fast: false
             matrix:
@@ -85,7 +85,7 @@ jobs:
     # This is a workaround until we can integrate GB200 into master configs.
     benchmark-gb200:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 1k1k sweep
+        name: gb200 1k1k sweep /
         strategy:
             fail-fast: false
             matrix:
