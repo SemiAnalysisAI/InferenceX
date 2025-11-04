@@ -45,9 +45,9 @@ jobs:
         secrets: inherit
         with:
             exp-name: "dsr1_8k1k"
-            isl: 1024
+            isl: 8192
             osl: 1024
-            max-model-len: 2048
+            max-model-len: 9216
             runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
@@ -69,9 +69,9 @@ jobs:
         secrets: inherit
         with:
             exp-name: "gptoss_8k1k"
-            isl: 1024
+            isl: 8192
             osl: 1024
-            max-model-len: 2048
+            max-model-len: 9216
             runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
