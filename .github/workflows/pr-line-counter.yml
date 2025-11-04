@@ -50,7 +50,7 @@ jobs:
             fi
             echo "base_line_count=$BASE_LINE_COUNT" >> $GITHUB_OUTPUT
             echo "base_file_exists=true" >> $GITHUB_OUTPUT
-            rm "$BASE_FILE_TMP"
+            rm -f "$BASE_FILE_TMP"
 
             # Calculate line difference
             LINE_DIFF=$((LINE_COUNT - BASE_LINE_COUNT))
