@@ -16,10 +16,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Count lines in generate_sweep_configs.py
         id: line-count
         run: |
+          # Count lines in PR version
           if [ -f "$TARGET_FILE" ]; then
             LINE_COUNT=$(wc -l < "$TARGET_FILE")
             # If the last character is not a newline, increment the count
@@ -31,6 +34,30 @@ jobs:
           else
             echo "file_exists=false" >> $GITHUB_OUTPUT
             echo "line_count=0" >> $GITHUB_OUTPUT
+            LINE_COUNT=0
+          fi
+
+          # Count lines in base branch version
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          # Fetch the base branch to ensure we have it
+          git fetch origin "$BASE_REF" 2>/dev/null || true
+          if git show "origin/$BASE_REF:$TARGET_FILE" > /tmp/base_file.tmp 2>/dev/null; then
+            BASE_LINE_COUNT=$(wc -l < /tmp/base_file.tmp)
+            # If the last character is not a newline, increment the count
+            if [ -n "$(tail -c 1 /tmp/base_file.tmp | tr -d '\n')" ]; then
+              BASE_LINE_COUNT=$((BASE_LINE_COUNT + 1))
+            fi
+            echo "base_line_count=$BASE_LINE_COUNT" >> $GITHUB_OUTPUT
+            echo "base_file_exists=true" >> $GITHUB_OUTPUT
+            rm /tmp/base_file.tmp
+
+            # Calculate line difference
+            LINE_DIFF=$((LINE_COUNT - BASE_LINE_COUNT))
+            echo "line_diff=$LINE_DIFF" >> $GITHUB_OUTPUT
+          else
+            echo "base_file_exists=false" >> $GITHUB_OUTPUT
+            echo "base_line_count=0" >> $GITHUB_OUTPUT
+            echo "line_diff=0" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate summary
@@ -39,11 +66,29 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           FILE_EXISTS="${{ steps.line-count.outputs.file_exists }}"
+          BASE_FILE_EXISTS="${{ steps.line-count.outputs.base_file_exists }}"
+
           if [ "$FILE_EXISTS" == "true" ]; then
             LINE_COUNT="${{ steps.line-count.outputs.line_count }}"
+            BASE_LINE_COUNT="${{ steps.line-count.outputs.base_line_count }}"
+            LINE_DIFF="${{ steps.line-count.outputs.line_diff }}"
+
             echo "**File:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Total Lines:** $LINE_COUNT" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$BASE_FILE_EXISTS" == "true" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Base Lines:** $BASE_LINE_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              if [ "$LINE_DIFF" -gt 0 ]; then
+                echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
+              elif [ "$LINE_DIFF" -lt 0 ]; then
+                echo "**Change:** $LINE_DIFF lines 📉" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "**Change:** No change ➡️" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
           else
             echo "⚠️ **File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
           fi
@@ -53,12 +98,28 @@ jobs:
         with:
           script: |
             const fileExists = '${{ steps.line-count.outputs.file_exists }}';
+            const baseFileExists = '${{ steps.line-count.outputs.base_file_exists }}';
             const lineCount = '${{ steps.line-count.outputs.line_count }}';
+            const baseLineCount = '${{ steps.line-count.outputs.base_line_count }}';
+            const lineDiff = '${{ steps.line-count.outputs.line_diff }}';
             const targetFile = process.env.TARGET_FILE;
 
             let commentBody;
             if (fileExists === 'true') {
               commentBody = `## 📊 Line Count Report\n\n**File:** \`${targetFile}\`\n\n**Total Lines:** ${lineCount}`;
+
+              if (baseFileExists === 'true') {
+                commentBody += `\n\n**Base Lines:** ${baseLineCount}`;
+
+                const diff = parseInt(lineDiff);
+                if (diff > 0) {
+                  commentBody += `\n\n**Change:** +${diff} lines 📈`;
+                } else if (diff < 0) {
+                  commentBody += `\n\n**Change:** ${diff} lines 📉`;
+                } else {
+                  commentBody += `\n\n**Change:** No change ➡️`;
+                }
+              }
             } else {
               commentBody = `## 📊 Line Count Report\n\n⚠️ **File not found:** \`${targetFile}\``;
             }
