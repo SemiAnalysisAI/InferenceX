@@ -1,0 +1,44 @@
+name: PR Line Counter
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  count-lines:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Count lines in generate_sweep_configs.py
+        id: line-count
+        run: |
+          FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
+
+          if [ -f "$FILE_PATH" ]; then
+            LINE_COUNT=$(wc -l < "$FILE_PATH")
+            echo "line_count=$LINE_COUNT" >> $GITHUB_OUTPUT
+            echo "file_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "file_exists=false" >> $GITHUB_OUTPUT
+            echo "line_count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate summary
+        run: |
+          echo "## 📊 Line Count Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          FILE_EXISTS="${{ steps.line-count.outputs.file_exists }}"
+          if [ "$FILE_EXISTS" == "true" ]; then
+            FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
+            LINE_COUNT="${{ steps.line-count.outputs.line_count }}"
+            echo "**File:** \`$FILE_PATH\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Total Lines:** $LINE_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
+            echo "⚠️ **File not found:** \`$FILE_PATH\`" >> $GITHUB_STEP_SUMMARY
+          fi
