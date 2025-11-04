@@ -40,7 +40,10 @@ jobs:
           # Count lines in base branch version
           BASE_REF="${{ github.event.pull_request.base.ref }}"
           # Fetch the base branch to ensure we have it
-          git fetch origin "$BASE_REF" 2>/dev/null || true
+          if ! git fetch origin "$BASE_REF" 2>/dev/null; then
+            echo "ERROR: Failed to fetch base branch '$BASE_REF' from origin." >&2
+            exit 1
+          fi
           BASE_FILE_TMP=$(mktemp)
           if git show "origin/$BASE_REF:$TARGET_FILE" > "$BASE_FILE_TMP" 2>/dev/null; then
             BASE_LINE_COUNT=$(wc -l < "$BASE_FILE_TMP")
