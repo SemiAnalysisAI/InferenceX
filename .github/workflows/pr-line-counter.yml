@@ -7,6 +7,8 @@ on:
 jobs:
   count-lines:
     runs-on: ubuntu-latest
+    env:
+      TARGET_FILE: utils/matrix-logic/generate_sweep_configs.py
 
     steps:
       - name: Checkout code
@@ -15,10 +17,8 @@ jobs:
       - name: Count lines in generate_sweep_configs.py
         id: line-count
         run: |
-          FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
-
-          if [ -f "$FILE_PATH" ]; then
-            LINE_COUNT=$(wc -l < "$FILE_PATH")
+          if [ -f "$TARGET_FILE" ]; then
+            LINE_COUNT=$(wc -l "$TARGET_FILE" | awk '{print $1}')
             echo "line_count=$LINE_COUNT" >> $GITHUB_OUTPUT
             echo "file_exists=true" >> $GITHUB_OUTPUT
           else
@@ -33,12 +33,10 @@ jobs:
 
           FILE_EXISTS="${{ steps.line-count.outputs.file_exists }}"
           if [ "$FILE_EXISTS" == "true" ]; then
-            FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
             LINE_COUNT="${{ steps.line-count.outputs.line_count }}"
-            echo "**File:** \`$FILE_PATH\`" >> $GITHUB_STEP_SUMMARY
+            echo "**File:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Total Lines:** $LINE_COUNT" >> $GITHUB_STEP_SUMMARY
           else
-            FILE_PATH="utils/matrix-logic/generate_sweep_configs.py"
-            echo "⚠️ **File not found:** \`$FILE_PATH\`" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
           fi
