@@ -23,11 +23,11 @@ jobs:
                   import os
 
                   # Print all PR labels
-                  print(f"All PR labels JSON: ${{ toJson(github.event.pull_request.labels) }}")
+                  labels_json = r'''${{ toJson(github.event.pull_request.labels) }}'''
+                  print("All PR labels JSON:")
+                  print(labels_json)
 
-                  print(f"All PR labels: ${{ github.event.pull_request.labels }}")
-
-                  labels = json.loads('${{ toJson(github.event.pull_request.labels) }}')
+                  labels = json.loads(labels_json)
                   label_names = [label['name'] for label in labels]
                   print(f"Label names: {label_names}")
 
