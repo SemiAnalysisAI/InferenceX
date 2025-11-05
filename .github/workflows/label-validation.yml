@@ -19,6 +19,8 @@ jobs:
               run: |
                   import re
 
+                  print("${{ github.event.label.name }}")
+
                   # Matches strings like h200-trt_gptoss
                   runner_model_pattern = r'^([^_]+)_([^_]+)$'
                   match = re.match(runner_model_pattern, '${{ github.event.label.name }}')
