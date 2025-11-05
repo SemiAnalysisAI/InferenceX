@@ -8,10 +8,12 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
 
+# For SGLang - we are working on updating the 8k1k configs 
+# For now we add conditionals to this script to use newer code for the 1k1k configs
+
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     # Set IMAGE based on ISL/OSL
-    # We are working on updating 8k1k configs
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
         export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.4.post3-cu129-arm64.sqsh"
     else
@@ -162,8 +164,6 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     generate_benchmark_configs "$ISL" "$OSL" "$MTP_MODE"
 
 else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
-    # We are working on updating 8k1k configs
-
     # Set up Dynamo repository path
     DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
