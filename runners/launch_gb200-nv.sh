@@ -196,7 +196,9 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
 
     # Launch jobs based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="1024x2048x4096x4608x4864x4992x5120x5376x5632x6144x8192"
+        top_of_curve_concurrency_list="4096"
+        middle_of_curve_concurrency_list="2048"
+        bottom_of_curve_concurrency_list="2x4x8x16x64x128x256x512x1024"
 
         # top of curve (2 prefill workers each at DEP8 and 1 decode worker at DEP32)
         bash ./submit_disagg.sh 4 2 8 1 9 $ISL $OSL $concurrency_list inf
