@@ -57,7 +57,13 @@ jobs:
                           f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/nvidia-master.yaml",
                           f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/amd-master.yaml",
                           '--runner-config', f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/runners.yaml"
-                      ], capture_output=True, text=True, check=True)
+                      ], capture_output=True, text=True)
+
+                      if result.returncode != 0:
+                          print(f"Error generating configs:")
+                          print(f"STDOUT: {result.stdout}")
+                          print(f"STDERR: {result.stderr}")
+                          exit(1)
 
                       all_configs.extend(json.loads(result.stdout))
 
