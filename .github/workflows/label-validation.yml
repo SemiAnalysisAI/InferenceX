@@ -19,7 +19,7 @@ jobs:
               run: |
                   import yaml
                   import re
-                  with open('${{ github.workspace }}.github/configs/runners.yaml', 'r') as f:
+                  with open('${{ github.workspace }}/.github/configs/runners.yaml', 'r') as f:
                     runners = yaml.safe_load(f)
 
                   # Matches strings like h200-trt_gptoss
