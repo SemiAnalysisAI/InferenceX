@@ -1,5 +1,5 @@
 name: PR Label Validation
-run-name: Validate ${{ github.event.label.name }} PR ${{ github.event.pull_request.number }}
+run-name: "Validate ${{ github.event.label.name }} PR #${{ github.event.pull_request.number }}"
 
 on:
     pull_request:
