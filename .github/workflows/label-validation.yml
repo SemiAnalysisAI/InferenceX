@@ -3,7 +3,7 @@ run-name: "Validate ${{ github.event.label.name }} PR #${{ github.event.pull_req
 
 on:
     pull_request:
-        types: [labeled]
+        types: [labeled, synchronize]
         branches:
             - main
 
