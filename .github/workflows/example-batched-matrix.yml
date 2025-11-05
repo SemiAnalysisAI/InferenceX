@@ -1,0 +1,116 @@
+name: "Example: Batched Matrix Workflow"
+
+# This is an example workflow demonstrating how to use the batching feature
+# to work around GitHub Actions' 256 job matrix limit
+
+on:
+  workflow_dispatch:
+    inputs:
+      model-prefix:
+        description: "Model prefix to benchmark"
+        required: true
+        type: string
+      seq-lens:
+        description: "Sequence length config (e.g., 1k1k)"
+        required: true
+        type: string
+
+jobs:
+  # Step 1: Determine how many batches are needed
+  get-batch-count:
+    runs-on: ubuntu-latest
+    outputs:
+      batch-count: ${{ steps.count.outputs.batch-count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: count
+        run: |
+          pip install pydantic
+          BATCH_COUNT=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py \
+            full-sweep \
+            --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml \
+                          ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
+            --seq-lens ${{ inputs.seq-lens }} \
+            --model-prefix ${{ inputs.model-prefix }} \
+            --get-batch-count)
+          echo "batch-count=$BATCH_COUNT" >> $GITHUB_OUTPUT
+          echo "Total batches needed: $BATCH_COUNT"
+
+  # Step 2: Generate config for each batch
+  # This job runs once per batch (up to the batch-count)
+  get-batch-configs:
+    needs: get-batch-count
+    runs-on: ubuntu-latest
+    # Create a matrix with one entry per batch
+    strategy:
+      matrix:
+        # Generate array [0, 1, 2, ..., batch-count-1]
+        batch-index: ${{ fromJson(format('[{0}]', join(range(0, fromJson(needs.get-batch-count.outputs.batch-count)), ','))) }}
+    outputs:
+      # Each batch gets its own output
+      configs-${{ matrix.batch-index }}: ${{ steps.get-configs.outputs.configs }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: get-configs
+        run: |
+          pip install pydantic
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py \
+            full-sweep \
+            --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml \
+                          ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
+            --seq-lens ${{ inputs.seq-lens }} \
+            --model-prefix ${{ inputs.model-prefix }} \
+            --batch-index ${{ matrix.batch-index }})
+          echo "configs=$CONFIG_JSON" >> $GITHUB_OUTPUT
+          echo "Generated batch ${{ matrix.batch-index }}"
+
+  # Step 3: Run benchmarks for batch 0
+  # You would create similar jobs for batch-1, batch-2, etc. if needed
+  benchmark-batch-0:
+    needs: get-batch-configs
+    # Only run if batch 0 exists
+    if: ${{ fromJson(needs.get-batch-count.outputs.batch-count) > 0 }}
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    name: ${{ inputs.model-prefix }} ${{ inputs.seq-lens }} batch-0 /
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.get-batch-configs.outputs.configs-0) }}
+    secrets: inherit
+    with:
+      exp-name: "${{ inputs.model-prefix }}_${{ inputs.seq-lens }}_batch0"
+      isl: 1024
+      osl: 1024
+      max-model-len: 2048
+      runner: ${{ matrix.config.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      tp: ${{ matrix.config.tp }}
+      ep: ${{ matrix.config.ep }}
+      dp-attn: ${{ matrix.config.dp-attn }}
+      conc: ${{ matrix.config.conc }}
+
+  # Step 4 (optional): Collect results from all batches
+  collect-results:
+    needs: [get-batch-count, benchmark-batch-0]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "Processed ${{ needs.get-batch-count.outputs.batch-count }} batch(es)"
+          echo "Benchmark complete"
+
+# Note: For production use with multiple batches, you would either:
+# 1. Create multiple benchmark-batch-N jobs (one per possible batch)
+# 2. Use a dynamic workflow generation approach
+# 3. Use GitHub's reusable workflows with a loop construct (when available)
+#
+# The current InferenceMAX workflows split by model-prefix instead,
+# which naturally keeps each job under the 256 limit.
