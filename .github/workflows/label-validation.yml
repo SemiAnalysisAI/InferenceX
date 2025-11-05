@@ -8,8 +8,6 @@ concurrency:
 on:
   pull_request:
     types: [labeled, synchronize]
-    branches:
-      - main
 
 jobs:
   get-jobs:
