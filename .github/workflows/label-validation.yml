@@ -129,7 +129,7 @@ jobs:
     needs: get-jobs
     if: ${{ needs.get-jobs.outputs.gb200-config != '[]' }}
     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-    name: gb200 validation
+    name: validate gb200 /
     strategy:
       fail-fast: false
       matrix:
