@@ -8,29 +8,7 @@ on:
             - main
 
 jobs:
-    parse-label:
-        runs-on: ubuntu-latest
-        outputs:
-            runner-type: ${{ steps.parse-label.outputs.runner-type }}
-            model-prefix: ${{ steps.parse-label.outputs.model-prefix }}
-        steps:
-            - name: Parse label
-              id: parse-label
-              shell: python
-              run: |
-                  import json
-                  import re
-                  import os
-
-                  labels = json.loads(r'''${{ toJson(github.event.pull_request.labels) }}''')
-                  label_names = [label['name'] for label in labels]
-                  print(f"Label names: {label_names}")
-
-
-
     get-jobs:
-        needs: parse-label
-        if: ${{ needs.parse-label.outputs.runner-type != '' && needs.parse-label.outputs.model-prefix != ''}}
         runs-on: ubuntu-latest
         outputs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
@@ -39,19 +17,53 @@ jobs:
               uses: actions/checkout@v4
 
             - id: get-jobs
+              shell: python
               run: |
-                  pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py \
-                    full-sweep \
-                    --runner-type ${{ needs.parse-label.outputs.runner-type }} \
-                    --model-prefix ${{ needs.parse-label.outputs.model-prefix }} \
-                    --seq-lens 1k1k \
-                    --test-mode \
-                    --config-files \
-                      ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml \
-                      ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
-                    --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  import json
+                  import subprocess
+                  import re
+                  import os
+
+                  # Get matching labels
+                  labels = json.loads(r'''${{ toJson(github.event.pull_request.labels) }}''')
+                  pattern = r'^([^_]+)_([^_]+)$'
+
+                  matching = []
+                  for label in labels:
+                      match = re.match(pattern, label['name'])
+                      if match:
+                          matching.append({'runner-type': match.group(1), 'model-prefix': match.group(2)})
+                          print(f"Matched label: {label['name']}")
+
+                  if not matching:
+                      print("No matching labels found")
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                          f.write('search-space-config=[]\n')
+                      exit(0)
+
+                  # Generate configs for all matching labels
+                  subprocess.run(['pip', 'install', 'pydantic'], check=True)
+
+                  all_configs = []
+                  for label in matching:
+                      result = subprocess.run([
+                          'python3', f"{os.environ['GITHUB_WORKSPACE']}/utils/matrix-logic/generate_sweep_configs.py",
+                          'full-sweep',
+                          '--runner-type', label['runner-type'],
+                          '--model-prefix', label['model-prefix'],
+                          '--seq-lens', '1k1k',
+                          '--test-mode',
+                          '--config-files',
+                          f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/nvidia-master.yaml",
+                          f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/amd-master.yaml",
+                          '--runner-config', f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/runners.yaml"
+                      ], capture_output=True, text=True, check=True)
+
+                      all_configs.extend(json.loads(result.stdout))
+
+                  print(f"Total configs: {len(all_configs)}")
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f'search-space-config={json.dumps(all_configs)}\n')
 
     validate:
         needs: get-jobs
