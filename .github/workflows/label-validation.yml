@@ -1,0 +1,120 @@
+name: PR Label Validation
+run-name: Validate ${{ github.event.label.name }} PR \#${{ github.event.pull_request.number }}
+
+on:
+    pull_request:
+        types: [labeled]
+        branches:
+            - main
+
+jobs:
+    parse-label:
+        runs-on: ubuntu-latest
+        outputs:
+            runner-type: ${{ steps.parse-label.outputs.runner-type }}
+            model-prefix: ${{ steps.parse-label.outputs.model-prefix }}
+        steps:
+            - name: Parse label
+              shell: python
+              run: |
+                  import yaml
+                  import re
+                  with open(runners_config, 'r') as f:
+                    runners = yaml.safe_load(f)
+
+                  # Matches strings like h200-trt_gptoss
+                  runner_model_pattern = r'^([^_]+)_([^_]+)$'
+                  match = re.match(runner_model_pattern, '${{ github.event.label.name }}')
+                  if match:
+                    runner_type = match.group(1)
+                    model_prefix = match.group(2)
+
+                    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f'runner-type={runner_type}\n')
+                      f.write(f'model-prefix={model_prefix}\n')
+
+
+
+    get-jobs:
+        needs: parse-label
+        if: ${{ needs.parse-label.outputs.runner-type != '' && needs.parse-label.outputs.model-prefix != ''}}
+        runs-on: ubuntu-latest
+        outputs:
+            search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - id: get-jobs
+              run: |
+                  pip install pydantic
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py \
+                    full-sweep \
+                    --runner-type ${{ needs.parse-label.outputs.runner-type }} \
+                    --model-prefix ${{ needs.parse-label.outputs.model-prefix }} \
+                    --seq-lens 1k1k \
+                    --test-mode \
+                    --config-files \
+                      .github/configs/nvidia-master.yaml \
+                      .github/configs/amd-master.yaml \
+                    --runner-config .github/configs/runners.yaml)
+                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+    validate:
+        needs: get-jobs
+        # Prolly unnecessary 
+        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: Validate ${{ github.event.label.name }}
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    calc-success-rate:
+        needs: validate
+        if: ${{ always() }}
+        runs-on: ubuntu-latest
+
+        env:
+            RESULTS_DIR: "results/"
+            STATS_FILENAME: "run_stats"
+            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  token: ${{ secrets.REPO_PAT }}
+                  fetch-depth: 0
+
+            - name: Download results artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ${{ env.RESULTS_DIR }}
+                  pattern: results_*
+
+            - name: Install python dependencies
+              run: pip install PyGithub
+
+            - name: Calculate success rate
+              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: "run-stats"
+                  path: ${{ env.STATS_FILENAME }}.json
