@@ -1,5 +1,5 @@
 name: PR Label Validation
-run-name: "Validate ${{ github.event.label.name }} PR #${{ github.event.pull_request.number }}"
+run-name: "Validate PR #${{ github.event.pull_request.number }}"
 
 on:
     pull_request:
@@ -15,22 +15,23 @@ jobs:
             model-prefix: ${{ steps.parse-label.outputs.model-prefix }}
         steps:
             - name: Parse label
+              id: parse-label
               shell: python
               run: |
+                  import json
                   import re
+                  import os
 
-                  print("${{ github.event.label.name }}")
+                  # Print all PR labels
+                  labels_json = '${{ toJson(github.event.pull_request.labels) }}'
+                  print(f"All PR labels JSON: {labels_json}")
 
-                  # Matches strings like h200-trt_gptoss
-                  runner_model_pattern = r'^([^_]+)_([^_]+)$'
-                  match = re.match(runner_model_pattern, '${{ github.event.label.name }}')
-                  if match:
-                    runner_type = match.group(1)
-                    model_prefix = match.group(2)
+                  labels = '${{ github.event.pull_request.labels }}'
+                  print(f"All PR labels: {labels}")
 
-                    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                      f.write(f'runner-type={runner_type}\n')
-                      f.write(f'model-prefix={model_prefix}\n')
+                  labels = json.loads(labels_json)
+                  label_names = [label['name'] for label in labels]
+                  print(f"Label names: {label_names}")
 
 
 
@@ -54,17 +55,16 @@ jobs:
                     --seq-lens 1k1k \
                     --test-mode \
                     --config-files \
-                      ${GITHUB_WORKSPACE}..github/configs/nvidia-master.yaml \
+                      ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml \
                       ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
                     --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     validate:
         needs: get-jobs
-        # Prolly unnecessary 
+        # Prolly unnecessary
         if: ${{ needs.get-jobs.outputs.search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: Validate ${{ github.event.label.name }}
         strategy:
             fail-fast: false
             matrix:
