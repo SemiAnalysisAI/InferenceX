@@ -109,7 +109,7 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
     secrets: inherit
-    name: validate ${{ matrix.config.runner }} ${{ matrix.config.model }}
+    name: validate ${{ matrix.config.runner }} ${{ matrix.config.model }} /
     with:
       exp-name: ${{ matrix.config.exp-name }}
       isl: ${{ matrix.config.isl }}
