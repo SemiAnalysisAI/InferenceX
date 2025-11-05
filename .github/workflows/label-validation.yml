@@ -19,7 +19,7 @@ jobs:
               run: |
                   import yaml
                   import re
-                  with open(runners_config, 'r') as f:
+                  with open('.github/configs/runners.yaml', 'r') as f:
                     runners = yaml.safe_load(f)
 
                   # Matches strings like h200-trt_gptoss
@@ -55,9 +55,9 @@ jobs:
                     --seq-lens 1k1k \
                     --test-mode \
                     --config-files \
-                      .github/configs/nvidia-master.yaml \
-                      .github/configs/amd-master.yaml \
-                    --runner-config .github/configs/runners.yaml)
+                      ${GITHUB_WORKSPACE}..github/configs/nvidia-master.yaml \
+                      ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml \
+                    --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     validate:
