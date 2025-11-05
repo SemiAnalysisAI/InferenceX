@@ -83,6 +83,7 @@ jobs:
                   all_configs.extend(json.loads(result.stdout))
 
           # Handle GB200 configs (use static config like in full-sweep-test.yml)
+          # FIXME: https://github.com/InferenceMAX/InferenceMAX/issues/171
           gb200_configs = []
           if gb200_labels:
               # Static GB200 config from full-sweep-test.yml
@@ -125,6 +126,7 @@ jobs:
       dp-attn: ${{ matrix.config.dp-attn }}
       conc: ${{ matrix.config.conc }}
 
+  # FIXME: https://github.com/InferenceMAX/InferenceMAX/issues/171
   validate-gb200:
     needs: get-jobs
     if: ${{ needs.get-jobs.outputs.gb200-config != '[]' }}
