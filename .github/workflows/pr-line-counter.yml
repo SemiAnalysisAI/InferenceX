@@ -108,7 +108,7 @@ jobs:
           fi
 
       - name: Comment on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fileExists = '${{ steps.line-count.outputs.file_exists }}';
