@@ -7,6 +7,12 @@ from pathlib import Path
 hw = os.environ.get('RUNNER_TYPE')
 tp_size = int(os.environ.get('TP'))
 ep_size = int(os.environ.get('EP_SIZE'))
+prefill_gpus_str = os.environ.get('PREFILL_GPUS', '')
+decode_gpus_str = os.environ.get('DECODE_GPUS', '')
+
+# If empty string (aggregated runs), assign to tp_size (total gpus), otherwise convert to int
+prefill_gpus = tp_size if not prefill_gpus_str else int(prefill_gpus_str)
+decode_gpus = tp_size if not decode_gpus_str else int(decode_gpus_str)
 dp_attention = os.environ.get('DP_ATTENTION')
 result_filename = os.environ.get('RESULT_FILENAME')
 framework = os.environ.get('FRAMEWORK')
@@ -26,8 +32,8 @@ data = {
     'framework': framework,
     'precision': precision,
     'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-    'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
-    'input_tput_per_gpu': float(bmk_result['input_throughput']) / tp_size,
+    'output_tput_per_gpu': float(bmk_result['output_throughput']) / decode_gpus,
+    'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput']) )/ prefill_gpus
 }
 
 if mtp_mode:  # MTP
