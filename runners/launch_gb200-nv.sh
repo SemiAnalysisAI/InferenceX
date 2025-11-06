@@ -195,8 +195,13 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
     export CONFIG_DIR=$CONFIG_DIR
     export CONTAINER_IMAGE=$IMAGE
 
+    # This number is set in the `submit_disagg.sh` script. 
+    RETRIES=1
+
     # Launch jobs based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+        NUMBER_OF_EXPERIMENTS=2
+
         top_to_middle_of_curve_concurrency_list="1024x2048x4096"
         bottom_of_curve_concurrency_list="2x4x8x16x64x128x256x512"
 
@@ -207,6 +212,8 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
         bash ./submit_disagg.sh 1 1 4 4 9 $ISL $OSL $bottom_of_curve_concurrency_list inf 1p_4d
 
     elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
+        NUMBER_OF_EXPERIMENTS=1
+
         concurrency_list="128x256x384x448x512x576x1024x2048x4096"
         bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
     else
@@ -286,9 +293,18 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     done
 
 else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
-    # Find the latest log directory
-    # we do "tail -1" here since only the latest job will yield the result
-    LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | sort -V | tail -2)
+    # Find the latest log directory that contains the data
+    cat > collect_latest_results.py <<'PY'
+import os, sys
+isl, osl, nexp, total_retries = [int(x) for x in sys.argv[1:]]
+for chosen_slurm_id in [
+    max([int(x) for x in os.listdir("logs/") if int(x) < end_index]) 
+    for end_index in 
+    [min([int(x) for x in os.listdir("logs/")]) + (total_retries+1) * (exp_idx+1) for exp_idx in range(nexp)]
+]:
+    print(f"logs/{chosen_slurm_id}/vllm_isl_{isl}_osl_{osl}")
+PY
+    LOGS_DIR=$(python3 collect_latest_results.py $ISL $OSL $NUMBER_OF_EXPERIMENTS $RETRIES)
     if [ -z "$LOGS_DIR" ]; then
         echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
         exit 1
