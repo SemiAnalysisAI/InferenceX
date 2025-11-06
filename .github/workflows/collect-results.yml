@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download JSON artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: results/
           pattern: ${{ inputs.exp-name && format('{0}_*', inputs.exp-name) || '*' }}
