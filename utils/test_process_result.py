@@ -6,6 +6,11 @@ from pathlib import Path
 from unittest.mock import patch, mock_open
 
 
+# Get the path to process_result.py dynamically
+SCRIPT_DIR = Path(__file__).parent
+PROCESS_RESULT_PATH = SCRIPT_DIR / 'process_result.py'
+
+
 @pytest.fixture
 def sample_benchmark_result():
     """Sample benchmark result JSON data."""
@@ -39,15 +44,6 @@ def basic_env_vars():
     }
 
 
-@pytest.fixture
-def temp_result_file(tmp_path, sample_benchmark_result):
-    """Create a temporary benchmark result file."""
-    result_file = tmp_path / 'test_result.json'
-    with open(result_file, 'w') as f:
-        json.dump(sample_benchmark_result, f)
-    return result_file
-
-
 def test_basic_processing(tmp_path, sample_benchmark_result, basic_env_vars):
     """Test basic processing of benchmark results."""
     # Create result file
@@ -62,7 +58,7 @@ def test_basic_processing(tmp_path, sample_benchmark_result, basic_env_vars):
     try:
         with patch.dict(os.environ, basic_env_vars):
             # Import and execute the script
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         # Check output file was created
         output_file = tmp_path / 'agg_test_result.json'
@@ -109,7 +105,7 @@ def test_ms_to_seconds_conversion(tmp_path, basic_env_vars):
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -145,7 +141,7 @@ def test_tpot_to_intvty_conversion(tmp_path, basic_env_vars):
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -185,7 +181,7 @@ def test_mtp_mode_included(tmp_path, sample_benchmark_result, basic_env_vars):
     
     try:
         with patch.dict(os.environ, env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -209,7 +205,7 @@ def test_mtp_mode_not_included(tmp_path, sample_benchmark_result, basic_env_vars
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -236,7 +232,7 @@ def test_prefill_decode_gpus_explicit(tmp_path, sample_benchmark_result, basic_e
     
     try:
         with patch.dict(os.environ, env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -262,7 +258,7 @@ def test_prefill_decode_gpus_defaults_to_tp(tmp_path, sample_benchmark_result, b
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -299,7 +295,7 @@ def test_different_tp_sizes(tmp_path, sample_benchmark_result, basic_env_vars):
         
         try:
             with patch.dict(os.environ, env_vars):
-                exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+                exec(open(PROCESS_RESULT_PATH).read())
             
             output_file = tmp_path / 'agg_test_result.json'
             with open(output_file) as f:
@@ -329,7 +325,7 @@ def test_different_ep_sizes(tmp_path, sample_benchmark_result, basic_env_vars):
         
         try:
             with patch.dict(os.environ, env_vars):
-                exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+                exec(open(PROCESS_RESULT_PATH).read())
             
             output_file = tmp_path / 'agg_test_result.json'
             with open(output_file) as f:
@@ -352,7 +348,7 @@ def test_output_file_content_structure(tmp_path, sample_benchmark_result, basic_
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -398,7 +394,7 @@ def test_complex_benchmark_result(tmp_path, basic_env_vars):
     
     try:
         with patch.dict(os.environ, basic_env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
@@ -438,7 +434,7 @@ def test_dp_attention_values(tmp_path, sample_benchmark_result, basic_env_vars):
         
         try:
             with patch.dict(os.environ, env_vars):
-                exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+                exec(open(PROCESS_RESULT_PATH).read())
             
             output_file = tmp_path / 'agg_test_result.json'
             with open(output_file) as f:
@@ -467,7 +463,7 @@ def test_different_frameworks(tmp_path, sample_benchmark_result, basic_env_vars)
         
         try:
             with patch.dict(os.environ, env_vars):
-                exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+                exec(open(PROCESS_RESULT_PATH).read())
             
             output_file = tmp_path / 'agg_test_result.json'
             with open(output_file) as f:
@@ -496,7 +492,7 @@ def test_different_precisions(tmp_path, sample_benchmark_result, basic_env_vars)
         
         try:
             with patch.dict(os.environ, env_vars):
-                exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+                exec(open(PROCESS_RESULT_PATH).read())
             
             output_file = tmp_path / 'agg_test_result.json'
             with open(output_file) as f:
@@ -531,7 +527,7 @@ def test_throughput_calculations(tmp_path, basic_env_vars):
     
     try:
         with patch.dict(os.environ, env_vars):
-            exec(open('/home/runner/work/InferenceMAX/InferenceMAX/utils/process_result.py').read())
+            exec(open(PROCESS_RESULT_PATH).read())
         
         output_file = tmp_path / 'agg_test_result.json'
         with open(output_file) as f:
