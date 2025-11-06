@@ -26,7 +26,8 @@ data = {
     'framework': framework,
     'precision': precision,
     'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-    'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size
+    'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
+    'input_tput_per_gpu': float(bmk_result['input_throughput']) / tp_size
 }
 
 if mtp_mode:  # MTP
