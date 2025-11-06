@@ -48,6 +48,12 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
+    collect-results:
+        needs: test-sweep
+        if: ${{ always() }}
+        uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+
     calc-success-rate:
         needs: test-sweep
         if: ${{ always() }}
