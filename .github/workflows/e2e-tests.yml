@@ -57,7 +57,7 @@ jobs:
             exp-name: "e2e"
 
     calc-success-rate:
-        needs: collect-results
+        needs: test-sweep
         if: ${{ always() }}
         runs-on: ubuntu-latest
 
