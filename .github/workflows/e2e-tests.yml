@@ -16,7 +16,7 @@ jobs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
             - id: get-jobs
               run: |

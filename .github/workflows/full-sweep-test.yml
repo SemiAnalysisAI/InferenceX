@@ -46,7 +46,7 @@ jobs:
             gptoss-8k1k: ${{ steps.generate-configs.outputs.gptoss-8k1k }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
               # This looks complicated, but it is just calling generate_sweep_configs.py conditioned on 
               # discrete inputs (i.e., run_1k1k, run_h100, etc.) to split the test sweep into discrete jobs 

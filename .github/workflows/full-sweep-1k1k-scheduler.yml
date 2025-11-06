@@ -12,7 +12,7 @@ jobs:
             search-space-config: ${{ steps.get-dsr1-configs.outputs.search-space-config }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
             - id: get-dsr1-configs
               run: |
@@ -26,7 +26,7 @@ jobs:
             search-space-config: ${{ steps.get-gptoss-configs.outputs.search-space-config }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
             - id: get-gptoss-configs
               run: |
