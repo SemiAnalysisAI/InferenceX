@@ -32,7 +32,7 @@ jobs:
         run: python3 utils/collect_results.py results/ ${{ inputs.exp-name || 'all' }}
 
       - name: Upload aggregated results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: results_${{ inputs.exp-name || 'all' }}
           path: agg_${{ inputs.exp-name || 'all' }}.json
@@ -42,7 +42,7 @@ jobs:
           pip install -q matplotlib
           python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
       - name: Upload performance graphs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: graphs_${{ inputs.exp-name || 'all' }}
           path: |
