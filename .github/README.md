@@ -96,7 +96,7 @@ full-sweep --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia
 
 **Test all TRT configs on H200 runners:**
 ```
-full-sweep --framework trt --runner-type h200 h200-trt --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
 
 **Quick smoke test of all configs (highest TP, lowest concurrency only):**

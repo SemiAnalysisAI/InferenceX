@@ -55,7 +55,7 @@ jobs:
         secrets: inherit
 
     calc-success-rate:
-        needs: test-sweep
+        needs: collect-results
         if: ${{ always() }}
         runs-on: ubuntu-latest
 

@@ -824,7 +824,7 @@ def main():
     test_config_parser.add_argument(
         '--runner-type',
         required=True,
-        help='Runner type (e.g., h200-trt, h100)'
+        help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
         '--runner-config',
@@ -847,7 +847,7 @@ def main():
     test_config_parser.add_argument(
         '--runner-type',
         required=True,
-        help='Runner type (e.g., h200-trt, h100)'
+        help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
         '--model-prefix',

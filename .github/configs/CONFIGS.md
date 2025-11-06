@@ -49,4 +49,4 @@ Notes:
 
 ## Runners
 
-The `runners.yaml` config represents the available runners in the repository. The keys are the runner *types* (i.e., the GPUs as well as some specific combinations like `h200-trt`) whereas the value is a list of *runner nodes*. This config is used to verify the master configs.
+The `runners.yaml` config represents the available runners in the repository. The keys are the runner *types* (i.e., the GPUs as well as some specific combinations like `b200-trt`) whereas the value is a list of *runner nodes*. This config is used to verify the master configs.
