@@ -144,7 +144,7 @@ dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-trt
+  runner: h200
   precision: fp8
   framework: trt
   # For all sequence lengths, EP=TP
@@ -258,7 +258,7 @@ gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
   model: openai/gpt-oss-120b
   model-prefix: gptoss
-  runner: h200-trt
+  runner: h200
   precision: fp4
   framework: trt
   # For all sequence lengths, EP=TP, DP_ATTENTION=false
