@@ -103,8 +103,14 @@ jobs:
       dp-attn: ${{ matrix.config.dp-attn }}
       conc: ${{ matrix.config.conc }}
 
-  calc-success-rate:
+  collect-results:
     needs: validate
+    if: ${{ always() }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+
+  calc-success-rate:
+    needs: collect-results
     if: ${{ always() }}
     runs-on: ubuntu-latest
 
