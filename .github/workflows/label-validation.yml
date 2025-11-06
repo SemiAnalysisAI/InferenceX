@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
-      gb200-config: ${{ steps.get-jobs.outputs.gb200-config }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,25 +31,19 @@ jobs:
           pattern = r'^([^_]+)_([^_]+)$'
 
           matching = []
-          gb200_labels = []
           for label in labels:
               match = re.match(pattern, label['name'])
               if match:
                   runner_type = match.group(1)
                   model_prefix = match.group(2)
 
-                  if runner_type == 'gb200':
-                      gb200_labels.append({'runner-type': runner_type, 'model-prefix': model_prefix})
-                      print(f"Matched GB200 label: {label['name']}")
-                  else:
-                      matching.append({'runner-type': runner_type, 'model-prefix': model_prefix})
-                      print(f"Matched label: {label['name']}")
+                  matching.append({'runner-type': runner_type, 'model-prefix': model_prefix})
+                  print(f"Matched label: {label['name']}")
 
-          if not matching and not gb200_labels:
+          if not matching:
               print("No matching labels found")
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write('search-space-config=[]\n')
-                  f.write('gb200-config=[]\n')
               exit(0)
 
           # Generate configs for standard labels
@@ -80,24 +73,10 @@ jobs:
 
                   all_configs.extend(json.loads(result.stdout))
 
-          # Handle GB200 configs (use static config like in full-sweep-test.yml)
-          # FIXME: https://github.com/InferenceMAX/InferenceMAX/issues/171
-          gb200_configs = []
-          if gb200_labels:
-              # Static GB200 config from full-sweep-test.yml
-              gb200_configs = [
-                  {"image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1", "model": "deepseek-ai/DeepSeek-R1-0528", "framework": "dynamo-sglang", "precision": "fp4", "mtp": "on"},
-                  {"image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1", "model": "deepseek-ai/DeepSeek-R1-0528", "framework": "dynamo-sglang", "precision": "fp4", "mtp": "off"},
-                  {"image": "nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3", "model": "deepseek-r1-fp4", "framework": "dynamo-trtllm", "precision": "fp4", "mtp": "on"},
-                  {"image": "nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3", "model": "deepseek-r1-fp4", "framework": "dynamo-trtllm", "precision": "fp4", "mtp": "off"}
-              ]
-
           print(f"Total standard configs: {len(all_configs)}")
-          print(f"Total GB200 configs: {len(gb200_configs)}")
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f'search-space-config={json.dumps(all_configs)}\n')
-              f.write(f'gb200-config={json.dumps(gb200_configs)}\n')
 
   validate:
     needs: get-jobs
@@ -124,31 +103,8 @@ jobs:
       dp-attn: ${{ matrix.config.dp-attn }}
       conc: ${{ matrix.config.conc }}
 
-  # FIXME: https://github.com/InferenceMAX/InferenceMAX/issues/171
-  validate-gb200:
-    needs: get-jobs
-    if: ${{ needs.get-jobs.outputs.gb200-config != '[]' }}
-    uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-    name: validate gb200 /
-    strategy:
-      fail-fast: false
-      matrix:
-        config: ${{ fromJson(needs.get-jobs.outputs.gb200-config) }}
-    secrets: inherit
-    with:
-      runner: gb200
-      image: ${{ matrix.config.image }}
-      model: ${{ matrix.config.model }}
-      framework: ${{ matrix.config.framework }}
-      precision: ${{ matrix.config.precision }}
-      exp-name: dsr1_1k1k
-      isl: "1024"
-      osl: "1024"
-      max-model-len: 2048
-      mtp-mode: ${{ matrix.config.mtp }}
-
   calc-success-rate:
-    needs: [validate, validate-gb200]
+    needs: validate
     if: ${{ always() }}
     runs-on: ubuntu-latest
 
