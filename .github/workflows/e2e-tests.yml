@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "e2e"
+            exp-name: ${{ matrix.config.exp-name }}
 
     calc-success-rate:
         needs: test-sweep
