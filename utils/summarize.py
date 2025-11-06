@@ -6,6 +6,7 @@ from pathlib import Path
 results = []
 results_dir = Path(sys.argv[1])
 for result_path in results_dir.rglob(f'*.json'):
+    print(f"Found result file: {result_path}")
     with open(result_path) as f:
         result = json.load(f)
     results.append(result)
