@@ -93,10 +93,14 @@ jobs:
           for result_file in ${RESULT_FILENAME}_*.json; do
             if [ -f "$result_file" ]; then
               echo "Processing $result_file"
-              # Extract GPU count from filename for tp_size calculation
-              gpus=$(echo "$result_file" | sed "s/.*_gpus\([0-9]*\)\.json/\1/")
+              # Extract GPU count, prefill_gpus and decode_gpus from filename for tp_size calculation
+              gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
+              prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
+              decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
+              
               if [ -n "$gpus" ]; then
-                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false python3 utils/process_result.py
+                echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
+                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
             fi
           done
