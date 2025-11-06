@@ -49,7 +49,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     rm -rf "$DYNAMO_PATH"
     git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
     cd "$DYNAMO_PATH"
-    git checkout tanmayv-sa
+    git checkout release/0.5.1-rc0.20251105
     git submodule update --init --recursive
 
     # Navigate to performance sweeps directory
