@@ -1,0 +1,41 @@
+name: Test Utils Process Result
+
+on:
+  pull_request:
+    paths:
+      - 'utils/process_result.py'
+      - 'utils/test_process_result.py'
+      - '.github/workflows/test-utils-process-result.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'utils/process_result.py'
+      - 'utils/test_process_result.py'
+      - '.github/workflows/test-utils-process-result.yml'
+
+jobs:
+  test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Run pytest
+        run: |
+          cd utils
+          pytest test_process_result.py -v
