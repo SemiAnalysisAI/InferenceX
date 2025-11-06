@@ -154,7 +154,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v5
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
