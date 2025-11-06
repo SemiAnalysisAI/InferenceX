@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       exp-name:
-        required: true
+        required: false
         type: string
+        default: ''
 
 jobs:
   collect-results:
@@ -22,28 +23,28 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           path: results/
-          pattern: ${{ inputs.exp-name }}_*
+          pattern: ${{ inputs.exp-name != '' && format('{0}_*', inputs.exp-name) || '*' }}
 
       - name: Print summary
-        run: python3 utils/summarize.py results/ ${{ inputs.exp-name }} >> $GITHUB_STEP_SUMMARY
+        run: python3 utils/summarize.py results/ ${{ inputs.exp-name || 'all' }} >> $GITHUB_STEP_SUMMARY
 
       - name: Aggregate results
-        run: python3 utils/collect_results.py results/ ${{ inputs.exp-name }}
+        run: python3 utils/collect_results.py results/ ${{ inputs.exp-name || 'all' }}
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@v4
         with:
-          name: results_${{ inputs.exp-name }}
-          path: agg_${{ inputs.exp-name }}.json
+          name: results_${{ inputs.exp-name || 'all' }}
+          path: agg_${{ inputs.exp-name || 'all' }}.json
 
       - name: Plot performance
         run: |
           pip install -q matplotlib
-          python3 utils/plot_perf.py results/ ${{ inputs.exp-name }}
+          python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
       - name: Upload performance graphs
         uses: actions/upload-artifact@v4
         with:
-          name: graphs_${{ inputs.exp-name }}
+          name: graphs_${{ inputs.exp-name || 'all' }}
           path: |
-            tput_vs_intvty_*_${{ inputs.exp-name }}.png
-            tput_vs_e2el_*_${{ inputs.exp-name }}.png
+            tput_vs_intvty_*_${{ inputs.exp-name || 'all' }}.png
+            tput_vs_e2el_*_${{ inputs.exp-name || 'all' }}.png

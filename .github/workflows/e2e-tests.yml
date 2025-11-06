@@ -53,8 +53,6 @@ jobs:
         if: ${{ always() }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
-        with:
-            exp-name: ${{ matrix.config.exp-name }}
 
     calc-success-rate:
         needs: test-sweep
