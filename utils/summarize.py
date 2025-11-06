@@ -9,18 +9,20 @@ for result_path in results_dir.rglob(f'*.json'):
     with open(result_path) as f:
         result = json.load(f)
     results.append(result)
-results.sort(key=lambda r: (r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r['tp'], r['ep'], r['conc']))
+results.sort(key=lambda r: (r.get('model', 'unknown'), r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r['tp'], r['ep'], r['conc']))
 
 summary_header = f'''\
-| Hardware | Framework | Precision | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
-| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
+| Model | Hardware | Framework | Precision | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
 '''
 print(summary_header)
 
 for result in results:
     framework = result.get('framework', 'vllm')
     precision = result.get('precision', 'fp8')
+    model = result.get('model', 'unknown')
     print(
+        f"| {model} "
         f"| {result['hw'].upper()} "
         f"| {framework.upper()} "
         f"| {precision.upper()} "
