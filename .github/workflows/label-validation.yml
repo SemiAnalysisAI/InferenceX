@@ -16,7 +16,7 @@ jobs:
       search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - id: get-jobs
         shell: python
@@ -120,13 +120,13 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
 
       - name: Download results artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: ${{ env.RESULTS_DIR }}
           pattern: results_*
@@ -137,7 +137,7 @@ jobs:
       - name: Calculate success rate
         run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: "run-stats"
           path: ${{ env.STATS_FILENAME }}.json
