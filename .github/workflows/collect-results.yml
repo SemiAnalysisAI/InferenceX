@@ -41,6 +41,10 @@ jobs:
         run: |
           pip install -q matplotlib
           python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
+
+      - name: Display graphs in summary
+        run: python3 utils/display_graphs.py ${{ inputs.exp-name || 'all' }} >> $GITHUB_STEP_SUMMARY
+
       - name: Upload performance graphs
         uses: actions/upload-artifact@v5
         with:
