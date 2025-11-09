@@ -9,17 +9,17 @@ dsr1-fp4-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
 
 dsr1-fp4-b200-trt:
