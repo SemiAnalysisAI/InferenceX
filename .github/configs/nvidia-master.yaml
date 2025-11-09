@@ -1,5 +1,5 @@
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
+  image: lmsysorg/sglang:v0.5.5-cu129-amd64
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -73,7 +73,7 @@ dsr1-fp4-b200-trt:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
 
 dsr1-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.3rc1-cu129-b200
+  image: lmsysorg/sglang:v0.5.5-cu129-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -120,7 +120,7 @@ dsr1-fp8-b200-trt:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.2rc2-cu126
+  image: lmsysorg/sglang:v0.5.5-cu129-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
