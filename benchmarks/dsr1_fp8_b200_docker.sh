@@ -34,4 +34,4 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --cuda-graph-max-bs 128 --max-running-requests 128 \
 --mem-fraction-static 0.82 --kv-cache-dtype fp8_e4m3 --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
---attention-backend trtllm_mla --stream-interval 30 --enable-flashinfer-trtllm-moe --quantization fp8
+--attention-backend trtllm_mla --stream-interval 30 --moe-runner-backend flashinfer_trtllm --quantization fp8
