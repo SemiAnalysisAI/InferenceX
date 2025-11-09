@@ -22,10 +22,9 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install pydantic pyyaml
+        run: pip install pydantic
 
       - id: get-jobs
         shell: python
@@ -137,7 +136,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-          cache: 'pip'
 
       - name: Install dependencies
         run: pip install PyGithub
