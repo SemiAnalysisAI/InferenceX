@@ -7,7 +7,7 @@ concurrency:
 
 on:
   pull_request:
-    types: [labeled, unlabeled, synchronize]
+    types: [labeled, synchronize]
 
 jobs:
   get-jobs:
