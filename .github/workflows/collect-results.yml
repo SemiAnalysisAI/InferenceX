@@ -19,6 +19,15 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install matplotlib
+
       - name: Download JSON artifacts
         uses: actions/download-artifact@v6
         with:
@@ -38,9 +47,7 @@ jobs:
           path: agg_${{ inputs.exp-name || 'all' }}.json
 
       - name: Plot performance
-        run: |
-          pip install -q matplotlib
-          python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
+        run: python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
       - name: Upload performance graphs
         uses: actions/upload-artifact@v5
         with:

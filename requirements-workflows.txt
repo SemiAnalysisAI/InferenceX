@@ -1,0 +1,7 @@
+# Requirements for GitHub Actions workflows
+# Used by various workflow files to generate configs and process results
+pydantic>=2.0.0
+pyyaml>=6.0.0
+PyGithub>=2.0.0
+matplotlib>=3.0.0
+pytest>=7.0.0
