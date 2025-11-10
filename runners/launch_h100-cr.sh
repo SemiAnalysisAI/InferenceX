@@ -50,18 +50,22 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     "$LM_EVAL_IMAGE" \
     -lc 'python3 -m pip install -q --upgrade pip || true; \
          python3 -m pip install -q --no-cache-dir "lm-eval[api]"; \
-         # 1) Sanity: /health is GET-able (avoid 405 on POST-only endpoints)
+         # Health check (GET); avoids 405s on POST-only routes
          curl -fsS "$OPENAI_SERVER_BASE/health" >/dev/null || { echo "Health check failed"; exit 1; }; \
-         # 2) Get served model id if not provided
+         # Resolve served model id if not provided
          if [ -z "$OPENAI_MODEL_NAME_COMPUTED" ]; then \
            OPENAI_MODEL_NAME_COMPUTED=$(curl -fsS "$OPENAI_SERVER_BASE/v1/models" \
-             | python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get(\"data\") or [{}])[0].get(\"id\",\"\"))"); \
-         fi; \
+             | python3 - <<PY
+import sys, json
+d=json.load(sys.stdin)
+print((d.get("data") or [{}])[0].get("id",""))
+PY
+); fi; \
          echo "Using model: $OPENAI_MODEL_NAME_COMPUTED"; \
-         # 3) Optional: quick POST sanity to chat endpoint
+         # One POST sanity to ensure chat endpoint + model both work
          curl -fsS -X POST "$OPENAI_CHAT_BASE" -H "Content-Type: application/json" \
-           -d "{\"model\":\"$OPENAI_MODEL_NAME_COMPUTED\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}" >/dev/null || { echo "Chat POST failed"; exit 1; }; \
-         # 4) Run lm-eval
+           -d "{\"model\":\"$OPENAI_MODEL_NAME_COMPUTED\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1,\"tool_choice\":\"none\",\"response_format\":{\"type\":\"text\"}}" >/dev/null || { echo "Chat POST failed"; exit 1; }; \
+         # Run lm-eval with strong API-side guards
          python3 -m lm_eval --model local-chat-completions \
            --tasks ${EVAL_TASK:-gsm8k} \
            --apply_chat_template \
@@ -69,7 +73,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
            --limit ${LIMIT:-200} \
            --batch_size 1 \
            --output_path /workspace/${EVAL_RESULT_DIR:-eval_out} \
-           --model_args "model=$OPENAI_MODEL_NAME_COMPUTED,base_url=$OPENAI_CHAT_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>"'
+           --model_args "model=$OPENAI_MODEL_NAME_COMPUTED,base_url=$OPENAI_CHAT_BASE,api_key=$OPENAI_API_KEY,temperature=0.0,eos_string=</s>,max_retries=12,timeout=120,num_concurrent=1,stop=Question:,stop=</s>,stop=<|im_end|>,extra_body={\"tool_choice\":\"none\",\"response_format\":{\"type\":\"text\"}}"' 
 else
     # Benchmark mode: original throughput client
     git clone https://github.com/kimbochen/bench_serving.git
