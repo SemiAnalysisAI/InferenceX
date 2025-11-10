@@ -137,7 +137,7 @@ jobs:
       - name: Calculate success rate
         run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: "run-stats"
           path: ${{ env.STATS_FILENAME }}.json
