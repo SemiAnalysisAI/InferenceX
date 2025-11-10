@@ -105,9 +105,25 @@ jobs:
             done
           fi
 
+      - name: Workspace pre-clean (root-owned artifacts)
+        if: always()
+        run: |
+          # Some previous runs (via Docker) may have left root-owned files
+          # that cause actions/checkout to fail when cleaning the repo dir.
+          # Use a root container to delete known output dirs before checkout.
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Pre-clean] Removing $EVAL_RESULT_DIR under $GITHUB_WORKSPACE via root container"
+            docker run --rm -v "$GITHUB_WORKSPACE:/w" alpine:3.19 \
+              sh -lc "chmod -R u+w /w/${EVAL_RESULT_DIR} 2>/dev/null || true; rm -rf /w/${EVAL_RESULT_DIR} || true"
+          else
+            echo "[Pre-clean] Docker not available; skipping"
+          fi
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          # Avoid aggressive workspace deletion if stale, rely on git reset/clean later
+          clean: false
 
       - name: Launch eval via runner script
         env:
