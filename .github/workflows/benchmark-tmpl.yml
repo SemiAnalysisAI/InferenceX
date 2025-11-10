@@ -63,6 +63,9 @@ env:
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
@@ -119,7 +122,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -143,7 +146,7 @@ jobs:
         run: |
           python3 utils/process_result.py
       - name: Upload result
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: ${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
