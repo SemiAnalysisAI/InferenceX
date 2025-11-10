@@ -1,0 +1,59 @@
+name: Eval - GSM8K on H100 (PoC)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Serving image"
+        required: false
+        type: string
+        default: "vllm/vllm-openai:v0.11.0"
+      model:
+        description: "Model"
+        required: false
+        type: string
+        default: "openai/gpt-oss-120b"
+      tp:
+        description: "Tensor Parallel Size"
+        required: false
+        type: string
+        default: "4"
+      port:
+        description: "Server port"
+        required: false
+        type: string
+        default: "8888"
+      num_fewshot:
+        description: "Fewshot k for GSM8K"
+        required: false
+        type: string
+        default: "5"
+      limit:
+        description: "Sample limit for GSM8K"
+        required: false
+        type: string
+        default: "200"
+  push:
+    paths:
+      - '.github/workflows/eval-h100-gms8k.yml'
+      - '.github/workflows/eval-tmpl.yml'
+      - 'runners/launch_h100-cr.sh'
+
+jobs:
+  eval:
+    uses: ./.github/workflows/eval-tmpl.yml
+    secrets: inherit
+    with:
+      runner: h100-cr
+      image: ${{ inputs.image }}
+      model: ${{ inputs.model }}
+      framework: vllm
+      precision: fp4
+      exp-name: gsm8k_poc
+      tp: ${{ inputs.tp }}
+      ep: '1'
+      dp-attn: false
+      port: ${{ inputs.port }}
+      eval-task: gsm8k
+      num-fewshot: ${{ inputs.num_fewshot }}
+      limit: ${{ inputs.limit }}

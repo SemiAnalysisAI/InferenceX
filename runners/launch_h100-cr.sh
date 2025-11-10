@@ -5,6 +5,7 @@ PORT=8888
 
 server_name="bmk-server"
 client_name="bmk-client"
+RUN_MODE="${RUN_MODE:-benchmark}"
 
 set -x
 docker run --rm -d --network=host --name=$server_name \
@@ -30,25 +31,48 @@ if ! docker ps --format "{{.Names}}" | grep -q "$server_name"; then
     exit 1
 fi
 
-git clone https://github.com/kimbochen/bench_serving.git
+if [[ "$RUN_MODE" == "eval" ]]; then
+    # Eval mode: run lm-eval against the OpenAI-compatible vLLM endpoint
+    mkdir -p "${EVAL_RESULT_DIR:-eval_out}"
+    # Allow overriding the OpenAI model name if the served name differs from HF repo id.
+    # Defaults to the trailing component (e.g., 'openai/gpt-oss-120b' -> 'gpt-oss-120b').
+    OPENAI_MODEL_NAME_COMPUTED="${OPENAI_MODEL_NAME:-${MODEL##*/}}"
+    set -x
+    docker run --rm --network=host --name=$client_name \
+    -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
+    --entrypoint=/bin/bash \
+    $IMAGE \
+    -lc "python -m pip install -q --upgrade pip && \
+         pip install -q lm-eval && \
+         lm_eval --model openai-chat-completions \
+                --tasks ${EVAL_TASK:-gsm8k} \
+                --num_fewshot ${NUM_FEWSHOT:-5} \
+                --limit ${LIMIT:-200} \
+                --batch_size auto \
+                --output_path /workspace/${EVAL_RESULT_DIR:-eval_out} \
+                --model_args model=${OPENAI_MODEL_NAME_COMPUTED},api_base=http://localhost:${PORT:-8888},api_key=EMPTY,temperature=0.0"
+else
+    # Benchmark mode: original throughput client
+    git clone https://github.com/kimbochen/bench_serving.git
 
-set -x
-docker run --rm --network=host --name=$client_name \
--v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
--e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
---entrypoint=/bin/bash \
-$IMAGE \
--lc "pip install -q datasets pandas && \
-python3 bench_serving/benchmark_serving.py \
---model=$MODEL \
---backend=vllm \
---base-url=\"http://localhost:$PORT\" \
---dataset-name=random \
---random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
---num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
---request-rate=inf --ignore-eos \
---save-result --percentile-metrics='ttft,tpot,itl,e2el' \
---result-dir=/workspace/ \
---result-filename=$RESULT_FILENAME.json"
+    set -x
+    docker run --rm --network=host --name=$client_name \
+    -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
+    -e HF_TOKEN -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
+    --entrypoint=/bin/bash \
+    $IMAGE \
+    -lc "pip install -q datasets pandas && \
+    python3 bench_serving/benchmark_serving.py \
+    --model=$MODEL \
+    --backend=vllm \
+    --base-url=\"http://localhost:$PORT\" \
+    --dataset-name=random \
+    --random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
+    --num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
+    --request-rate=inf --ignore-eos \
+    --save-result --percentile-metrics='ttft,tpot,itl,e2el' \
+    --result-dir=/workspace/ \
+    --result-filename=$RESULT_FILENAME.json"
+fi
 
 docker stop $server_name

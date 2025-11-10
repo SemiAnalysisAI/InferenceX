@@ -1,0 +1,133 @@
+name: Template - Eval
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      model:
+        required: true
+        type: string
+      framework:
+        required: true
+        type: string
+      precision:
+        required: true
+        type: string
+      exp-name:
+        required: true
+        type: string
+      tp:
+        required: true
+        type: string
+      ep:
+        required: false
+        type: string
+        default: '1'
+      dp-attn:
+        required: false
+        type: boolean
+        default: false
+      port:
+        required: false
+        type: string
+        default: '8888'
+      eval-task:
+        required: true
+        type: string
+      num-fewshot:
+        required: false
+        type: string
+        default: '5'
+      limit:
+        required: false
+        type: string
+        default: '200'
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
+  EXP_NAME: ${{ inputs.exp-name }}
+  MODEL: ${{ inputs.model }}
+  IMAGE: ${{ inputs.image }}
+  FRAMEWORK: ${{ inputs.framework }}
+  PRECISION: ${{ inputs.precision }}
+  TP: ${{ inputs.tp }}
+  EP_SIZE: ${{ inputs.ep }}
+  DP_ATTENTION: ${{ inputs.dp-attn }}
+  PORT: ${{ inputs.port }}
+  EVAL_TASK: ${{ inputs['eval-task'] }}
+  NUM_FEWSHOT: ${{ inputs['num-fewshot'] }}
+  LIMIT: ${{ inputs.limit }}
+  EVAL_RESULT_DIR: eval_out
+  # Server-side concurrency default (used by some server scripts)
+  CONC: '4'
+
+jobs:
+  eval:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 180
+    name: "Eval ${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} tp=${{ inputs.tp }} task=${{ inputs['eval-task'] }} limit=${{ inputs.limit }}"
+    steps:
+      - name: Resource cleanup
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            host=$(hostname)
+
+            if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
+              echo "[INFO] Running container-by-container cleanup on $host"
+              for cid in $(docker ps -aq); do
+                echo "[INFO] Cleaning container $cid"
+                docker stop -t 90 "$cid" || true
+                docker wait "$cid" >/dev/null 2>&1 || true
+                docker rm -f "$cid" >/dev/null 2>&1 || true
+              done
+              sleep 2
+              if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
+                echo "[WARN] After stop, GPU still busy:"
+                nvidia-smi || true
+              fi
+            else
+              echo "[Docker] Cleaning up resources ..."
+              docker ps -aq | xargs -r docker rm -f || true
+              docker network prune -f || true
+              while [ -n "$(docker ps -aq)" ]; do
+                docker ps -a || true
+                sleep 5
+              done
+            fi
+          fi
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up resources ..."
+            scancel -u $USER || true
+            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+              squeue -u $USER || true
+              sleep 5
+            done
+          fi
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Launch eval via runner script
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          RUN_MODE: eval
+          # Optional: structured filename if runner chooses to use it later
+          EVAL_RESULT_BASENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_${{ runner.name }}
+        run: |
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+
+      - name: Upload eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: eval_${{ env.EXP_NAME }}_${{ runner.name }}
+          path: |
+            ${{ env.EVAL_RESULT_DIR }}/
+            ${{ env.EVAL_RESULT_DIR }}/*
