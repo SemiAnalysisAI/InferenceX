@@ -50,6 +50,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     "$LM_EVAL_IMAGE" \
     -lc 'python3 -m pip install -q --upgrade pip || true; \
          python3 -m pip install -q --no-cache-dir "lm-eval[api]"; \
+         python3 -m pip install -q --no-cache-dir --no-deps "git+https://github.com/EleutherAI/lm-evaluation-harness.git@97d8a38"; \
          # 1) Sanity: /health is GET-able (avoid 405 on POST-only endpoints)
          curl -fsS "$OPENAI_SERVER_BASE/health" >/dev/null || { echo "Health check failed"; exit 1; }; \
          # 2) Get served model id if not provided
