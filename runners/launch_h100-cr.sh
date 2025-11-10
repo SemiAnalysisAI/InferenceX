@@ -49,6 +49,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
          python3 -m pip install -q --no-cache-dir 'lm-eval[api]' && \
          python3 -m lm_eval --model openai-chat-completions \
                 --tasks ${EVAL_TASK:-gsm8k} \
+                --apply_chat_template \
                 --num_fewshot ${NUM_FEWSHOT:-5} \
                 --limit ${LIMIT:-200} \
                 --batch_size auto \
