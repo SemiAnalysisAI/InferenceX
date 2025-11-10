@@ -48,18 +48,11 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-            - name: Set up Python
-              uses: actions/setup-python@v6
-              with:
-                  python-version: '3.12'
-
-            - name: Install dependencies
-              run: pip install pydantic pyyaml
-
               # This looks complicated, but it is just calling generate_sweep_configs.py conditioned on 
               # discrete inputs (i.e., run_1k1k, run_h100, etc.) to split the test sweep into discrete jobs 
             - id: generate-configs
               run: |
+                  pip install pydantic
 
                   set -x
                   # Build runner type filters based on inputs
@@ -434,19 +427,14 @@ jobs:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
 
-            - name: Set up Python
-              uses: actions/setup-python@v6
-              with:
-                  python-version: '3.12'
-
-            - name: Install dependencies
-              run: pip install PyGithub
-
             - name: Download results artifacts
               uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
               with:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
+
+            - name: Install python dependencies
+              run: pip install PyGithub
 
             - name: Calculate success rate
               run: python3 utils/calc_success_rate.py $STATS_FILENAME
