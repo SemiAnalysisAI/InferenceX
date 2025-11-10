@@ -20,8 +20,16 @@ else
     # Update the IMAGE variable to the squash file
     export IMAGE=$SQUASH_FILE
 
-    export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    if [[ $MODEL == *"gpt-oss"* ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
+        export SERVED_MODEL_NAME="gpt-oss-120b"
+    elif [[ $MODEL == *"deepseek-r1-fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
+        export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    else
+        echo "Unsupported model: $MODEL. Supported models are: gpt-oss, deepseek-r1-fp4"
+        exit 1
+    fi
 fi
 
 
@@ -49,7 +57,11 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     rm -rf "$DYNAMO_PATH"
     git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
     cd "$DYNAMO_PATH"
-    git checkout release/0.5.1-rc0.20251105
+    if [[ $MODEL == *"gpt-oss"* ]]; then
+        git checkout jthomson04/gpt-oss-disagg-slurm
+    else
+        git checkout release/0.5.1-rc0.20251105
+    fi  
     git submodule update --init --recursive
 
     # Navigate to performance sweeps directory
@@ -94,60 +106,82 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
         #   gen_eplb_num_slots: Expert load balancing slots (0, 256, 288)
         #   gen_concurrency_list: Concurrency values (space-separated, quoted)
 
-        if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
-            if [ "$mtp_mode" = "on" ]; then
-                echo "Running 1k/1k MTP=ON configurations"
-
-                ./submit_disagg.sh "mtp=on" "tep" 1 4 8 32 128 "0.9" 3 0 "1 2 4 8 16 36"
-
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 16 64 256 "0.7" 3 0 "512 1075"
-
-                ./submit_disagg.sh "mtp=on" "dep" 2 1 16 128 256 "0.7" 1 0 "2150"
-
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 32 16 64 "0.6" 3 0 "512"
-
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 8 256 512 "0.8" 1 0 "2252"
+        # MODEL-SPECIFIC HOOK: Different benchmark configurations for different models
+        if [[ $MODEL == *"gpt-oss"* ]]; then
+            # GPT-OSS specific benchmark configurations
+            if [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
+                
+                    echo "Running 8k/1k MTP=OFF configurations for GPT-OSS"
+                    
+                    #./submit_disagg.sh mtp=off tp 1 1 1 512 20000 "0.9" 0 0 "128 256 512"
+                    #./submit_disagg.sh mtp=off tp 1 1 2 1024 20000 "0.9" 0 0 "64 128 256"
+                    ./submit_disagg.sh mtp=off tep 1 1 2 1024 20000 "0.9" 0 0 "64 256"
+                    #./submit_disagg.sh mtp=off tp 1 1 4 2048 20000 "0.9" 0 0 "8 16 32 64 128"
+                    #./submit_disagg.sh mtp=off tp 1 1 8 2048 20000 "0.9" 0 0 "1 2 4 8 16"
             else
-                echo "Running 1k/1k MTP=OFF configurations"
-
-                ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 32 32 32 "0.7" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
+                echo "Unsupported ISL/OSL combination for GPT-OSS: $isl/$osl"
+                exit 1
             fi
-        elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
-            if [ "$mtp_mode" = "on" ]; then
-                echo "Running 8k/1k MTP=ON configurations"
+        elif [[ $MODEL == *"deepseek-r1-fp4" ]]; then
+            # DeepSeek-R1 specific benchmark configurations (existing logic)
+            if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
+                if [ "$mtp_mode" = "on" ]; then
+                    echo "Running 1k/1k MTP=ON configurations for DeepSeek-R1"
 
-                ./submit_disagg.sh "mtp=on" "tep" 1 3 8 16 64 "0.9" 3 0 "1 2 4 8 18"
+                    ./submit_disagg.sh "mtp=on" "tep" 1 4 8 32 128 "0.9" 3 0 "1 2 4 8 16 36"
 
-                ./submit_disagg.sh "mtp=on" "dep" 5 1 32 8 32 "0.7" 3 0 "128 269"
+                    ./submit_disagg.sh "mtp=on" "dep" 1 1 16 64 256 "0.7" 3 0 "512 1075"
 
-                ./submit_disagg.sh "mtp=on" "dep" 8 1 32 16 64 "0.7" 3 0 "538"
+                    ./submit_disagg.sh "mtp=on" "dep" 2 1 16 128 256 "0.7" 1 0 "2150"
 
-                ./submit_disagg.sh "mtp=on" "dep" 8 1 16 64 256 "0.75" 2 0 "1075"
+                    ./submit_disagg.sh "mtp=on" "dep" 1 1 32 16 64 "0.6" 3 0 "512"
 
-                ./submit_disagg.sh "mtp=on" "dep" 6 1 8 256 512 "0.8" 1 0 "2150"
+                    ./submit_disagg.sh "mtp=on" "dep" 1 1 8 256 512 "0.8" 1 0 "2252"
+                else
+                    echo "Running 1k/1k MTP=OFF configurations for DeepSeek-R1"
+
+                    ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 1 1 32 32 32 "0.7" 0 0 "1075"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
+                fi
+            elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
+                if [ "$mtp_mode" = "on" ]; then
+                    echo "Running 8k/1k MTP=ON configurations for DeepSeek-R1"
+
+                    ./submit_disagg.sh "mtp=on" "tep" 1 3 8 16 64 "0.9" 3 0 "1 2 4 8 18"
+
+                    ./submit_disagg.sh "mtp=on" "dep" 5 1 32 8 32 "0.7" 3 0 "128 269"
+
+                    ./submit_disagg.sh "mtp=on" "dep" 8 1 32 16 64 "0.7" 3 0 "538"
+
+                    ./submit_disagg.sh "mtp=on" "dep" 8 1 16 64 256 "0.75" 2 0 "1075"
+
+                    ./submit_disagg.sh "mtp=on" "dep" 6 1 8 256 512 "0.8" 1 0 "2150"
+                else
+                    echo "Running 8k/1k MTP=OFF configurations for DeepSeek-R1"
+
+                    ./submit_disagg.sh "mtp=off" "tep" 1 3 8 32 32 "0.9" 0 0 "1 2 4 8 16 34"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 4 1 32 16 16 "0.7" 0 0 "256 538"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 6 1 16 64 64 "0.75" 0 0 "1075"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 8 1 16 128 128 "0.75" 0 0 "2150"
+
+                    ./submit_disagg.sh "mtp=off" "dep" 5 1 8 256 256 "0.8" 0 0 "2150"
+                fi
             else
-                echo "Running 8k/1k MTP=OFF configurations"
-
-                ./submit_disagg.sh "mtp=off" "tep" 1 3 8 32 32 "0.9" 0 0 "1 2 4 8 16 34"
-
-                ./submit_disagg.sh "mtp=off" "dep" 4 1 32 16 16 "0.7" 0 0 "256 538"
-
-                ./submit_disagg.sh "mtp=off" "dep" 6 1 16 64 64 "0.75" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 8 1 16 128 128 "0.75" 0 0 "2150"
-
-                ./submit_disagg.sh "mtp=off" "dep" 5 1 8 256 256 "0.8" 0 0 "2150"
+                echo "Unsupported ISL/OSL combination for DeepSeek-R1: $isl/$osl"
+                exit 1
             fi
         else
-            echo "Unsupported ISL/OSL combination: $isl/$osl"
+            echo "Unsupported model: $MODEL. Supported models are: gpt-oss, deepseek-r1-fp4"
             exit 1
         fi
     }

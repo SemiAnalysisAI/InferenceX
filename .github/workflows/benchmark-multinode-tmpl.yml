@@ -48,6 +48,7 @@ env:
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   MTP_MODE: ${{ inputs.mtp-mode }}
+  MODEL: ${{ inputs.model }}
 
 permissions:
   contents: read
@@ -76,7 +77,7 @@ jobs:
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_mtp-${{ env.MTP_MODE }}_${{ runner.name }}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_${{ env.MODEL }}_mtp-${{ env.MTP_MODE }}_${{ runner.name }}
         run: |
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           # Check if at least one result file was created

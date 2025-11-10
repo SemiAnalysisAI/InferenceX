@@ -10,6 +10,7 @@ on:
                 options:
                     - "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1"
                     - "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3"
+                    - "docker.io/jwillthomson/gpt-oss-disagg-submission"
 
             model:
                 description: "Model"
@@ -18,6 +19,7 @@ on:
                 options:
                     - "deepseek-ai/DeepSeek-R1-0528"
                     - "deepseek-r1-fp4"
+                    - "openai/gpt-oss-120b"
 
             precision:
                 description: "Precision"
@@ -84,7 +86,7 @@ jobs:
             model: ${{ inputs.model }}
             framework: ${{ inputs.framework }}
             precision: ${{ inputs.precision }}
-            exp-name: dsr1_1k1k
+            exp-name: ${{ inputs.model }}_${{ inputs.isl }}/${{ inputs.osl }}
             isl: ${{ inputs.isl }}
             osl: ${{ inputs.osl }}
             max-model-len: ${{ needs.pre-run.outputs.max-model-len }}
