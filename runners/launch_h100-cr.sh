@@ -46,7 +46,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     $LM_EVAL_IMAGE \
     -lc "export PIP_NO_CACHE_DIR=1; \
          (python3 -m pip install -q --upgrade pip || true); \
-         python3 -m pip install -q --no-cache-dir lm-eval && \
+         python3 -m pip install -q --no-cache-dir 'lm-eval[api]' && \
          python3 -m lm_eval --model openai-chat-completions \
                 --tasks ${EVAL_TASK:-gsm8k} \
                 --num_fewshot ${NUM_FEWSHOT:-5} \
