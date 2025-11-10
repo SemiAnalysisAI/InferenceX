@@ -18,14 +18,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install pydantic pyyaml
-
       - id: get-jobs
         shell: python
         run: |
@@ -57,6 +49,7 @@ jobs:
           # Generate configs for standard labels
           all_configs = []
           if matching:
+              subprocess.run(['pip', 'install', 'pydantic'], check=True)
 
               for label in matching:
                   result = subprocess.run([
@@ -132,19 +125,14 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install PyGithub
-
       - name: Download results artifacts
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: ${{ env.RESULTS_DIR }}
           pattern: results_*
+
+      - name: Install python dependencies
+        run: pip install PyGithub
 
       - name: Calculate success rate
         run: python3 utils/calc_success_rate.py $STATS_FILENAME
