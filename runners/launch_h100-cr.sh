@@ -60,7 +60,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     "$LM_EVAL_IMAGE" \
     -lc 'python3 -m pip install -q --upgrade pip || true; \
          python3 -m pip install -q --no-cache-dir "lm-eval[api]"; \
-         python3 -m pip install -q --no-cache-dir --no-deps "git+https://github.com/EleutherAI/lm-evaluation-harness.git@97d8a38"; \
+         python3 -m pip install -q --no-cache-dir --no-deps "git+https://github.com/EleutherAI/lm-evaluation-harness.git@main"; \
          # 1) Sanity: /health is GET-able (avoid 405 on POST-only endpoints)
          curl -fsS "$OPENAI_SERVER_BASE/health" >/dev/null || { echo "Health check failed"; exit 1; }; \
          # 2) Get served model id if not provided
@@ -80,7 +80,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
            --limit ${LIMIT:-200} \
            --batch_size 1 \
            --output_path /workspace/${EVAL_RESULT_DIR:-eval_out} \
-           --model_args "model=$OPENAI_MODEL_NAME_COMPUTED,base_url=$OPENAI_CHAT_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3"
+           --model_args "model=$OPENAI_MODEL_NAME_COMPUTED,base_url=$OPENAI_CHAT_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3" \
            --gen_kwargs "max_tokens=16384,temperature=0,top_p=1"'
 else
     # Benchmark mode: original throughput client
