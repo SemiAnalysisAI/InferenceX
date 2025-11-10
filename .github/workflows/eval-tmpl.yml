@@ -92,13 +92,8 @@ jobs:
                 nvidia-smi || true
               fi
             else
-              echo "[Docker] Cleaning up resources ..."
-              docker ps -aq | xargs -r docker rm -f || true
-              docker network prune -f || true
-              while [ -n "$(docker ps -aq)" ]; do
-                docker ps -a || true
-                sleep 5
-              done
+              echo "[Docker] looking at docker resources ..."
+              docker ps -aq 
             fi
           fi
           if command -v squeue >/dev/null 2>&1; then

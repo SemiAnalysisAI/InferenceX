@@ -37,16 +37,17 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     # Allow overriding the OpenAI model name if the served name differs from HF repo id.
     # Defaults to the trailing component (e.g., 'openai/gpt-oss-120b' -> 'gpt-oss-120b').
     OPENAI_MODEL_NAME_COMPUTED="${OPENAI_MODEL_NAME:-${MODEL##*/}}"
-    # Allow overriding the client image used for lm-eval. Default to a minimal Python image.
-    LM_EVAL_IMAGE="${LM_EVAL_IMAGE:-python:3.10-slim}"
+    # Allow overriding the client image used for lm-eval. Default to reuse server image to avoid pulling extras.
+    LM_EVAL_IMAGE="${LM_EVAL_IMAGE:-$IMAGE}"
     set -x
     docker run --rm --network=host --name=$client_name \
     -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
     --entrypoint=/bin/bash \
     $LM_EVAL_IMAGE \
-    -lc "python3 -m pip install -q --upgrade pip && \
-         python3 -m pip install -q lm-eval && \
-         lm_eval --model openai-chat-completions \
+    -lc "export PIP_NO_CACHE_DIR=1; \
+         (python3 -m pip install -q --upgrade pip || true); \
+         python3 -m pip install -q --no-cache-dir lm-eval && \
+         python3 -m lm_eval --model openai-chat-completions \
                 --tasks ${EVAL_TASK:-gsm8k} \
                 --num_fewshot ${NUM_FEWSHOT:-5} \
                 --limit ${LIMIT:-200} \
