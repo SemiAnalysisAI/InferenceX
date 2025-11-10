@@ -12,8 +12,8 @@ for result_path in results_dir.rglob(f'*.json'):
 results.sort(key=lambda r: (r.get('model', 'unknown'), r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r['tp'], r['ep'], r['conc']))
 
 summary_header = f'''\
-| Model | Hardware | Framework | Precision | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
-| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
+| Model | Hardware | Framework | Precision | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | Interactivity (tok/s/user) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
 '''
 print(summary_header)
 
@@ -32,6 +32,7 @@ for result in results:
         f"| {result['conc']} "
         f"| {(result['median_ttft'] * 1000):.4f} "
         f"| {(result['median_tpot'] * 1000):.4f} "
+        f"| {result['median_intvty']:.4f} "
         f"| {result['median_e2el']:.4f} "
         f"| {result['tput_per_gpu']:.4f} "
         f"| {result['output_tput_per_gpu']:.4f} "
