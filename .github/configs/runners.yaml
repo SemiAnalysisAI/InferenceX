@@ -34,6 +34,9 @@ mi300x:
 - 'mi300x-oci_0'
 mi325x:
 - 'mi325x-amd_0'
+- 'mi325x-amd_1'
+- 'mi325x-amd_2'
+- 'mi325x-amd_3'
 - 'mi325x-tw_0'
 - 'mi325x-tw_1'
 - 'mi325x-tw_2'
