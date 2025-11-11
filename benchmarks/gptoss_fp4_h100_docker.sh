@@ -68,27 +68,31 @@ if [[ "$READY" -ne 1 ]]; then
   exit 1
 fi
 echo "vLLM server up"
-
 RUN_MODE=${RUN_MODE:-benchmark}
 
 if [[ "$RUN_MODE" == "eval" ]]; then
-  # Run evaluation in-container using lm-evaluation-harness
   EVAL_RESULT_DIR=${EVAL_RESULT_DIR:-eval_out}
   OPENAI_SERVER_BASE="http://0.0.0.0:${PORT}"
   OPENAI_COMP_BASE="$OPENAI_SERVER_BASE/v1/completions"
   OPENAI_CHAT_BASE="$OPENAI_SERVER_BASE/v1/chat/completions"
   export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
 
+  # Ensure bench_serving is present (mirror benchmark behavior)
+  if [[ ! -d bench_serving ]]; then
+    git clone https://github.com/oseltamivir/bench_serving.git
+  fi
+
+  # Deps for lm-eval
   python3 -m pip install -q --upgrade pip || true
   python3 -m pip install -q --no-cache-dir "lm-eval[api]" || true
   # Temporary: workaround known harness issue
   python3 -m pip install -q --no-cache-dir --no-deps "git+https://github.com/EleutherAI/lm-evaluation-harness.git@main" || true
-  fi
 
   echo "Using model: $MODEL"
 
   # Clean up previous eval results if any
-  rm -rf /workspace/"${EVAL_RESULT_DIR}"/openai__gpt-oss-120b/*
+  rm -rf "/workspace/${EVAL_RESULT_DIR}"/* 2>/dev/null || true
+  mkdir -p "/workspace/${EVAL_RESULT_DIR}"
 
   set -x
   python3 -m lm_eval --model local-completions \
@@ -100,80 +104,21 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     --gen_kwargs "max_tokens=8192,temperature=0,top_p=1"
   set +x
 
-  # Append a Markdown table to the GitHub Actions job summary
+  # Append a Markdown table to the GitHub Actions job summary using helper in bench_serving
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    RES_DIR="${EVAL_RESULT_DIR:-eval_out}"
-    # Find the most recent JSON anywhere under RES_DIR (handles nested outputs)
-    RES_FILE="$(find "$RES_DIR" -type f -name '*.json' -print0 2>/dev/null | xargs -0 ls -1t 2>/dev/null | head -n1)"
-
-    {
-      echo "### ${EVAL_TASK:-gsm8k} Evaluation"
-      echo ""
-      if [ -z "$RES_FILE" ]; then
-        echo "> No result JSON found in \`$RES_DIR\`."
-      else
-        # Prefer Python (usually available on self-hosted); fall back to jq if desired
-        if command -v python3 >/dev/null 2>&1; then
-python3 - "$FRAMEWORK" "$PRECISION" "$TP" "$EP_SIZE" "$DP_ATTENTION" "${EVAL_TASK:-gsm8k}" "$RES_FILE" <<'PY'
-import sys, json, re, os
-framework, precision, tp, ep, dp, task, path = sys.argv[1:8]
-with open(path, 'r') as f:
-    data = json.load(f)
-
-pe = data.get("pretty_env_info","")
-gpu_lines = [l for l in pe.splitlines() if l.startswith("GPU ")]
-names = [re.sub(r"GPU \d+:\s*", "", l).strip() for l in gpu_lines]
-from collections import Counter
-c = Counter(names)
-gpu_summary = " + ".join([f"{n}\u00D7 {name}" for name, n in c.items()]) if c else "Unknown GPU"
-cpu_line = next((l.split(":",1)[1].strip() for l in pe.splitlines() if l.startswith("Model name:")), None)
-hardware = gpu_summary + (f" ({cpu_line})" if cpu_line else "")
-
-task_key = task
-# Fallback: if provided task missing, try first available key
-res_all = data.get("results", {}) or {}
-res = res_all.get(task_key) if isinstance(res_all, dict) else {}
-if not res and isinstance(res_all, dict) and res_all:
-    task_key = next(iter(res_all.keys()))
-    res = res_all.get(task_key, {})
-strict = res.get("exact_match,strict-match")
-flex   = res.get("exact_match,flexible-extract")
-strict_se = res.get("exact_match_stderr,strict-match")
-flex_se   = res.get("exact_match_stderr,flexible-extract")
-n_eff = data.get("n-samples",{}).get("gsm8k",{}).get("effective")
-
-def pct(x): return f"{x*100:.2f}%" if isinstance(x,(int,float)) else "N/A"
-def se(x):  return f" \u00B1{(x*100):.2f}%" if isinstance(x,(int,float)) else ""
-
-print("| Hardware | Framework | Precision | TP | EP | DP Attention | EM Strict | EM Flexible | N (eff) |")
-print("|---|---|---:|--:|--:|:--:|--:|--:|--:|")
-print(f"| {hardware} | {framework} | {precision} | {tp} | {ep} | {str(dp).lower()} | {pct(strict)}{se(strict_se)} | {pct(flex)}{se(flex_se)} | {n_eff or ''} |")
-
-model = data.get("model_name") or data.get("configs",{}).get(task_key,{}).get("metadata",{}).get("model")
-limit = data.get("config",{}).get("limit")
-fewshot = data.get("n-shot",{}).get(task_key)
-lim_str = str(int(limit)) if isinstance(limit,(int,float)) else str(limit)
-print(f"\n_Model_: `{model}` &nbsp;&nbsp; _k-shot_: **{fewshot}** &nbsp;&nbsp; _limit_: **{lim_str}**  \n_Source_: `{os.path.basename(path)}`")
-PY
-        else
-          # Minimal jq fallback (prints only metrics without hardware/CPU inference)
-          jq -r --arg fw "$FRAMEWORK" --arg prec "$PRECISION" --arg tp "$TP" --arg ep "$EP_SIZE" --arg dp "$DP_ATTENTION" '
-            def pct: (. * 100 | tostring) + "%";
-            . as $root
-            | "| Hardware | Framework | Precision | TP | EP | DP Attention | EM Strict | EM Flexible | N (eff) |",
-              "|---|---|---:|--:|--:|:--:|--:|--:|--:|",
-              ("| Unknown GPU | \($fw) | \($prec) | \($tp) | \($ep) | \($dp) | "
-               + (.results.gsm8k["exact_match,strict-match"]    | pct) + " | "
-               + (.results.gsm8k["exact_match,flexible-extract"]| pct) + " | "
-               + (.["n-samples"].gsm8k.effective|tostring) + " |")
-          ' "$RES_FILE"
-        fi
-      fi
-      echo ""
-    } >> "$GITHUB_STEP_SUMMARY" || true
+    python3 bench_serving/lm_eval_to_md.py \
+      --results-dir "/workspace/${EVAL_RESULT_DIR}" \
+      --task "${EVAL_TASK:-gsm8k}" \
+      --framework "${FRAMEWORK:-vLLM}" \
+      --precision "${PRECISION:-fp16}" \
+      --tp "${TP:-1}" \
+      --ep "${EP_SIZE:-1}" \
+      --dp-attention "${DP_ATTENTION:-false}" \
+      >> "$GITHUB_STEP_SUMMARY" || true
   fi
 
   echo "Evaluation completed. Results in /workspace/${EVAL_RESULT_DIR}"
+  exit 0
 
 else
 
