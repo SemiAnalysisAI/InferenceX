@@ -78,7 +78,9 @@ if [[ "$RUN_MODE" == "eval" ]]; then
   export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
 
   # Ensure bench_serving is present (mirror benchmark behavior)
+  git config --global --add safe.directory /workspace || true
   if [[ ! -d bench_serving ]]; then
+    rm -rf bench_serving 2>/dev/null || true
     git clone https://github.com/oseltamivir/bench_serving.git
   fi
 
@@ -100,8 +102,8 @@ if [[ "$RUN_MODE" == "eval" ]]; then
     --num_fewshot ${NUM_FEWSHOT:-5} \
     --batch_size 4 \
     --output_path "/workspace/${EVAL_RESULT_DIR}" \
-    --model_args "model=$MODEL,base_url=$OPENAI_COMP_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3,num_concurrent=4" \
-    --gen_kwargs "max_tokens=8192,temperature=0,top_p=1"
+    --model_args "model=$MODEL,base_url=$OPENAI_COMP_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3,num_concurrent=32" \
+    --gen_kwargs "max_tokens=4096,temperature=0,top_p=1"
   set +x
 
   # Append a Markdown table to the GitHub Actions job summary using helper in bench_serving
