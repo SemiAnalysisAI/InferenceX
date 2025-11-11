@@ -88,7 +88,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
   echo "Using model: $MODEL"
 
   # Clean up previous eval results if any
-  rm -f /workspace/"${EVAL_RESULT_DIR}"/*
+  rm -rf /workspace/"${EVAL_RESULT_DIR}"/openai__gpt-oss-120b/*
 
   set -x
   python3 -m lm_eval --model local-completions \
