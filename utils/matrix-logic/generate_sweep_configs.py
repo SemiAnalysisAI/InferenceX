@@ -471,6 +471,13 @@ def generate_runner_model_sweep_config(args, all_config_data):
         raise ValueError(
             f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
 
+    # Filter runner nodes if filter is specified
+    if hasattr(args, 'runner_node_filter') and args.runner_node_filter:
+        runner_nodes = [node for node in runner_nodes if args.runner_node_filter in node]
+        if not runner_nodes:
+            raise ValueError(
+                f"No runner nodes found matching filter '{args.runner_node_filter}' for runner type '{args.runner_type}'.")
+
     matrix_values = []
     for key, val in all_config_data.items():
         # Only consider configs with specified runner
@@ -830,6 +837,11 @@ def main():
         '--runner-config',
         required=True,
         help='Configuration file holding runner information'
+    )
+    test_config_parser.add_argument(
+        '--runner-node-filter',
+        required=False,
+        help='Filter runner nodes by substring match (e.g., "mi300x-amd" to only include nodes containing that string)'
     )
     test_config_parser.add_argument(
         '-h', '--help',
