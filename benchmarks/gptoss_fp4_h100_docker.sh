@@ -42,7 +42,7 @@ set -x
 python3 bench_serving/benchmark_serving.py \
 --model=$MODEL \
 --backend=vllm \
---base-url=\"http://localhost:$PORT\" \
+--base-url=http://localhost:$PORT \
 --dataset-name=random \
 --random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
 --num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
