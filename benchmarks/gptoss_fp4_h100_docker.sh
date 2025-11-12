@@ -29,18 +29,16 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \
---disable-log-requests &
+--disable-log-requests 2>&1 | tee $(mktemp /tmp/server-XXXXXX.log) &
 
-SERVER_PID=$!
+VLLM_PID=$!
 set +x
-tail -f /tmp/vllm_server.log &
-TAIL_PID=$!
 
 until curl --output /dev/null --silent --fail http://localhost:$PORT/health; do
     sleep 5
 done
 
-kill $TAIL_PID 2>/dev/null
+pkill -P $$ tee 2>/dev/null
 
 pip install -q datasets pandas
 git clone https://github.com/kimbochen/bench_serving.git
