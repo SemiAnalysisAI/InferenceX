@@ -3,7 +3,6 @@
 # === Required Env Vars === 
 # HF_TOKEN
 # HF_HUB_CACHE
-# IMAGE
 # MODEL
 # ISL
 # OSL
