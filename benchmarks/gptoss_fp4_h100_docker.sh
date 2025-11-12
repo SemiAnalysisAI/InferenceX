@@ -32,7 +32,7 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 set +x
-until curl --output /dev/null --silent --head --fail http://localhost:$PORT; do
+until curl --output /dev/null --silent --head --fail http://localhost:$PORT/health; do
     sleep 5
 done
 
