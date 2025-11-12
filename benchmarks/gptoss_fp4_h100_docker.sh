@@ -29,10 +29,10 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \
---disable-log-requests
+--disable-log-requests &
 
 set +x
-until curl --output /dev/null --silent --head --fail http://localhost:$PORT/health; do
+until curl --output /dev/null --silent --fail http://localhost:$PORT/health; do
     sleep 5
 done
 
