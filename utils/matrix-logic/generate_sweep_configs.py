@@ -472,7 +472,7 @@ def generate_runner_model_sweep_config(args, all_config_data):
             f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
 
     # Filter runner nodes if filter is specified
-    if hasattr(args, 'runner_node_filter') and args.runner_node_filter:
+    if args.runner_node_filter:
         runner_nodes = [node for node in runner_nodes if args.runner_node_filter in node]
         if not runner_nodes:
             raise ValueError(
