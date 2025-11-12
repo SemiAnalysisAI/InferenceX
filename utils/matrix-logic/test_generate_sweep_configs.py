@@ -1208,6 +1208,7 @@ def test_generate_runner_model_sweep_config(sample_master_config, temp_config_fi
     class Args:
         runner_type = "h200"
         runner_config = runner_file
+        runner_node_filter = None
 
     result = generate_runner_model_sweep_config(Args(), sample_master_config)
     assert len(result) > 0
@@ -1224,9 +1225,70 @@ def test_generate_runner_model_sweep_config_invalid_runner(sample_master_config,
     class Args:
         runner_type = "invalid-runner"
         runner_config = runner_file
+        runner_node_filter = None
 
     with pytest.raises(ValueError, match="does not exist in runner config"):
         generate_runner_model_sweep_config(Args(), sample_master_config)
+
+
+def test_generate_runner_model_sweep_config_with_node_filter(sample_master_config, temp_config_files):
+    """Test runner-model sweep with runner node filter."""
+    _, runner_file = temp_config_files
+
+    class Args:
+        runner_type = "h200"
+        runner_config = runner_file
+        runner_node_filter = "nv_1"
+
+    result = generate_runner_model_sweep_config(Args(), sample_master_config)
+    # Should only have entries for h200-nv_1
+    runners = set(entry['runner'] for entry in result)
+    assert 'h200-nv_1' in runners
+    assert 'h200-nv_2' not in runners
+
+
+def test_generate_runner_model_sweep_config_with_node_filter_multiple_matches(sample_master_config, temp_config_files):
+    """Test runner-model sweep with runner node filter matching multiple nodes."""
+    _, runner_file = temp_config_files
+
+    class Args:
+        runner_type = "h200"
+        runner_config = runner_file
+        runner_node_filter = "nv"  # Should match both nv_1 and nv_2
+
+    result = generate_runner_model_sweep_config(Args(), sample_master_config)
+    runners = set(entry['runner'] for entry in result)
+    assert 'h200-nv_1' in runners
+    assert 'h200-nv_2' in runners
+
+
+def test_generate_runner_model_sweep_config_with_node_filter_no_matches(sample_master_config, temp_config_files):
+    """Test runner-model sweep with runner node filter that matches no nodes."""
+    _, runner_file = temp_config_files
+
+    class Args:
+        runner_type = "h200"
+        runner_config = runner_file
+        runner_node_filter = "nonexistent"
+
+    with pytest.raises(ValueError, match="No runner nodes found matching filter"):
+        generate_runner_model_sweep_config(Args(), sample_master_config)
+
+
+def test_generate_runner_model_sweep_config_without_node_filter(sample_master_config, temp_config_files):
+    """Test runner-model sweep without runner node filter (default behavior)."""
+    _, runner_file = temp_config_files
+
+    class Args:
+        runner_type = "h200"
+        runner_config = runner_file
+        runner_node_filter = None
+
+    result = generate_runner_model_sweep_config(Args(), sample_master_config)
+    # Should have entries for all h200 nodes
+    runners = set(entry['runner'] for entry in result)
+    assert 'h200-nv_1' in runners
+    assert 'h200-nv_2' in runners
 
 
 # Tests for generate_runner_sweep_config
@@ -1385,6 +1447,27 @@ def test_main_runner_model_sweep(temp_config_files):
     with patch('sys.argv', test_args):
         result = main()
         assert len(result) > 0
+
+
+def test_main_runner_model_sweep_with_node_filter(temp_config_files):
+    """Test main function with runner-model-sweep command with node filter."""
+    master_file, runner_file = temp_config_files
+
+    test_args = [
+        "generate_sweep_configs.py",
+        "runner-model-sweep",
+        "--config-files", master_file,
+        "--runner-config", runner_file,
+        "--runner-type", "h200",
+        "--runner-node-filter", "nv_1"
+    ]
+
+    with patch('sys.argv', test_args):
+        result = main()
+        assert len(result) > 0
+        runners = set(entry['runner'] for entry in result)
+        assert 'h200-nv_1' in runners
+        assert 'h200-nv_2' not in runners
 
 
 def test_main_runner_sweep(temp_config_files):
