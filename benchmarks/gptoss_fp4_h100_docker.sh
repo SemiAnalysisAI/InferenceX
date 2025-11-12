@@ -1,28 +1,26 @@
 #!/usr/bin/env bash
 
-# Source benchmark utilities early
-source "$(dirname "$0")/benchmark_lib.sh"
+# === Required Env Vars === 
+# HF_TOKEN
+# HF_HUB_CACHE
+# MODEL
+# MAX_MODEL_LEN
+# TP
+# CONC
+# ISL
+# OSL
 
-check_env_vars \
-    MODEL \
-    PORT \
-    TP \
-    CONC \
-    ISL \
-    OSL \
-    RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
 
 cat > config.yaml << EOF
+compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
 async-scheduling: true
 no-enable-prefix-caching: true
-max-cudagraph-capture-size: 2048
+cuda-graph-sizes: 2048
 max-num-batched-tokens: 8192
 max-model-len: 10240
 EOF
 
 export PYTHONNOUSERSITE=1
-export VLLM_MXFP4_USE_MARLIN=1
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
@@ -31,23 +29,27 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \
-> $SERVER_LOG 2>&1 &
+--disable-log-requests > $SERVER_LOG 2>&1 &
 
-SERVER_PID=$!
-
-# Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+set +x
+while IFS= read -r line; do
+    printf '%s\n' "$line"
+    if [[ "$line" =~ Application\ startup\ complete ]]; then
+        break
+    fi
+done < <(tail -F -n0 "$SERVER_LOG")
 
 pip install -q datasets pandas
-
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend vllm \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
-    --max-concurrency "$CONC" \
-    --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+git clone https://github.com/kimbochen/bench_serving.git
+set -x
+python3 bench_serving/benchmark_serving.py \
+--model=$MODEL \
+--backend=vllm \
+--base-url=\"http://localhost:$PORT\" \
+--dataset-name=random \
+--random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
+--num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
+--request-rate=inf --ignore-eos \
+--save-result --percentile-metrics='ttft,tpot,itl,e2el' \
+--result-dir=/workspace/ \
+--result-filename=$RESULT_FILENAME.json"
