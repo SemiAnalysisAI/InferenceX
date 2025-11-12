@@ -107,7 +107,8 @@ jobs:
 
       - name: Nuke with sudo (pre-checkout)
         run: |
-          sudo rm -rf "/home/ubuntu/actions-runner-1/_work/InferenceMAX/InferenceMAX/bench_serving" || true
+          sudo ls -lah "${GITHUB_WORKSPACE}" || true
+          sudo rm -rf "/home/ubuntu/actions-runner-1/_work/InferenceMAX/InferenceMAX/eval_out" || true
 
       - uses: actions/checkout@v5
         with:
