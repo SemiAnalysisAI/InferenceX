@@ -7,7 +7,7 @@ server_name="bmk-server"
 # client_name="bmk-client"
 
 set -x
-docker run --rm -d --network=host --name=$server_name \
+docker run --rm --network=host --name=$server_name \
 --runtime=nvidia --gpus=all --ipc=host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
