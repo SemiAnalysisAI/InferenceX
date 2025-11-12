@@ -5,6 +5,7 @@
 # HF_HUB_CACHE
 # MODEL
 # MAX_MODEL_LEN
+# RANDOM_RANGE_RATIO
 # TP
 # CONC
 # ISL
@@ -21,7 +22,6 @@ max-model-len: 10240
 EOF
 
 export PYTHONNOUSERSITE=1
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
@@ -32,12 +32,9 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 set +x
-while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [[ "$line" =~ Application\ startup\ complete ]]; then
-        break
-    fi
-done < <(tail -F -n0 "$SERVER_LOG")
+until curl --output /dev/null --silent --head --fail http://localhost:$PORT; do
+    sleep 5
+done
 
 pip install -q datasets pandas
 git clone https://github.com/kimbochen/bench_serving.git
