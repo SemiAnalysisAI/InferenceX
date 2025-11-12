@@ -31,13 +31,12 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --max-num-seqs=$CONC  \
 --disable-log-requests 2>&1 | tee $(mktemp /tmp/server-XXXXXX.log) &
 
+# Show server logs til' it is up, then stop showing
 VLLM_PID=$!
 set +x
-
 until curl --output /dev/null --silent --fail http://localhost:$PORT/health; do
     sleep 5
 done
-
 pkill -P $$ tee 2>/dev/null
 
 pip install -q datasets pandas
