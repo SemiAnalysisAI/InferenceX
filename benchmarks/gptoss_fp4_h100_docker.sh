@@ -73,30 +73,34 @@ RUN_MODE=${RUN_MODE:-benchmark}
 
 if [[ "$RUN_MODE" == "eval" ]]; then
   EVAL_RESULT_DIR=${EVAL_RESULT_DIR:-eval_out}
-  OPENAI_SERVER_BASE="http://0.0.0.0:${PORT}"
-  OPENAI_CHAT_BASE="$OPENAI_SERVER_BASE/v1"
-  # LiteLLM (OpenAI provider) expects an API key; empty/dummy is fine for local vLLM.
+  OPENAI_SERVER_BASE="http://localhost:${PORT}"
   export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
 
-  # Install LightEval + LiteLLM
+  # Detect exact served model id so LiteLLM matches vLLM
+  SERVED_NAME="${OPENAI_MODEL_NAME:-}"
+  if [[ -z "$SERVED_NAME" ]]; then
+    SERVED_NAME="$(curl -sSf "${OPENAI_SERVER_BASE}/v1/models" \
+      | python3 - <<'PY'
+import json,sys; j=json.load(sys.stdin); print(j["data"][0]["id"] if j.get("data") else "")
+PY
+    )"
+  fi
+  [ -z "$SERVED_NAME" ] && { echo "Could not discover served model id"; exit 1; }
+  echo "Using served model id: $SERVED_NAME"
+
+  # Install LightEval + LiteLLM (unchanged)
   python3 -m pip install -q --upgrade pip || true
-  # Use current stable LightEval & LiteLLM
-  python3 -m pip install -q --no-cache-dir "lighteval" "litellm" || true
+  python3 -m pip install -q --no-cache-dir lighteval litellm || true
 
-  echo "Using model: $MODEL"
+  # Optional: small preflight (will fail fast if URL is wrong)
+  curl -sSf "${OPENAI_SERVER_BASE}/v1/models" >/dev/null
 
-  # Clean up previous eval results if any
-  rm -rf "/workspace/${EVAL_RESULT_DIR}"/* 2>/dev/null || true
-  mkdir -p "/workspace/${EVAL_RESULT_DIR}"
-  # Build LightEval task spec: {suite_optional}|{task}|{num_few_shot}
   TASK_SPEC="${EVAL_TASK:-gsm8k}|${NUM_FEWSHOT:-5}"
 
   set -x
-  # Evaluate via LiteLLM endpoint pointing at local vLLM (OpenAI-compatible)
-  # Model args map to the LiteLLM/OpenAI config fields shown in the docs.
   lighteval endpoint litellm \
-    "provider=openai,model_name=${OPENAI_MODEL_NAME:-$MODEL},base_url=${OPENAI_CHAT_BASE},api_key=${OPENAI_API_KEY}" \
-    "$TASK_SPEC" \
+    "provider=openai,model_name=${SERVED_NAME},base_url=${OPENAI_SERVER_BASE}/v1,api_key=${OPENAI_API_KEY},temperature=0,top_p=1,max_new_tokens=8192,timeout=600" \
+    "${TASK_SPEC}" \
     --output-dir "/workspace/${EVAL_RESULT_DIR}"
   set +x
 
