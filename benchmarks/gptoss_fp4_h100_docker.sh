@@ -75,7 +75,7 @@ curl -s "http://0.0.0.0:${PORT}/v1/models"
 
 if [[ "$RUN_MODE" == "eval" ]]; then
   EVAL_RESULT_DIR=${EVAL_RESULT_DIR:-eval_out}
-  OPENAI_SERVER_BASE="http://0.0.0.0::${PORT}"
+  OPENAI_SERVER_BASE="http://0.0.0.0:${PORT}"
   export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
 
   # Install LightEval + LiteLLM (unchanged)
