@@ -41,9 +41,10 @@ done
 pkill -P $$ tee 2>/dev/null
 
 pip install -q datasets pandas
-git clone https://github.com/kimbochen/bench_serving.git
+BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
+git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
 set -x
-python3 bench_serving/benchmark_serving.py \
+python3 $BENCH_SERVING_DIR/bench_serving/benchmark_serving.py \
 --model=$MODEL \
 --backend=vllm \
 --base-url=http://localhost:$PORT \
