@@ -31,10 +31,16 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --max-num-seqs=$CONC  \
 --disable-log-requests &
 
+SERVER_PID=$!
 set +x
+tail -f /tmp/vllm_server.log &
+TAIL_PID=$!
+
 until curl --output /dev/null --silent --fail http://localhost:$PORT/health; do
     sleep 5
 done
+
+kill $TAIL_PID 2>/dev/null
 
 pip install -q datasets pandas
 git clone https://github.com/kimbochen/bench_serving.git
