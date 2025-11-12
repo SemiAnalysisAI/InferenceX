@@ -104,6 +104,10 @@ jobs:
               sleep 5
             done
           fi
+          
+      - name: Nuke with sudo (pre-checkout)
+        run: |
+          sudo rm -rf "$GITHUB_WORKSPACE/bench_serving/.git" || true
 
       - uses: actions/checkout@v5
         with:
