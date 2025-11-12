@@ -82,6 +82,7 @@ if [[ "$RUN_MODE" == "eval" ]]; then
   # --- Install LightEval (no lm-eval; no sitecustomize patch needed) ---
   python3 -m pip install -q --upgrade pip || true
   python3 -m pip install -q --no-cache-dir "lighteval" || true
+  python3 -m pip install -q --no-cache-dir "litellm[caching]>=1.66.0" || true
 
   echo "Using model: ${MODEL}"
   rm -rf "/workspace/${EVAL_RESULT_DIR}"/* 2>/dev/null || true
