@@ -69,6 +69,7 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     --tp_size=$TP --ep_size=$EP_SIZE \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
+SERVER_PID=$!
 
 
 # Show logs until server is ready
@@ -76,6 +77,10 @@ tail -f $SERVER_LOG &
 TAIL_PID=$!
 set +x
 until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        echo "Server died before becoming healthy. Exiting."
+        exit 1
+    fi
     sleep 5
 done
 kill $TAIL_PID
