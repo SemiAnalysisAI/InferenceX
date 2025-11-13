@@ -210,24 +210,19 @@ PY
   python3 -m lm_eval --model local-completions \
     --tasks ${EVAL_TASK:-gsm8k} \
     --num_fewshot ${NUM_FEWSHOT:-5} \
-    --batch_size 2 \
+    --batch_size 1 \
     --limit ${LIMIT:-200} \
     --output_path "/workspace/${EVAL_RESULT_DIR}" \
-    --model_args "model=$MODEL,base_url=$OPENAI_COMP_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3,num_concurrent=32,tokenized_requests=False" \
-    --gen_kwargs "max_tokens=8192,temperature=0,top_p=1"
-  RC=$?
-  if [[ $RC -ne 0 ]]; then
-    echo "[WARN] local-completions failed (rc=$RC). Retrying with local-chat-completions (no chat template)."
-    python3 -m lm_eval --model local-chat-completions \
-      --tasks ${EVAL_TASK:-gsm8k} \
-      --num_fewshot ${NUM_FEWSHOT:-5} \
-      --batch_size 2 \
-      --limit ${LIMIT:-200} \
-      --output_path "/workspace/${EVAL_RESULT_DIR}" \
-      --model_args "model=$MODEL,base_url=$OPENAI_CHAT_BASE,api_key=$OPENAI_API_KEY,eos_string=</s>,max_retries=3,num_concurrent=32,tokenized_requests=False" \
-      --gen_kwargs "max_tokens=8192,temperature=0,top_p=1"
-  fi
+    --model_args "model=$MODEL,base_url=$OPENAI_COMP_BASE,api_key=$OPENAI_API_KEY,max_retries=3,num_concurrent=4,timeout=600,tokenized_requests=False" \
+    --gen_kwargs "max_tokens=1024,temperature=0,top_p=1"
+    RC=$?
   set +x
+
+    if [[ $RC -ne 0 ]]; then
+    echo "[ERROR] lm_eval local-completions failed with rc=$RC; not retrying with chat on TRT-LLM due to known schema bug (#5393)."
+    exit $RC
+    fi
+
 
   # Append a Markdown table to the GitHub Actions job summary
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
