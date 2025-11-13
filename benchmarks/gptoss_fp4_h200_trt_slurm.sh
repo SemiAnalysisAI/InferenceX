@@ -19,7 +19,7 @@
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 hf download $MODEL
-# SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 
@@ -44,9 +44,6 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-
-#mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
@@ -65,8 +62,6 @@ trtllm-serve $MODEL \
 # Show logs until server is ready
 tail -f $SERVER_LOG &
 TAIL_PID=$!
-
-# Show server logs til' it is up, then stop showing
 set +x
 until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
     sleep 5

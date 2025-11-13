@@ -71,17 +71,19 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     > $SERVER_LOG 2>&1 &
 
 
+# Show logs until server is ready
+tail -f $SERVER_LOG &
+TAIL_PID=$!
 set +x
-while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [[ "$line" == *"Application startup complete"* ]]; then
-        break
-    fi
-done < <(tail -F -n0 "$SERVER_LOG")
+until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
+    sleep 5
+done
+kill $TAIL_PID
 
-git clone https://github.com/kimbochen/bench_serving.git
 set -x
-python3 bench_serving/benchmark_serving.py \
+BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
+git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
+python3 $BENCH_SERVING_DIR/benchmark_serving.py \
 --model $MODEL --backend openai \
 --base-url http://0.0.0.0:$PORT \
 --dataset-name random \
