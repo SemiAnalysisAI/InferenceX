@@ -44,6 +44,8 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+
 #mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
@@ -58,14 +60,18 @@ trtllm-serve $MODEL \
 --port $PORT \
 --tp_size=$TP \
 --pp_size=1 \
-2>&1 | tee $(mktemp /tmp/server-XXXXXX.log) &
+> $SERVER_LOG 2>&1 &
+
+# Show logs until server is ready
+tail -f $SERVER_LOG &
+TAIL_PID=$!
 
 # Show server logs til' it is up, then stop showing
 set +x
 until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
     sleep 5
 done
-pkill -P $$ tee 2>/dev/null
+kill $TAIL_PID
 
 set -x
 BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
