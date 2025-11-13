@@ -115,7 +115,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
                     
                     #./submit_disagg.sh mtp=off tp 1 1 1 512 20000 "0.9" 0 0 "128 256 512"
                     #./submit_disagg.sh mtp=off tp 1 1 2 1024 20000 "0.9" 0 0 "64 128 256"
-                    ./submit_disagg.sh mtp=off tep 1 1 2 1024 20000 "0.9" 0 0 "64 256"
+                    ./submit_disagg.sh mtp=off tep 1 1 2 1024 20000 "0.9" 0 0 "64" #"64 256"
                     #./submit_disagg.sh mtp=off tp 1 1 4 2048 20000 "0.9" 0 0 "8 16 32 64 128"
                     #./submit_disagg.sh mtp=off tp 1 1 8 2048 20000 "0.9" 0 0 "1 2 4 8 16"
             else
