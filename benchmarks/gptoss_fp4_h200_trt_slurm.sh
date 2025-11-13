@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 
-# Source benchmark utilities early
-source "$(dirname "$0")/benchmark_lib.sh"
-
-check_env_vars \
-    MODEL \
-    TP \
-    CONC \
-    ISL \
-    OSL \
-    RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    PORT_OFFSET \
-    DP_ATTENTION \
-    EP_SIZE
+# === Required Env Vars === 
+# HF_TOKEN
+# HF_HUB_CACHE
+# IMAGE
+# MODEL
+# ISL
+# OSL
+# MAX_MODEL_LEN
+# RANDOM_RANGE_RATIO
+# TP
+# CONC
+# RESULT_FILENAME
+# PORT_OFFSET
+# DP_ATTENTION
+# EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 hf download $MODEL
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+# SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 
@@ -43,6 +44,7 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
+#mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
@@ -56,21 +58,25 @@ trtllm-serve $MODEL \
 --port $PORT \
 --tp_size=$TP \
 --pp_size=1 \
-> $SERVER_LOG 2>&1 &
+2>&1 | tee $(mktemp /tmp/server-XXXXXX.log) &
 
-SERVER_PID=$!
+# Show server logs til' it is up, then stop showing
+set +x
+until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
+    sleep 5
+done
+pkill -P $$ tee 2>/dev/null
 
-# Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend openai \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
-    --max-concurrency "$CONC" \
-    --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+set -x
+BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
+git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
+python3 $BENCH_SERVING_DIR/benchmark_serving.py \
+--model $MODEL --backend openai \
+--base-url http://0.0.0.0:$PORT \
+--dataset-name random \
+--random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
+--num-prompts $(( $CONC * 10 )) --max-concurrency $CONC \
+--request-rate inf --ignore-eos \
+--save-result --percentile-metrics 'ttft,tpot,itl,e2el' \
+--result-dir /workspace/ \
+--result-filename $RESULT_FILENAME.json
