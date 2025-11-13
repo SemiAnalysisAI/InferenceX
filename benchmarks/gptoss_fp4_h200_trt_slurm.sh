@@ -19,7 +19,7 @@
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 hf download $MODEL
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+# SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 
@@ -45,20 +45,32 @@ stream_interval: 20
 EOF
 
 #mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --tp_size $TP --trust_remote_code --max_seq_len $MAX_MODEL_LEN --max_num_tokens $MAX_MODEL_LEN --num_postprocess_workers 2 --extra_llm_api_options llama-config.yml --port $PORT > $SERVER_LOG 2>&1 &
-mpirun -n 1 --oversubscribe --allow-run-as-root trtllm-serve $MODEL --max_batch_size $CONC --max_num_tokens 20000 --backend pytorch --extra_llm_api_options gptoss-config.yml  --ep_size=$EP_SIZE --trust_remote_code --gpus_per_node 8 --host 0.0.0.0 --port $PORT --tp_size=$TP --pp_size=1 > $SERVER_LOG 2>&1 &
+mpirun -n 1 --oversubscribe --allow-run-as-root \
+trtllm-serve $MODEL \
+--max_batch_size $CONC \
+--max_num_tokens 20000 \
+--backend pytorch \
+--extra_llm_api_options gptoss-config.yml \
+--ep_size=$EP_SIZE \
+--trust_remote_code \
+--gpus_per_node 8 \
+--host 0.0.0.0 \
+--port $PORT \
+--tp_size=$TP \
+--pp_size=1 \
+2>&1 | tee $(mktemp /tmp/server-XXXXXX.log) &
 
-
+# Show server logs til' it is up, then stop showing
 set +x
-while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [[ "$line" == *"Application startup complete"* ]]; then
-        break
-    fi
-done < <(tail -F -n0 "$SERVER_LOG")
+until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
+    sleep 5
+done
+pkill -P $$ tee 2>/dev/null
 
 set -x
-git clone https://github.com/kimbochen/bench_serving.git
-python3 bench_serving/benchmark_serving.py \
+BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
+git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
+python3 $BENCH_SERVING_DIR/benchmark_serving.py \
 --model $MODEL --backend openai \
 --base-url http://0.0.0.0:$PORT \
 --dataset-name random \
