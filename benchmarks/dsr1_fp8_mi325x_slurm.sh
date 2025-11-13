@@ -2,11 +2,6 @@
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-echo "=== CPU Information Inside Container ==="
-nproc
-cat /proc/cpuinfo | grep processor | wc -l
-cat /sys/fs/cgroup/cpuset/cpuset.cpus 2>/dev/null || echo "cpuset info not available"
-echo "========================================"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=8888
