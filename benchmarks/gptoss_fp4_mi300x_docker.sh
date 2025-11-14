@@ -51,7 +51,7 @@ set -x
 BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
 git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
 python3 $BENCH_SERVING_DIR/benchmark_serving.py \
---model=$MODEL --backend=vllm --base-url=http://$server_name:$PORT \
+--model=$MODEL --backend=vllm --base-url=http://0.0.0.0:$PORT \
 --dataset-name=random \
 --random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
 --num-prompts=$(( $CONC * 10 )) \

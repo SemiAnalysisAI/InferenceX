@@ -1,24 +1,20 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 
-export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
-export PORT_OFFSET=${USER: -1}
+sudo sh -c 'echo 0 > /proc/sys/kernel/numa_balancing'
 
-PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+HF_HUB_CACHE_MOUNT="/home/kimbosemianalysis/hf_hub_cache/"
+PORT=8888
+
+server_name="bmk-server"
 
 set -x
-salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
-JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
-
-srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --jobid=$JOB_ID \
---container-image=$SQUASH_FILE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
---container-mount-home \
---container-writable \
---container-remap-root \
---container-workdir=/workspace/ \
---no-container-entrypoint --export=ALL \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x_slurm.sh
-
-scancel $JOB_ID
+docker run --rm --ipc=host --shm-size=16g --network=host --name=$server_name \
+--privileged --cap-add=CAP_SYS_ADMIN --device=/dev/kfd --device=/dev/dri --device=/dev/mem \
+--cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+-v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+-v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
+-e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e PORT=$PORT \
+-e ISL -e OSL -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RANDOM_RANGE_RATIO -e RESULT_FILENAME \
+--entrypoint=/bin/bash \
+$IMAGE \
+benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi325x_docker.sh"
