@@ -8,7 +8,7 @@ PORT=8888
 server_name="bmk-server"
 
 set -x
-docker run --rm -d --ipc=host --shm-size=16g --network=host --name=$server_name \
+docker run --rm --ipc=host --shm-size=16g --network=host --name=$server_name \
 --privileged --cap-add=CAP_SYS_ADMIN --device=/dev/kfd --device=/dev/dri --device=/dev/mem \
 --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
