@@ -52,7 +52,6 @@ pip install -q datasets pandas
 # Source benchmark utilities
 source "$(dirname "$0")/benchmark_lib.sh"
 
-set -x
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \

@@ -124,6 +124,7 @@ run_benchmark_serving() {
     git clone https://github.com/kimbochen/bench_serving.git "$BENCH_SERVING_DIR"
 
     # Run benchmark
+    set -x
     python3 "$BENCH_SERVING_DIR/benchmark_serving.py" \
         --model "$model" \
         --backend "$backend" \
