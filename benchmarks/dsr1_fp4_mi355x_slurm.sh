@@ -34,13 +34,14 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --cuda-graph-max-bs=128 \
 > $SERVER_LOG 2>&1 &
 
+SERVER_PID=$!
+
 # Source benchmark utilities
 source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-set -x
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \

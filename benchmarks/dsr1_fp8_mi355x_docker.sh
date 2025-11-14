@@ -28,6 +28,8 @@ python3 -m sglang.launch_server \
     --max-prefill-tokens 196608 \
     --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
 
+SERVER_PID=$!
+
 # Source benchmark utilities
 source "$(dirname "$0")/benchmark_lib.sh"
 
@@ -44,7 +46,6 @@ else
   NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
-set -x
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
