@@ -59,7 +59,6 @@ wait_for_server_ready() {
     # Show logs until server is ready
     tail -f "$server_log" &
     local TAIL_PID=$!
-    set +x
     until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
         if ! kill -0 "$server_pid" 2>/dev/null; then
             echo "Server died before becoming healthy. Exiting."
@@ -85,6 +84,7 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 run_benchmark_serving() {
+    set +x
     local model=""
     local port=""
     local backend=""
@@ -210,4 +210,5 @@ run_benchmark_serving() {
         --percentile-metrics 'ttft,tpot,itl,e2el' \
         --result-dir "$result_dir" \
         --result-filename "$result_filename.json"
+    set +x
 }
