@@ -14,6 +14,8 @@
 
 export SGLANG_USE_AITER=1
 
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+
 python3 -m sglang.launch_server \
     --model-path $MODEL \
     --host=0.0.0.0 \
@@ -24,13 +26,16 @@ python3 -m sglang.launch_server \
     --mem-fraction-static 0.8 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
-    --cuda-graph-max-bs 128 | tee $(mktemp /tmp/server-XXXXXX.log) &
+    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
 
+# Show logs until server is ready
+tail -f $SERVER_LOG &
+TAIL_PID=$!
 set +x
-until curl --output /dev/null --silent --fail http://localhost:$PORT/health; do
+until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
     sleep 5
 done
-pkill -P $$ tee 2>/dev/null
+kill $TAIL_PID
 
 if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   if [[ "$OSL" == "8192" ]]; then
@@ -42,9 +47,9 @@ else
   NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
+set -x
 BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
 git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
-set -x
 python3 $BENCH_SERVING_DIR/benchmark_serving.py \
 --model=$MODEL --backend=vllm --base-url="http://localhost:$PORT" \
 --dataset-name=random \
