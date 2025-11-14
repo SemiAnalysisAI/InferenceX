@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 
-# Source benchmark utilities early
-source "$(dirname "$0")/benchmark_lib.sh"
-
-check_env_vars \
-    MODEL \
-    PORT \
-    TP \
-    CONC \
-    ISL \
-    OSL \
-    RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+# ========= Required Env Vars =========
+# HF_TOKEN
+# HF_HUB_CACHE
+# MODEL
+# PORT
+# TP
+# CONC
+# MAX_MODEL_LEN
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
@@ -41,19 +37,25 @@ python3 -m sglang.launch_server \
 --max-prefill-tokens=196608 \
 --disable-radix-cache > $SERVER_LOG 2>&1 &
 
-SERVER_PID=$!
 
-# Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+# Show logs until server is ready
+tail -f $SERVER_LOG &
+TAIL_PID=$!
+set +x
+until curl --output /dev/null --silent --fail http://0.0.0.0:$PORT/health; do
+    sleep 5
+done
+kill $TAIL_PID
 
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend vllm \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
-    --max-concurrency "$CONC" \
-    --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+set -x
+BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
+git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
+python3 $BENCH_SERVING_DIR/benchmark_serving.py \
+--model=$MODEL --backend=vllm --base-url=http://$server_name:$PORT \
+--dataset-name=random \
+--random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
+--num-prompts=$(( $CONC * 10 )) \
+--max-concurrency=$CONC \
+--request-rate=inf --ignore-eos \
+--save-result --percentile-metrics="ttft,tpot,itl,e2el" \
+--result-dir=/workspace/ --result-filename=$RESULT_FILENAME.json

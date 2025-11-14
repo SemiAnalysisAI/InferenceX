@@ -27,12 +27,12 @@ set -x
 
 if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   if [[ "$OSL" == "8192" ]]; then
-    NUM_PROMPTS=$(( CONC * 20 ))
+    export NUM_PROMPTS=$(( CONC * 20 ))
   else
-    NUM_PROMPTS=$(( CONC * 50 ))
+    export NUM_PROMPTS=$(( CONC * 50 ))
   fi
 else
-  NUM_PROMPTS=$(( CONC * 10 ))
+  export NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
 docker run --rm --init --network host --name $server_name \

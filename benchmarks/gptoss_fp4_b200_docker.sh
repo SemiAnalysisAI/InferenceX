@@ -43,6 +43,7 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB='{"2":32,"4":32,"8":8}'
 export PYTHONNOUSERSITE=1
 export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
+
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
@@ -66,7 +67,7 @@ set -x
 BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
 git clone https://github.com/kimbochen/bench_serving.git $BENCH_SERVING_DIR
 python3 $BENCH_SERVING_DIR/benchmark_serving.py \
---model $MODEL  --backend vllm --base-url http://localhost:$PORT \
+--model $MODEL --backend vllm --base-url http://localhost:$PORT \
 --dataset-name random \
 --random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
 --num-prompts $NUM_PROMPTS \
