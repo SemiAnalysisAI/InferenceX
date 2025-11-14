@@ -69,8 +69,8 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     --tp_size=$TP --ep_size=$EP_SIZE \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
+    
 SERVER_PID=$!
-
 
 # Show logs until server is ready
 tail -f $SERVER_LOG &
