@@ -140,15 +140,15 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
                 else
                     echo "Running 1k/1k MTP=OFF configurations for DeepSeek-R1"
 
-                    ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
+                    #./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
 
                     ./submit_disagg.sh "mtp=off" "dep" 1 1 32 32 32 "0.7" 0 0 "1075"
 
-                    ./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
+                    #./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
 
-                    ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
+                    #./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
 
-                    ./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
+                    #./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
                 fi
             elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
                 if [ "$mtp_mode" = "on" ]; then
