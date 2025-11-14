@@ -51,7 +51,7 @@ python3 $BENCH_SERVING_DIR/benchmark_serving.py \
 --base-url=http://localhost:$PORT \
 --dataset-name=random \
 --random-input-len=$ISL --random-output-len=$OSL --random-range-ratio=$RANDOM_RANGE_RATIO \
---num-prompts=$(( $CONC * 10 )) --max-concurrency=$CONC \
+--num-prompts=$(( $CONC * 10 )) --max-concurrency=512 \
 --request-rate=inf --ignore-eos \
 --save-result --percentile-metrics='ttft,tpot,itl,e2el' \
 --result-dir=/workspace/ \
