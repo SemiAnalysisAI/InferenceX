@@ -45,7 +45,6 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 pip install -q datasets pandas
 
-set -x
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
