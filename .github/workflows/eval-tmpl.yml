@@ -67,7 +67,9 @@ env:
   # Server-side concurrency default (used by some server scripts)
   CONC: '32'
   MAX_MODEL_LEN: '8192'
-
+  ISL: 1024
+  OSL: 8192
+  
 jobs:
   eval:
     runs-on: ${{ inputs.runner }}
