@@ -4,7 +4,7 @@ echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=8888
-huggingface-cli download $MODEL
+hf download $MODEL
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark

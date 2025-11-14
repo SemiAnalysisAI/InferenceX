@@ -15,7 +15,7 @@
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-huggingface-cli download $MODEL
+hf download $MODEL
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=8888

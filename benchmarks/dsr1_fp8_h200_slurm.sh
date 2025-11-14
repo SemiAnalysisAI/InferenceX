@@ -17,7 +17,7 @@
 echo "JOB \$SLURM_JOB_ID running on \$SLURMD_NODENAME"
 
 pip3 install --user sentencepiece
-huggingface-cli download $MODEL
+hf download $MODEL
 PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
