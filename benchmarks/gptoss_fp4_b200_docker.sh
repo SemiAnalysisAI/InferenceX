@@ -48,7 +48,7 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
---gpu-memory-utilization 0.9 --tensor-parallel-size $TP --max-num-seqs $CONC \
+--gpu-memory-utilization 0.9 --tensor-parallel-size $TP --max-num-seqs 512 \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
