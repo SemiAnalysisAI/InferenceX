@@ -49,7 +49,7 @@ jobs:
       model: ${{ inputs.model || 'deepseek-ai/DeepSeek-R1-0528' }}
       framework: sglang
       precision: fp8
-      exp-name: dpr1_gsm8k_poc
+      exp-name: dsr1_gsm8k_poc
       tp: ${{ inputs.tp || '4' }}
       ep: '1'
       dp-attn: false
