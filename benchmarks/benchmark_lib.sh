@@ -233,17 +233,22 @@ _patch_lm_eval_filters() {
     local patch_dir
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
-import re, sys, unicodedata
+# sitecustomize.py — loaded automatically by Python if on PYTHONPATH
+import re, sys, unicodedata, types
+
+# -----------------------------
+# 1) Safe regex filters (yours)
+# -----------------------------
 from lm_eval.filters import extraction as ex
 
 def _s(x):  # coerce to str
     return x if isinstance(x, str) else ""
 
-# --- Patch RegexFilter.apply (used by many datasets) ---
+# --- RegexFilter.apply ---
 _orig_regex_apply = ex.RegexFilter.apply
 def _safe_regex_apply(self, resps, docs):
     out = []
-    for inst in resps:  # inst is a list of candidate responses for one doc
+    for inst in resps:  # list of candidates for one doc
         filtered = []
         for resp in inst:
             txt = _s(resp)
@@ -261,7 +266,7 @@ def _safe_regex_apply(self, resps, docs):
     return out
 ex.RegexFilter.apply = _safe_regex_apply
 
-# --- Patch MultiChoiceRegexFilter.apply (used by GSM8K flexible-extract) ---
+# --- MultiChoiceRegexFilter.apply (used by GSM8K flexible-extract) ---
 _orig_mc_apply = ex.MultiChoiceRegexFilter.apply
 def _safe_mc_apply(self, resps, docs):
     def find_match(regex, resp, convert_dict={}):
@@ -298,7 +303,7 @@ def _safe_mc_apply(self, resps, docs):
 
     out = []
     for r, doc in zip(resps, docs):
-        # Build fallback regexes from choices (A, B, C, ...) as in upstream
+        # Build fallback regexes from choices (A, B, C, ...) as upstream
         fallback_regexes, choice_to_alpha = [], {}
         next_alpha = "A"
         without_paren, without_paren_to_target = [], {}
@@ -325,8 +330,75 @@ def _safe_mc_apply(self, resps, docs):
             filtered.append(m)
         out.append(filtered)
     return out
-
 ex.MultiChoiceRegexFilter.apply = _safe_mc_apply
+
+# -----------------------------------------------------
+# 2) Fallback to reasoning_content in parse_generations
+# -----------------------------------------------------
+# For OpenAI-like chat completions, some servers return:
+#   choices[0].message.content == None
+#   choices[0].message.reasoning_content == "<text>"
+# If so, return reasoning_content instead of None; if both missing, return "".
+
+from lm_eval.models.api_models import TemplateAPI
+
+def _wrap_parse_generations_on_class(cls):
+    if not hasattr(cls, "parse_generations"):
+        return
+    orig = cls.parse_generations
+    # parse_generations is a @staticmethod on API models; preserve staticmethod
+    def wrapped(*, outputs, **kwargs):
+        # First, run the original
+        res = orig(outputs=outputs, **kwargs)
+        # Normalize to list for convenience
+        if isinstance(res, (str, type(None))):
+            res = [res]
+            outputs_list = [outputs]
+        else:
+            outputs_list = outputs if isinstance(outputs, list) else [outputs]
+
+        def _fallback_from_output(o):
+            try:
+                # OpenAI-style: dict -> choices[0] -> message
+                ch0 = (o or {}).get("choices", [{}])[0]
+                msg = ch0.get("message", {}) or {}
+                txt = msg.get("content")
+                if txt is None:
+                    # Newer servers may use reasoning_content
+                    txt = msg.get("reasoning_content")
+                if txt is None:
+                    # Some servers put it at choices[0].reasoning.content
+                    txt = (ch0.get("reasoning") or {}).get("content")
+                return "" if txt is None else txt
+            except Exception:
+                return ""
+        fb = [_fallback_from_output(o) for o in outputs_list]
+
+        # Replace None/empty only if a fallback exists
+        res_out = []
+        for i, v in enumerate(res):
+            if (v is None or v == "") and i < len(fb) and fb[i]:
+                res_out.append(fb[i])
+            else:
+                # still coerce None -> "" so downstream filters never see None
+                res_out.append("" if v is None else v)
+        return res_out
+
+    # Rebind as staticmethod to match original decoration
+    cls.parse_generations = staticmethod(wrapped)
+
+# Try to patch common OpenAI-like chat backends
+try:
+    from lm_eval.models import openai_like as oli
+    for name in dir(oli):
+        obj = getattr(oli, name)
+        if isinstance(obj, type) and issubclass(obj, TemplateAPI):
+            # Heuristically target chat-style classes only
+            if "Chat" in obj.__name__ or "OpenAI" in obj.__name__:
+                _wrap_parse_generations_on_class(obj)
+except Exception:
+    # If module layout changes, fail soft; your regex guards still protect filters.
+    pass
 PY
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
