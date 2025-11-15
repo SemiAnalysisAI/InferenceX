@@ -65,7 +65,7 @@ env:
   LIMIT: ${{ inputs.limit }}
   EVAL_RESULT_DIR: eval_out
   # Server-side concurrency default (used by some server scripts)
-  CONC: '32'
+  CONC: '16'
   MAX_MODEL_LEN: '8192'
   ISL: 1024
   OSL: 8192

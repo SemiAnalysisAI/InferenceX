@@ -37,14 +37,14 @@ on:
     paths:
       - '.github/workflows/eval-gms8k.yml'
       - '.github/workflows/eval-tmpl.yml'
-      - 'benchmarks/gptoss_fp4_h100_slurm.sh'
+      - 'benchmarks/gptoss_fp4_h200_slurm.sh'
 
 jobs:
   eval:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: h100-cw_1
+      runner: h200-nb_1
       image: ${{ inputs.image || 'vllm/vllm-openai:v0.11.0' }}
       model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
       framework: vllm
