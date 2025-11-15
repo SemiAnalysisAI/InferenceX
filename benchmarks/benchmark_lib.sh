@@ -399,15 +399,34 @@ append_lm_eval_summary() {
     set +x
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
     local task="${EVAL_TASK:-gsm8k}"
-    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        python3 utils/lm_eval_to_md.py \
+    # Render markdown once, then decide where to write it to avoid redirection errors
+    local md_out
+    md_out=$(python3 utils/lm_eval_to_md.py \
             --results-dir "/workspace/${results_dir}" \
             --task "${task}" \
             --framework "${FRAMEWORK}" \
             --precision "${PRECISION}" \
             --tp "${TP:-1}" \
             --ep "${EP_SIZE:-1}" \
-            --dp-attention "${DP_ATTENTION:-false}" \
-            >> "$GITHUB_STEP_SUMMARY" || true
+            --dp-attention "${DP_ATTENTION:-false}" 2>/dev/null || true)
+
+    # If nothing was produced, nothing to append
+    if [ -z "${md_out}" ]; then
+        return 0
     fi
+
+    # Prefer GitHub step summary when available and path is valid; otherwise fallback to workspace file
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        local _gh_path="$GITHUB_STEP_SUMMARY"
+        local _gh_dir
+        _gh_dir="$(dirname "$_gh_path")"
+        if [ -d "$_gh_dir" ]; then
+            printf "%s\n" "${md_out}" >> "$_gh_path" || true
+            return 0
+        fi
+    fi
+
+    # Fallback: write to a summary file alongside results
+    mkdir -p "/workspace/${results_dir}" 2>/dev/null || true
+    printf "%s\n" "${md_out}" >> "/workspace/${results_dir}/SUMMARY.md" || true
 }
