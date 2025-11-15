@@ -218,15 +218,6 @@ run_benchmark_serving() {
 # Eval (lm-eval-harness) helpers
 # ------------------------------
 
-# Ensure bench_serving repo is available for helper utilities (e.g., md summary)
-_ensure_bench_serving_repo() {
-    set +x
-    git config --global --add safe.directory /workspace || true
-    if [[ ! -d bench_serving ]]; then
-        git clone https://github.com/kimbochen/bench_serving.git || true
-    fi
-}
-
 # Install or update lm-eval dependencies
 _install_lm_eval_deps() {
     set +x
@@ -384,8 +375,7 @@ run_lm_eval() {
                 echo "Unknown parameter: $1"; return 1;;
         esac
     done
-
-    _ensure_bench_serving_repo
+ 
     _install_lm_eval_deps
     _patch_lm_eval_filters
 
@@ -410,8 +400,7 @@ append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
     local task="${EVAL_TASK:-gsm8k}"
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        _ensure_bench_serving_repo
-        python3 bench_serving/lm_eval_to_md.py \
+        python3 utils/lm_eval_to_md.py \
             --results-dir "/workspace/${results_dir}" \
             --task "${task}" \
             --framework "${FRAMEWORK}" \
