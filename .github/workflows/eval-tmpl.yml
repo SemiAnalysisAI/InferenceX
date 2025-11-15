@@ -68,7 +68,7 @@ env:
   CONC: '16'
   MAX_MODEL_LEN: '8192'
   ISL: 1024
-  OSL: 8192
+  OSL: 1024
   RANDOM_RANGE_RATIO: '1.0'
   RESULT_FILENAME: results
   
