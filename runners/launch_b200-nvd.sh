@@ -35,6 +35,17 @@ else
   export NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
+## Propagate GitHub summary file into the container when available
+GH_SUM_ENV=""
+GH_SUM_MOUNT=""
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  GH_SUM_ENV="-e GITHUB_STEP_SUMMARY=${GITHUB_STEP_SUMMARY}"
+  GH_SUM_DIR="$(dirname "${GITHUB_STEP_SUMMARY}")"
+  if [ -d "${GH_SUM_DIR}" ]; then
+    GH_SUM_MOUNT="-v ${GH_SUM_DIR}:${GH_SUM_DIR}"
+  fi
+fi
+
 docker run --rm --init --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
@@ -43,6 +54,7 @@ docker run --rm --init --network host --name $server_name \
 -e NCCL_GRAPH_REGISTER=0 \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e NUM_PROMPTS \
+ ${GH_SUM_ENV} ${GH_SUM_MOUNT} \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
 benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_docker.sh"
