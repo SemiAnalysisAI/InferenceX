@@ -80,8 +80,14 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
-          # Helper to avoid indefinite hangs on flaky Docker daemons
-          safe_timeout() { timeout -k 5 30s "$@"; }
+          # Helper to avoid indefinite hangs on flaky tools (Docker/Slurm)
+          safe_timeout() {
+            if command -v timeout >/dev/null 2>&1; then
+              timeout -k 5 30s "$@"
+            else
+              "$@"
+            fi
+          }
 
           host=$(hostname)
           if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
@@ -105,14 +111,27 @@ jobs:
           else
             echo "[Docker] skipping docker cleanup on host $host"
           fi
-          sudo rm -rf /home/ubuntu/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out/openai__gpt-oss-120b
+          # Best-effort cleanup of prior eval outputs; do not block
+          safe_timeout sudo rm -rf /home/ubuntu/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out/openai__gpt-oss-120b || true
+
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up resources ..."
-            scancel -u $USER || true
-            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-              squeue -u $USER || true
+            safe_timeout scancel -u "$USER" || true
+            # Wait up to 5 minutes for jobs to clear to avoid indefinite hang
+            end=$((SECONDS + 300))
+            while [ $SECONDS -lt $end ]; do
+              queued=$(safe_timeout squeue -u "$USER" --noheader --format='%i' 2>/dev/null || true)
+              if [ -z "$queued" ]; then
+                break
+              fi
+              echo "$queued" | sed 's/^/[Slurm] pending job: /' || true
               sleep 5
             done
+            # Final status; do not block
+            safe_timeout squeue -u "$USER" || true
+            if [ -n "$(safe_timeout squeue -u "$USER" --noheader --format='%i' 2>/dev/null || true)" ]; then
+              echo "[Slurm] Jobs still present after timeout; proceeding"
+            fi
           fi
 
       - uses: actions/checkout@v5
