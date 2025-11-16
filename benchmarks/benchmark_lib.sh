@@ -234,7 +234,101 @@ _patch_lm_eval_filters() {
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
 # sitecustomize.py — loaded automatically by Python if on PYTHONPATH
-import re, sys, unicodedata, types
+import os, re, sys, unicodedata, types
+
+# --------------------------------------------------------
+# Transport-level shim: normalize chat completion requests
+# --------------------------------------------------------
+# Some lm-eval builds may emit Responses-style message shapes
+# (message.type, role "developer", structured content lists).
+# Many OpenAI-compatible servers for /v1/chat/completions expect
+# classic roles (system/user/assistant) and string content.
+#
+# This shim rewrites payloads sent to */v1/chat/completions into
+# the classic format. It is no-op for other endpoints.
+
+def _flatten_content_to_text(content):
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for p in content:
+            if not isinstance(p, dict):
+                continue
+            t = p.get("type") or p.get("role")
+            if t in ("text", "input_text", None):
+                txt = p.get("text")
+                if txt is None:
+                    txt = p.get("content")
+                if txt is None and isinstance(p.get("text"), dict):
+                    txt = p["text"].get("content")
+                if txt:
+                    parts.append(str(txt))
+        return "".join(parts)
+    try:
+        return str(content)
+    except Exception:
+        return ""
+
+def _normalize_messages(payload):
+    try:
+        msgs = payload.get("messages")
+        if not isinstance(msgs, list):
+            return payload
+        norm = []
+        for m in msgs:
+            if not isinstance(m, dict):
+                continue
+            role = m.get("role", "user")
+            if role == "developer":
+                role = "system"
+            m = {k: v for k, v in m.items() if k != "type"}
+            content = m.get("content")
+            if content is None:
+                content = m.get("text") if isinstance(m.get("text"), (str, list, dict)) else m.get("input")
+            m_out = {"role": role, "content": _flatten_content_to_text(content)}
+            if isinstance(m.get("name"), str):
+                m_out["name"] = m["name"]
+            norm.append(m_out)
+        payload["messages"] = norm
+    except Exception:
+        return payload
+    return payload
+
+def _patch_http_clients():
+    # requests
+    try:
+        import requests
+        _orig_req = requests.sessions.Session.request
+        def _wrapped_request(self, method, url, *args, **kwargs):
+            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
+                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
+            return _orig_req(self, method, url, *args, **kwargs)
+        requests.sessions.Session.request = _wrapped_request
+    except Exception:
+        pass
+    # httpx sync/async
+    try:
+        import httpx
+        _orig_httpx = httpx.Client.request
+        def _wrapped_httpx(self, method, url, *args, **kwargs):
+            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
+                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
+            return _orig_httpx(self, method, url, *args, **kwargs)
+        httpx.Client.request = _wrapped_httpx
+        _orig_async = httpx.AsyncClient.request
+        async def _wrapped_async(self, method, url, *args, **kwargs):
+            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
+                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
+            return await _orig_async(self, method, url, *args, **kwargs)
+        httpx.AsyncClient.request = _wrapped_async
+    except Exception:
+        pass
+
+if not os.environ.get("LM_EVAL_DISABLE_CHAT_SHIM"):
+    _patch_http_clients()
 
 # -----------------------------
 # 1) Safe regex filters (yours)
