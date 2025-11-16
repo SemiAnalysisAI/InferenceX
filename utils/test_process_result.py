@@ -19,6 +19,7 @@ def create_mock_result_file(tmp_path):
     result_file = tmp_path / "test_result.json"
     with open(result_file, 'w') as f:
         json.dump(result_data, f)
+    return result_file
 
 
 def run_process_result_script(tmp_path):
@@ -88,7 +89,7 @@ def test_disagg_false_when_prefill_gpus_not_set(tmp_path, monkeypatch):
     data = run_process_result_script(tmp_path)
     
     # Check that disagg is false
-    assert not data['disagg']
+    assert data['disagg'] is False
     # Check that num_prefill_gpu and num_decode_gpu are NOT present
     assert 'num_prefill_gpu' not in data
     assert 'num_decode_gpu' not in data
@@ -113,7 +114,7 @@ def test_disagg_false_when_decode_gpus_not_set(tmp_path, monkeypatch):
     data = run_process_result_script(tmp_path)
     
     # Check that disagg is false
-    assert not data['disagg']
+    assert data['disagg'] is False
     # Check that num_prefill_gpu and num_decode_gpu are NOT present
     assert 'num_prefill_gpu' not in data
     assert 'num_decode_gpu' not in data
@@ -139,7 +140,7 @@ def test_disagg_false_when_both_env_vars_empty_strings(tmp_path, monkeypatch):
     data = run_process_result_script(tmp_path)
     
     # Check that disagg is false
-    assert not data['disagg']
+    assert data['disagg'] is False
     # Check that num_prefill_gpu and num_decode_gpu are NOT present
     assert 'num_prefill_gpu' not in data
     assert 'num_decode_gpu' not in data
