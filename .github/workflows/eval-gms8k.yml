@@ -44,7 +44,7 @@ jobs:
     secrets: inherit
     with:
       runner: h200-cw_0
-      image: ${{ inputs.image || 'vllm/vllm-openai:v0.11.0' }}
+      image: ${{ inputs.image || 'nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-devs' }}
       model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
       framework: trt
       precision: fp4
