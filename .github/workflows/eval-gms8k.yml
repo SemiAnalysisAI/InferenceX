@@ -43,9 +43,9 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: mi355x-amd_5
-      image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915' }}
-      model: ${{ inputs.model || 'amd/DeepSeek-R1-0528-MXFP4-Preview' }}
+      runner: b200-nvd_2
+      image: ${{ inputs.image || 'lmsysorg/sglang:v0.5.5-cu129-amd64' }}
+      model: ${{ inputs.model || 'nvidia/DeepSeek-R1-0528-FP4-V2' }}
       framework: sglang
       precision: fp4
       exp-name: dsr1_gsm8k_poc
