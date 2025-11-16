@@ -1,4 +1,4 @@
-name: Eval - GSM8K on H100 (PoC)
+name: Eval - GSM8K (PoC)
 
 on:
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
       framework: trt
       precision: fp4
       exp-name: gptoss_gsm8k_poc
-      tp: ${{ inputs.tp || '4' }}
+      tp: ${{ inputs.tp || '1' }}
       ep: '1'
       dp-attn: false
       port: ${{ inputs.port || '8888' }}

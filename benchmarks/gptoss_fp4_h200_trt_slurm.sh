@@ -50,12 +50,12 @@ trtllm-serve $MODEL \
 --max_num_tokens 20000 \
 --backend pytorch \
 --extra_llm_api_options gptoss-config.yml \
---ep_size=$EP_SIZE \
+--ep_size=1 \
 --trust_remote_code \
 --gpus_per_node 8 \
 --host 0.0.0.0 \
 --port $PORT \
---tp_size=$TP \
+--tp_size=1 \
 --pp_size=1 \
 > $SERVER_LOG 2>&1 &
 
