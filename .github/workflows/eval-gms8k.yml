@@ -17,7 +17,7 @@ on:
         description: "Tensor Parallel Size"
         required: false
         type: string
-        default: "4"
+        default: "1"
       port:
         description: "Server port"
         required: false
@@ -43,10 +43,10 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: h100-cr_0
-      image: ${{ inputs.image || 'vllm/vllm-openai:v0.11.0' }}
+      runner: h200-cw_0
+      image: ${{ inputs.image || 'nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev' }}
       model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
-      framework: vllm
+      framework: trt
       precision: fp4
       exp-name: gptoss_gsm8k_poc
       tp: ${{ inputs.tp || '4' }}
