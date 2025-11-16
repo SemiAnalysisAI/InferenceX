@@ -2,7 +2,6 @@ import pytest
 import json
 import sys
 import importlib.util
-from pathlib import Path
 from io import StringIO
 
 
