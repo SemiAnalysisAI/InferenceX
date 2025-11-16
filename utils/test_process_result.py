@@ -1,6 +1,5 @@
 import pytest
 import json
-import sys
 import importlib.util
 from io import StringIO
 
