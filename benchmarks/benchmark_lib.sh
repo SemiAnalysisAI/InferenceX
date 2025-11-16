@@ -233,116 +233,17 @@ _patch_lm_eval_filters() {
     local patch_dir
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
-# sitecustomize.py — loaded automatically by Python if on PYTHONPATH
-import os, re, sys, unicodedata, types
-
-# --------------------------------------------------------
-# Transport-level shim: normalize chat completion requests
-# --------------------------------------------------------
-# Some lm-eval builds may emit Responses-style message shapes
-# (message.type, role "developer", structured content lists).
-# Many OpenAI-compatible servers for /v1/chat/completions expect
-# classic roles (system/user/assistant) and string content.
-#
-# This shim rewrites payloads sent to */v1/chat/completions into
-# the classic format. It is no-op for other endpoints.
-
-def _flatten_content_to_text(content):
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for p in content:
-            if not isinstance(p, dict):
-                continue
-            t = p.get("type") or p.get("role")
-            if t in ("text", "input_text", None):
-                txt = p.get("text")
-                if txt is None:
-                    txt = p.get("content")
-                if txt is None and isinstance(p.get("text"), dict):
-                    txt = p["text"].get("content")
-                if txt:
-                    parts.append(str(txt))
-        return "".join(parts)
-    try:
-        return str(content)
-    except Exception:
-        return ""
-
-def _normalize_messages(payload):
-    try:
-        msgs = payload.get("messages")
-        if not isinstance(msgs, list):
-            return payload
-        norm = []
-        for m in msgs:
-            if not isinstance(m, dict):
-                continue
-            role = m.get("role", "user")
-            if role == "developer":
-                role = "system"
-            m = {k: v for k, v in m.items() if k != "type"}
-            content = m.get("content")
-            if content is None:
-                content = m.get("text") if isinstance(m.get("text"), (str, list, dict)) else m.get("input")
-            m_out = {"role": role, "content": _flatten_content_to_text(content)}
-            if isinstance(m.get("name"), str):
-                m_out["name"] = m["name"]
-            norm.append(m_out)
-        payload["messages"] = norm
-    except Exception:
-        return payload
-    return payload
-
-def _patch_http_clients():
-    # requests
-    try:
-        import requests
-        _orig_req = requests.sessions.Session.request
-        def _wrapped_request(self, method, url, *args, **kwargs):
-            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
-                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
-            return _orig_req(self, method, url, *args, **kwargs)
-        requests.sessions.Session.request = _wrapped_request
-    except Exception:
-        pass
-    # httpx sync/async
-    try:
-        import httpx
-        _orig_httpx = httpx.Client.request
-        def _wrapped_httpx(self, method, url, *args, **kwargs):
-            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
-                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
-            return _orig_httpx(self, method, url, *args, **kwargs)
-        httpx.Client.request = _wrapped_httpx
-        _orig_async = httpx.AsyncClient.request
-        async def _wrapped_async(self, method, url, *args, **kwargs):
-            if isinstance(kwargs.get("json"), dict) and "/chat/completions" in str(url):
-                kwargs["json"] = _normalize_messages(dict(kwargs["json"]))
-            return await _orig_async(self, method, url, *args, **kwargs)
-        httpx.AsyncClient.request = _wrapped_async
-    except Exception:
-        pass
-
-if not os.environ.get("LM_EVAL_DISABLE_CHAT_SHIM"):
-    _patch_http_clients()
-
-# -----------------------------
-# 1) Safe regex filters (yours)
-# -----------------------------
+import re, sys, unicodedata
 from lm_eval.filters import extraction as ex
 
 def _s(x):  # coerce to str
     return x if isinstance(x, str) else ""
 
-# --- RegexFilter.apply ---
+# --- Patch RegexFilter.apply (used by many datasets) ---
 _orig_regex_apply = ex.RegexFilter.apply
 def _safe_regex_apply(self, resps, docs):
     out = []
-    for inst in resps:  # list of candidates for one doc
+    for inst in resps:  # inst is a list of candidate responses for one doc
         filtered = []
         for resp in inst:
             txt = _s(resp)
@@ -360,7 +261,7 @@ def _safe_regex_apply(self, resps, docs):
     return out
 ex.RegexFilter.apply = _safe_regex_apply
 
-# --- MultiChoiceRegexFilter.apply (used by GSM8K flexible-extract) ---
+# --- Patch MultiChoiceRegexFilter.apply (used by GSM8K flexible-extract) ---
 _orig_mc_apply = ex.MultiChoiceRegexFilter.apply
 def _safe_mc_apply(self, resps, docs):
     def find_match(regex, resp, convert_dict={}):
@@ -397,7 +298,7 @@ def _safe_mc_apply(self, resps, docs):
 
     out = []
     for r, doc in zip(resps, docs):
-        # Build fallback regexes from choices (A, B, C, ...) as upstream
+        # Build fallback regexes from choices (A, B, C, ...) as in upstream
         fallback_regexes, choice_to_alpha = [], {}
         next_alpha = "A"
         without_paren, without_paren_to_target = [], {}
@@ -424,75 +325,8 @@ def _safe_mc_apply(self, resps, docs):
             filtered.append(m)
         out.append(filtered)
     return out
+
 ex.MultiChoiceRegexFilter.apply = _safe_mc_apply
-
-# -----------------------------------------------------
-# 2) Fallback to reasoning_content in parse_generations
-# -----------------------------------------------------
-# For OpenAI-like chat completions, some servers return:
-#   choices[0].message.content == None
-#   choices[0].message.reasoning_content == "<text>"
-# If so, return reasoning_content instead of None; if both missing, return "".
-
-from lm_eval.models.api_models import TemplateAPI
-
-def _wrap_parse_generations_on_class(cls):
-    if not hasattr(cls, "parse_generations"):
-        return
-    orig = cls.parse_generations
-    # parse_generations is a @staticmethod on API models; preserve staticmethod
-    def wrapped(*, outputs, **kwargs):
-        # First, run the original
-        res = orig(outputs=outputs, **kwargs)
-        # Normalize to list for convenience
-        if isinstance(res, (str, type(None))):
-            res = [res]
-            outputs_list = [outputs]
-        else:
-            outputs_list = outputs if isinstance(outputs, list) else [outputs]
-
-        def _fallback_from_output(o):
-            try:
-                # OpenAI-style: dict -> choices[0] -> message
-                ch0 = (o or {}).get("choices", [{}])[0]
-                msg = ch0.get("message", {}) or {}
-                txt = msg.get("content")
-                if txt is None:
-                    # Newer servers may use reasoning_content
-                    txt = msg.get("reasoning_content")
-                if txt is None:
-                    # Some servers put it at choices[0].reasoning.content
-                    txt = (ch0.get("reasoning") or {}).get("content")
-                return "" if txt is None else txt
-            except Exception:
-                return ""
-        fb = [_fallback_from_output(o) for o in outputs_list]
-
-        # Replace None/empty only if a fallback exists
-        res_out = []
-        for i, v in enumerate(res):
-            if (v is None or v == "") and i < len(fb) and fb[i]:
-                res_out.append(fb[i])
-            else:
-                # still coerce None -> "" so downstream filters never see None
-                res_out.append("" if v is None else v)
-        return res_out
-
-    # Rebind as staticmethod to match original decoration
-    cls.parse_generations = staticmethod(wrapped)
-
-# Try to patch common OpenAI-like chat backends
-try:
-    from lm_eval.models import openai_like as oli
-    for name in dir(oli):
-        obj = getattr(oli, name)
-        if isinstance(obj, type) and issubclass(obj, TemplateAPI):
-            # Heuristically target chat-style classes only
-            if "Chat" in obj.__name__ or "OpenAI" in obj.__name__:
-                _wrap_parse_generations_on_class(obj)
-except Exception:
-    # If module layout changes, fail soft; your regex guards still protect filters.
-    pass
 PY
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
@@ -565,34 +399,16 @@ append_lm_eval_summary() {
     set +x
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
     local task="${EVAL_TASK:-gsm8k}"
-    # Render markdown once, then decide where to write it to avoid redirection errors
-    local md_out
-    md_out=$(python3 utils/lm_eval_to_md.py \
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        _ensure_bench_serving_repo
+        python3 XXX \
             --results-dir "/workspace/${results_dir}" \
             --task "${task}" \
             --framework "${FRAMEWORK}" \
             --precision "${PRECISION}" \
             --tp "${TP:-1}" \
             --ep "${EP_SIZE:-1}" \
-            --dp-attention "${DP_ATTENTION:-false}" 2>/dev/null || true)
-
-    # If nothing was produced, nothing to append
-    if [ -z "${md_out}" ]; then
-        return 0
+            --dp-attention "${DP_ATTENTION:-false}" \
+            >> "$GITHUB_STEP_SUMMARY" || true
     fi
-
-    # Prefer GitHub step summary when available and path is valid; otherwise fallback to workspace file
-    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        local _gh_path="$GITHUB_STEP_SUMMARY"
-        local _gh_dir
-        _gh_dir="$(dirname "$_gh_path")"
-        if [ -d "$_gh_dir" ]; then
-            printf "%s\n" "${md_out}" >> "$_gh_path" || true
-            return 0
-        fi
-    fi
-
-    # Fallback: write to a summary file alongside results
-    mkdir -p "/workspace/${results_dir}" 2>/dev/null || true
-    printf "%s\n" "${md_out}" >> "/workspace/${results_dir}/SUMMARY.md" || true
 }
