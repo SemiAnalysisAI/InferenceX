@@ -43,7 +43,7 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: mi300x-cr_0
+      runner: mi325x-amd_0
       image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915' }}
       model: ${{ inputs.model || 'deepseek-ai/DeepSeek-R1-0528' }}
       framework: sglang

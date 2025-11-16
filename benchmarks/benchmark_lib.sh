@@ -400,8 +400,7 @@ append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
     local task="${EVAL_TASK:-gsm8k}"
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        _ensure_bench_serving_repo
-        python3 XXX \
+        python3 utils/lm_eval_to_md.py \
             --results-dir "/workspace/${results_dir}" \
             --task "${task}" \
             --framework "${FRAMEWORK}" \
