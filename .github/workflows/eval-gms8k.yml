@@ -43,7 +43,7 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: b200-nvd_0
+      runner: b200-nvd_3
       image: ${{ inputs.image || 'vllm/vllm-openai:v0.11.0' }}
       model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
       framework: vllm
