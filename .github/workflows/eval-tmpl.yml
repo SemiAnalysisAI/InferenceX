@@ -80,16 +80,20 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+          # Helper to avoid indefinite hangs on flaky Docker daemons
+          safe_timeout() { timeout -k 5 30s "$@"; }
+
+          if command -v docker >/dev/null 2>&1 && safe_timeout docker info >/dev/null 2>&1; then
             host=$(hostname)
 
             if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
               echo "[INFO] Running container-by-container cleanup on $host"
-              for cid in $(docker ps -aq); do
+              cids=$(safe_timeout docker ps -aq || true)
+              for cid in $cids; do
                 echo "[INFO] Cleaning container $cid"
-                docker stop -t 90 "$cid" || true
-                docker wait "$cid" >/dev/null 2>&1 || true
-                docker rm -f "$cid" >/dev/null 2>&1 || true
+                safe_timeout docker stop -t 90 "$cid" || true
+                safe_timeout docker wait "$cid" >/dev/null 2>&1 || true
+                safe_timeout docker rm -f "$cid" >/dev/null 2>&1 || true
               done
               sleep 2
               if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q '[0-9]'; then
@@ -98,7 +102,7 @@ jobs:
               fi
             else
               echo "[Docker] looking at docker resources ..."
-              docker ps -aq 
+              safe_timeout docker ps -aq || echo "[WARN] docker ps timed out"
             fi
           fi
           sudo rm -rf /home/ubuntu/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out/openai__gpt-oss-120b
