@@ -144,7 +144,7 @@ jobs:
             sleep 1
           done
    
-          if [ -n $FOUND_RESULT_FILE ]; then
+          if [ -z "$FOUND_RESULT_FILE" ]; then
             echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
             exit 1
           fi
