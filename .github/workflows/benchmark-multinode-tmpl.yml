@@ -27,6 +27,13 @@ on:
       osl:
         required: true
         type: string
+      conc:
+        required: true
+        type: string
+      mtp-mode:
+        required: true
+        type: string
+
       max-model-len:
         required: true
         type: string
@@ -34,7 +41,42 @@ on:
         required: false
         type: string
         default: '0.8'
-      mtp-mode:
+
+      prefill-num-worker:
+        required: true
+        type: string
+      prefill-tp:
+        required: true
+        type: string
+      prefill-ep:
+        required: true
+        type: string
+      prefill-batch-size:
+        required: true
+        type: string
+      prefill-max-num-tokens:
+        required: true
+        type: string
+      prefill-dp-attn:
+        required: true
+        type: string
+
+      decode-num-worker:
+        required: true
+        type: string
+      decode-tp:
+        required: true
+        type: string
+      decode-ep:
+        required: true
+        type: string
+      decode-batch-size:
+        required: true
+        type: string
+      decode-max-num-tokens:
+        required: true
+        type: string
+      decode-dp-attn:
         required: true
         type: string
 

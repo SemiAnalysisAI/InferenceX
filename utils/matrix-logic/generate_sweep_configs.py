@@ -2,7 +2,7 @@ import json
 import yaml
 import argparse
 from pydantic import BaseModel, Field, ValidationError, ConfigDict
-from typing import List
+from typing import List, Optional, Union
 
 # Field name constants
 # Top-level config fields
@@ -13,6 +13,7 @@ FIELD_PRECISION = 'precision'
 FIELD_FRAMEWORK = 'framework'
 FIELD_RUNNER = 'runner'
 FIELD_SEQ_LEN_CONFIGS = 'seq-len-configs'
+FIELD_MULTINODE = 'multinode'
 
 # Seq-len-config fields
 FIELD_ISL = 'isl'
@@ -23,8 +24,18 @@ FIELD_SEARCH_SPACE = 'search-space'
 FIELD_TP = 'tp'
 FIELD_CONC_START = 'conc-start'
 FIELD_CONC_END = 'conc-end'
+FIELD_CONC_LIST = 'conc-list'
 FIELD_EP = 'ep'
 FIELD_DP_ATTN = 'dp-attn'
+
+# Multinode-specific fields (when FIELD_MULTINODE = true)
+FIELD_MTP = 'mtp'
+FIELD_PREFILL = 'prefill'
+FIELD_DECODE = 'decode'
+FIELD_NUM_WORKER = 'num-worker'
+FIELD_BATCH_SIZE = 'batch-size'
+FIELD_MAX_NUM_TOKENS = 'max-num-tokens'
+FIELD_ADDITIONAL_SETTINGS = 'additional-settings'
 
 # Matrix entry fields
 FIELD_CONC = 'conc'
@@ -50,8 +61,20 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
+class WorkerConfig(BaseModel):
+    """Pydantic model for validating worker configuration in multinode entries."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    num_worker: int = Field(alias='num-worker')
+    tp: int
+    ep: int
+    batch_size: int = Field(alias='batch-size')
+    max_num_tokens: int = Field(alias='max-num-tokens')
+    dp_attn: bool = Field(alias='dp-attn')
+
+
 class MatrixEntry(BaseModel):
-    """Pydantic model for validating matrix entry structure."""
+    """Pydantic model for validating single-node matrix entry structure."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     image: str
@@ -69,18 +92,64 @@ class MatrixEntry(BaseModel):
     exp_name: str = Field(alias='exp-name')
 
 
+class MultinodeMatrixEntry(BaseModel):
+    """Pydantic model for validating multinode matrix entry structure."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    image: str
+    model: str
+    precision: str
+    framework: str
+    runner: str
+    isl: int
+    osl: int
+    mtp: str
+    prefill: WorkerConfig
+    decode: WorkerConfig
+    conc: int
+    max_model_len: int = Field(alias='max-model-len')
+    exp_name: str = Field(alias='exp-name')
+    additional_settings: Optional[List[dict]] = Field(default=None, alias='additional-settings')
+
+
 def validate_matrix_output(matrix_values: List[dict]) -> List[dict]:
     """Validate that matrix_values entries match the expected structure.
 
+    Supports both single-node and multinode matrix entries.
     Raises ValueError if any entry fails validation.
     Returns the original list if all entries are valid.
     """
     for i, entry in enumerate(matrix_values):
         try:
-            MatrixEntry(**entry)
+            # Determine if this is a multinode entry by checking for mtp field
+            if 'mtp' in entry:
+                MultinodeMatrixEntry(**entry)
+            else:
+                MatrixEntry(**entry)
         except ValidationError as e:
             raise ValueError(f"Matrix entry at index {i} failed validation:\n{e}")
     return matrix_values
+
+
+def validate_worker_config(config: dict, config_name: str, location: str):
+    """Validate prefill or decode worker configuration."""
+    required_fields = {
+        FIELD_NUM_WORKER: int,
+        FIELD_TP: int,
+        FIELD_EP: int,
+        FIELD_BATCH_SIZE: int,
+        FIELD_MAX_NUM_TOKENS: int,
+        FIELD_DP_ATTN: bool
+    }
+
+    for field, expected_type in required_fields.items():
+        if field not in config or config[field] is None:
+            raise ValueError(f"Missing '{field}' in {config_name} for {location}")
+        if not isinstance(config[field], expected_type):
+            raise ValueError(
+                f"'{field}' must be {expected_type.__name__} in {config_name} for {location}, "
+                f"got {type(config[field]).__name__}"
+            )
 
 
 def validate_master_configs_structure(all_config_data):
@@ -98,7 +167,8 @@ def validate_master_configs_structure(all_config_data):
             FIELD_PRECISION: str,
             FIELD_FRAMEWORK: str,
             FIELD_RUNNER: str,
-            FIELD_SEQ_LEN_CONFIGS: list
+            FIELD_SEQ_LEN_CONFIGS: list,
+            FIELD_MULTINODE: bool
         }
 
         for field, expected_type in required_fields.items():
@@ -137,36 +207,167 @@ def validate_master_configs_structure(all_config_data):
                 raise ValueError(
                     f"Missing or invalid '{FIELD_SEARCH_SPACE}' in seq-len-config[{i}] for key '{key}'")
 
+            # Get multinode flag from top level
+            is_multinode = val[FIELD_MULTINODE]
+
             # Validate each benchmark in search-space
             for j, bmk in enumerate(bmk_space):
-                # Define allowed fields
-                allowed_fields = {FIELD_TP, FIELD_CONC_START,
-                                  FIELD_CONC_END, FIELD_EP, FIELD_DP_ATTN}
-                required_bmk_fields = {FIELD_TP: int,
-                                       FIELD_CONC_START: int, FIELD_CONC_END: int}
-                optional_bmk_fields = {FIELD_EP: int, FIELD_DP_ATTN: bool}
+                location = f"search-space[{j}] of seq-len-config[{i}] for key '{key}'"
 
-                # Check for extra fields
-                extra_fields = set(bmk.keys()) - allowed_fields
-                if extra_fields:
-                    raise ValueError(
-                        f"Extra fields {extra_fields} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                if is_multinode:
+                    # Validate multinode configuration
+                    allowed_fields = {
+                        FIELD_MTP, FIELD_PREFILL, FIELD_DECODE,
+                        FIELD_CONC_START, FIELD_CONC_END, FIELD_CONC_LIST,
+                        FIELD_ADDITIONAL_SETTINGS
+                    }
 
-                # Validate required fields
-                for field, expected_type in required_bmk_fields.items():
-                    if field not in bmk or bmk[field] is None:
+                    # Check for extra fields
+                    extra_fields = set(bmk.keys()) - allowed_fields
+                    if extra_fields:
+                        raise ValueError(f"Extra fields {extra_fields} in {location}")
+
+                    # Validate required multinode fields
+                    if FIELD_MTP not in bmk or bmk[FIELD_MTP] is None:
+                        raise ValueError(f"Missing '{FIELD_MTP}' in multinode config at {location}")
+                    if not isinstance(bmk[FIELD_MTP], str):
+                        raise ValueError(f"'{FIELD_MTP}' must be str in {location}")
+
+                    if FIELD_PREFILL not in bmk or bmk[FIELD_PREFILL] is None:
+                        raise ValueError(f"Missing '{FIELD_PREFILL}' in multinode config at {location}")
+                    if not isinstance(bmk[FIELD_PREFILL], dict):
+                        raise ValueError(f"'{FIELD_PREFILL}' must be dict in {location}")
+                    validate_worker_config(bmk[FIELD_PREFILL], FIELD_PREFILL, location)
+
+                    if FIELD_DECODE not in bmk or bmk[FIELD_DECODE] is None:
+                        raise ValueError(f"Missing '{FIELD_DECODE}' in multinode config at {location}")
+                    if not isinstance(bmk[FIELD_DECODE], dict):
+                        raise ValueError(f"'{FIELD_DECODE}' must be dict in {location}")
+                    validate_worker_config(bmk[FIELD_DECODE], FIELD_DECODE, location)
+
+                    # Validate concurrency specification (either conc-list OR conc-start/conc-end)
+                    has_conc_list = FIELD_CONC_LIST in bmk
+                    has_conc_range = FIELD_CONC_START in bmk and FIELD_CONC_END in bmk
+
+                    if not has_conc_list and not has_conc_range:
                         raise ValueError(
-                            f"Missing '{field}' in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
-                    if not isinstance(bmk[field], expected_type):
+                            f"Must specify either '{FIELD_CONC_LIST}' or both '{FIELD_CONC_START}' "
+                            f"and '{FIELD_CONC_END}' in {location}"
+                        )
+                    if has_conc_list and has_conc_range:
                         raise ValueError(
-                            f"'{field}' must be {expected_type.__name__} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                            f"Cannot specify both '{FIELD_CONC_LIST}' and '{FIELD_CONC_START}/{FIELD_CONC_END}' "
+                            f"in {location}"
+                        )
 
-                # Validate optional fields if they exist
-                for field, expected_type in optional_bmk_fields.items():
-                    if field in bmk and bmk[field] is not None:
+                    if has_conc_list:
+                        if not isinstance(bmk[FIELD_CONC_LIST], list):
+                            raise ValueError(f"'{FIELD_CONC_LIST}' must be list in {location}")
+                        if len(bmk[FIELD_CONC_LIST]) == 0:
+                            raise ValueError(f"'{FIELD_CONC_LIST}' must be non-empty in {location}")
+                        for conc in bmk[FIELD_CONC_LIST]:
+                            if not isinstance(conc, int):
+                                raise ValueError(f"All values in '{FIELD_CONC_LIST}' must be int in {location}")
+
+                    if has_conc_range:
+                        if not isinstance(bmk[FIELD_CONC_START], int):
+                            raise ValueError(f"'{FIELD_CONC_START}' must be int in {location}")
+                        if not isinstance(bmk[FIELD_CONC_END], int):
+                            raise ValueError(f"'{FIELD_CONC_END}' must be int in {location}")
+
+                    # Validate optional additional-settings
+                    if FIELD_ADDITIONAL_SETTINGS in bmk:
+                        if not isinstance(bmk[FIELD_ADDITIONAL_SETTINGS], list):
+                            raise ValueError(f"'{FIELD_ADDITIONAL_SETTINGS}' must be list in {location}")
+                        for setting in bmk[FIELD_ADDITIONAL_SETTINGS]:
+                            if not isinstance(setting, dict):
+                                raise ValueError(
+                                    f"Each item in '{FIELD_ADDITIONAL_SETTINGS}' must be dict in {location}"
+                                )
+                else:
+                    # Validate single node configuration
+                    allowed_fields = {
+                        FIELD_TP, FIELD_CONC_START, FIELD_CONC_END,
+                        FIELD_CONC_LIST, FIELD_EP, FIELD_DP_ATTN
+                    }
+                    required_bmk_fields = {FIELD_TP: int}
+                    optional_bmk_fields = {FIELD_EP: int, FIELD_DP_ATTN: bool}
+
+                    # Check for extra fields
+                    extra_fields = set(bmk.keys()) - allowed_fields
+                    if extra_fields:
+                        raise ValueError(f"Extra fields {extra_fields} in {location}")
+
+                    # Validate required fields
+                    for field, expected_type in required_bmk_fields.items():
+                        if field not in bmk or bmk[field] is None:
+                            raise ValueError(f"Missing '{field}' in {location}")
                         if not isinstance(bmk[field], expected_type):
                             raise ValueError(
-                                f"'{field}' must be {expected_type.__name__} in search-space[{j}] of seq-len-config[{i}] for key '{key}'")
+                                f"'{field}' must be {expected_type.__name__} in {location}"
+                            )
+
+                    # Validate optional fields if they exist
+                    for field, expected_type in optional_bmk_fields.items():
+                        if field in bmk and bmk[field] is not None:
+                            if not isinstance(bmk[field], expected_type):
+                                raise ValueError(
+                                    f"'{field}' must be {expected_type.__name__} in {location}"
+                                )
+
+                    # Validate concurrency specification (either conc-list OR conc-start/conc-end)
+                    has_conc_list = FIELD_CONC_LIST in bmk
+                    has_conc_range = FIELD_CONC_START in bmk and FIELD_CONC_END in bmk
+
+                    if not has_conc_list and not has_conc_range:
+                        raise ValueError(
+                            f"Must specify either '{FIELD_CONC_LIST}' or both '{FIELD_CONC_START}' "
+                            f"and '{FIELD_CONC_END}' in {location}"
+                        )
+                    if has_conc_list and has_conc_range:
+                        raise ValueError(
+                            f"Cannot specify both '{FIELD_CONC_LIST}' and '{FIELD_CONC_START}/{FIELD_CONC_END}' "
+                            f"in {location}"
+                        )
+
+                    if has_conc_list:
+                        if not isinstance(bmk[FIELD_CONC_LIST], list):
+                            raise ValueError(f"'{FIELD_CONC_LIST}' must be list in {location}")
+                        if len(bmk[FIELD_CONC_LIST]) == 0:
+                            raise ValueError(f"'{FIELD_CONC_LIST}' must be non-empty in {location}")
+                        for conc in bmk[FIELD_CONC_LIST]:
+                            if not isinstance(conc, int):
+                                raise ValueError(f"All values in '{FIELD_CONC_LIST}' must be int in {location}")
+
+                    if has_conc_range:
+                        if not isinstance(bmk[FIELD_CONC_START], int):
+                            raise ValueError(f"'{FIELD_CONC_START}' must be int in {location}")
+                        if not isinstance(bmk[FIELD_CONC_END], int):
+                            raise ValueError(f"'{FIELD_CONC_END}' must be int in {location}")
+
+
+def get_concurrency_values(bmk: dict, args) -> List[int]:
+    """Get list of concurrency values from benchmark config.
+
+    Handles both conc-list and conc-start/conc-end patterns.
+    """
+    if FIELD_CONC_LIST in bmk:
+        # Use explicit list
+        return bmk[FIELD_CONC_LIST]
+    else:
+        # Generate range from start/end with step size
+        conc_start = bmk[FIELD_CONC_START]
+        conc_end = bmk[FIELD_CONC_END]
+        conc_values = []
+        conc = conc_start
+        while conc <= conc_end:
+            conc_values.append(conc)
+            if conc == conc_end:
+                break
+            conc *= args.step_size
+            if conc > conc_end:
+                conc = conc_end
+        return conc_values
 
 
 def generate_full_sweep(args, all_config_data):
@@ -224,6 +425,13 @@ def generate_full_sweep(args, all_config_data):
         if args.runner_type and val[FIELD_RUNNER] not in args.runner_type:
             continue
 
+        # Filter by node type if specified
+        is_multinode = val[FIELD_MULTINODE]
+        if args.node_type == 'multinode' and not is_multinode:
+            continue
+        if args.node_type == 'single-node' and is_multinode:
+            continue
+
         seq_len_configs = val[FIELD_SEQ_LEN_CONFIGS]
         image = val[FIELD_IMAGE]
         model = val[FIELD_MODEL]
@@ -244,9 +452,17 @@ def generate_full_sweep(args, all_config_data):
 
             if args.test_mode:
                 # In test mode, use highest TP with lowest concurrency
+                # For multinode configs, skip for now
+                if is_multinode:
+                    continue  # Skip multinode configs in test mode for now
+
                 highest_tp_bmk = max(bmk_space, key=lambda x: x[FIELD_TP])
                 tp = highest_tp_bmk[FIELD_TP]
-                conc = highest_tp_bmk[FIELD_CONC_START]
+
+                # Get lowest concurrency
+                conc_values = get_concurrency_values(highest_tp_bmk, args)
+                conc = min(conc_values)
+
                 ep = highest_tp_bmk.get(FIELD_EP)
                 dp_attn = highest_tp_bmk.get(FIELD_DP_ATTN)
 
@@ -276,43 +492,71 @@ def generate_full_sweep(args, all_config_data):
             else:
                 # Full sweep mode
                 for bmk in bmk_space:
-                    tp = bmk[FIELD_TP]
-                    conc_start = bmk[FIELD_CONC_START]
-                    conc_end = bmk[FIELD_CONC_END]
-                    ep = bmk.get(FIELD_EP)
-                    dp_attn = bmk.get(FIELD_DP_ATTN)
+                    if is_multinode:
+                        # Generate multinode matrix entries
+                        mtp = bmk[FIELD_MTP]
+                        prefill = bmk[FIELD_PREFILL]
+                        decode = bmk[FIELD_DECODE]
+                        additional_settings = bmk.get(FIELD_ADDITIONAL_SETTINGS)
 
-                    conc = conc_start
-                    while conc <= conc_end:
-                        seq_len_str = seq_len_to_str(isl, osl)
-                        entry = {
-                            FIELD_IMAGE: image,
-                            FIELD_MODEL: model,
-                            FIELD_PRECISION: precision,
-                            FIELD_FRAMEWORK: framework,
-                            FIELD_RUNNER: runner,
-                            FIELD_ISL: isl,
-                            FIELD_OSL: osl,
-                            FIELD_TP: tp,
-                            FIELD_CONC: conc,
-                            FIELD_MAX_MODEL_LEN: isl + osl + 200,
-                            FIELD_EP: 1,  # Default
-                            FIELD_DP_ATTN: False,  # Default
-                            FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
-                        }
+                        # Get concurrency values
+                        conc_values = get_concurrency_values(bmk, args)
 
-                        if ep is not None:
-                            entry[FIELD_EP] = ep
-                        if dp_attn is not None:
-                            entry[FIELD_DP_ATTN] = dp_attn
+                        for conc in conc_values:
+                            seq_len_str = seq_len_to_str(isl, osl)
+                            entry = {
+                                FIELD_IMAGE: image,
+                                FIELD_MODEL: model,
+                                FIELD_PRECISION: precision,
+                                FIELD_FRAMEWORK: framework,
+                                FIELD_RUNNER: runner,
+                                FIELD_ISL: isl,
+                                FIELD_OSL: osl,
+                                FIELD_MTP: mtp,
+                                FIELD_PREFILL: prefill,
+                                FIELD_DECODE: decode,
+                                FIELD_CONC: conc,
+                                FIELD_MAX_MODEL_LEN: isl + osl + 200,
+                                FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
+                            }
 
-                        matrix_values.append(entry)
+                            if additional_settings is not None:
+                                entry[FIELD_ADDITIONAL_SETTINGS] = additional_settings
 
-                        if conc == conc_end:
-                            break
-                        conc *= args.step_size
-                        if conc > conc_end:
-                            conc = conc_end
+                            matrix_values.append(entry)
+                    else:
+                        # Generate single-node matrix entries
+                        tp = bmk[FIELD_TP]
+                        ep = bmk.get(FIELD_EP)
+                        dp_attn = bmk.get(FIELD_DP_ATTN)
+
+                        # Get concurrency values
+                        conc_values = get_concurrency_values(bmk, args)
+
+                        for conc in conc_values:
+                            seq_len_str = seq_len_to_str(isl, osl)
+                            entry = {
+                                FIELD_IMAGE: image,
+                                FIELD_MODEL: model,
+                                FIELD_PRECISION: precision,
+                                FIELD_FRAMEWORK: framework,
+                                FIELD_RUNNER: runner,
+                                FIELD_ISL: isl,
+                                FIELD_OSL: osl,
+                                FIELD_TP: tp,
+                                FIELD_CONC: conc,
+                                FIELD_MAX_MODEL_LEN: isl + osl + 200,
+                                FIELD_EP: 1,  # Default
+                                FIELD_DP_ATTN: False,  # Default
+                                FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
+                            }
+
+                            if ep is not None:
+                                entry[FIELD_EP] = ep
+                            if dp_attn is not None:
+                                entry[FIELD_DP_ATTN] = dp_attn
+
+                            matrix_values.append(entry)
 
     if len(matrix_values) == 0:
         error_msg = "No configs found matching filters:"
@@ -326,6 +570,8 @@ def generate_full_sweep(args, all_config_data):
             error_msg += f" runner-type={args.runner_type}"
         if seq_lens_filter:
             error_msg += f" seq-lens={args.seq_lens}"
+        if args.node_type != 'all':
+            error_msg += f" node-type={args.node_type}"
         raise ValueError(error_msg)
 
     return matrix_values
@@ -364,6 +610,7 @@ def generate_test_config(args, all_config_data):
     framework = val[FIELD_FRAMEWORK]
     # Use default runner or specific runner node if input by user
     runner = val[FIELD_RUNNER] if not args.runner_node else args.runner_node
+    is_multinode = val[FIELD_MULTINODE]
 
     # Convert seq-lens to set of (isl, osl) tuples for filtering
     seq_lens_filter = None
@@ -384,42 +631,73 @@ def generate_test_config(args, all_config_data):
         bmk_space = seq_config[FIELD_SEARCH_SPACE]
 
         for bmk in bmk_space:
-            tp = bmk[FIELD_TP]
-            conc_start = bmk[FIELD_CONC_START]
-            conc_end = bmk[FIELD_CONC_END]
-            ep = bmk.get(FIELD_EP)
-            dp_attn = bmk.get(FIELD_DP_ATTN)
+            if is_multinode:
+                # Generate multinode matrix entries
+                mtp = bmk[FIELD_MTP]
+                prefill = bmk[FIELD_PREFILL]
+                decode = bmk[FIELD_DECODE]
+                additional_settings = bmk.get(FIELD_ADDITIONAL_SETTINGS)
 
-            # In test mode, only use the lowest concurrency (conc_start)
-            if args.test_mode:
-                entry = {
-                    FIELD_IMAGE: image,
-                    FIELD_MODEL: model,
-                    FIELD_PRECISION: precision,
-                    FIELD_FRAMEWORK: framework,
-                    FIELD_RUNNER: runner,
-                    FIELD_ISL: isl,
-                    FIELD_OSL: osl,
-                    FIELD_TP: tp,
-                    FIELD_EP: 1, # Default,
-                    FIELD_DP_ATTN: False, # Default
-                    FIELD_CONC: conc_start,
-                    FIELD_MAX_MODEL_LEN: isl + osl,
-                    FIELD_EXP_NAME: f"{model_code}_test",
-                }
+                # Get concurrency values
+                conc_values = get_concurrency_values(bmk, args)
 
-                # Add optional fields if they exist
-                if ep is not None:
-                    entry[FIELD_EP] = ep
-                if dp_attn is not None:
-                    entry[FIELD_DP_ATTN] = dp_attn
+                # In test mode, only use the lowest concurrency
+                if args.test_mode:
+                    entry = {
+                        FIELD_IMAGE: image,
+                        FIELD_MODEL: model,
+                        FIELD_PRECISION: precision,
+                        FIELD_FRAMEWORK: framework,
+                        FIELD_RUNNER: runner,
+                        FIELD_ISL: isl,
+                        FIELD_OSL: osl,
+                        FIELD_MTP: mtp,
+                        FIELD_PREFILL: prefill,
+                        FIELD_DECODE: decode,
+                        FIELD_CONC: min(conc_values),
+                        FIELD_MAX_MODEL_LEN: isl + osl,
+                        FIELD_EXP_NAME: f"{model_code}_test",
+                    }
 
-                matrix_values.append(entry)
+                    if additional_settings is not None:
+                        entry[FIELD_ADDITIONAL_SETTINGS] = additional_settings
+
+                    matrix_values.append(entry)
+                else:
+                    # Generate entries for each concurrency value
+                    for conc in conc_values:
+                        seq_len_str = seq_len_to_str(isl, osl)
+                        entry = {
+                            FIELD_IMAGE: image,
+                            FIELD_MODEL: model,
+                            FIELD_PRECISION: precision,
+                            FIELD_FRAMEWORK: framework,
+                            FIELD_RUNNER: runner,
+                            FIELD_ISL: isl,
+                            FIELD_OSL: osl,
+                            FIELD_MTP: mtp,
+                            FIELD_PREFILL: prefill,
+                            FIELD_DECODE: decode,
+                            FIELD_CONC: conc,
+                            FIELD_MAX_MODEL_LEN: isl + osl,
+                            FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
+                        }
+
+                        if additional_settings is not None:
+                            entry[FIELD_ADDITIONAL_SETTINGS] = additional_settings
+
+                        matrix_values.append(entry)
             else:
-                # Generate entries for each concurrency value in the range
-                conc = conc_start
-                while conc <= conc_end:
-                    seq_len_str = seq_len_to_str(isl, osl)
+                # Generate single-node matrix entries
+                tp = bmk[FIELD_TP]
+                ep = bmk.get(FIELD_EP)
+                dp_attn = bmk.get(FIELD_DP_ATTN)
+
+                # Get concurrency values
+                conc_values = get_concurrency_values(bmk, args)
+
+                # In test mode, only use the lowest concurrency
+                if args.test_mode:
                     entry = {
                         FIELD_IMAGE: image,
                         FIELD_MODEL: model,
@@ -431,9 +709,9 @@ def generate_test_config(args, all_config_data):
                         FIELD_TP: tp,
                         FIELD_EP: 1, # Default,
                         FIELD_DP_ATTN: False, # Default
-                        FIELD_CONC: conc,
+                        FIELD_CONC: min(conc_values),
                         FIELD_MAX_MODEL_LEN: isl + osl,
-                        FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
+                        FIELD_EXP_NAME: f"{model_code}_test",
                     }
 
                     # Add optional fields if they exist
@@ -443,12 +721,33 @@ def generate_test_config(args, all_config_data):
                         entry[FIELD_DP_ATTN] = dp_attn
 
                     matrix_values.append(entry)
+                else:
+                    # Generate entries for each concurrency value
+                    for conc in conc_values:
+                        seq_len_str = seq_len_to_str(isl, osl)
+                        entry = {
+                            FIELD_IMAGE: image,
+                            FIELD_MODEL: model,
+                            FIELD_PRECISION: precision,
+                            FIELD_FRAMEWORK: framework,
+                            FIELD_RUNNER: runner,
+                            FIELD_ISL: isl,
+                            FIELD_OSL: osl,
+                            FIELD_TP: tp,
+                            FIELD_EP: 1, # Default,
+                            FIELD_DP_ATTN: False, # Default
+                            FIELD_CONC: conc,
+                            FIELD_MAX_MODEL_LEN: isl + osl,
+                            FIELD_EXP_NAME: f"{model_code}_{seq_len_str}",
+                        }
 
-                    if conc == conc_end:
-                        break
-                    conc *= args.step_size
-                    if conc > conc_end:
-                        conc = conc_end
+                        # Add optional fields if they exist
+                        if ep is not None:
+                            entry[FIELD_EP] = ep
+                        if dp_attn is not None:
+                            entry[FIELD_DP_ATTN] = dp_attn
+
+                        matrix_values.append(entry)
 
     return matrix_values
 
@@ -486,6 +785,7 @@ def generate_runner_model_sweep_config(args, all_config_data):
 
         # Get model code for exp_name
         model_code = val[FIELD_MODEL_PREFIX]
+        is_multinode = val[FIELD_MULTINODE]
 
         # Find 1k1k config
         target_config = None
@@ -494,41 +794,79 @@ def generate_runner_model_sweep_config(args, all_config_data):
                 target_config = config
                 break
 
-        highest_tp_bmk = max(target_config[FIELD_SEARCH_SPACE], key=lambda x: x[FIELD_TP])
-        # Since we are just testing, pick the highest TP for this config and just test
-        # on that TP with the lowest concurrency available
-        highest_tp = highest_tp_bmk[FIELD_TP]
-        lowest_conc = highest_tp_bmk[FIELD_CONC_START]
+        bmk_space = target_config[FIELD_SEARCH_SPACE]
+        if not bmk_space:
+            continue
 
-        ep = highest_tp_bmk.get(FIELD_EP)
-        dp_attn = highest_tp_bmk.get(FIELD_DP_ATTN)
+        if is_multinode:
+            # For multinode configs, use the first benchmark config with lowest concurrency
+            first_bmk = bmk_space[0]
+            mtp = first_bmk[FIELD_MTP]
+            prefill = first_bmk[FIELD_PREFILL]
+            decode = first_bmk[FIELD_DECODE]
+            additional_settings = first_bmk.get(FIELD_ADDITIONAL_SETTINGS)
+            conc_values = get_concurrency_values(first_bmk, args)
+            lowest_conc = min(conc_values)
 
-        for node in runner_nodes:
-            entry = {
-                FIELD_IMAGE: val[FIELD_IMAGE],
-                FIELD_MODEL: val[FIELD_MODEL],
-                FIELD_PRECISION: val[FIELD_PRECISION],
-                FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
-                # Add one entry for each node under specified runner type
-                FIELD_RUNNER: node,
-                # Again, just use 1k1k since this is just meant to smoke test all runners
-                FIELD_ISL: 1024,
-                FIELD_OSL: 1024,
-                FIELD_TP: highest_tp,
-                FIELD_EP: 1, # Default,
-                FIELD_DP_ATTN: False, # Default
-                FIELD_CONC: lowest_conc,
-                FIELD_MAX_MODEL_LEN: 2048,
-                FIELD_EXP_NAME: f"{model_code}_test",
-            }
+            for node in runner_nodes:
+                entry = {
+                    FIELD_IMAGE: val[FIELD_IMAGE],
+                    FIELD_MODEL: val[FIELD_MODEL],
+                    FIELD_PRECISION: val[FIELD_PRECISION],
+                    FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
+                    FIELD_RUNNER: node,
+                    FIELD_ISL: 1024,
+                    FIELD_OSL: 1024,
+                    FIELD_MTP: mtp,
+                    FIELD_PREFILL: prefill,
+                    FIELD_DECODE: decode,
+                    FIELD_CONC: lowest_conc,
+                    FIELD_MAX_MODEL_LEN: 2048,
+                    FIELD_EXP_NAME: f"{model_code}_test",
+                }
 
-            # Add optional fields if they exist
-            if ep is not None:
-                entry[FIELD_EP] = ep
-            if dp_attn is not None:
-                entry[FIELD_DP_ATTN] = dp_attn
+                if additional_settings is not None:
+                    entry[FIELD_ADDITIONAL_SETTINGS] = additional_settings
 
-            matrix_values.append(entry)
+                matrix_values.append(entry)
+        else:
+            # For single-node configs
+            highest_tp_bmk = max(bmk_space, key=lambda x: x[FIELD_TP])
+            # Since we are just testing, pick the highest TP for this config and just test
+            # on that TP with the lowest concurrency available
+            highest_tp = highest_tp_bmk[FIELD_TP]
+            conc_values = get_concurrency_values(highest_tp_bmk, args)
+            lowest_conc = min(conc_values)
+
+            ep = highest_tp_bmk.get(FIELD_EP)
+            dp_attn = highest_tp_bmk.get(FIELD_DP_ATTN)
+
+            for node in runner_nodes:
+                entry = {
+                    FIELD_IMAGE: val[FIELD_IMAGE],
+                    FIELD_MODEL: val[FIELD_MODEL],
+                    FIELD_PRECISION: val[FIELD_PRECISION],
+                    FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
+                    # Add one entry for each node under specified runner type
+                    FIELD_RUNNER: node,
+                    # Again, just use 1k1k since this is just meant to smoke test all runners
+                    FIELD_ISL: 1024,
+                    FIELD_OSL: 1024,
+                    FIELD_TP: highest_tp,
+                    FIELD_EP: 1, # Default,
+                    FIELD_DP_ATTN: False, # Default
+                    FIELD_CONC: lowest_conc,
+                    FIELD_MAX_MODEL_LEN: 2048,
+                    FIELD_EXP_NAME: f"{model_code}_test",
+                }
+
+                # Add optional fields if they exist
+                if ep is not None:
+                    entry[FIELD_EP] = ep
+                if dp_attn is not None:
+                    entry[FIELD_DP_ATTN] = dp_attn
+
+                matrix_values.append(entry)
 
     return matrix_values
 
@@ -542,12 +880,12 @@ def generate_custom_test(args):
     except FileNotFoundError as e:
         raise ValueError(
             f"Runner config file '{args.runner_config}' does not exist.")
-    
+
     found_runner_label = False
     for runner_type, runner_nodes in runner_config.items():
         if args.runner_label == runner_type or args.runner_label in runner_nodes:
             found_runner_label = True
-    
+
     if not found_runner_label:
         raise ValueError(f"Unable to find specified runner label '{args.runner_label}'.")
 
@@ -607,6 +945,7 @@ def generate_runner_sweep_config(args, all_config_data):
 
         # Get model code for exp_name
         model_code = val[FIELD_MODEL_PREFIX]
+        is_multinode = val[FIELD_MULTINODE]
 
         runner_nodes = runner_config.get(val[FIELD_RUNNER])
         if not runner_nodes:
@@ -620,41 +959,79 @@ def generate_runner_sweep_config(args, all_config_data):
                 target_config = config
                 break
 
-        highest_tp_bmk = max(target_config[FIELD_SEARCH_SPACE], key=lambda x: x[FIELD_TP])
-        # Since we are just testing, pick the highest TP for this config and just test
-        # on that TP with the lowest concurrency available
-        highest_tp = highest_tp_bmk[FIELD_TP]
-        lowest_conc = highest_tp_bmk[FIELD_CONC_START]
+        bmk_space = target_config[FIELD_SEARCH_SPACE]
+        if not bmk_space:
+            continue
 
-        ep = highest_tp_bmk.get(FIELD_EP)
-        dp_attn = highest_tp_bmk.get(FIELD_DP_ATTN)
+        if is_multinode:
+            # For multinode configs, use the first benchmark config with lowest concurrency
+            first_bmk = bmk_space[0]
+            mtp = first_bmk[FIELD_MTP]
+            prefill = first_bmk[FIELD_PREFILL]
+            decode = first_bmk[FIELD_DECODE]
+            additional_settings = first_bmk.get(FIELD_ADDITIONAL_SETTINGS)
+            conc_values = get_concurrency_values(first_bmk, args)
+            lowest_conc = min(conc_values)
 
-        for node in runner_nodes:
-            entry = {
-                FIELD_IMAGE: val[FIELD_IMAGE],
-                FIELD_MODEL: val[FIELD_MODEL],
-                FIELD_PRECISION: val[FIELD_PRECISION],
-                FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
-                # Add one entry for each node under specified runner type
-                FIELD_RUNNER: node,
-                # Again, just use 1k1k since this is just meant to smoke test all runners
-                FIELD_ISL: 1024,
-                FIELD_OSL: 1024,
-                FIELD_TP: highest_tp,
-                FIELD_EP: 1, # Default,
-                FIELD_DP_ATTN: False, # Default
-                FIELD_CONC: lowest_conc,
-                FIELD_EXP_NAME: f"{model_code}_test",
-                FIELD_MAX_MODEL_LEN: 2048,
-            }
+            for node in runner_nodes:
+                entry = {
+                    FIELD_IMAGE: val[FIELD_IMAGE],
+                    FIELD_MODEL: val[FIELD_MODEL],
+                    FIELD_PRECISION: val[FIELD_PRECISION],
+                    FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
+                    FIELD_RUNNER: node,
+                    FIELD_ISL: 1024,
+                    FIELD_OSL: 1024,
+                    FIELD_MTP: mtp,
+                    FIELD_PREFILL: prefill,
+                    FIELD_DECODE: decode,
+                    FIELD_CONC: lowest_conc,
+                    FIELD_EXP_NAME: f"{model_code}_test",
+                    FIELD_MAX_MODEL_LEN: 2048,
+                }
 
-            # Add optional fields if they exist
-            if ep is not None:
-                entry[FIELD_EP] = ep
-            if dp_attn is not None:
-                entry[FIELD_DP_ATTN] = dp_attn
+                if additional_settings is not None:
+                    entry[FIELD_ADDITIONAL_SETTINGS] = additional_settings
 
-            matrix_values.append(entry)
+                matrix_values.append(entry)
+        else:
+            # For single-node configs
+            highest_tp_bmk = max(bmk_space, key=lambda x: x[FIELD_TP])
+            # Since we are just testing, pick the highest TP for this config and just test
+            # on that TP with the lowest concurrency available
+            highest_tp = highest_tp_bmk[FIELD_TP]
+            conc_values = get_concurrency_values(highest_tp_bmk, args)
+            lowest_conc = min(conc_values)
+
+            ep = highest_tp_bmk.get(FIELD_EP)
+            dp_attn = highest_tp_bmk.get(FIELD_DP_ATTN)
+
+            for node in runner_nodes:
+                entry = {
+                    FIELD_IMAGE: val[FIELD_IMAGE],
+                    FIELD_MODEL: val[FIELD_MODEL],
+                    FIELD_PRECISION: val[FIELD_PRECISION],
+                    FIELD_FRAMEWORK: val[FIELD_FRAMEWORK],
+                    # Add one entry for each node under specified runner type
+                    FIELD_RUNNER: node,
+                    # Again, just use 1k1k since this is just meant to smoke test all runners
+                    FIELD_ISL: 1024,
+                    FIELD_OSL: 1024,
+                    FIELD_TP: highest_tp,
+                    FIELD_EP: 1, # Default,
+                    FIELD_DP_ATTN: False, # Default
+                    FIELD_CONC: lowest_conc,
+                    FIELD_EXP_NAME: f"{model_code}_test",
+                    FIELD_MAX_MODEL_LEN: 2048,
+                }
+
+                # Add optional fields if they exist
+                if ep is not None:
+                    entry[FIELD_EP] = ep
+                if dp_attn is not None:
+                    entry[FIELD_DP_ATTN] = dp_attn
+
+                matrix_values.append(entry)
 
     if len(matrix_values) == 0:
         error_msg = f"No configs found matching model prefix '{args.model_prefix}'"
@@ -768,6 +1145,12 @@ def main():
         '--test-mode',
         action='store_true',
         help='Test mode: only run highest TP with lowest concurrency for each matching config'
+    )
+    full_sweep_parser.add_argument(
+        '--node-type',
+        choices=['all', 'multinode', 'single-node'],
+        default='all',
+        help='Filter by node type: "all" (default), "multinode" (only multinode configs), or "single-node" (only single-node configs)'
     )
     full_sweep_parser.add_argument(
         '-h', '--help',

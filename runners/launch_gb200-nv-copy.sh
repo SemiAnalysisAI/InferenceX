@@ -1,0 +1,345 @@
+#!/usr/bin/bash
+
+# This script sets up the environment and launches multi-node benchmarks
+
+
+# Set up environment variables for SLURM
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
+export SLURM_JOB_NAME="benchmark-dynamo.job"
+
+### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
+if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    export IMAGE="/mnt/lustre01/artifacts/containers/dynamo-sglang.sqsh"
+    export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+    export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
+else
+    SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
+    # Update the IMAGE variable to the squash file
+    export IMAGE=$SQUASH_FILE
+
+    export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
+    export SERVED_MODEL_NAME="deepseek-r1-fp4"
+fi
+
+
+export ISL="$ISL"
+export OSL="$OSL"
+
+### FRAMEWORK_DIFF_IF_STATEMENT #2 - difference in launching jobs
+if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
+
+    # Set up Dynamo repository path
+    DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
+    PERFORMANCE_SWEEPS_PATH="$DYNAMO_PATH/components/backends/trtllm/performance_sweeps"
+
+    # Overview:
+    # The Dynamo repository contains the bench_serving repository as a submodule.
+    # The submit_disagg.sh script, located at $PERFORMANCE_SWEEPS_PATH, orchestrates the entire benchmarking workflow:
+    #   1. Launches the Dynamo inference service with the specified configuration.
+    #   2. Waits for the service to become healthy.
+    #   3. Initiates benchmarking using the bench_serving tools.
+    #   4. Monitors all jobs until completion.
+    #   5. Collects and processes the results.
+
+    # Always clone and setup Dynamo
+    echo "Cloning Dynamo repository..."
+    rm -rf "$DYNAMO_PATH"
+    git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
+    cd "$DYNAMO_PATH"
+    git checkout release/0.5.1-rc0.20251105
+    git submodule update --init --recursive
+
+    # Navigate to performance sweeps directory
+    cd "$PERFORMANCE_SWEEPS_PATH"
+
+    # 1. CACHE_TRANSCEIVER_MAX_NUM_TOKENS controls the max_tokens_in_buffer value
+    # in cache_transceiver_config of TensorRT-LLM context and generation workers.
+    # Specifically, it is the max number of tokens the transfer buffer can fit.
+    
+    # Set up environment variables based on ISL/OSL
+    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+        export CACHE_TRANSCEIVER_MAX_NUM_TOKENS=4608
+    elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
+        export CACHE_TRANSCEIVER_MAX_NUM_TOKENS=8448
+    else
+        echo "Unsupported ISL/OSL combination: $ISL/$OSL"
+        exit 1
+    fi
+
+    # New stuff
+    # CONC
+    # ISL
+    # OSL
+    # IMAGE
+
+    # PREFILL_NUM_WORKERS
+    # PREFILL_TP
+    # PREFILL_EP
+    # PREFILL_DP_ATTN
+    # PREFILL_BATCH_SIZE
+    # PREFILL_MAX_NUM_TOKENS
+
+    # DECODE_NUM_WORKERS
+    # DECODE_TP
+    # DECODE_EP
+    # DECODE_DP_ATTN
+    # DECODE_BATCH_SIZE
+    # DECODE_MAX_NUM_TOKENS
+
+    # gen_eplb_num_slots
+    # gen_gpu_memory_fraction
+    # gen_mtp_size
+
+    # For GB200, we use 4 tasks per node.
+    ntasks_per_node=4
+    additional_slurm_args="--time=04:00:00"
+
+    kind=dynamo_disagg
+
+    gen_nodes=$(((DECODE_TP + 3)/4 * DECODE_NUM_WORKERS))
+    total_nodes=$((PREFILL_NUM_WORKERS + gen_nodes))
+    total_tasks=$((total_nodes * ntasks_per_node))
+    set -x
+    if [ $ISL == $OSL ]; then
+        sbatch --nodes=${total_nodes} \
+            --ntasks=${total_tasks} \
+            --ntasks-per-node=${ntasks_per_node} \
+            --segment=${total_nodes} ${additional_slurm_args} \
+            # 4608 prefill max num toks originally
+            benchmark_disagg.slurm \
+            ${PREFILL_NUM_WORKERS} ${PREFILL_TP} \
+            ${PREFILL_BATCH_SIZE} ${PREFILL_MAX_NUM_TOKENS} \
+            ${PREFILL_DP_ATTN} ${DECODE_NUM_WORKERS} \
+            ${DECODE_TP} ${DECODE_BATCH_SIZE} \
+            ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
+            ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} \
+            ${gen_mtp_size} "${CONC}" \
+            ${gen_nodes} ${kind} \
+            ${MODEL_PATH} ${SERVED_MODEL_NAME} \
+            ${IMAGE} ${ISL} ${OSL}
+    # else
+    #     sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${ntasks_per_node} --segment=${total_nodes} ${slurm_args} benchmark_disagg.slurm ${ctx_num} 4 1 8448 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
+    fi
+    set +x
+
+
+#     # Generate benchmark configurations based on ISL/OSL and MTP mode
+#     generate_benchmark_configs() {
+#         local isl="$1"
+#         local osl="$2"
+#         local mtp_mode="$3"
+
+#         # Usage: 
+#         # ./submit_disagg.sh <mtp_mode> <mode> [ctx_num] [gen_num] [gen_tp_size] [gen_batch_size] [gen_max_num_tokens] [gen_gpu_memory_fraction] [gen_eplb_num_slots] [gen_mtp_size] [gen_concurrency_list]"
+#         # MTP Modes:
+#         #   mtp=off - Run without Multi-Token Prediction (gen_mtp_size=0)
+#         #   mtp=on  - Run with Multi-Token Prediction (gen_mtp_size=1,2,3)
+#         # Execution Modes:
+#         #   tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+#         #   dep - Run Data-Expert Parallel mode (attention_dp=true)
+#         # Parameters for tep/dep modes:
+#         #   ctx_num: Number of context nodes
+#         #   gen_num: Number of generation nodes
+#         #   gen_tp_size: Generation tensor parallel size
+#         #   gen_batch_size: Generation batch size
+#         #   gen_max_num_tokens: Generation max number of tokens
+#         #   gen_gpu_memory_fraction: GPU memory fraction (0.7-0.95)
+#         #   gen_mtp_size: Multi-Token Prediction size (0 for mtp=off, 1-3 for mtp=on)
+#         #   gen_eplb_num_slots: Expert load balancing slots (0, 256, 288)
+#         #   gen_concurrency_list: Concurrency values (space-separated, quoted)
+
+#         if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
+#             if [ "$mtp_mode" = "on" ]; then
+#                 echo "Running 1k/1k MTP=ON configurations"
+#                 #                                 ctx_num  gen_num  gen_tp_size gen_batch_size  gen_max_num_tokens  gen_gpu_memory_fraction  gen_mtp_size  gen_eplb_num_slots
+#                 ./submit_disagg.sh "mtp=on" "tep"    1        4          8            32               128                  "0.9"                  3                0          "1 2 4 8 16 36"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 1 1 16 64 256 "0.7" 3 0 "512 1075"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 2 1 16 128 256 "0.7" 1 0 "2150"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 1 1 32 16 64 "0.6" 3 0 "512"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 1 1 8 256 512 "0.8" 1 0 "2252"
+#             else
+#                 echo "Running 1k/1k MTP=OFF configurations"
+
+#                 ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 1 1 32 32 32 "0.7" 0 0 "1075"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
+#             fi
+#         elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
+#             if [ "$mtp_mode" = "on" ]; then
+#                 echo "Running 8k/1k MTP=ON configurations"
+
+#                 ./submit_disagg.sh "mtp=on" "tep" 1 3 8 16 64 "0.9" 3 0 "1 2 4 8 18"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 5 1 32 8 32 "0.7" 3 0 "128 269"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 8 1 32 16 64 "0.7" 3 0 "538"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 8 1 16 64 256 "0.75" 2 0 "1075"
+
+#                 ./submit_disagg.sh "mtp=on" "dep" 6 1 8 256 512 "0.8" 1 0 "2150"
+#             else
+#                 echo "Running 8k/1k MTP=OFF configurations"
+
+#                 ./submit_disagg.sh "mtp=off" "tep" 1 3 8 32 32 "0.9" 0 0 "1 2 4 8 16 34"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 4 1 32 16 16 "0.7" 0 0 "256 538"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 6 1 16 64 64 "0.75" 0 0 "1075"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 8 1 16 128 128 "0.75" 0 0 "2150"
+
+#                 ./submit_disagg.sh "mtp=off" "dep" 5 1 8 256 256 "0.8" 0 0 "2150"
+#             fi
+#         else
+#             echo "Unsupported ISL/OSL combination: $isl/$osl"
+#             exit 1
+#         fi
+#     }
+
+#     # Run all benchmark configurations
+#     generate_benchmark_configs "$ISL" "$OSL" "$MTP_MODE"
+
+
+
+# else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
+#     # Set up Dynamo repository path
+#     DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
+#     SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/components/backends/sglang/slurm_jobs"
+
+#     # Always clone and setup Dynamo
+#     echo "Cloning Dynamo repository..."
+#     rm -rf "$DYNAMO_PATH"
+#     git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
+#     cd "$DYNAMO_PATH"
+
+#     # Navigate to corresponding directory
+#     cd "$SGL_SLURM_JOBS_PATH"
+
+#     # Set up SGL launch script-specific environment variables
+#     export SLURM_ACCOUNT=$SLURM_ACCOUNT
+#     export SLURM_PARTITION=$SLURM_PARTITION
+#     export TIME_LIMIT="04:00:00"
+#     export MODEL_PATH=$MODEL_PATH
+#     export CONFIG_DIR=$CONFIG_DIR
+#     export CONTAINER_IMAGE=$IMAGE
+
+#     # Launch jobs based on ISL/OSL
+#     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+#         concurrency_list="1024x2048x4096x4608x4864x4992x5120x5376x5632x6144x8192"
+#         bash ./submit_disagg.sh 6 3 12 1 8 $ISL $OSL $concurrency_list inf
+#     elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
+#         concurrency_list="128x256x384x448x512x576x1024x2048x4096"
+#         bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
+#     else
+#         echo "Unsupported ISL/OSL combination: $ISL/$OSL"
+#         exit 1
+#     fi
+fi
+
+# Wait for all jobs to complete
+echo "Waiting for all jobs to complete..."
+while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+    echo "Jobs still running..."
+    squeue -u $USER
+    sleep 60
+done
+echo "All jobs completed"
+
+### FRAMEWORK_DIFF_IF_STATEMENT #3 - difference in log post-processing
+if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
+
+    # Find the logs directory (should be only one for this ISL/OSL combination)
+    LOGS_DIR=$(find . -name "dynamo_disagg-bm-${ISL}-${OSL}" -type d | head -1)
+    if [ -z "$LOGS_DIR" ]; then
+        echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
+        exit 1
+    fi
+
+    echo "Found logs directory: $LOGS_DIR"
+
+    # Find all result subdirectories in this logs directory
+    RESULT_SUBDIRS=$(find "$LOGS_DIR" -name "ctx*_gen*_[td]ep*_batch*_eplb*_mtp*" -type d)
+
+    if [ -z "$RESULT_SUBDIRS" ]; then
+        echo "No result subdirectories found in $LOGS_DIR"
+        exit 1
+    fi
+
+    echo "Found result subdirectories:"
+    echo "$RESULT_SUBDIRS"
+
+    # Process results from all configurations
+    for result_subdir in $RESULT_SUBDIRS; do
+        echo "Processing result subdirectory: $result_subdir"
+
+        # Extract configuration info from directory name
+        CONFIG_NAME=$(basename "$result_subdir")
+
+        # Process individual concurrency result files
+        RESULTS_SUBDIR="$result_subdir/results"
+
+        if [ -d "$RESULTS_SUBDIR" ]; then
+            echo "Processing results from: $RESULTS_SUBDIR"
+
+            # Find all concurrency result files with new format
+            CONCURRENCY_FILES=$(find "$RESULTS_SUBDIR" -name "results_concurrency_*_gpus_*.json")
+
+            for result_file in $CONCURRENCY_FILES; do
+                if [ -f "$result_file" ]; then
+                    # Extract concurrency and GPU count from filename
+                    filename=$(basename "$result_file")
+                    concurrency=$(echo "$filename" | sed 's/results_concurrency_\([0-9]*\)_gpus_.*\.json/\1/')
+                    gpus=$(echo "$filename" | sed 's/results_concurrency_.*_gpus_\([0-9]*\)\.json/\1/')
+                    echo "Processing concurrency $concurrency with $gpus GPUs: $result_file"
+
+                    # Copy the result file to workspace with a unique name
+                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus${gpus}.json"
+                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
+
+                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                fi
+            done
+        else
+            echo "Results subdirectory not found: $RESULTS_SUBDIR"
+        fi
+    done
+
+else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
+    # Find the latest log directory
+    # we do "tail -1" here since only the latest job will yield the result
+    LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | sort -V | tail -1)
+    if [ -z "$LOGS_DIR" ]; then
+        echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
+        exit 1
+    fi
+
+    echo "Found logs directory: $LOGS_DIR"
+    ls $LOGS_DIR
+
+    # Result JSON are contained within the result directory
+    for result_file in $(find $LOGS_DIR -type f); do
+        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
+        file_name=$(basename $result_file)
+        if [ -f $result_file ]; then
+            # Copy the result file to workspace with a unique name
+            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
+            echo "Found result file ${result_file}. Copying them to ${WORKSPACE_RESULT_FILE}"
+            cp $result_file $WORKSPACE_RESULT_FILE
+        fi
+    done
+fi
+
+echo "All result files processed"
