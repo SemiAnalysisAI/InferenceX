@@ -19,22 +19,22 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --seq-lens 1k1k --model-prefix dsr1)
                   echo "multi-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    get-gptoss-configs:
-        runs-on: ubuntu-latest
-        outputs:
-            multi-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.multi-node-search-space-config }}
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    # get-gptoss-configs:
+    #     runs-on: ubuntu-latest
+    #     outputs:
+    #         multi-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.multi-node-search-space-config }}
+    #     steps:
+    #         - name: Checkout code
+    #           uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-            - id: get-gptoss-configs
-              run: |
-                  pip install pydantic
-                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
-                  echo "multi-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+    #         - id: get-gptoss-configs
+    #           run: |
+    #               pip install pydantic
+    #               CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+    #               echo "multi-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
 
     benchmark-dsr1-multi-node:
