@@ -59,8 +59,8 @@ jobs:
             exp-name: "dsr1_1k1k"
             conc: ${{ matrix.config.conc }}
             mtp-mode: ${{ matrix.config.mtp }}
-            
-            additional-settings: ${{ fromJson(matrix.config.additional-settings) }}
+
+            additional-settings: ${{ toJson(matrix.config.additional-settings) }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
