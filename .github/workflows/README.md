@@ -115,7 +115,7 @@ full-sweep --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sg
 
 Use the `custom` command to specify all parameters manually:
 ```
-custom --runner-label b200-nb_0 --image vllm/vllm-openai:v0.11.0 --model meta-llama/Llama-3.1-70B --framework vllm --precision fp8 --exp-name llama70b_test --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+custom --runner-label b200-nb_0 --image vllm/vllm-openai:v0.11.2 --model meta-llama/Llama-3.1-70B --framework vllm --precision fp8 --exp-name llama70b_test --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
 
 This runs a single 1k1k test job with your custom parameters on the specified runner node. Useful for:
