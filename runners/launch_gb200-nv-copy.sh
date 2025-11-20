@@ -116,8 +116,8 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
             ${PREFILL_DP_ATTN} ${DECODE_NUM_WORKERS} \
             ${DECODE_TP} ${DECODE_BATCH_SIZE} \
             ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
-            ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} \
-            ${gen_mtp_size} "${CONC}" \
+            ${GEN_GPU_MEM_FRACTION} ${GEN_EPLB_NUM_SLOTS} \
+            ${GEN_MTP_SIZE} "${CONC}" \
             ${gen_nodes} ${kind} \
             ${MODEL_PATH} ${SERVED_MODEL_NAME} \
             ${IMAGE} ${ISL} ${OSL}
