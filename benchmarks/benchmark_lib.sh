@@ -283,16 +283,28 @@ append_lm_eval_summary() {
     set +x
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
     local task="${EVAL_TASK:-gsm8k}"
+    # Always render a local summary so the runner can pick it up
+    local out_dir="/workspace/${results_dir}"
+    local summary_md="${out_dir}/SUMMARY.md"
+    mkdir -p "$out_dir" || true
+
+    python3 utils/lm_eval_to_md.py \
+        --results-dir "$out_dir" \
+        --task "${task}" \
+        --framework "${FRAMEWORK}" \
+        --precision "${PRECISION}" \
+        --tp "${TP:-1}" \
+        --ep "${EP_SIZE:-1}" \
+        --dp-attention "${DP_ATTENTION:-false}" \
+        > "$summary_md" || true
+
+    # If running inside a GitHub Actions step on this same machine, append there too
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        python3 utils/lm_eval_to_md.py \
-            --results-dir "/workspace/${results_dir}" \
-            --task "${task}" \
-            --framework "${FRAMEWORK}" \
-            --precision "${PRECISION}" \
-            --tp "${TP:-1}" \
-            --ep "${EP_SIZE:-1}" \
-            --dp-attention "${DP_ATTENTION:-false}" \
-            >> "$GITHUB_STEP_SUMMARY" || true
+        local GH_SUM_DIR
+        GH_SUM_DIR="$(dirname "$GITHUB_STEP_SUMMARY")"
+        if [ -d "$GH_SUM_DIR" ] && [ -w "$GH_SUM_DIR" ]; then
+            cat "$summary_md" >> "$GITHUB_STEP_SUMMARY" || true
+        fi
     fi
 }
 
