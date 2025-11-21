@@ -1,5 +1,15 @@
 #!/usr/bin/bash
 
+# === Required Env Vars ===
+# MODEL
+# PORT
+# TP
+# CONC
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
+
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)

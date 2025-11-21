@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
+# PORT
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
 # RESULT_FILENAME
 # PORT_OFFSET
 

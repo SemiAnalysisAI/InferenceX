@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 
-# ========= Required Env Vars =========
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
+# PORT
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
-# PORT
 # RESULT_FILENAME
+# PORT_OFFSET
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 

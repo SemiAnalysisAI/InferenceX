@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+# === Required Env Vars ===
+# MODEL
+# PORT
+# TP
+# CONC
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
+# EP_SIZE
+# NUM_PROMPTS
+
 nvidia-smi
 
 # To improve CI stability, we patch this helper function to prevent a race condition that

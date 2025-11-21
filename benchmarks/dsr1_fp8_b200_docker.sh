@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
-# ========= Required Env Vars =========
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
 # PORT
 # TP
 # CONC
-# MAX_MODEL_LEN
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
+# EP_SIZE
+# NUM_PROMPTS
 
 nvidia-smi
 
