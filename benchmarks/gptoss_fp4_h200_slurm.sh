@@ -2,12 +2,10 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
 # OSL
-# MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # PORT_OFFSET

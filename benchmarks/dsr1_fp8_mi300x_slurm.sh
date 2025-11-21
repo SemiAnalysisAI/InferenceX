@@ -2,14 +2,12 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
-# NF
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
