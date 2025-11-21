@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-# ========= Required Env Vars =========
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
 # PORT
 # TP
 # CONC
-# MAX_MODEL_LEN
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html

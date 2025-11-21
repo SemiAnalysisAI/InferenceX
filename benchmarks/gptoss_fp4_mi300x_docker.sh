@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
-# ========= Required Env Vars =========
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
 # PORT
 # TP
 # CONC
+# ISL
+# OSL
 # MAX_MODEL_LEN
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
 
 # If the machine runs a MEC FW older than 177, RCCL
 # cannot reclaim some memory.

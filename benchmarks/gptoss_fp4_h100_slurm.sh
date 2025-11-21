@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
+# PORT
 # TP
 # CONC
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
 # RESULT_FILENAME
-# PORT_OFFSET
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 

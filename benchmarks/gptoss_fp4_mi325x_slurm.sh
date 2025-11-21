@@ -1,16 +1,13 @@
 #!/usr/bin/bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
 # RESULT_FILENAME
 
 
