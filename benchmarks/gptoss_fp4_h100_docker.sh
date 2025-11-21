@@ -10,6 +10,7 @@
 # CONC
 # ISL
 # OSL
+# RESULT_FILENAME
 
 
 cat > config.yaml << EOF
