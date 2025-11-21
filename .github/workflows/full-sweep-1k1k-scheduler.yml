@@ -52,7 +52,7 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             exp-name: "dsr1_1k1k"
-            conc: ${{ toJson(matrix.config.conc) }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
             mtp-mode: ${{ matrix.config.mtp }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}

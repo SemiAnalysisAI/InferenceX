@@ -98,6 +98,29 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     # DECODE_MTP_SIZE
     # DECODE_EPLB_NUM_SLOTS
 
+    echo "CONC=$CONC"
+    echo "ISL=$ISL"
+    echo "OSL=$OSL"
+    echo "IMAGE=$IMAGE"
+
+    echo "PREFILL_NUM_WORKERS=$PREFILL_NUM_WORKERS"
+    echo "PREFILL_TP=$PREFILL_TP"
+    echo "PREFILL_EP=$PREFILL_EP"
+    echo "PREFILL_DP_ATTN=$PREFILL_DP_ATTN"
+
+    echo "DECODE_NUM_WORKERS=$DECODE_NUM_WORKERS"
+    echo "DECODE_TP=$DECODE_TP"
+    echo "DECODE_EP=$DECODE_EP"
+    echo "DECODE_DP_ATTN=$DECODE_DP_ATTN"
+
+    echo "PREFILL_MAX_NUM_TOKENS=$PREFILL_MAX_NUM_TOKENS"
+    echo "PREFILL_BATCH_SIZE=$PREFILL_BATCH_SIZE"
+    echo "DECODE_MAX_NUM_TOKENS=$DECODE_MAX_NUM_TOKENS"
+    echo "DECODE_BATCH_SIZE=$DECODE_BATCH_SIZE"
+    echo "DECODE_GPU_MEM_FRACTION=$DECODE_GPU_MEM_FRACTION"
+    echo "DECODE_MTP_SIZE=$DECODE_MTP_SIZE"
+    echo "DECODE_EPLB_NUM_SLOTS=$DECODE_EPLB_NUM_SLOTS"
+
     # For GB200, we use 4 tasks per node.
     ntasks_per_node=4
     additional_slurm_args="--time=04:00:00"
