@@ -18,6 +18,8 @@ result_filename = os.environ.get('RESULT_FILENAME')
 framework = os.environ.get('FRAMEWORK')
 precision = os.environ.get('PRECISION')
 mtp_mode = os.environ.get('MTP_MODE')
+isl = os.environ.get('ISL')
+osl = os.environ.get('OSL')
 
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
@@ -31,6 +33,8 @@ data = {
     'model': bmk_result['model_id'],
     'framework': framework,
     'precision': precision,
+    'isl': int(isl) if isl else None,
+    'osl': int(osl) if osl else None,
     'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
     'output_tput_per_gpu': float(bmk_result['output_throughput']) / decode_gpus,
     'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput']) )/ prefill_gpus

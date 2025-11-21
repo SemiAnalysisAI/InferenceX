@@ -9,11 +9,11 @@ for result_path in results_dir.rglob(f'*.json'):
     with open(result_path) as f:
         result = json.load(f)
     results.append(result)
-results.sort(key=lambda r: (r.get('model', 'unknown'), r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r['tp'], r['ep'], r['conc']))
+results.sort(key=lambda r: (r.get('model', 'unknown'), r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r.get('isl', 0), r.get('osl', 0), r['tp'], r['ep'], r['conc']))
 
 summary_header = f'''\
-| Model | Hardware | Framework | Precision | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | Interactivity (tok/s/user) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
-| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
+| Model | Hardware | Framework | Precision | ISL | OSL | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | Interactivity (tok/s/user) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
 '''
 print(summary_header)
 
@@ -21,11 +21,15 @@ for result in results:
     framework = result.get('framework', 'vllm')
     precision = result.get('precision', 'fp8')
     model = result.get('model', 'unknown')
+    isl = result.get('isl', 'N/A')
+    osl = result.get('osl', 'N/A')
     print(
         f"| {model} "
         f"| {result['hw'].upper()} "
         f"| {framework.upper()} "
         f"| {precision.upper()} "
+        f"| {isl} "
+        f"| {osl} "
         f"| {result['tp']} "
         f"| {result['ep']} "
         f"| {result['dp_attention']} "
