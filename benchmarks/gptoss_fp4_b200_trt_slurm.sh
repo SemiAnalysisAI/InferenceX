@@ -12,9 +12,6 @@
 # PORT_OFFSET
 # DP_ATTENTION
 # EP_SIZE
-# EXTRA_CONFIG_FILE
-# MAX_NUM_TOKENS
-# MOE_BACKEND
 
 # GPTOSS TRTLLM Deployment Guide:
 # https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
