@@ -71,7 +71,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     fi
 
     # New stuff
-    # CONC
+    # CONC_LIST
     # ISL
     # OSL
     # IMAGE
@@ -95,7 +95,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     # DECODE_MTP_SIZE
     # DECODE_EPLB_NUM_SLOTS
 
-    echo "CONC=$CONC"
+    echo "CONC_LIST=$CONC_LIST"
     echo "ISL=$ISL"
     echo "OSL=$OSL"
     echo "IMAGE=$IMAGE"
@@ -141,7 +141,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
             ${DECODE_TP} ${DECODE_MAX_BATCH_SIZE} \
             ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
             ${DECODE_GPU_MEM_FRACTION} ${DECODE_EPLB_NUM_SLOTS} \
-            ${DECODE_MTP_SIZE} ${CONC} \
+            ${DECODE_MTP_SIZE} ${CONC_LIST} \
             ${gen_nodes} ${kind} \
             ${MODEL_PATH} ${SERVED_MODEL_NAME} \
             ${IMAGE} ${ISL} ${OSL}
