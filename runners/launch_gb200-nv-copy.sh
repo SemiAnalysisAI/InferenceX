@@ -128,7 +128,6 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     total_nodes=$((PREFILL_NUM_WORKERS + gen_nodes))
     total_tasks=$((total_nodes * ntasks_per_node))
 
-    set +x
     # 4608 prefill max num toks originally
     if [ $ISL == $OSL ]; then
         sbatch --nodes=${total_nodes} \
