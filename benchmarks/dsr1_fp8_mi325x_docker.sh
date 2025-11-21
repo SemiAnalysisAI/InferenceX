@@ -47,4 +47,3 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
-    
