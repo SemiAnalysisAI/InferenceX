@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
 # RESULT_FILENAME
 # PORT_OFFSET
 # DP_ATTENTION
@@ -69,25 +66,23 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     --tp_size=$TP --ep_size=$EP_SIZE \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE \
     > $SERVER_LOG 2>&1 &
+    
+SERVER_PID=$!
 
+# Source benchmark utilities
+source "$(dirname "$0")/benchmark_lib.sh"
 
-set +x
-while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [[ "$line" == *"Application startup complete"* ]]; then
-        break
-    fi
-done < <(tail -F -n0 "$SERVER_LOG")
+# Wait for server to be ready
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-git clone https://github.com/kimbochen/bench_serving.git
-set -x
-python3 bench_serving/benchmark_serving.py \
---model $MODEL --backend openai \
---base-url http://0.0.0.0:$PORT \
---dataset-name random \
---random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
---num-prompts $(( $CONC * 10 )) --max-concurrency $CONC \
---request-rate inf --ignore-eos \
---save-result --percentile-metrics 'ttft,tpot,itl,e2el' \
---result-dir /workspace/ \
---result-filename $RESULT_FILENAME.json
+run_benchmark_serving \
+    --model "$MODEL" \
+    --port "$PORT" \
+    --backend openai \
+    --input-len "$ISL" \
+    --output-len "$OSL" \
+    --random-range-ratio "$RANDOM_RANGE_RATIO" \
+    --num-prompts $(( $CONC * 10 )) \
+    --max-concurrency "$CONC" \
+    --result-filename "$RESULT_FILENAME" \
+    --result-dir /workspace/
