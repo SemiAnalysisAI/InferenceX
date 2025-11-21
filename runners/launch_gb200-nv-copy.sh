@@ -48,9 +48,9 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     # Always clone and setup Dynamo
     echo "Cloning Dynamo repository..."
     rm -rf "$DYNAMO_PATH"
-    git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
+    git clone https://github.com/cquil11/dynamo.git "$DYNAMO_PATH"
     cd "$DYNAMO_PATH"
-    git checkout release/0.5.1-rc0.20251105
+    git checkout release/0.5.1-rc0.20251105-cam
     git submodule update --init --recursive
 
     # Navigate to performance sweeps directory
