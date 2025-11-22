@@ -80,6 +80,7 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
+          sudo rm -rf /home/kimbosemianalysis/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache/
           # Helper to avoid indefinite hangs on flaky tools (Docker/Slurm)
           safe_timeout() {
             if command -v timeout >/dev/null 2>&1; then
