@@ -113,6 +113,7 @@ jobs:
           fi
           # Best-effort cleanup of prior eval outputs; do not block
           safe_timeout sudo rm -rf /home/ubuntu/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out/openai__gpt-oss-120b || true
+          safe_timeout sudo rm -rf /home/ubuntu/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache/cache.db || true
 
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up resources ..."
@@ -138,7 +139,7 @@ jobs:
         with:
           fetch-depth: 0
           # Avoid aggressive workspace deletion if stale, rely on git reset/clean later
-          clean: false
+          clean: true
 
       - name: Launch eval via runner script
         env:

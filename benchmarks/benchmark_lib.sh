@@ -515,7 +515,7 @@ run_lighteval_eval() {
     local base_url="http://0.0.0.0:${port}/v1"
     export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 
-    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY}"
+    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:1.0}"
     local TASK_SPEC="${task}|${num_fewshot}"
 
     set -x
@@ -538,10 +538,6 @@ run_eval() {
     local framework="${EVAL_FRAMEWORK:-lm-eval}"
     local forwarded=()
 
-    # Defensive cleanup: remove any LiteLLM cache in the repo workspace so
-    # subsequent steps (e.g., actions/checkout) won't hit permission issues.
-    #rm -rf .litellm_cache 2>/dev/null || true
-
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --framework) framework="$2"; shift 2 ;;
@@ -556,5 +552,5 @@ run_eval() {
     esac
 
     # Clean up again after eval, in case the tool recreated it.
-    #rm -rf .litellm_cache 2>/dev/null || true
+    rm -rf .litellm_cache 2>/dev/null || true
 }
