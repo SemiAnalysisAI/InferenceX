@@ -538,6 +538,10 @@ run_eval() {
     local framework="${EVAL_FRAMEWORK:-lm-eval}"
     local forwarded=()
 
+    # Defensive cleanup: remove any LiteLLM cache in the repo workspace so
+    # subsequent steps (e.g., actions/checkout) won't hit permission issues.
+    rm -rf .litellm_cache 2>/dev/null || true
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --framework) framework="$2"; shift 2 ;;
@@ -550,4 +554,7 @@ run_eval() {
         lighteval)       run_lighteval_eval "${forwarded[@]}" ;;
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
+
+    # Clean up again after eval, in case the tool recreated it.
+    rm -rf .litellm_cache 2>/dev/null || true
 }
