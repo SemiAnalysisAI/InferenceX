@@ -80,6 +80,9 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
+          sudo rm -rf /home/kimbosemianalysis/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache/
+          sudo rm -rf /home/kimbosemianalysis/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out/
+          sudo rm -rf /home/kimbosemianalysis/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out_lighteval
           # Helper to avoid indefinite hangs on flaky tools (Docker/Slurm)
           safe_timeout() {
             if command -v timeout >/dev/null 2>&1; then
@@ -159,10 +162,10 @@ jobs:
             ${{ env.EVAL_RESULT_DIR }}/
             ${{ env.EVAL_RESULT_DIR }}/*
             ${{ env.EVAL_RESULT_DIR }}/**
-
+            
       - name: Resource cleanup
         run: |
-          safe_timeout sudo rm -rf \
+          sudo rm -rf \
             "${{ github.workspace }}/.litellm_cache" \
             "${{ github.workspace }}/eval_out"* \
             "${{ github.workspace }}/.cache" \
