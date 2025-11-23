@@ -159,3 +159,11 @@ jobs:
             ${{ env.EVAL_RESULT_DIR }}/
             ${{ env.EVAL_RESULT_DIR }}/*
             ${{ env.EVAL_RESULT_DIR }}/**
+
+      - name: Resource cleanup
+        run: |
+          safe_timeout sudo rm -rf \
+            "${{ github.workspace }}/.litellm_cache" \
+            "${{ github.workspace }}/eval_out"* \
+            "${{ github.workspace }}/.cache" \
+            || true

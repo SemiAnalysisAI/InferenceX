@@ -61,9 +61,6 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# Auto cleanup on exit
-setup_cleanup_trap
-
 # After throughput, run evaluation (defaults to GSM8K)
 run_eval --framework lm-eval --port "$PORT"
 run_eval --framework lighteval --task gsm8k --num-fewshot 5
