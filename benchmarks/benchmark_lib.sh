@@ -551,6 +551,4 @@ run_eval() {
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
 
-    # Clean up again after eval, in case the tool recreated it.
-    rm -rf .litellm_cache 2>/dev/null || true
 }
