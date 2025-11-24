@@ -46,7 +46,7 @@ total_tasks=$((total_nodes * NTASKS_PER_NODE))
 
 sbatch --nodes=${total_nodes} \
     --ntasks=${total_tasks} \
-    --ntasks-per-node=${ntasks_per_node} \
+    --ntasks-per-node=${NTASKS_PER_NODE} \
     --segment=${total_nodes} ${additional_slurm_args} \
     benchmark_disagg.slurm \
     ${PREFILL_NUM_WORKERS} ${PREFILL_TP} \
