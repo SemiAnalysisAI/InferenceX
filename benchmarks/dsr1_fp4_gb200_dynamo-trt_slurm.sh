@@ -55,7 +55,7 @@ sbatch --nodes=${total_nodes} \
     ${DECODE_TP} ${DECODE_MAX_BATCH_SIZE} \
     ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
     ${DECODE_GPU_MEM_FRACTION} ${DECODE_EPLB_NUM_SLOTS} \
-    ${DECODE_MTP_SIZE} ${CONC_LIST} \
+    ${DECODE_MTP_SIZE} "${CONC_LIST}" \
     ${gen_nodes} ${kind} \
     ${MODEL_PATH} ${SERVED_MODEL_NAME} \
     ${IMAGE} ${ISL} ${OSL}
