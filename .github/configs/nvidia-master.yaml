@@ -332,7 +332,7 @@ dsr1-fp4-gb200-trt:
   model-prefix: dsr1
   runner: gb200
   precision: fp4
-  framework: dynamo-trtllm
+  framework: dynamo-trt
   multinode: true
   seq-len-configs:
   - isl: 1024

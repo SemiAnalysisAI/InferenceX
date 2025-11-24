@@ -2,6 +2,27 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Check if required environment variables are set
+# Usage: check_env_vars VAR1 VAR2 VAR3 ...
+# Exits with code 1 if any variable is not set
+check_env_vars() {
+    local missing_vars=()
+
+    for var_name in "$@"; do
+        if [[ -z "${!var_name}" ]]; then
+            missing_vars+=("$var_name")
+        fi
+    done
+
+    if [[ ${#missing_vars[@]} -gt 0 ]]; then
+        echo "Error: The following required environment variables are not set:"
+        for var in "${missing_vars[@]}"; do
+            echo "  - $var"
+        done
+        exit 1
+    fi
+}
+
 # Wait for server to be ready by polling the health endpoint
 # All parameters are required
 # Parameters:
