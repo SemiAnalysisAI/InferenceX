@@ -42,6 +42,7 @@ on:
     paths:
       - '.github/workflows/eval-gms8k.yml'
       - '.github/workflows/eval-tmpl.yml' 
+      - 'benchmarks/benchmark_lib.sh'
 
 jobs:
   eval:

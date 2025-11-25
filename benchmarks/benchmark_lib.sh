@@ -518,7 +518,7 @@ run_lighteval_eval() {
     local base_url="http://0.0.0.0:${port}/v1"
     export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 
-    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:1.0}"
+    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,max_new_tokens:2056}"
     local TASK_SPEC="${task}|${num_fewshot}"
 
     set -x
@@ -526,8 +526,7 @@ run_lighteval_eval() {
         "${MODEL_ARGS}" \
         "${TASK_SPEC}" \
         --output-dir "/workspace/${results_dir}" \
-        --max-samples "${max_samples}" \
-        --remove-reasoning-tags
+        --max-samples "${max_samples}"
     set +x
 }
 
