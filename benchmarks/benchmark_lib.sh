@@ -100,6 +100,7 @@ run_benchmark_serving() {
     fi
 
     set -x
+    echo "Before benchmark_serving: $(id -u) $(id -g) $(id -un)" >&2
     python3 "$BENCH_SERVING_DIR/benchmark_serving.py" \
         --model "$model" \
         --backend "$backend" \
@@ -269,6 +270,7 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
 
     set -x
+    echo "Before lm_eval: $(id -u) $(id -g) $(id -un)" >&2
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "${task}" \
       --num_fewshot "${num_fewshot}" \
@@ -524,6 +526,7 @@ run_lighteval_eval() {
     local TASK_SPEC="${task}|${num_fewshot}"
 
     set -x
+    echo "Before lighteval: $(id -u) $(id -g) $(id -un)" >&2
     lighteval endpoint litellm \
         "${MODEL_ARGS}" \
         "${TASK_SPEC}" \
@@ -555,4 +558,5 @@ run_eval() {
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
 
+    ls -ld /workspace /workspace/eval_out* /workspace/results*
 }

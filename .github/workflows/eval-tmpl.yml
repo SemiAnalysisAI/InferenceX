@@ -79,8 +79,6 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
-          sudo mv /home/nvadmin/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache /tmp/ || true
-          sudo -n rm -rf /home/nvadmin/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out*
           # Helper to avoid indefinite hangs on flaky tools (Docker/Slurm)
           safe_timeout() {
             if command -v timeout >/dev/null 2>&1; then
@@ -161,7 +159,8 @@ jobs:
 
       - name: Resource cleanup
         run: |
-          ls -lt
+          ls -lt eval_out
+          ls -lt .litellm_cache
           pkill -f litellm || true
           sleep 2
           if command -v fuser >/dev/null 2>&1; then
