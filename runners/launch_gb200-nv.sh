@@ -201,7 +201,7 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
 
         top_of_curve_concurrency_list="4096"
 	    middle_of_curve_concurrency_list="1024x2048x4096"
-        bottom_of_curve_concurrency_list="2x4x8x16x64x128x256x512"
+        bottom_of_curve_concurrency_list="2x4x8x16x64x128"
 
         # Top of curve (2 prefill workers each at DEP8 and 1 decode worker at DEP32)
         bash ./submit_disagg.sh 4 2 8 1 9 $ISL $OSL $top_of_curve_concurrency_list inf
