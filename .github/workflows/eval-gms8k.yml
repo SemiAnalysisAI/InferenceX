@@ -22,7 +22,7 @@ on:
         description: "Tensor Parallel Size"
         required: false
         type: string
-        default: "8"
+        default: "2"
       port:
         description: "Server port"
         required: false
@@ -48,13 +48,13 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: mi300x-amd_0
-      image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1' }}
+      runner: h200-nb_1
+      image: ${{ inputs.image || 'vllm/vllm-openai:v0.11.0' }}
       model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
       framework: vllm
       precision: fp4
       exp-name: ${{ inputs.exp-name || 'gptoss_gsm8k_poc' }}
-      tp: '8'
+      tp: '2'
       ep: '1'
       dp-attn: false
       port: ${{ inputs.port || '8888' }}

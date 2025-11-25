@@ -319,6 +319,8 @@ _install_lighteval_deps() {
 }
 
 # Patch lighteval's LiteLLMClient to handle reasoning content and Python name mangling
+# 1. Removed "response_format": {"type": "text"}, as it interferred with vllm endpoint
+# 2. Concat reasoning with output tokens as sometimes the output is empty.
 _patch_lighteval_litellm() {
     set +x
     local patch_dir
@@ -340,13 +342,12 @@ from lighteval.utils.cache_management import cached
 
 logger = logging.getLogger(__name__)
 
-# --- Patched __call_api: don't retry when we have reasoning_content ---
+# --- Patched __call_api: don't retry when we have reasoning_content, enforce chat template on vLLM and avoid stop interference ---
 def _patched___call_api(self, prompt, return_logits, max_new_tokens, num_samples, stop_sequence):  # noqa: C901
-    """Make API call with retries, but don't treat reasoning-only responses as empty."""
     from lighteval.models.endpoints.litellm_model import LitellmModelResponse
-
     response = LitellmModelResponse()
-    stop_sequence = self._prepare_stop_sequence(stop_sequence)
+
+    stop_sequence = None  # Important: let the chat template drive turn-taking
     max_new_tokens = self._prepare_max_new_tokens(max_new_tokens)
 
     if return_logits and not self.provider == "openai":
@@ -355,15 +356,18 @@ def _patched___call_api(self, prompt, return_logits, max_new_tokens, num_samples
     kwargs = {
         "model": self.model,
         "messages": prompt,
-        "response_format": {"type": "text"},
         "max_tokens": max_new_tokens,
         "logprobs": return_logits if self.provider == "openai" else None,
-        "stop": stop_sequence,
+        "stop": stop_sequence,  # disabled for chat
         "base_url": self.base_url,
         "api_key": self.api_key,
         "n": num_samples,
         "caching": True,
         "timeout": self.timeout,
+        # vLLM OpenAI server: ensure chat template is applied and an assistant turn is started
+        "extra_body": {
+            "use_chat_template": True
+        },
     }
 
     if "o1" in self.model:
@@ -381,6 +385,7 @@ def _patched___call_api(self, prompt, return_logits, max_new_tokens, num_samples
             content = msg.content
             reasoning = getattr(msg, "reasoning_content", None)
 
+            # Accept reasoning-only replies
             if (not content) and reasoning:
                 return response
 
@@ -388,14 +393,11 @@ def _patched___call_api(self, prompt, return_logits, max_new_tokens, num_samples
                 logger.info("Response is empty, retrying without caching")
                 kwargs["caching"] = False
                 response = litellm.completion(**kwargs)
-                msg = response.choices[0].message
-                content = msg.content
-                reasoning = getattr(msg, "reasoning_content", None)
 
             return response
         except litellm.BadRequestError as e:
             if "message" in e.__dict__ and "policy" in e.__dict__["message"]:
-                logger.warning(f"Content filtered. Returning empty response.")
+                logger.warning("Content filtered. Returning empty response.")
                 return LitellmModelResponse()
         except Exception as e:
             wait_time = min(64, self.API_RETRY_SLEEP * (self.API_RETRY_MULTIPLIER**attempt))
@@ -405,10 +407,9 @@ def _patched___call_api(self, prompt, return_logits, max_new_tokens, num_samples
     logger.error(f"API call failed after {self.API_MAX_RETRY} attempts.")
     return LitellmModelResponse()
 
-# APPLY PATCH: Must use mangled name because original was private (__call_api)
+# APPLY PATCH
 LiteLLMClient._LiteLLMClient__call_api = _patched___call_api
 
-# --- Patched greedy_until: merge reasoning + content, preserve ordering ---
 def _greedy_until_impl(self, docs: list[Doc]) -> list[ModelResponse]:
     dataset = GenerativeTaskDataset(requests=docs, num_dataset_splits=self.DATASET_SPLITS)
     results: list[ModelResponse] = []
@@ -420,7 +421,8 @@ def _greedy_until_impl(self, docs: list[Doc]) -> list[ModelResponse]:
         position=0,
         disable=self.disable_tqdm,
     ):
-        contexts = [self.prompt_manager.prepare_prompt_api(doc) for doc in dataset]
+        # FIX: only build contexts for the current split
+        contexts = [self.prompt_manager.prepare_prompt_api(doc) for doc in split]
 
         max_new_tokens = split[0].generation_size
         return_logits = split[0].use_logits
@@ -430,7 +432,6 @@ def _greedy_until_impl(self, docs: list[Doc]) -> list[ModelResponse]:
         if num_samples > 1 and self.generation_parameters.temperature == 0:
             raise ValueError("num_samples > 1 requires temperature > 0")
 
-        # CRITICAL FIX: Access the private method via mangled name
         responses = self._LiteLLMClient__call_api_parallel(
             contexts,
             return_logits,
@@ -443,28 +444,30 @@ def _greedy_until_impl(self, docs: list[Doc]) -> list[ModelResponse]:
             raw_contents = [(choice.message.content or "").strip() for choice in response.choices]
             raw_reasonings = [(getattr(choice.message, "reasoning_content", None) or "").strip() for choice in response.choices]
 
-            merged: list[str] = []
+            merged_texts: list[str] = []
+            reasonings: list[str | None] = []
+
             for c, r in zip(raw_contents, raw_reasonings):
                 if c and r:
-                    merged.append(r + "\n\n" + c)
+                    merged_texts.append(f"<think>{r}</think>\n\n{c}")
                 elif c:
-                    merged.append(c)
+                    merged_texts.append(c)
                 elif r:
-                    merged.append(r)
+                    merged_texts.append(f"<think>{r}</think>")
                 else:
-                    merged.append("")
+                    merged_texts.append("")
+                reasonings.append(r if r != "" else None)
 
-            reasonings: list[str | None] = [r if r != "" else None for r in raw_reasonings]
+            if not merged_texts or merged_texts[0] is None:
+                merged_texts = [""]
 
-            if not merged or merged[0] is None:
-                merged = [""]
-
-            cur_response = ModelResponse(
-                text=merged,
-                reasonings=reasonings,
-                input=context,
+            results.append(
+                ModelResponse(
+                    text=merged_texts,
+                    reasonings=reasonings,
+                    input=context,
+                )
             )
-            results.append(cur_response)
 
     if len(results) != len(dataset):
         raise RuntimeError(f"Internal mismatch: {len(results)} outputs vs {len(dataset)} docs.")
