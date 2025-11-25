@@ -88,7 +88,7 @@ jobs:
             fi
           }
           set -x
-          sudo rm -rf $GITHUB_WORKSPACE
+          sudo rm -rf ${GITHUB_WORKSPACE}/* || true
           set +x
           host=$(hostname)
           if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
