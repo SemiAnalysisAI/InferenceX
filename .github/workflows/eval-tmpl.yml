@@ -130,9 +130,6 @@ jobs:
               echo "[Slurm] Jobs still present after timeout; proceeding"
             fi
           fi
-          set -x
-          sudo rm -rfv ${GITHUB_WORKSPACE}/* || true
-          set +x
 
       - uses: actions/checkout@v5
         with:
