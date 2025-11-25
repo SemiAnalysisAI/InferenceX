@@ -87,9 +87,9 @@ jobs:
               "$@"
             fi
           }
-          sudo rm -rf /home/nvadmin/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache/
-          sudo rm -rf /home/nvadmin/actions-runner/_work/InferenceMAX/InferenceMAX/eval_out*
-
+          set -x
+          sudo rm -rf $GITHUB_WORKSPACE
+          set +x
           host=$(hostname)
           if [[ "$host" == "b200-81" || "$host" == "b200-80" || "$host" == "b200-79" ]]; then
             if command -v docker >/dev/null 2>&1; then
