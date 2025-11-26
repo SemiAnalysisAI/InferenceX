@@ -2,7 +2,7 @@ dsr1-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.5-cu129-amd64
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
-  runner: b200-test
+  runner: b200
   precision: fp4
   framework: sglang
   seq-len-configs:
@@ -76,7 +76,7 @@ dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.5-cu129-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-test
+  runner: b200
   precision: fp8
   framework: sglang
   seq-len-configs:
