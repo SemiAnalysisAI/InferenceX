@@ -64,11 +64,11 @@ env:
   NUM_FEWSHOT: ${{ inputs['num-fewshot'] }}
   LIMIT: ${{ inputs.limit }}
   EVAL_RESULT_DIR: eval_out
-  CONC: '4'
-  MAX_MODEL_LEN: '8192'
+  CONC: '32'
+  MAX_MODEL_LEN: '4096'
   ISL: 1024
   OSL: 1024
-  RANDOM_RANGE_RATIO: '1.0'
+  RANDOM_RANGE_RATIO: '0.8'
   RESULT_FILENAME: results
   
 jobs:
