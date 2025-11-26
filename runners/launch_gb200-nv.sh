@@ -15,7 +15,7 @@ export SLURM_JOB_NAME="benchmark-dynamo.job"
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     # Set IMAGE based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.4.post3-cu129-arm64.sqsh"
+        export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.5.post2.sqsh"
     else
         export IMAGE="/mnt/lustre01/artifacts/containers/dynamo-sglang.sqsh"
     fi
