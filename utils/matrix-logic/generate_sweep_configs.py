@@ -471,6 +471,13 @@ def generate_runner_model_sweep_config(args, all_config_data):
         raise ValueError(
             f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_config.keys())}'.")
 
+    # Filter runner nodes if filter is specified
+    if args.runner_node_filter:
+        runner_nodes = [node for node in runner_nodes if args.runner_node_filter in node]
+        if not runner_nodes:
+            raise ValueError(
+                f"No runner nodes found matching filter '{args.runner_node_filter}' for runner type '{args.runner_type}'.")
+
     matrix_values = []
     for key, val in all_config_data.items():
         # Only consider configs with specified runner
@@ -824,12 +831,17 @@ def main():
     test_config_parser.add_argument(
         '--runner-type',
         required=True,
-        help='Runner type (e.g., h200-trt, h100)'
+        help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
         '--runner-config',
         required=True,
         help='Configuration file holding runner information'
+    )
+    test_config_parser.add_argument(
+        '--runner-node-filter',
+        required=False,
+        help='Filter runner nodes by substring match (e.g., "mi300x-amd" to only include nodes containing that string)'
     )
     test_config_parser.add_argument(
         '-h', '--help',
@@ -847,7 +859,7 @@ def main():
     test_config_parser.add_argument(
         '--runner-type',
         required=True,
-        help='Runner type (e.g., h200-trt, h100)'
+        help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
         '--model-prefix',

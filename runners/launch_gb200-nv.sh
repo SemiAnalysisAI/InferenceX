@@ -57,7 +57,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     rm -rf "$DYNAMO_PATH"
     git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
     cd "$DYNAMO_PATH"
-    git checkout release/0.5.1-rc0.pre1
+    git checkout release/0.5.1-rc0.20251105
     git submodule update --init --recursive
 
     # Navigate to performance sweeps directory
@@ -180,8 +180,9 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
         # TODO: before merge this will be a different branch off of main
         git clone --branch ishan/sa-1.1-sgl-dsr1-fp8 https://github.com/ai-dynamo/dynamo.git $DYNAMO_PATH
     else
-        git clone --branch update-wait-for-model https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
+        git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
     fi
+
     cd "$DYNAMO_PATH"
 
     # Navigate to corresponding directory
@@ -312,7 +313,7 @@ PY
 
     # Result JSON are contained within the result directory
     for result_file in $(find $LOGS_DIR -type f); do
-        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpusN.json
+        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
         file_name=$(basename $result_file)
         if [ -f $result_file ]; then
             # Copy the result file to workspace with a unique name

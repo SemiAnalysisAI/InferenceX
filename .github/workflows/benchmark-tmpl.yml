@@ -63,11 +63,14 @@ env:
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }}'
+    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }}'
     steps:
       - name: Resource cleanup
         run: |
@@ -119,7 +122,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -130,9 +133,18 @@ jobs:
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP_SIZE }}_dpa_${{ env.DP_ATTENTION }}_conc${{ env.CONC }}_${{ runner.name }}
         run: |
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-          if [ -f "$RESULT_FILENAME.json" ]; then
-            echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-          else
+          FOUND_RESULT_FILE=
+          for i in {1..10}; do
+            if [ -f "$RESULT_FILENAME.json" ]; then
+              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+              FOUND_RESULT_FILE=true
+              break
+            fi
+            echo "Waiting for result file... (attempt $i)"
+            sleep 1
+          done
+   
+          if [ -z "$FOUND_RESULT_FILE" ]; then
             echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
             exit 1
           fi
@@ -143,7 +155,7 @@ jobs:
         run: |
           python3 utils/process_result.py
       - name: Upload result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: ${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json

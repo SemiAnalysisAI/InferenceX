@@ -49,11 +49,14 @@ env:
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   MTP_MODE: ${{ inputs.mtp-mode }}
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.precision }} mtp-${{ inputs.mtp-mode }}'
+    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} mtp-${{ inputs.mtp-mode }}'
 
     steps:
       - name: Resource cleanup
@@ -65,7 +68,7 @@ jobs:
             sleep 5
           done
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -93,16 +96,20 @@ jobs:
           for result_file in ${RESULT_FILENAME}_*.json; do
             if [ -f "$result_file" ]; then
               echo "Processing $result_file"
-              # Extract GPU count from filename for tp_size calculation
-              gpus=$(echo "$result_file" | sed "s/.*_gpus\([0-9]*\)\.json/\1/")
+              # Extract GPU count, prefill_gpus and decode_gpus from filename for tp_size calculation
+              gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
+              prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
+              decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
+              
               if [ -n "$gpus" ]; then
-                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false python3 utils/process_result.py
+                echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
+                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
             fi
           done
 
       - name: Upload results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: ${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
