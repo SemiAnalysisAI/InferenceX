@@ -1,0 +1,36 @@
+name: Test Process Result
+
+on:
+  pull_request:
+    paths:
+      - 'utils/process_result.py'
+      - 'utils/test_process_result.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Run pytest
+        run: |
+          cd utils
+          pytest test_process_result.py -v

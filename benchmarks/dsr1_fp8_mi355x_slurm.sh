@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-# ========= Required Env Vars =========
-# HF_TOKEN
-# HF_HUB_CACHE
+# === Required Env Vars ===
 # MODEL
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
+# PORT
 # TP
 # CONC
-# PORT
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
@@ -32,22 +29,22 @@ python3 -m sglang.launch_server \
     --max-prefill-tokens 196608 \
     --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
 
-set +x
-while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [[ "$line" == *"The server is fired up and ready to roll"* ]]; then
-        break
-    fi
-done < <(tail -F -n0 "$SERVER_LOG")
+SERVER_PID=$!
 
-set -x
-git clone https://github.com/kimbochen/bench_serving.git
-python3 bench_serving/benchmark_serving.py \
---model $MODEL --backend vllm \
---base-url "http://0.0.0.0:$PORT" \
---dataset-name random \
---random-input-len $ISL --random-output-len $OSL --random-range-ratio $RANDOM_RANGE_RATIO \
---num-prompts $(( $CONC * 10 )) --max-concurrency $CONC \
---request-rate inf --ignore-eos \
---save-result --percentile-metrics "ttft,tpot,itl,e2el" \
---result-dir /workspace/ --result-filename $RESULT_FILENAME.json
+# Source benchmark utilities
+source "$(dirname "$0")/benchmark_lib.sh"
+
+# Wait for server to be ready
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+run_benchmark_serving \
+    --model "$MODEL" \
+    --port "$PORT" \
+    --backend vllm \
+    --input-len "$ISL" \
+    --output-len "$OSL" \
+    --random-range-ratio "$RANDOM_RANGE_RATIO" \
+    --num-prompts $(( $CONC * 10 )) \
+    --max-concurrency "$CONC" \
+    --result-filename "$RESULT_FILENAME" \
+    --result-dir /workspace/
