@@ -159,7 +159,7 @@ jobs:
               
               if [ -n "$gpus" ]; then
                 echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
-                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
+                IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
             fi
           done
