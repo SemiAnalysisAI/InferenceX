@@ -55,7 +55,7 @@ jobs:
       framework: sglang
       precision: fp8
       exp-name: ${{ inputs.exp-name || 'dsr1_gsm8k_poc' }}
-      tp: '2'
+      tp: '8'
       ep: '1'
       dp-attn: false
       port: ${{ inputs.port || '8888' }}

@@ -158,12 +158,9 @@ jobs:
 
       - name: Resource cleanup
         run: |
-          ls -lt eval_out
-          ls -lt .litellm_cache
           pkill -f litellm || true
+          pkill -f lighteval || true
           sleep 2
-          if command -v fuser >/dev/null 2>&1; then
-            fuser -k /home/nvadmin/actions-runner/_work/InferenceMAX/InferenceMAX/.litellm_cache/cache.db 2>/dev/null || true
-          fi
+
           sudo rm -rf .litellm_cache
           sudo rm -rf eval_out*
