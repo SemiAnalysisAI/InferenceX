@@ -246,6 +246,7 @@ run_lm_eval() {
     local gen_max_tokens=4096
     local temperature=0
     local top_p=1
+    local concurrent_requests=32
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -257,6 +258,7 @@ run_lm_eval() {
             --gen-max-tokens) gen_max_tokens="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
+            --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -274,7 +276,7 @@ run_lm_eval() {
       --num_fewshot "${num_fewshot}" \
       --batch_size "${batch_size}" \
       --output_path "/workspace/${results_dir}" \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=3,num_concurrent=32,tokenized_requests=False" \
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=3,num_concurrent=${concurrent_requests},tokenized_requests=False" \
       --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
     set +x
 }
@@ -548,7 +550,7 @@ run_lighteval_eval() {
     local num_fewshot="${NUM_FEWSHOT:-5}"
     local results_dir="${EVAL_RESULT_DIR:-eval_out_lighteval}"
     local max_samples=0
-    local concurrent_requests=8
+    local concurrent_requests=32
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -590,6 +592,7 @@ run_lighteval_eval() {
         "${MODEL_ARGS}" \
         "${TASK_SPEC}" \
         --output-dir "/workspace/${results_dir}" \
+        --custom-tasks utils/evals/custom_gsm8k.py \
         --max-samples "${max_samples}"
     set +x
 }
