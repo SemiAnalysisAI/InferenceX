@@ -548,6 +548,7 @@ run_lighteval_eval() {
     local num_fewshot="${NUM_FEWSHOT:-5}"
     local results_dir="${EVAL_RESULT_DIR:-eval_out_lighteval}"
     local max_samples=0
+    local concurrent_requests=8
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -556,6 +557,7 @@ run_lighteval_eval() {
             --num-fewshot) num_fewshot="$2"; shift 2 ;;
             --results-dir) results_dir="$2"; shift 2 ;;
             --max-samples) max_samples="$2"; shift 2 ;;
+            --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
             *)             echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -580,7 +582,7 @@ run_lighteval_eval() {
     export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 
 
-    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,max_new_tokens:2048},concurrent_requests=8"
+    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,max_new_tokens:2048},concurrent_requests=${concurrent_requests}"
     local TASK_SPEC="${task}|${num_fewshot}"
 
     set -x
