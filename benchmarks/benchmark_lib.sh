@@ -619,6 +619,4 @@ run_eval() {
         lighteval)       run_lighteval_eval "${forwarded[@]}" ;;
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
-
-    ls -ld /workspace /workspace/eval_out* /workspace/results*
 }
