@@ -205,9 +205,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         if conc > conc_end:
                             conc = conc_end
 
-    if len(matrix_values) == 0:
-        raise ValueError("No configs found matching input filters.")
-
     return matrix_values
 
 

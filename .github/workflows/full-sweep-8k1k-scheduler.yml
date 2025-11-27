@@ -2,14 +2,13 @@ name: "Full Sweep Scheduler - 8k1k"
 
 on:
     workflow_dispatch:
-    schedule:
-        - cron: "0 0 * * *"
 
 jobs:
     get-dsr1-configs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-dsr1-configs.outputs.search-space-config }}
+            multi-node-search-space-config: ${{ steps.get-dsr1-configs.outputs.multi-node-search-space-config }}
+            single-node-search-space-config: ${{ steps.get-dsr1-configs.outputs.single-node-search-space-config }}
         steps:
             - name: Checkout code
               uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -17,13 +16,16 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1)
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 8k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 8k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
+                  echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-gptoss-configs.outputs.search-space-config }}
+            multi-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.multi-node-search-space-config }}
+            single-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.single-node-search-space-config }}
         steps:
             - name: Checkout code
               uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -31,23 +33,62 @@ jobs:
             - id: get-gptoss-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss)
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 8k1k --model-prefix gptoss --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 8k1k --model-prefix gptoss --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
+                  echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
+
+    benchmark-dsr1-multi-node:
+        needs: get-dsr1-configs
+        if: ${{ needs.get-dsr1-configs.outputs.multi-node-search-space-config != '[]' }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: dsr1 8k1k /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-dsr1-configs.outputs.multi-node-search-space-config) }}
+        secrets: inherit
+        with:
+            isl: 8192
+            osl: 1024
+            max-model-len: 2048
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: "dsr1_8k1k"
+            conc-list: ${{ toJson(matrix.config.conc) }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+
+            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
+            prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-ep: ${{ matrix.config.prefill.ep }}
+            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
+            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
+
+            decode-num-worker: ${{ matrix.config.decode.num-worker }}
+            decode-tp: ${{ matrix.config.decode.tp }}
+            decode-ep: ${{ matrix.config.decode.ep }}
+            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
+            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
 
     benchmark-dsr1:
         needs: get-dsr1-configs
+        if: ${{ needs.get-dsr1-configs.outputs.single-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: dsr1 8k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-dsr1-configs.outputs.single-node-search-space-config) }}
         secrets: inherit
         with:
             exp-name: "dsr1_8k1k"
             isl: 8192
             osl: 1024
-            max-model-len: 9216
+            max-model-len: 2048
             runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
@@ -58,20 +99,21 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
-    benchmark-gptoss:
+    benchmark-gptoss-single-node:
         needs: get-gptoss-configs
+        if: ${{ needs.get-gptoss-configs.outputs.single-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: gptoss 8k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-gptoss-configs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-gptoss-configs.outputs.single-node-search-space-config) }}
         secrets: inherit
         with:
             exp-name: "gptoss_8k1k"
             isl: 8192
             osl: 1024
-            max-model-len: 9216
+            max-model-len: 2048
             runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
@@ -82,69 +124,60 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
-    # This is a workaround until we can integrate GB200 into master configs.
-    benchmark-gb200:
+    benchmark-gptoss-multi-node:
+        needs: get-gptoss-configs
+        if: ${{ needs.get-gptoss-configs.outputs.multi-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 8k1k sweep /
+        name: dsr1 8k1k /
         strategy:
             fail-fast: false
             matrix:
-                config:
-                    - {
-                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
-                          "model": "deepseek-r1-fp4",
-                          "model-prefix": "dsr1",
-                          "precision": "fp4",
-                          "framework": "dynamo-trtllm",
-                          "mtp": "off",
-                      }
-                    - {
-                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
-                          "model": "deepseek-r1-fp4",
-                          "model-prefix": "dsr1",
-                          "precision": "fp4",
-                          "framework": "dynamo-trtllm",
-                          "mtp": "on",
-                      }
-                    - {
-                          "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
-                          "model": "deepseek-ai/DeepSeek-R1-0528",
-                          "model-prefix": "dsr1",
-                          "precision": "fp8",
-                          "framework": "dynamo-sglang",
-                          "mtp": "off",
-                      }
+                config: ${{ fromJson(needs.get-gptoss-configs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
-            runner: gb200
+            isl: 8192
+            osl: 1024
+            max-model-len: 2048
+            runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            exp-name: ${{ matrix.config.model-prefix }}_8k1k
-            isl: 8192
-            osl: 1024
-            max-model-len: 9216
-            mtp-mode: ${{ matrix.config.mtp }}
+            exp-name: "dsr1_8k1k"
+            conc-list: ${{ toJson(matrix.config.conc) }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+
+            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
+            prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-ep: ${{ matrix.config.prefill.ep }}
+            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
+            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
+
+            decode-num-worker: ${{ matrix.config.decode.num-worker }}
+            decode-tp: ${{ matrix.config.decode.tp }}
+            decode-ep: ${{ matrix.config.decode.ep }}
+            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
+            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
 
     collect-dsr1-results:
-        needs: [benchmark-dsr1, benchmark-gb200]
-        if: ${{ always() }}
+        needs: [get-dsr1-configs, benchmark-dsr1, benchmark-dsr1-multi-node]
+        if: ${{ always() && needs.get-dsr1-configs.result == 'success' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
             exp-name: "dsr1_8k1k"
 
     collect-gptoss-results:
-        needs: benchmark-gptoss
-        if: ${{ always() }}
+        needs: [get-gptoss-configs, benchmark-gptoss-single-node, benchmark-gptoss-multi-node]
+        if: ${{ always() && needs.get-gptoss-configs.result == 'success' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
             exp-name: "gptoss_8k1k"
 
     calc-success-rate:
-        needs: [benchmark-dsr1, benchmark-gptoss, benchmark-gb200]
+        needs: [collect-dsr1-results, collect-gptoss-results]
         if: ${{ always() }}
         runs-on: ubuntu-latest
 

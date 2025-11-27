@@ -31,18 +31,3 @@ bash ./submit_disagg.sh $PREFILL_NODES \
     $DECODE_NUM_WORKERS \
     $N_ADDITIONAL_FRONTENDS \
     $ISL $OSL "${CONC_LIST// /x}" inf
-
-# if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-#     bash ./submit_disagg.sh $PREFILL_NODES \
-#         $PREFILL_NUM_WORKERS \
-#         $DECODE_NODES \
-#         $DECODE_NUM_WORKERS \
-#         $DECODE_NUM_WORKERS \
-#         $ISL $OSL "${CONC_LIST// /x}" inf
-# elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
-#     concurrency_list="128x256x384x448x512x576x1024x2048x4096"
-#     bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL "${CONC_LIST// /x}" inf
-# else
-#     echo "Unsupported ISL/OSL combination: $ISL/$OSL"
-#     exit 1
-# fi
