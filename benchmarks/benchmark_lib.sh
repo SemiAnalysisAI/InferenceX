@@ -141,6 +141,7 @@ _patch_lm_eval_filters() {
     cat > "$patch_dir/sitecustomize.py" <<'PY'
 import re, sys, unicodedata
 from lm_eval.filters import extraction as ex
+from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
 
 def _s(x):  # coerce to str
     return x if isinstance(x, str) else ""
@@ -265,7 +266,7 @@ run_lm_eval() {
     local task="${EVAL_TASK:-gsm8k}"
     local num_fewshot="${NUM_FEWSHOT:-5}"
     local results_dir="${EVAL_RESULT_DIR:-eval_out}"
-    local gen_max_tokens=4096
+    local gen_max_tokens=1024
     local temperature=0
     local top_p=1
     local concurrent_requests=32
