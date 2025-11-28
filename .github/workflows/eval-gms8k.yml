@@ -49,10 +49,10 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: h200-cw_1
-      image: ${{ inputs.image || 'lmsysorg/sglang:v0.5.5-cu129-amd64' }}
+      runner: mi325x-tw_1
+      image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915' }}
       model: ${{ inputs.model || 'deepseek-ai/DeepSeek-R1-0528' }}
-      framework: sglang 
+      framework: sglang
       precision: fp8
       exp-name: ${{ inputs.exp-name || 'dsr1_gsm8k_poc' }}
       tp: '8'
