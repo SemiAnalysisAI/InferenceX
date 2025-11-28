@@ -1,0 +1,36 @@
+name: Drain b200-nvd_2
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Minutes to hold (defaults to 72h if empty)
+        required: false
+        default: ""
+
+jobs:
+  hold:
+    # Pin specifically to the self-hosted runner label for b200-nvd_2
+    runs-on: [b200-nvd_2]
+    # Many orgs cap at 72h; adjust if your org allows more
+    timeout-minutes: ${{ fromJSON(github.event.inputs.minutes || '0') > 0 && fromJSON(github.event.inputs.minutes) || 4320 }}
+    steps:
+      - name: Start drain
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Holding runner: $RUNNER_NAME"
+          echo "Runner OS/Arch: $RUNNER_OS / $RUNNER_ARCH"
+          echo "Started at: $(date -Iseconds)"
+          echo "Cancel this workflow run to release the runner."
+
+      - name: Hold indefinitely (until timeout or cancel)
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'echo "Release signal received at $(date -Iseconds)"; exit 0' INT TERM
+          while true; do
+            echo "Still holding at $(date -Iseconds)"
+            sleep 1800
+          done
+
