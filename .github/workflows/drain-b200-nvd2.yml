@@ -11,9 +11,9 @@ on:
 jobs:
   hold:
     # Pin specifically to the self-hosted runner label for b200-nvd_2
-    runs-on: [b200-nvd_2]
-    # Many orgs cap at 72h; adjust if your org allows more
-    timeout-minutes: ${{ fromJSON(github.event.inputs.minutes || '0') > 0 && fromJSON(github.event.inputs.minutes) || 4320 }}
+    runs-on: [self-hosted, b200-nvd_2]
+    # Hold for 24h by default (override by canceling anytime)
+    timeout-minutes: 1440
     steps:
       - name: Start drain
         shell: bash
@@ -33,4 +33,3 @@ jobs:
             echo "Still holding at $(date -Iseconds)"
             sleep 1800
           done
-
