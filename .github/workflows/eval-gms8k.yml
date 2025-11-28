@@ -49,13 +49,13 @@ jobs:
     uses: ./.github/workflows/eval-tmpl.yml
     secrets: inherit
     with:
-      runner: mi325x-tw_1
-      image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1' }}
-      model: ${{ inputs.model || 'openai/gpt-oss-120b' }}
-      framework: vllm
-      precision: fp4
-      exp-name: ${{ inputs.exp-name || 'gptoss_gsm8k_poc' }}
-      tp: '2'
+      runner: mi325x-tw_0
+      image: ${{ inputs.image || 'rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915' }}
+      model: ${{ inputs.model || 'deepseek-ai/DeepSeek-R1-0528' }}
+      framework: sglang
+      precision: fp8
+      exp-name: ${{ inputs.exp-name || 'dsr1_gsm8k_poc' }}
+      tp: '8'
       ep: '1'
       dp-attn: false
       port: ${{ inputs.port || '8888' }}

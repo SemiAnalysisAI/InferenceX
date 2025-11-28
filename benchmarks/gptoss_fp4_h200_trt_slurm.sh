@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
 # TP
 # CONC
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # PORT_OFFSET
 # DP_ATTENTION
@@ -50,12 +46,12 @@ trtllm-serve $MODEL \
 --max_num_tokens 20000 \
 --backend pytorch \
 --extra_llm_api_options gptoss-config.yml \
---ep_size=1 \
+--ep_size=$EP_SIZE \
 --trust_remote_code \
 --gpus_per_node 8 \
 --host 0.0.0.0 \
 --port $PORT \
---tp_size=1 \
+--tp_size=$TP \
 --pp_size=1 \
 > $SERVER_LOG 2>&1 &
 
@@ -78,7 +74,3 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
-
-# After throughput, run evaluation (defaults to GSM8K)
-#run_lm_eval --port "$PORT"
-append_lm_eval_summary

@@ -67,7 +67,9 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-MODEL_NAME="openai/$MODEL"
-run_eval --framework lighteval --task gsm8k --num-fewshot 5
+# After throughput, run evaluation (defaults to GSM8K)
+run_eval --framework lm-eval --port "$PORT" --concurrent-requests $(( $CONC * 2 ))
+#MODEL_NAME="openai/$MODEL"
+#run_eval --framework lighteval --task gsm8k_long --num-fewshot 5 --concurrent-requests $CONC
 append_lm_eval_summary
 set +x

@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
 # RESULT_FILENAME
 # PORT_OFFSET
 # DP_ATTENTION
@@ -86,7 +83,6 @@ source "$(dirname "$0")/benchmark_lib.sh"
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-set -x
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \

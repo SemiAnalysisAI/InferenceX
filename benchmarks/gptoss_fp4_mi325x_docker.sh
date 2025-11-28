@@ -58,6 +58,6 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation (defaults to GSM8K)
-#run_lm_eval --port "$PORT"
+run_eval --framework lm-eval --port "$PORT" --concurrent-requests $(( $CONC * 2 ))
 append_lm_eval_summary
 set +x

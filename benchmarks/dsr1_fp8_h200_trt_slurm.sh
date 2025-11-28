@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# HF_TOKEN
-# HF_HUB_CACHE
-# IMAGE
+# === Required Env Vars ===
 # MODEL
+# TP
+# CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# TP
-# CONC
 # RESULT_FILENAME
 # PORT_OFFSET
 # DP_ATTENTION
@@ -89,10 +86,3 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
-
-# After throughput, run evaluation (defaults to GSM8K)
-#run_lm_eval --port "$PORT"
-MODEL_NAME="openai/$MODEL"
-run_eval --framework lighteval --task gsm8k --num-fewshot 5
-append_lm_eval_summary
-set +x
