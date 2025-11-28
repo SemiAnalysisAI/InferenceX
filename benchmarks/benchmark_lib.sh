@@ -290,6 +290,7 @@ run_lm_eval() {
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
+    MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
