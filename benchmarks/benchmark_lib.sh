@@ -213,7 +213,7 @@ run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
     local num_fewshot="${NUM_FEWSHOT:-5}"
-    local results_dir="${EVAL_RESULT_DIR:-eval_out}"
+    local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens=4096
     local temperature=0
     local top_p=1
@@ -241,11 +241,14 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
+    # Export for append_lm_eval_summary to pick up
+    export EVAL_RESULT_DIR="$results_dir"
+
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "utils/evals/${task}.yaml" \
       --num_fewshot "${num_fewshot}" \
-      --output_path "/workspace/${results_dir}" \
+      --output_path "${results_dir}" \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=2,num_concurrent=${concurrent_requests},tokenized_requests=False" \
       --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
     set +x
@@ -253,10 +256,9 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     set +x
-    local results_dir="${EVAL_RESULT_DIR:-eval_out}"
+    local results_dir="${EVAL_RESULT_DIR}"
     local task="${EVAL_TASK:-gsm8k}"
-    # Always render a local summary so the runner can pick it up
-    local out_dir="/workspace/${results_dir}"
+    local out_dir="${results_dir}"
     local summary_md="${out_dir}/SUMMARY.md"
     mkdir -p "$out_dir" || true
 
@@ -278,8 +280,9 @@ append_lm_eval_summary() {
             cat "$summary_md" >> "$GITHUB_STEP_SUMMARY" || true
         fi
     fi
-}
 
+    echo "Results saved to: ${summary_md}"
+}
 
 # ------------------------------
 # Lighteval + LiteLLM patching

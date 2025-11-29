@@ -156,7 +156,3 @@ jobs:
             ${{ env.EVAL_RESULT_DIR }}/
             ${{ env.EVAL_RESULT_DIR }}/*
             ${{ env.EVAL_RESULT_DIR }}/**
-
-      - name: Resource cleanup
-        run: |
-          sudo rm -rf eval_out*

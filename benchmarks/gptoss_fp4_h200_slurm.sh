@@ -74,8 +74,9 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation (defaults to GSM8K)
-run_eval --framework lm-eval --port "$PORT" --concurrent-requests $(( $CONC * 2 ))
-#run_eval --framework lighteval --task gsm8k --num-fewshot 5
-append_lm_eval_summary
+# After throughput, run evaluation only if RUN_EVAL is true
+if [ "${RUN_EVAL}" = "true" ]; then
+    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $(( $CONC * 2 ))
+    append_lm_eval_summary
+fi
 set +x
