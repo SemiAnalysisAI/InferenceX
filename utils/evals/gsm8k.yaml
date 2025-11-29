@@ -33,6 +33,7 @@ filter_list:
   - name: "strict-match"
     filter:
       - function: "regex"
+        group_select: -1
         regex_pattern: "#### (\\-?[0-9\\.\\,]+)"
       - function: "take_first"
   - name: "flexible-extract"

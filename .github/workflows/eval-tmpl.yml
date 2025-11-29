@@ -70,6 +70,7 @@ env:
   OSL: 1024
   RANDOM_RANGE_RATIO: '0.8'
   RESULT_FILENAME: results
+  RUN_EVAL: true
   
 jobs:
   eval:
