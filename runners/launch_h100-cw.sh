@@ -21,13 +21,3 @@ bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_h100_slurm.sh
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID
-
-# Append eval summary within this same step when available
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  GH_SUM_DIR="$(dirname "${GITHUB_STEP_SUMMARY}")"
-  if [ -d "${GH_SUM_DIR}" ]; then
-    if [ -f "${GITHUB_WORKSPACE}/${EVAL_RESULT_DIR:-eval_out}/SUMMARY.md" ]; then
-      cat "${GITHUB_WORKSPACE}/${EVAL_RESULT_DIR:-eval_out}/SUMMARY.md" >> "${GITHUB_STEP_SUMMARY}" || true
-    fi
-  fi
-fi

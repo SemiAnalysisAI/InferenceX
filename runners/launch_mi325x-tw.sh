@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
+export HF_HUB_CACHE_MOUNT="/home/hf_hub_cache/"
 export PORT_OFFSET=${USER: -1}
 
-PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+PARTITION="gpuworker"
+SQUASH_FILE="/home/.tw/slinky/.cache/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 set -x
-salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
+salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"

@@ -262,6 +262,22 @@ append_lm_eval_summary() {
     local summary_md="${out_dir}/SUMMARY.md"
     mkdir -p "$out_dir" || true
 
+    # Write minimal meta for collectors that expect it
+    local meta_json="${out_dir}/meta_env.json"
+    local model_name="${MODEL_NAME:-$MODEL}"
+    local dp_json="false"
+    if [ "${DP_ATTENTION}" = "true" ]; then dp_json="true"; fi
+    cat > "${meta_json}" <<META
+{
+  "framework": "${FRAMEWORK:-unknown}",
+  "precision": "${PRECISION:-unknown}",
+  "tp": ${TP:-1},
+  "ep": ${EP_SIZE:-1},
+  "dp_attention": ${dp_json},
+  "model": "${model_name:-}"
+}
+META
+
     PYTHONNOUSERSITE=1 PYTHONPATH="" python3 -S utils/lm_eval_to_md.py \
         --results-dir "$out_dir" \
         --task "${task}" \
@@ -561,11 +577,19 @@ run_lighteval_eval() {
     local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,top_p=1,max_new_tokens:2048},concurrent_requests=${concurrent_requests}"
     local TASK_SPEC="${task}|${num_fewshot}"
 
+    # Respect absolute paths (e.g., /tmp/eval_out); otherwise write under /workspace
+    local output_dir
+    if [[ "$results_dir" = /* ]]; then
+        output_dir="$results_dir"
+    else
+        output_dir="/workspace/${results_dir}"
+    fi
+
     set -x
     lighteval endpoint litellm \
         "${MODEL_ARGS}" \
         "${TASK_SPEC}" \
-        --output-dir "/workspace/${results_dir}" \
+        --output-dir "${output_dir}" \
         --custom-tasks utils/evals/custom_gsm8k.py \
         --max-samples "${max_samples}"
     set +x
