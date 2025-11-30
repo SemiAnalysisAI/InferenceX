@@ -128,18 +128,18 @@ run_benchmark_serving() {
 _install_lm_eval_deps() {
     set +x
     python3 -m pip install -q --no-cache-dir "lm-eval[api]" || true
-    # Temporary: workaround known harness issue by using main
+    # Temporary: workaround issue by using main
     python3 -m pip install -q --no-cache-dir --no-deps \
         "git+https://github.com/EleutherAI/lm-evaluation-harness.git@main" || true
 }
 
 # Patch lm-eval filters to be robust to empty strings via sitecustomize
-# Patch lm-eval filters to be robust to empty strings via sitecustomize
-_patch_lm_eval_filters() {
+_patch_lm_eval() {
     set +x
     local patch_dir
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
+# --- Patch LocalChatCompletion.parse_generations to handle empty content with reasoning_content ---
 import re, sys, unicodedata, json
 from lm_eval.filters import extraction as ex
 from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
@@ -167,7 +167,7 @@ def _le_parse_generations(outputs, **kwargs):
 # Keep staticmethod semantics
 _LCC.parse_generations = staticmethod(_le_parse_generations)
 
-# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" ---
+# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" for TRT ---
 try:
     from lm_eval.models import api_models as _api_models
     _TemplateAPI = _api_models.TemplateAPI
@@ -234,7 +234,7 @@ run_lm_eval() {
     done
 
     _install_lm_eval_deps
-    _patch_lm_eval_filters
+    _patch_lm_eval
 
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
