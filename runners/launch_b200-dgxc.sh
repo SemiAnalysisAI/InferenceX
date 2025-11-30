@@ -8,7 +8,6 @@ PORT=8888
 MODEL_NAME=$(basename "$MODEL")
 
 server_name="bmk-server"
-client_name="bmk-client"
 
 nvidia-smi
 
