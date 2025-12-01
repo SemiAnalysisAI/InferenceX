@@ -22,9 +22,9 @@ jobs:
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py \
+                    ${{ inputs.generate-cli-command }} \
                     --runner-config .github/configs/runners.yaml \
-                    --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml \
-                    ${{ inputs.generate-cli-command }})
+                    --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     test:
