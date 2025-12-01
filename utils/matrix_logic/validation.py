@@ -3,6 +3,7 @@ from typing import List, Optional, Union, Literal
 from enum import Enum
 
 import pprint
+import yaml
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -315,3 +316,73 @@ def validate_runner_config(runner_configs: dict) -> List[dict]:
                 f"Runner config entry '{key}' cannot be an empty list")
 
     return runner_configs
+
+
+# =============================================================================
+# File Loading Functions
+# =============================================================================
+
+
+def load_config_files(config_files: List[str], validate: bool = True) -> dict:
+    """Load and merge configuration files.
+
+    Args:
+        config_files: List of paths to YAML configuration files.
+        validate: If True, run validate_master_config on loaded data. Defaults to True.
+
+    Returns:
+        Merged configuration dictionary.
+
+    Raises:
+        ValueError: If file doesn't exist, isn't a dict, or has duplicate keys.
+    """
+    all_config_data = {}
+    for config_file in config_files:
+        try:
+            with open(config_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+                assert isinstance(
+                    config_data, dict), f"Config file '{config_file}' must contain a dictionary"
+
+                # Check for duplicate keys
+                duplicate_keys = set(all_config_data.keys()) & set(
+                    config_data.keys())
+                if duplicate_keys:
+                    raise ValueError(
+                        f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
+                    )
+
+                all_config_data.update(config_data)
+        except FileNotFoundError:
+            raise ValueError(f"Input file '{config_file}' does not exist.")
+
+    if validate:
+        validate_master_config(all_config_data)
+
+    return all_config_data
+
+
+def load_runner_file(runner_file: str, validate: bool = True) -> dict:
+    """Load runner configuration file.
+
+    Args:
+        runner_file: Path to the runner YAML configuration file.
+        validate: If True, run validate_runner_config on loaded data. Defaults to True.
+
+    Returns:
+        Runner configuration dictionary.
+
+    Raises:
+        ValueError: If file doesn't exist or fails validation.
+    """
+    try:
+        with open(runner_file, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise ValueError(
+            f"Runner config file '{runner_file}' does not exist.")
+
+    if validate:
+        validate_runner_config(runner_config)
+
+    return runner_config

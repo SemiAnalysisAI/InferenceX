@@ -1,8 +1,12 @@
 import json
-import yaml
 import argparse
 
-from validation import validate_master_config, validate_matrix_entry, validate_runner_config, Fields
+from validation import (
+    validate_matrix_entry,
+    load_config_files,
+    load_runner_file,
+    Fields
+)
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
@@ -366,44 +370,6 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
     return matrix_values
 
 
-def load_config_files(config_files):
-    """Load and merge configuration files."""
-    all_config_data = {}
-    for config_file in config_files:
-        try:
-            with open(config_file, 'r') as f:
-                config_data = yaml.safe_load(f)
-                assert isinstance(
-                    config_data, dict), f"Config file '{config_file}' must contain a dictionary"
-
-                # Check for duplicate keys, this is only in place to prevent against the very unlikely
-                # case where an entry in one config accidentally/purposefully tries to override an entry in another config
-                duplicate_keys = set(all_config_data.keys()) & set(
-                    config_data.keys())
-                if duplicate_keys:
-                    raise ValueError(
-                        f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
-                    )
-
-                all_config_data.update(config_data)
-        except FileNotFoundError:
-            raise ValueError(f"Input file '{config_file}' does not exist.")
-
-    return all_config_data
-
-
-def load_runner_file(runner_file):
-    """Load runner configuration file."""
-    try:
-        with open(runner_file, 'r') as f:
-            runner_config = yaml.safe_load(f)
-    except FileNotFoundError as e:
-        raise ValueError(
-            f"Runner config file '{runner_file}' does not exist.")
-
-    return runner_config
-
-
 def main():
     # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
@@ -547,11 +513,9 @@ def main():
 
     args = parser.parse_args()
 
-    # Load and validate configuration files
+    # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
-    validate_master_config(all_config_data)
-    validate_runner_config(runner_data)
 
     # Route to appropriate function based on subcommand
     if args.command == 'full-sweep':
