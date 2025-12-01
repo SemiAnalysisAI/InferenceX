@@ -9,7 +9,8 @@ jobs:
     get-dsr1-configs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-dsr1-configs.outputs.search-space-config }}
+            single-node-search-space-config: ${{ steps.get-dsr1-configs.outputs.single-node-search-space-config }}
+            multi-node-search-space-config: ${{ steps.get-dsr1-configs.outputs.multi-node-search-space-config }}
         steps:
             - name: Checkout code
               uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
@@ -17,13 +18,16 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type single-node --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1)
+                  echo "single-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  echo "multi-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-gptoss-configs.outputs.search-space-config }}
+            single-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.single-node-search-space-config }}
+            multi-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.multi-node-search-space-config }}
         steps:
             - name: Checkout code
               uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
@@ -31,17 +35,19 @@ jobs:
             - id: get-gptoss-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type single-node --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --node-type multinode --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss)
+                  echo "single-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  echo "multi-node-search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    benchmark-dsr1:
+    benchmark-dsr1-single-node:
         needs: get-dsr1-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: dsr1 1k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-dsr1-configs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-dsr1-configs.outputs.single-node-search-space-config) }}
         secrets: inherit
         with:
             exp-name: "dsr1_1k1k"
@@ -58,14 +64,14 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
-    benchmark-gptoss:
+    benchmark-gptoss-single-node:
         needs: get-gptoss-configs
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: gptoss 1k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-gptoss-configs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-gptoss-configs.outputs.single-node-search-space-config) }}
         secrets: inherit
         with:
             exp-name: "gptoss_1k1k"
@@ -82,50 +88,98 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
 
-    # This is a workaround until we can integrate GB200 into master configs.
-    benchmark-gb200:
+    benchmark-dsr1-multi-node:
+        needs: get-dsr1-configs
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: gb200 1k1k sweep /
+        name: dsr1 1k1k /
         strategy:
             fail-fast: false
             matrix:
-                config:
-                    - {
-                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
-                          "model": "deepseek-r1-fp4",
-                          "model-prefix": "dsr1",
-                          "precision": "fp4",
-                          "framework": "dynamo-trtllm",
-                          "mtp": "off",
-                      }
-                    - {
-                          "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
-                          "model": "deepseek-r1-fp4",
-                          "model-prefix": "dsr1",
-                          "precision": "fp4",
-                          "framework": "dynamo-trtllm",
-                          "mtp": "on",
-                      }
-                    - {
-                          "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
-                          "model": "deepseek-ai/DeepSeek-R1-0528",
-                          "model-prefix": "dsr1",
-                          "precision": "fp8",
-                          "framework": "dynamo-sglang",
-                          "mtp": "off",
-                      }
+                config: ${{ fromJson(needs.get-dsr1-configs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
-            runner: gb200
+            exp-name: "dsr1_1k1k"
+            isl: 1024
+            osl: 1024
+            max-model-len: 2048
+            runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            exp-name: ${{ matrix.config.model-prefix }}_1k1k
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    benchmark-gptoss-multi-node:
+        needs: get-gptoss-configs
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: gptoss 1k1k /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-gptoss-configs.outputs.multi-node-search-space-config) }}
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k1k"
             isl: 1024
             osl: 1024
             max-model-len: 2048
-            mtp-mode: ${{ matrix.config.mtp }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+
+    # # This is a workaround until we can integrate GB200 into master configs.
+    # benchmark-gb200:
+    #     uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+    #     name: gb200 1k1k sweep /
+    #     strategy:
+    #         fail-fast: false
+    #         matrix:
+    #             config:
+    #                 - {
+    #                       "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+    #                       "model": "deepseek-r1-fp4",
+    #                       "model-prefix": "dsr1",
+    #                       "precision": "fp4",
+    #                       "framework": "dynamo-trtllm",
+    #                       "mtp": "off",
+    #                   }
+    #                 - {
+    #                       "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+    #                       "model": "deepseek-r1-fp4",
+    #                       "model-prefix": "dsr1",
+    #                       "precision": "fp4",
+    #                       "framework": "dynamo-trtllm",
+    #                       "mtp": "on",
+    #                   }
+    #                 - {
+    #                       "image": "nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1",
+    #                       "model": "deepseek-ai/DeepSeek-R1-0528",
+    #                       "model-prefix": "dsr1",
+    #                       "precision": "fp8",
+    #                       "framework": "dynamo-sglang",
+    #                       "mtp": "off",
+    #                   }
+    #     secrets: inherit
+    #     with:
+    #         runner: gb200
+    #         image: ${{ matrix.config.image }}
+    #         model: ${{ matrix.config.model }}
+    #         framework: ${{ matrix.config.framework }}
+    #         precision: ${{ matrix.config.precision }}
+    #         exp-name: ${{ matrix.config.model-prefix }}_1k1k
+    #         isl: 1024
+    #         osl: 1024
+    #         max-model-len: 2048
+    #         mtp-mode: ${{ matrix.config.mtp }}
 
     collect-dsr1-results:
         needs: [benchmark-dsr1, benchmark-gb200]

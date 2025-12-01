@@ -27,6 +27,13 @@ on:
       osl:
         required: true
         type: string
+      conc:
+        required: true
+        type: string
+      mtp-mode:
+        required: true
+        type: string
+
       max-model-len:
         required: true
         type: string
@@ -34,9 +41,49 @@ on:
         required: false
         type: string
         default: '0.8'
-      mtp-mode:
+
+      prefill-num-worker:
         required: true
         type: string
+      prefill-tp:
+        required: true
+        type: string
+      prefill-ep:
+        required: true
+        type: string
+      prefill-batch-size:
+        required: true
+        type: string
+      prefill-max-num-tokens:
+        required: true
+        type: string
+      prefill-dp-attn:
+        required: true
+        type: string
+
+      decode-num-worker:
+        required: true
+        type: string
+      decode-tp:
+        required: true
+        type: string
+      decode-ep:
+        required: true
+        type: string
+      decode-batch-size:
+        required: true
+        type: string
+      decode-max-num-tokens:
+        required: true
+        type: string
+      decode-dp-attn:
+        required: true
+        type: string
+
+      additional-settings:
+        required: false
+        type: string
+        default: '[]'
 
 env:
   EXP_NAME: ${{ inputs.exp-name }}
@@ -47,7 +94,24 @@ env:
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
+  CONC: ${{ inputs.conc }}
   MTP_MODE: ${{ inputs.mtp-mode }}
+
+  PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
+  PREFILL_TP: ${{ inputs.prefill-tp }} 
+  PREFILL_EP: ${{ inputs.prefill-ep }}
+  PREFILL_BATCH_SIZE: ${{ inputs.prefill-batch-size }}
+  PREFILL_MAX_NUM_TOKENS: ${{ inputs.prefill-max-num-tokens }}
+  PREFILL_DP_ATTN: ${{ inputs.prefill-dp-attn }}
+  
+  DECODE_NUM_WORKERS: ${{ inputs.decode-num-worker }}
+  DECODE_TP: ${{ inputs.decode-tp }}
+  DECODE_EP: ${{ inputs.decode-ep }}
+  DECODE_BATCH_SIZE: ${{ inputs.decode-batch-size }}
+  DECODE_MAX_NUM_TOKENS: ${{ inputs.decode-max-num-tokens }}
+  DECODE_DP_ATTN: ${{ inputs.decode-dp-attn }}
+
+
 
 permissions:
   contents: read
@@ -78,7 +142,10 @@ jobs:
           RUNNER_NAME: ${{ runner.name }}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_mtp-${{ env.MTP_MODE }}_${{ runner.name }}
         run: |
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          # bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          set -x
+          export ${{ join(fromJson(inputs.additional-settings), ' ') }}
+          bash ./runners/launch_gb200-nv-copy.sh
           # Check if at least one result file was created
           if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
             echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV

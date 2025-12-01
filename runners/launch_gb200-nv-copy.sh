@@ -2,6 +2,7 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+set -x
 
 # Set up environment variables for SLURM
 export SLURM_PARTITION="batch"
@@ -28,6 +29,9 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
+job_output=
+job_id=
+
 ### FRAMEWORK_DIFF_IF_STATEMENT #2 - difference in launching jobs
 if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
 
@@ -47,9 +51,9 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     # Always clone and setup Dynamo
     echo "Cloning Dynamo repository..."
     rm -rf "$DYNAMO_PATH"
-    git clone https://github.com/ai-dynamo/dynamo.git "$DYNAMO_PATH"
+    git clone https://github.com/cquil11/dynamo.git "$DYNAMO_PATH"
     cd "$DYNAMO_PATH"
-    git checkout release/0.5.1-rc0.20251105
+    git checkout cam-stuff
     git submodule update --init --recursive
 
     # Navigate to performance sweeps directory
@@ -69,134 +73,80 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
         exit 1
     fi
 
-    # Generate benchmark configurations based on ISL/OSL and MTP mode
-    generate_benchmark_configs() {
-        local isl="$1"
-        local osl="$2"
-        local mtp_mode="$3"
+    # New stuff
+    # CONC
+    # ISL
+    # OSL
+    # IMAGE
 
-        # Usage: 
-        # ./submit_disagg.sh <mtp_mode> <mode> [ctx_num] [gen_num] [gen_tp_size] [gen_batch_size] [gen_max_num_tokens] [gen_gpu_memory_fraction] [gen_eplb_num_slots] [gen_mtp_size] [gen_concurrency_list]"
-        # MTP Modes:
-        #   mtp=off - Run without Multi-Token Prediction (gen_mtp_size=0)
-        #   mtp=on  - Run with Multi-Token Prediction (gen_mtp_size=1,2,3)
-        # Execution Modes:
-        #   tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-        #   dep - Run Data-Expert Parallel mode (attention_dp=true)
-        # Parameters for tep/dep modes:
-        #   ctx_num: Number of context nodes
-        #   gen_num: Number of generation nodes
-        #   gen_tp_size: Generation tensor parallel size
-        #   gen_batch_size: Generation batch size
-        #   gen_max_num_tokens: Generation max number of tokens
-        #   gen_gpu_memory_fraction: GPU memory fraction (0.7-0.95)
-        #   gen_mtp_size: Multi-Token Prediction size (0 for mtp=off, 1-3 for mtp=on)
-        #   gen_eplb_num_slots: Expert load balancing slots (0, 256, 288)
-        #   gen_concurrency_list: Concurrency values (space-separated, quoted)
+    # PREFILL_NUM_WORKERS
+    # PREFILL_TP
+    # PREFILL_EP
+    # PREFILL_DP_ATTN
+    # PREFILL_BATCH_SIZE
+    # PREFILL_MAX_NUM_TOKENS
 
-        if [ "$isl" = "1024" ] && [ "$osl" = "1024" ]; then
-            if [ "$mtp_mode" = "on" ]; then
-                echo "Running 1k/1k MTP=ON configurations"
-                #                                 ctx_num  gen_num  gen_tp_size gen_batch_size  gen_max_num_tokens  gen_gpu_memory_fraction  gen_mtp_size  gen_eplb_num_slots
-                ./submit_disagg.sh "mtp=on" "tep"    1        4          8            32               128                  "0.9"                  3                0          "1 2 4 8 16 36"
+    # DECODE_NUM_WORKERS
+    # DECODE_TP
+    # DECODE_EP
+    # DECODE_DP_ATTN
+    # DECODE_BATCH_SIZE
+    # DECODE_MAX_NUM_TOKENS
 
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 16 64 256 "0.7" 3 0 "512 1075"
+    # gen_eplb_num_slots
+    # gen_gpu_memory_fraction
+    # gen_mtp_size
 
-                ./submit_disagg.sh "mtp=on" "dep" 2 1 16 128 256 "0.7" 1 0 "2150"
+    # For GB200, we use 4 tasks per node.
+    ntasks_per_node=4
+    additional_slurm_args="--time=04:00:00"
 
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 32 16 64 "0.6" 3 0 "512"
+    kind=dynamo_disagg
 
-                ./submit_disagg.sh "mtp=on" "dep" 1 1 8 256 512 "0.8" 1 0 "2252"
-            else
-                echo "Running 1k/1k MTP=OFF configurations"
+    gen_nodes=$(((DECODE_TP + 3)/4 * DECODE_NUM_WORKERS))
+    total_nodes=$((PREFILL_NUM_WORKERS + gen_nodes))
+    total_tasks=$((total_nodes * ntasks_per_node))
 
-                ./submit_disagg.sh "mtp=off" "tep" 1 4 8 128 128 "0.9" 0 0 "1 2 4 8 16 32 64 141"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 32 32 32 "0.7" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 16 64 64 "0.75" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 2 1 16 256 256 "0.75" 0 0 "2048 4300"
-
-                ./submit_disagg.sh "mtp=off" "dep" 1 1 8 512 512 "0.8" 0 0 "4300"
-            fi
-        elif [ "$isl" = "8192" ] && [ "$osl" = "1024" ]; then
-            if [ "$mtp_mode" = "on" ]; then
-                echo "Running 8k/1k MTP=ON configurations"
-
-                ./submit_disagg.sh "mtp=on" "tep" 1 3 8 16 64 "0.9" 3 0 "1 2 4 8 18"
-
-                ./submit_disagg.sh "mtp=on" "dep" 5 1 32 8 32 "0.7" 3 0 "128 269"
-
-                ./submit_disagg.sh "mtp=on" "dep" 8 1 32 16 64 "0.7" 3 0 "538"
-
-                ./submit_disagg.sh "mtp=on" "dep" 8 1 16 64 256 "0.75" 2 0 "1075"
-
-                ./submit_disagg.sh "mtp=on" "dep" 6 1 8 256 512 "0.8" 1 0 "2150"
-            else
-                echo "Running 8k/1k MTP=OFF configurations"
-
-                ./submit_disagg.sh "mtp=off" "tep" 1 3 8 32 32 "0.9" 0 0 "1 2 4 8 16 34"
-
-                ./submit_disagg.sh "mtp=off" "dep" 4 1 32 16 16 "0.7" 0 0 "256 538"
-
-                ./submit_disagg.sh "mtp=off" "dep" 6 1 16 64 64 "0.75" 0 0 "1075"
-
-                ./submit_disagg.sh "mtp=off" "dep" 8 1 16 128 128 "0.75" 0 0 "2150"
-
-                ./submit_disagg.sh "mtp=off" "dep" 5 1 8 256 256 "0.8" 0 0 "2150"
-            fi
-        else
-            echo "Unsupported ISL/OSL combination: $isl/$osl"
-            exit 1
-        fi
-    }
-
-    # Run all benchmark configurations
-    generate_benchmark_configs "$ISL" "$OSL" "$MTP_MODE"
-
-else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
-    # Set up Dynamo repository path
-    DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
-    SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/components/backends/sglang/slurm_jobs"
-
-    # Always clone and setup Dynamo
-    echo "Cloning Dynamo repository..."
-    rm -rf "$DYNAMO_PATH"
-    git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
-    cd "$DYNAMO_PATH"
-
-    # Navigate to corresponding directory
-    cd "$SGL_SLURM_JOBS_PATH"
-
-    # Set up SGL launch script-specific environment variables
-    export SLURM_ACCOUNT=$SLURM_ACCOUNT
-    export SLURM_PARTITION=$SLURM_PARTITION
-    export TIME_LIMIT="04:00:00"
-    export MODEL_PATH=$MODEL_PATH
-    export CONFIG_DIR=$CONFIG_DIR
-    export CONTAINER_IMAGE=$IMAGE
-
-    # Launch jobs based on ISL/OSL
-    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="1024x2048x4096x4608x4864x4992x5120x5376x5632x6144x8192"
-        bash ./submit_disagg.sh 6 3 12 1 8 $ISL $OSL $concurrency_list inf
-    elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="128x256x384x448x512x576x1024x2048x4096"
-        bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
-    else
-        echo "Unsupported ISL/OSL combination: $ISL/$OSL"
-        exit 1
+    set +x
+    # 4608 prefill max num toks originally
+    if [ $ISL == $OSL ]; then
+        job_output=$(sbatch --nodes=${total_nodes} \
+            --ntasks=${total_tasks} \
+            --ntasks-per-node=${ntasks_per_node} \
+            --segment=${total_nodes} ${additional_slurm_args} \
+            benchmark_disagg.slurm \
+            ${PREFILL_NUM_WORKERS} ${PREFILL_TP} \
+            ${PREFILL_BATCH_SIZE} ${PREFILL_MAX_NUM_TOKENS} \
+            ${PREFILL_DP_ATTN} ${DECODE_NUM_WORKERS} \
+            ${DECODE_TP} ${DECODE_BATCH_SIZE} \
+            ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
+            ${GEN_GPU_MEM_FRACTION} ${GEN_EPLB_NUM_SLOTS} \
+            ${GEN_MTP_SIZE} ${CONC} \
+            ${gen_nodes} ${kind} \
+            ${MODEL_PATH} ${SERVED_MODEL_NAME} \
+            ${IMAGE} ${ISL} ${OSL})
+    # else
+    #     sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${ntasks_per_node} --segment=${total_nodes} ${slurm_args} benchmark_disagg.slurm ${ctx_num} 4 1 8448 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
     fi
 fi
 
+job_id=$(echo "$job_output" | awk '{print $NF}')
+echo "Submitted job $job_id"
+
+slurm_out="slurm-${job_id}.out"
+while [ ! -f "$slurm_out" ]; do sleep 1; done
+
+tail -f "$slurm_out" &
+tail_pid=$!
+
 # Wait for all jobs to complete
-echo "Waiting for all jobs to complete..."
+# echo "Waiting for all jobs to complete..."
 while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-    echo "Jobs still running..."
+    # echo "Jobs still running..."
     squeue -u $USER
     sleep 60
 done
+kill $tail_pid 2>/dev/null
 echo "All jobs completed"
 
 ### FRAMEWORK_DIFF_IF_STATEMENT #3 - difference in log post-processing

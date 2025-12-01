@@ -5,6 +5,7 @@ dsr1-fp4-b200-sglang:
   runner: b200
   precision: fp4
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -29,17 +30,18 @@ dsr1-fp4-b200-trt:
   runner: b200-trt
   precision: fp4
   framework: trt
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # If TP=4, 
+    # If TP=4,
     #   If CONC > 32, then EP=4
     #   If CONC >= 256, DP_ATTN=true
     - { tp: 4, conc-start: 4, conc-end: 32 }
     - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
-    # If TP=8, 
+    # If TP=8,
     #   If CONC > 8, then EP=8
     #   If CONC >= 256, DP_ATTN=true
     - { tp: 8, conc-start: 4, conc-end: 8 }
@@ -48,13 +50,13 @@ dsr1-fp4-b200-trt:
   - isl: 1024
     osl: 8192
     search-space:
-    # If TP=4, 
+    # If TP=4,
     #   If CONC > 32, then EP=4
     #   If CONC >= 256, DP_ATTN=true
     - { tp: 4, conc-start: 4, conc-end: 32 }
     - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
-    # If TP=8, 
+    # If TP=8,
     #   If CONC > 16, then EP=8
     #   If CONC >= 256, DP_ATTN=true
     - { tp: 8, conc-start: 4, conc-end: 16 }
@@ -63,11 +65,11 @@ dsr1-fp4-b200-trt:
   - isl: 8192
     osl: 1024
     search-space:
-    # If TP=4, 
+    # If TP=4,
     #   If CONC > 32, then EP=4 and DP_ATTN=true
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
-    # If TP=8, 
+    # If TP=8,
     #   If CONC > 32, then EP=8 and DP_ATTN=true
     - { tp: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
@@ -79,6 +81,7 @@ dsr1-fp8-b200-sglang:
   runner: b200
   precision: fp8
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -100,6 +103,7 @@ dsr1-fp8-b200-trt:
   runner: b200-trt
   precision: fp8
   framework: trt
+  multinode: false
   seq-len-configs:
   # For all sequence lengths, EP=TP
   - isl: 1024
@@ -126,6 +130,7 @@ dsr1-fp8-h200-sglang:
   runner: h200
   precision: fp8
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -147,6 +152,7 @@ dsr1-fp8-h200-trt:
   runner: h200
   precision: fp8
   framework: trt
+  multinode: false
   # For all sequence lengths, EP=TP
   seq-len-configs:
   - isl: 1024
@@ -173,6 +179,7 @@ gptoss-fp4-b200-trt:
   runner: b200-trt
   precision: fp4
   framework: trt
+  multinode: false
   # For all sequence lengths, if CONC >= 256, then EP=TP and DP_ATTN=true
   seq-len-configs:
   - isl: 1024
@@ -204,6 +211,7 @@ gptoss-fp4-b200-vllm:
   runner: b200
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -234,6 +242,7 @@ gptoss-fp4-h100-vllm:
   runner: h100
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -261,6 +270,7 @@ gptoss-fp4-h200-trt:
   runner: h200
   precision: fp4
   framework: trt
+  multinode: false
   # For all sequence lengths, EP=TP, DP_ATTENTION=false
   seq-len-configs:
   - isl: 1024
@@ -292,6 +302,7 @@ gptoss-fp4-h200-vllm:
   runner: h200
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -314,3 +325,237 @@ gptoss-fp4-h200-vllm:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 32 }
+
+dsr1-fp4-gb200-trt:
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-trtllm
+  multinode: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # MTP=ON configurations
+    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    # NOTE: Prefill tp and ep are always 4 because each GB200 node has 4 GPUs and
+    # ctx_tp_size is hardcoded to 4 in launch_gb200-nv.sh. Decode tp/ep matches gen_tp_size.
+    # For 1k/1k: prefill batch-size=4, max-num-tokens=4608
+    - mtp: "on"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: false }
+      decode: { num-worker: 4, tp: 8, ep: 8, batch-size: 32, max-num-tokens: 128, dp-attn: false }
+      conc-list: [ 1, 2, 4, 8, 16, 36 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.9"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    - mtp: "on"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 64, max-num-tokens: 256, dp-attn: true }
+      conc-list: [ 512, 1075 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    - mtp: "on"
+      conc-list: [ 512, 1075 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CTX_MAX_NUM_TOKENS=4608"
+        - "CTX_MAX_BATCH_SIZE=4"
+      decode:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "GEN_MAX_NUM_TOKENS=256"
+        - "GEN_MAX_BATCH_SIZE=64"
+        - "GEN_GPU_MEM_FRACTION=0.7"
+        - "GEN_MTP_SIZE=3"
+        - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 2, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 128, max-num-tokens: 256, dp-attn: true }
+      conc-list: [ 2150 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=1"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 32, ep: 32, batch-size: 16, max-num-tokens: 64, dp-attn: true }
+      conc-list: [ 512 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.6"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 8, ep: 8, batch-size: 256, max-num-tokens: 512, dp-attn: true }
+      conc-list: [ 2252 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.8"
+      - "GEN_MTP_SIZE=1"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # MTP=OFF configurations
+    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    - mtp: "off"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: false }
+      decode: { num-worker: 4, tp: 8, ep: 8, batch-size: 128, max-num-tokens: 128, dp-attn: false }
+      conc-list: [ 1, 2, 4, 8, 16, 32, 64, 141 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.9"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    - mtp: "off"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 32, ep: 32, batch-size: 32, max-num-tokens: 32, dp-attn: true }
+      conc-list: [ 1075 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 64, max-num-tokens: 64, dp-attn: true }
+      conc-list: [ 1075 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.75"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 2, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 256, max-num-tokens: 256, dp-attn: true }
+      conc-list: [ 2048, 4300 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.75"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 4, max-num-tokens: 4608, dp-attn: true }
+      decode: { num-worker: 1, tp: 8, ep: 8, batch-size: 512, max-num-tokens: 512, dp-attn: true }
+      conc-list: [ 4300 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.8"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # MTP=ON configurations
+    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    # For 8k/1k: prefill batch-size=1, max-num-tokens=8448
+    - mtp: "on"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: false }
+      decode: { num-worker: 3, tp: 8, ep: 8, batch-size: 16, max-num-tokens: 64, dp-attn: false }
+      conc-list: [ 1, 2, 4, 8, 18 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.9"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    - mtp: "on"
+      prefill: { num-worker: 5, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 32, ep: 32, batch-size: 8, max-num-tokens: 32, dp-attn: true }
+      conc-list: [ 128, 269 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 8, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 32, ep: 32, batch-size: 16, max-num-tokens: 64, dp-attn: true }
+      conc-list: [ 538 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=3"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 8, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 64, max-num-tokens: 256, dp-attn: true }
+      conc-list: [ 1075 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.75"
+      - "GEN_MTP_SIZE=2"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "on"
+      prefill: { num-worker: 6, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 8, ep: 8, batch-size: 256, max-num-tokens: 512, dp-attn: true }
+      conc-list: [ 2150 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.8"
+      - "GEN_MTP_SIZE=1"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # MTP=OFF configurations
+    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    - mtp: "off"
+      prefill: { num-worker: 1, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: false }
+      decode: { num-worker: 3, tp: 8, ep: 8, batch-size: 32, max-num-tokens: 32, dp-attn: false }
+      conc-list: [ 1, 2, 4, 8, 16, 34 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.9"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    - mtp: "off"
+      prefill: { num-worker: 4, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 32, ep: 32, batch-size: 16, max-num-tokens: 16, dp-attn: true }
+      conc-list: [ 256, 538 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.7"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 6, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 64, max-num-tokens: 64, dp-attn: true }
+      conc-list: [ 1075 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.75"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 8, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 16, ep: 16, batch-size: 128, max-num-tokens: 128, dp-attn: true }
+      conc-list: [ 2150 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.75"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
+
+    - mtp: "off"
+      prefill: { num-worker: 5, tp: 4, ep: 4, batch-size: 1, max-num-tokens: 8448, dp-attn: true }
+      decode: { num-worker: 1, tp: 8, ep: 8, batch-size: 256, max-num-tokens: 256, dp-attn: true }
+      conc-list: [ 2150 ]
+      additional-settings:
+      - "GEN_GPU_MEM_FRACTION=0.8"
+      - "GEN_MTP_SIZE=0"
+      - "GEN_EPLB_NUM_SLOTS=0"
