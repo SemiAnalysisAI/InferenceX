@@ -11,6 +11,9 @@ export SLURM_JOB_NAME="benchmark-dynamo.job"
 # For GB200 we have 4 GPUs per node
 export NTASKS_PER_NODE=4
 
+# For SGLang - we are working on updating the 8k1k configs 
+# For now we add conditionals to this script to use newer code for the 1k1k configs
+
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     # Set IMAGE based on ISL/OSL
