@@ -8,7 +8,7 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING \
     PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN \
     DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN \
     PREFILL_MAX_NUM_TOKENS PREFILL_MAX_BATCH_SIZE DECODE_MAX_NUM_TOKENS \
-    DECODE_MAX_BATCH_SIZE DECODE_GPU_MEM_FRACTION DECODE_EPLB_NUM_SLOTS \
+    DECODE_MAX_BATCH_SIZE DECODE_GPU_MEM_FRACTION \
     NTASKS_PER_NODE
 
 if [ "$SPEC_DECODING" == "mtp" ]; then
@@ -44,6 +44,8 @@ gen_nodes=$(((DECODE_TP + 3)/4 * DECODE_NUM_WORKERS))
 total_nodes=$((PREFILL_NUM_WORKERS + gen_nodes))
 total_tasks=$((total_nodes * NTASKS_PER_NODE))
 
+decode_eplb_num_slots=0
+
 sbatch --nodes=${total_nodes} \
     --ntasks=${total_tasks} \
     --ntasks-per-node=${NTASKS_PER_NODE} \
@@ -54,7 +56,7 @@ sbatch --nodes=${total_nodes} \
     ${PREFILL_DP_ATTN} ${DECODE_NUM_WORKERS} \
     ${DECODE_TP} ${DECODE_MAX_BATCH_SIZE} \
     ${DECODE_MAX_NUM_TOKENS} ${DECODE_DP_ATTN} \
-    ${DECODE_GPU_MEM_FRACTION} ${DECODE_EPLB_NUM_SLOTS} \
+    ${DECODE_GPU_MEM_FRACTION} ${decode_eplb_num_slots} \
     ${DECODE_MTP_SIZE} "${CONC_LIST}" \
     ${gen_nodes} ${kind} \
     ${MODEL_PATH} ${SERVED_MODEL_NAME} \

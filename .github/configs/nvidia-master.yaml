@@ -339,433 +339,414 @@ dsr1-fp4-gb200-dynamo-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    # MTP configurations
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    # NOTE: Prefill tp and ep are always 4 because each GB200 node has 4 GPUs and
-    # ctx_tp_size is hardcoded to 4 in launch_gb200-nv.sh. Decode tp/ep matches gen_tp_size.
-    # For 1k/1k: prefill batch-size=4, max-num-tokens=4608
-    - spec-decoding: "mtp"
-      conc-list: [ 1, 2, 4, 8, 16, 36 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 4
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    # # MTP configurations
+    # # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    # # NOTE: Prefill tp and ep are always 4 because each GB200 node has 4 GPUs and
+    # # ctx_tp_size is hardcoded to 4 in launch_gb200-nv.sh. Decode tp/ep matches gen_tp_size.
+    # # For 1k/1k: prefill batch-size=4, max-num-tokens=4608
+    # - spec-decoding: "mtp"
+    #   conc-list: [ 1, 2, 4, 8, 16, 36 ]
+    #   prefill:
+    #     num-worker: 1
+    #     tp: 4
+    #     ep: 4
+    #     dp-attn: false
+    #     additional-settings:
+    #     - "PREFILL_MAX_NUM_TOKENS=4608"
+    #     - "PREFILL_MAX_BATCH_SIZE=4"
+    #   decode:
+    #     num-worker: 4
+    #     tp: 8
+    #     ep: 8
+    #     dp-attn: false
+    #     additional-settings:
+    #     - "DECODE_MAX_NUM_TOKENS=128"
+    #     - "DECODE_MAX_BATCH_SIZE=32"
+    #     - "DECODE_GPU_MEM_FRACTION=0.9"
+    #     - "DECODE_MTP_SIZE=3"
 
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - spec-decoding: "mtp"
-      conc-list: [ 512, 1075 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 512, 1075 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=256"
+    #       - "DECODE_MAX_BATCH_SIZE=64"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=3"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 2150 ]
-      prefill:
-        num-worker: 2
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=1"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 2150 ]
+    #     prefill:
+    #       num-worker: 2
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=256"
+    #       - "DECODE_MAX_BATCH_SIZE=128"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=1"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 512 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.6"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 512 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 32
+    #       ep: 32
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=64"
+    #       - "DECODE_MAX_BATCH_SIZE=16"
+    #       - "DECODE_GPU_MEM_FRACTION=0.6"
+    #       - "DECODE_MTP_SIZE=3"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 2252 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=1"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 2252 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=512"
+    #       - "DECODE_MAX_BATCH_SIZE=256"
+    #       - "DECODE_GPU_MEM_FRACTION=0.8"
+    #       - "DECODE_MTP_SIZE=1"
 
-    # Non-MTP configurations (default spec_decoding="none")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 141 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 4
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # Non-MTP configurations (default spec_decoding="none")
+    #   # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    #   - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 141 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 4
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=128"
+    #       - "DECODE_MAX_BATCH_SIZE=128"
+    #       - "DECODE_GPU_MEM_FRACTION=0.9"
+    #       - "DECODE_MTP_SIZE=0"
 
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - conc-list: [ 1075 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    #   - conc-list: [ 1075 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 32
+    #       ep: 32
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=32"
+    #       - "DECODE_MAX_BATCH_SIZE=32"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=0"
 
-    - conc-list: [ 1075 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - conc-list: [ 1075 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=64"
+    #       - "DECODE_MAX_BATCH_SIZE=64"
+    #       - "DECODE_GPU_MEM_FRACTION=0.75"
+    #       - "DECODE_MTP_SIZE=0"
 
-    - conc-list: [ 2048, 4300 ]
-      prefill:
-        num-worker: 2
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - conc-list: [ 2048, 4300 ]
+    #     prefill:
+    #       num-worker: 2
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=256"
+    #       - "DECODE_MAX_BATCH_SIZE=256"
+    #       - "DECODE_GPU_MEM_FRACTION=0.75"
+    #       - "DECODE_MTP_SIZE=0"
 
-    - conc-list: [ 4300 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=512"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - conc-list: [ 4300 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=4608"
+    #       - "PREFILL_MAX_BATCH_SIZE=4"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=512"
+    #       - "DECODE_MAX_BATCH_SIZE=512"
+    #       - "DECODE_GPU_MEM_FRACTION=0.8"
+    #       - "DECODE_MTP_SIZE=0"
 
-  - isl: 8192
-    osl: 1024
-    search-space:
-    # MTP configurations (spec_decoding="mtp")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    # For 8k/1k: prefill batch-size=1, max-num-tokens=8448
-    - spec-decoding: "mtp"
-      conc-list: [ 1, 2, 4, 8, 18 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 3
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    # - isl: 8192
+    #   osl: 1024
+    #   search-space:
+    #   # MTP configurations (spec_decoding="mtp")
+    #   # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    #   # For 8k/1k: prefill batch-size=1, max-num-tokens=8448
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 1, 2, 4, 8, 18 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 3
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=64"
+    #       - "DECODE_MAX_BATCH_SIZE=16"
+    #       - "DECODE_GPU_MEM_FRACTION=0.9"
+    #       - "DECODE_MTP_SIZE=3"
 
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - spec-decoding: "mtp"
-      conc-list: [ 128, 269 ]
-      prefill:
-        num-worker: 5
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=8"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 128, 269 ]
+    #     prefill:
+    #       num-worker: 5
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 32
+    #       ep: 32
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=32"
+    #       - "DECODE_MAX_BATCH_SIZE=8"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=3"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 538 ]
-      prefill:
-        num-worker: 8
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 538 ]
+    #     prefill:
+    #       num-worker: 8
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 32
+    #       ep: 32
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=64"
+    #       - "DECODE_MAX_BATCH_SIZE=16"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=3"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 1075 ]
-      prefill:
-        num-worker: 8
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=2"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 1075 ]
+    #     prefill:
+    #       num-worker: 8
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=256"
+    #       - "DECODE_MAX_BATCH_SIZE=64"
+    #       - "DECODE_GPU_MEM_FRACTION=0.75"
+    #       - "DECODE_MTP_SIZE=2"
 
-    - spec-decoding: "mtp"
-      conc-list: [ 2150 ]
-      prefill:
-        num-worker: 6
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=1"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - spec-decoding: "mtp"
+    #     conc-list: [ 2150 ]
+    #     prefill:
+    #       num-worker: 6
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=512"
+    #       - "DECODE_MAX_BATCH_SIZE=256"
+    #       - "DECODE_GPU_MEM_FRACTION=0.8"
+    #       - "DECODE_MTP_SIZE=1"
 
-    # Non-MTP configurations (default spec_decoding="none")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    - conc-list: [ 1, 2, 4, 8, 16, 34 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 3
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # Non-MTP configurations (default spec_decoding="none")
+    #   # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
+    #   - conc-list: [ 1, 2, 4, 8, 16, 34 ]
+    #     prefill:
+    #       num-worker: 1
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 3
+    #       tp: 8
+    #       ep: 8
+    #       dp-attn: false
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=32"
+    #       - "DECODE_MAX_BATCH_SIZE=32"
+    #       - "DECODE_GPU_MEM_FRACTION=0.9"
+    #       - "DECODE_MTP_SIZE=0"
 
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - conc-list: [ 256, 538 ]
-      prefill:
-        num-worker: 4
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=16"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   # dep - Run Data-Expert Parallel mode (attention_dp=true)
+    #   - conc-list: [ 256, 538 ]
+    #     prefill:
+    #       num-worker: 4
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 32
+    #       ep: 32
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=16"
+    #       - "DECODE_MAX_BATCH_SIZE=16"
+    #       - "DECODE_GPU_MEM_FRACTION=0.7"
+    #       - "DECODE_MTP_SIZE=0"
 
-    - conc-list: [ 1075 ]
-      prefill:
-        num-worker: 6
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - conc-list: [ 1075 ]
+    #     prefill:
+    #       num-worker: 6
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=64"
+    #       - "DECODE_MAX_BATCH_SIZE=64"
+    #       - "DECODE_GPU_MEM_FRACTION=0.75"
+    #       - "DECODE_MTP_SIZE=0"
 
-    - conc-list: [ 2150 ]
-      prefill:
-        num-worker: 8
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
+    #   - conc-list: [ 2150 ]
+    #     prefill:
+    #       num-worker: 8
+    #       tp: 4
+    #       ep: 4
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "PREFILL_MAX_NUM_TOKENS=8448"
+    #       - "PREFILL_MAX_BATCH_SIZE=1"
+    #     decode:
+    #       num-worker: 1
+    #       tp: 16
+    #       ep: 16
+    #       dp-attn: true
+    #       additional-settings:
+    #       - "DECODE_MAX_NUM_TOKENS=128"
+    #       - "DECODE_MAX_BATCH_SIZE=128"
+    #       - "DECODE_GPU_MEM_FRACTION=0.75"
+    #       - "DECODE_MTP_SIZE=0"
 
     - conc-list: [ 2150 ]
       prefill:
@@ -786,61 +767,60 @@ dsr1-fp4-gb200-dynamo-trt:
         - "DECODE_MAX_BATCH_SIZE=256"
         - "DECODE_GPU_MEM_FRACTION=0.8"
         - "DECODE_MTP_SIZE=0"
-        - "DECODE_EPLB_NUM_SLOTS=0"
 
-dsr1-fp8-gb200-dynamo-sglang:
-  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  runner: gb200
-  precision: fp8
-  framework: dynamo-sglang
-  multinode: true
-  disagg: true
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - spec-decoding: "none"
-      # conc-list: [ 1024, 2048, 4096, 4608, 4864, 4992, 5120, 5376, 5632, 6144, 8192 ]
-      conc-list: [ 1024, 2048 ]
-      prefill:
-        num-worker: 3
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
-        tp: 1
-        ep: 1
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=6"
-        - "N_ADDITIONAL_FRONTENDS=8"
-      decode:
-        num-worker: 1
-        tp: 1
-        ep: 1
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=12"
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - spec-decoding: "none"
-      # conc-list: [ 128, 256, 384, 448, 512, 576, 1024, 2048, 4096 ]
-      conc-list: [ 128 ]
-      prefill:
-        num-worker: 6
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
-        tp: 1
-        ep: 1
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=12"
-        - "N_ADDITIONAL_FRONTENDS=8"
-      decode:
-        num-worker: 1
-        tp: 1
-        ep: 1
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=6"
+# dsr1-fp8-gb200-dynamo-sglang:
+#   image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
+#   model: deepseek-ai/DeepSeek-R1-0528
+#   model-prefix: dsr1
+#   runner: gb200
+#   precision: fp8
+#   framework: dynamo-sglang
+#   multinode: true
+#   disagg: true
+#   seq-len-configs:
+#   - isl: 1024
+#     osl: 1024
+#     search-space:
+#     - spec-decoding: "none"
+#       # conc-list: [ 1024, 2048, 4096, 4608, 4864, 4992, 5120, 5376, 5632, 6144, 8192 ]
+#       conc-list: [ 1024, 2048 ]
+#       prefill:
+#         num-worker: 3
+#         # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
+#         # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
+#         tp: 1
+#         ep: 1
+#         dp-attn: true
+#         additional-settings:
+#         - "PREFILL_NODES=6"
+#         - "N_ADDITIONAL_FRONTENDS=8"
+#       decode:
+#         num-worker: 1
+#         tp: 1
+#         ep: 1
+#         dp-attn: true
+#         additional-settings:
+#         - "DECODE_NODES=12"
+#   - isl: 8192
+#     osl: 1024
+#     search-space:
+#     - spec-decoding: "none"
+#       # conc-list: [ 128, 256, 384, 448, 512, 576, 1024, 2048, 4096 ]
+#       conc-list: [ 128 ]
+#       prefill:
+#         num-worker: 6
+#         # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
+#         # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
+#         tp: 1
+#         ep: 1
+#         dp-attn: true
+#         additional-settings:
+#         - "PREFILL_NODES=12"
+#         - "N_ADDITIONAL_FRONTENDS=8"
+#       decode:
+#         num-worker: 1
+#         tp: 1
+#         ep: 1
+#         dp-attn: true
+#         additional-settings:
+#         - "DECODE_NODES=6"
