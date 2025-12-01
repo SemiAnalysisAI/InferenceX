@@ -4,8 +4,8 @@
 
 
 # Set up environment variables for SLURM
-export SLURM_PARTITION="test"
-export SLURM_ACCOUNT="test"
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
 
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
@@ -14,7 +14,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
 else
-    SQUASH_FILE="/mnt/lustre01/users/test-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 
     # Update the IMAGE variable to the squash file
@@ -32,7 +32,7 @@ export OSL="$OSL"
 if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
 
     # Set up Dynamo repository path
-    DYNAMO_PATH="/mnt/lustre01/users/test-shared/benchmarks/dynamo"
+    DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
     PERFORMANCE_SWEEPS_PATH="$DYNAMO_PATH/components/backends/trtllm/performance_sweeps"
 
     # Overview:
@@ -157,7 +157,7 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
 
 else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
     # Set up Dynamo repository path
-    DYNAMO_PATH="/mnt/lustre01/users/test-shared/benchmarks/dynamo"
+    DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
     SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/components/backends/sglang/slurm_jobs"
 
     # Always clone and setup Dynamo
