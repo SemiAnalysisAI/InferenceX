@@ -11,6 +11,9 @@ on:
       model:
         required: true
         type: string
+      model-prefix:
+        required: true
+        type: string
       precision:
         required: true
         type: string
@@ -57,6 +60,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
   MODEL: ${{ inputs.model }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}

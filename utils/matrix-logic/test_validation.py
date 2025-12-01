@@ -27,6 +27,7 @@ def valid_single_node_matrix_entry():
     return {
         "image": "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915",
         "model": "amd/DeepSeek-R1-0528-MXFP4-Preview",
+        "model-prefix": "dsr1",
         "precision": "fp4",
         "framework": "sglang",
         "spec-decoding": "none",
@@ -49,6 +50,7 @@ def valid_multinode_matrix_entry():
     return {
         "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
         "model": "deepseek-r1-fp4",
+        "model-prefix": "dsr1",
         "precision": "fp4",
         "framework": "dynamo-trt",
         "spec-decoding": "none",

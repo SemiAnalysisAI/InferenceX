@@ -12,6 +12,9 @@ on:
       model:
         required: true
         type: string
+      model-prefix:
+        required: true
+        type: string
       framework:
         required: true
         type: string
@@ -82,6 +85,7 @@ on:
 env:
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   ISL: ${{ inputs.isl }}

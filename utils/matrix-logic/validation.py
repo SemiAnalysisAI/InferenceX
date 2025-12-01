@@ -68,6 +68,7 @@ class SingleNodeMatrixEntry(BaseModel):
 
     image: str
     model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
@@ -104,6 +105,7 @@ class MultiNodeMatrixEntry(BaseModel):
 
     image: str
     model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(

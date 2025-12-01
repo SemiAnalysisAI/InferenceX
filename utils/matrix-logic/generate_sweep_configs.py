@@ -142,6 +142,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     entry = {
                         Fields.IMAGE.value: image,
                         Fields.MODEL.value: model,
+                        Fields.MODEL_PREFIX.value: model_code,
                         Fields.PRECISION.value: precision,
                         Fields.FRAMEWORK.value: framework,
                         Fields.RUNNER.value: runner,
@@ -200,6 +201,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         entry = {
                             Fields.IMAGE.value: image,
                             Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
                             Fields.PRECISION.value: precision,
                             Fields.FRAMEWORK.value: framework,
                             Fields.RUNNER.value: runner,
@@ -302,6 +304,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                 entry = {
                     Fields.IMAGE.value: val[Fields.IMAGE.value],
                     Fields.MODEL.value: val[Fields.MODEL.value],
+                    Fields.MODEL_PREFIX.value: model_code,
                     Fields.PRECISION.value: val[Fields.PRECISION.value],
                     Fields.FRAMEWORK.value: val[Fields.FRAMEWORK.value],
                     Fields.RUNNER.value: node,
@@ -343,6 +346,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                 entry = {
                     Fields.IMAGE.value: val[Fields.IMAGE.value],
                     Fields.MODEL.value: val[Fields.MODEL.value],
+                    Fields.MODEL_PREFIX.value: model_code,
                     Fields.PRECISION.value: val[Fields.PRECISION.value],
                     Fields.FRAMEWORK.value: val[Fields.FRAMEWORK.value],
                     Fields.RUNNER.value: node,

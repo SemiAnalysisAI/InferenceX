@@ -25,10 +25,11 @@ def get_required_env_vars(required_vars):
 # Base required env vars
 base_env = get_required_env_vars([
     'RUNNER_TYPE', 'FRAMEWORK', 'PRECISION', 'SPEC_DECODING',
-    'RESULT_FILENAME', 'ISL', 'OSL', 'DISAGG'
+    'RESULT_FILENAME', 'ISL', 'OSL', 'DISAGG', 'MODEL_PREFIX'
 ])
 
 hw = base_env['RUNNER_TYPE']
+model_prefix = base_env['MODEL_PREFIX']
 framework = base_env['FRAMEWORK']
 precision = base_env['PRECISION']
 spec_decoding = base_env['SPEC_DECODING']
@@ -44,6 +45,7 @@ data = {
     'hw': hw,
     'conc': int(bmk_result['max_concurrency']),
     'model': bmk_result['model_id'],
+    'infmax_model_prefix': model_prefix,
     'framework': framework,
     'precision': precision,
     'spec_decoding': spec_decoding,
