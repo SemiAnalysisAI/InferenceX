@@ -17,12 +17,15 @@ else
     DECODE_MTP_SIZE="0"
 fi
 
+PERFORMANCE_SWEEPS_PATH="components/backends/trtllm/performance_sweeps"
+
 echo "Cloning Dynamo repository..."
 git clone https://github.com/ai-dynamo/dynamo.git
+cd dynamo
 git checkout release/0.5.1-rc0.20251105
 git submodule update --init --recursive
 
-cd dynamo/components/backends/trtllm/performance_sweeps
+cd "$PERFORMANCE_SWEEPS_PATH"
 
 # Set up environment variables based on ISL/OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
