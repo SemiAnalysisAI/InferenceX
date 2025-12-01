@@ -8,9 +8,17 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
 
+# For SGLang - we are working on updating the 8k1k configs 
+# For now we add conditionals to this script to use newer code for the 1k1k configs
+
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-    export IMAGE="/mnt/lustre01/artifacts/containers/dynamo-sglang.sqsh"
+    # Set IMAGE based on ISL/OSL
+    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+        export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.5.post2.sqsh"
+    else
+        export IMAGE="/mnt/lustre01/artifacts/containers/dynamo-sglang.sqsh"
+    fi
     export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
 else
@@ -157,13 +165,24 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
 
 else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
     # Set up Dynamo repository path
+    set -x
     DYNAMO_PATH="/mnt/lustre01/users/sa-shared/benchmarks/dynamo"
-    SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/components/backends/sglang/slurm_jobs"
+    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+        SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/examples/backends/sglang/slurm_jobs"
+    else
+        SGL_SLURM_JOBS_PATH="$DYNAMO_PATH/components/backends/sglang/slurm_jobs"
+    fi
 
     # Always clone and setup Dynamo
     echo "Cloning Dynamo repository..."
     rm -rf "$DYNAMO_PATH"
-    git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
+    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+        # TODO: before merge this will be a different branch off of main
+        git clone --branch ishan/sa-1.1-sgl-dsr1-fp8 https://github.com/ai-dynamo/dynamo.git $DYNAMO_PATH
+    else
+        git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git $DYNAMO_PATH
+    fi
+
     cd "$DYNAMO_PATH"
 
     # Navigate to corresponding directory
@@ -179,15 +198,32 @@ else # if statement at the top - search for "FRAMEWORK_DIFF_IF_STATEMENT #2"
 
     # Launch jobs based on ISL/OSL
     if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        concurrency_list="1024x2048x4096x4608x4864x4992x5120x5376x5632x6144x8192"
-        bash ./submit_disagg.sh 6 3 12 1 8 $ISL $OSL $concurrency_list inf
+        NUMBER_OF_EXPERIMENTS=3
+
+        top_of_curve_concurrency_list="4096"
+	    middle_of_curve_concurrency_list="1024x2048x4096"
+        bottom_of_curve_concurrency_list="2x4x8x16x64x128"
+
+        # Top of curve (2 prefill workers each at DEP8 and 1 decode worker at DEP32)
+        bash ./submit_disagg.sh 4 2 8 1 9 $ISL $OSL $top_of_curve_concurrency_list inf
+
+        # Bottom of curve (1 prefill worker at DEP4 and 4 decode workers at DEP4)
+        bash ./submit_disagg.sh 1 1 4 4 9 $ISL $OSL $bottom_of_curve_concurrency_list inf 1p_4d
+
+        # Middle of curve (3 prefill workers each at DEP8 and 1 decode worker at DEP48)
+        bash ./submit_disagg.sh 6 3 12 1 9 $ISL $OSL $middle_of_curve_concurrency_list inf
+
     elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
+        NUMBER_OF_EXPERIMENTS=1
+
         concurrency_list="128x256x384x448x512x576x1024x2048x4096"
         bash ./submit_disagg.sh 12 6 6 1 8 $ISL $OSL $concurrency_list inf
     else
         echo "Unsupported ISL/OSL combination: $ISL/$OSL"
         exit 1
     fi
+
+    set +x
 fi
 
 # Wait for all jobs to complete
@@ -259,9 +295,14 @@ if [[ $FRAMEWORK == "dynamo-trtllm" ]]; then
     done
 
 else # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
-    # Find the latest log directory
-    # we do "tail -1" here since only the latest job will yield the result
-    LOGS_DIR=$(find logs/*/vllm_isl_${ISL}_osl_${OSL} -type d | sort -V | tail -1)
+    # Find the latest log directory that contains the data
+    cat > collect_latest_results.py <<'PY'
+import os, sys
+isl, osl, nexp = [int(x) for x in sys.argv[1:]]
+for path in sorted([f"logs/{name}/vllm_isl_{isl}_osl_{osl}" for name in os.listdir("logs/") if os.path.isdir(f"logs/{name}/vllm_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+    print(path)
+PY
+    LOGS_DIR=$(python3 collect_latest_results.py $ISL $OSL $NUMBER_OF_EXPERIMENTS)
     if [ -z "$LOGS_DIR" ]; then
         echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
         exit 1
