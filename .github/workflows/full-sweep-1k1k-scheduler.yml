@@ -16,7 +16,7 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 1k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
                   echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
@@ -33,8 +33,8 @@ jobs:
             - id: get-gptoss-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix gptoss --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 1k1k --model-prefix gptoss --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix gptoss ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 1k1k --model-prefix gptoss ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
                   echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
 
