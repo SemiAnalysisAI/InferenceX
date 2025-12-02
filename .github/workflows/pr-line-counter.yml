@@ -74,7 +74,7 @@ jobs:
 
       - name: Generate summary
         run: |
-          echo "## 📊 Line Count Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Line Count Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           FILE_EXISTS="${{ steps.line-count.outputs.file_exists }}"
@@ -94,20 +94,20 @@ jobs:
               echo "**Base Lines:** $BASE_LINE_COUNT" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               if [ "$LINE_DIFF" -gt 0 ]; then
-                echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** +$LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
               elif [ "$LINE_DIFF" -lt 0 ]; then
-                echo "**Change:** $LINE_DIFF lines 📉" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** $LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
               else
-                echo "**Change:** No change ➡️" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** No change" >> $GITHUB_STEP_SUMMARY
               fi
             else
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "**Base Lines:** 0 (new file)" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
+              echo "**Change:** +$LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "⚠️ **File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
+            echo "**File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Comment on PR
