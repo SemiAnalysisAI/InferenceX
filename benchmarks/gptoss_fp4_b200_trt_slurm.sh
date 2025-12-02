@@ -31,7 +31,9 @@ echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
 EXTRA_CONFIG_FILE="gptoss-fp4.yml"
 export TRTLLM_ENABLE_PDL=1
-export NCCL_GRAPH_REGISTER=0
+export TRTLLM_MOE_ALLTOALL_BACKEND="mnnvlthroughput"
+export TRTLLM_FORCE_ALLTOALL_METHOD="MNNVL"
+export TRTLLM_MOE_A2A_WORKSPACE_MB="2048"
 
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
