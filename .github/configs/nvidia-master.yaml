@@ -173,6 +173,7 @@ gptoss-fp4-b200-trt:
   runner: b200-trt
   precision: fp4
   framework: trt
+  # Enable DP_ATTENTION for conc >= 32
   seq-len-configs:
   - isl: 1024
     osl: 1024
