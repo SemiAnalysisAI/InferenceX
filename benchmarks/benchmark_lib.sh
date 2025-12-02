@@ -297,9 +297,28 @@ META
         fi
     fi
 
-    # Note: Per policy, eval outputs stay under /tmp only; do not copy to workspace.
+    # Move eval artifacts into PWD (no new directories in workspace)
+    if [ -f "${summary_md}" ]; then
+        mv -f "${summary_md}" ./ || true
+    fi
+    if [ -f "${meta_json}" ]; then
+        mv -f "${meta_json}" ./ || true
+    fi
+    if [ -d "${out_dir}" ]; then
+        while IFS= read -r -d '' jf; do
+            base=$(basename "$jf")
+            if [ "$base" != "meta_env.json" ] && [ "$base" != "SUMMARY.md" ]; then
+                mv -f "$jf" ./ || true
+            fi
+        done < <(find "${out_dir}" -type f -name "*.json" -print0 2>/dev/null)
+    fi
 
-    echo "Results saved to: ${summary_md}"
+    # Best-effort cleanup of the temp directory
+    if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
+        rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
+    fi
+
+    echo "Moved eval artifacts to: $(pwd)"
 }
 
 # ------------------------------
@@ -539,7 +558,7 @@ run_lighteval_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
     local num_fewshot="${NUM_FEWSHOT:-5}"
-    local results_dir="${EVAL_RESULT_DIR:-eval_out_lighteval}"
+    local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local max_samples=0
     local concurrent_requests=32
 
@@ -584,6 +603,9 @@ run_lighteval_eval() {
     else
         output_dir="/workspace/${results_dir}"
     fi
+
+    # Make output dir visible to append_lm_eval_summary
+    export EVAL_RESULT_DIR="$output_dir"
 
     set -x
     lighteval endpoint litellm \
