@@ -1,3 +1,5 @@
 changelog:
 - config-key: dsr1-fp8-h200-trt
-  description: Test change
+  description: Test change a
+  date: '2025-12-02'
+  author: Cam Quilici
