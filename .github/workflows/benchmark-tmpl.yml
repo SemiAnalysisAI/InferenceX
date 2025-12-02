@@ -172,16 +172,15 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
-          path: eval_out/${{ env.RESULT_FILENAME }}
+          path: |
+            SUMMARY.md
+            meta_env.json
+            results*.json
+          if-no-files-found: ignore
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ env.RUN_EVAL == 'true' }}
         run: |
-          if [ -n "${RESULT_FILENAME:-}" ] && [ -e "eval_out/${RESULT_FILENAME}" ]; then
-            echo "Removing eval dir: eval_out/${RESULT_FILENAME}"
-            rm -rf --one-file-system "eval_out/${RESULT_FILENAME}" || rm -rf "eval_out/${RESULT_FILENAME}" || true
-          fi
-          # Also remove empty parent folder if present
-          if [ -d "eval_out" ]; then
-            rmdir eval_out 2>/dev/null || true
-          fi
+          rm -f SUMMARY.md meta_env.json || true
+          # Remove any eval results JSONs that were moved into workspace
+          rm -f results*.json || true

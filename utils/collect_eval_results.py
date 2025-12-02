@@ -7,8 +7,29 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 def find_eval_sets(root: Path) -> List[Path]:
-    """Return directories that contain a meta_env.json (one set per job)."""
+    """Return directories that contain a meta_env.json (one set per job).
+
+    New structure: each downloaded artifact is placed under
+    eval_results/<artifact-name>/ with flat files inside, e.g.:
+      - meta_env.json
+      - SUMMARY.md
+      - results_*.json
+
+    We first check immediate child directories for meta_env.json to avoid
+    descending unnecessarily. If nothing is found (backward compatibility),
+    fall back to recursive search.
+    """
     out: List[Path] = []
+    # Prefer immediate children (one directory per artifact)
+    try:
+        for d in root.iterdir():
+            if d.is_dir() and (d / 'meta_env.json').exists():
+                out.append(d)
+    except Exception:
+        pass
+    if out:
+        return out
+    # Fallback: recursive (legacy structure)
     for p in root.rglob('meta_env.json'):
         out.append(p.parent)
     return out
@@ -23,32 +44,49 @@ def load_json(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return (lm_eval_json, lighteval_json) if present (latest by mtime)."""
-    lm: List[Tuple[float, Path]] = []
-    le: List[Tuple[float, Path]] = []
-    for p in d.rglob('*.json'):
-        if p.name == 'meta_env.json':
-            continue
-        data = load_json(p)
-        if not isinstance(data, dict):
-            continue
-        # Heuristics similar to utils/lm_eval_to_md.py
-        if 'lm_eval_version' in data or 'pretty_env_info' in data:
-            try:
-                lm.append((p.stat().st_mtime, p))
-            except Exception:
-                lm.append((0, p))
-        elif 'config_general' in data and 'results' in data:
-            try:
-                le.append((p.stat().st_mtime, p))
-            except Exception:
-                le.append((0, p))
-        elif 'results' in data:
-            # Fallback: treat as lm-eval JSON
-            try:
-                lm.append((p.stat().st_mtime, p))
-            except Exception:
-                lm.append((0, p))
+    """Return (lm_eval_json, lighteval_json) if present (latest by mtime).
+
+    New structure places result JSONs flat in the artifact directory. We
+    first check only the immediate directory for JSONs, then fall back to
+    recursive search for backward compatibility.
+    """
+    def scan_jsons(paths: List[Path]) -> Tuple[List[Tuple[float, Path]], List[Tuple[float, Path]]]:
+        lm: List[Tuple[float, Path]] = []
+        le: List[Tuple[float, Path]] = []
+        for p in paths:
+            if p.name == 'meta_env.json':
+                continue
+            data = load_json(p)
+            if not isinstance(data, dict):
+                continue
+            # Heuristics similar to utils/lm_eval_to_md.py
+            if 'lm_eval_version' in data or 'pretty_env_info' in data:
+                try:
+                    lm.append((p.stat().st_mtime, p))
+                except Exception:
+                    lm.append((0, p))
+            elif 'config_general' in data and 'results' in data:
+                try:
+                    le.append((p.stat().st_mtime, p))
+                except Exception:
+                    le.append((0, p))
+            elif 'results' in data:
+                # Fallback: treat as lm-eval JSON
+                try:
+                    lm.append((p.stat().st_mtime, p))
+                except Exception:
+                    lm.append((0, p))
+        return lm, le
+
+    # 1) Prefer immediate JSONs (flat structure)
+    immediate_jsons = list(d.glob('results*.json')) + [p for p in d.glob('*.json') if p.name != 'meta_env.json']
+    lm, le = scan_jsons(immediate_jsons)
+
+    # 2) If nothing found, fallback to deep scan (legacy)
+    if not lm and not le:
+        deep_jsons = list(d.rglob('*.json'))
+        lm, le = scan_jsons(deep_jsons)
+
     lm_path = sorted(lm, key=lambda x: x[0])[-1][1] if lm else None
     le_path = sorted(le, key=lambda x: x[0])[-1][1] if le else None
     return lm_path, le_path
