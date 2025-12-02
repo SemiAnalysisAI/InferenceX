@@ -1,8 +1,6 @@
 - config-keys:
   - dsr1-fp8-h200-trt
   description: Test change abc
-  seq-lens: [ 1k1k, 1k8k, 8k1k ]
 - config-keys:
   - dsr1-fp8-h200-sglang
   description: Test change 2
-  seq-lens: [ 1k1k, 1k8k, 8k1k ]
