@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import yaml
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -39,7 +39,7 @@ def main():
         return
 
     modified = False
-    today = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     author = get_git_username()
 
     for entry in changelog['changelog']:
