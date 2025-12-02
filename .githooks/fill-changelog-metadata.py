@@ -39,7 +39,7 @@ def main():
         return
 
     modified = False
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now().strftime('%Y-%m-%d %H:%M')
     author = get_git_username()
 
     for entry in changelog['changelog']:
