@@ -140,6 +140,14 @@ jobs:
         with:
             exp-name: "dsr1_1k1k"
 
+    collect-dsr1-1k1k-evals:
+        needs: benchmark-dsr1-1k1k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-1k1k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k1k"
+
     # GPTOSS 1K1K Benchmarks
     benchmark-gptoss-1k1k:
         needs: get-configs
@@ -171,6 +179,14 @@ jobs:
         needs: benchmark-gptoss-1k1k
         if: ${{ always() && needs.get-configs.outputs.gptoss-1k1k != '[]' }}
         uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k1k"
+
+    collect-gptoss-1k1k-evals:
+        needs: benchmark-gptoss-1k1k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-1k1k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
         with:
             exp-name: "gptoss_1k1k"
@@ -211,6 +227,14 @@ jobs:
         with:
             exp-name: "dsr1_8k1k"
 
+    collect-dsr1-8k1k-evals:
+        needs: benchmark-dsr1-8k1k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-8k1k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_8k1k"
+
     # GPTOSS 8K1K Benchmarks
     benchmark-gptoss-8k1k:
         needs: get-configs
@@ -242,6 +266,14 @@ jobs:
         needs: benchmark-gptoss-8k1k
         if: ${{ always() && needs.get-configs.outputs.gptoss-8k1k != '[]' }}
         uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_8k1k"
+
+    collect-gptoss-8k1k-evals:
+        needs: benchmark-gptoss-8k1k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-8k1k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
         with:
             exp-name: "gptoss_8k1k"
@@ -376,6 +408,14 @@ jobs:
         with:
             exp-name: "dsr1_1k8k"
 
+    collect-dsr1-1k8k-evals:
+        needs: benchmark-dsr1-1k8k
+        if: ${{ always() && needs.get-configs.outputs.dsr1-1k8k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
+        with:
+            exp-name: "dsr1_1k8k"
+
 
     # GPTOSS 1K8K Benchmarks
     benchmark-gptoss-1k8k:
@@ -408,6 +448,14 @@ jobs:
         needs: benchmark-gptoss-1k8k
         if: ${{ always() && needs.get-configs.outputs.gptoss-1k8k != '[]' }}
         uses: ./.github/workflows/collect-results.yml
+        secrets: inherit
+        with:
+            exp-name: "gptoss_1k8k"
+
+    collect-gptoss-1k8k-evals:
+        needs: benchmark-gptoss-1k8k
+        if: ${{ always() && needs.get-configs.outputs.gptoss-1k8k != '[]' }}
+        uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
         with:
             exp-name: "gptoss_1k8k"
