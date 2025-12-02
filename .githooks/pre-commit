@@ -1,6 +1,0 @@
-#!/bin/bash
-
-if git diff --cached --name-only | grep -q "perf-changelog.yaml"; then
-    python3 "$(dirname "$0")/fill-changelog-metadata.py" || exit 1
-    git add perf-changelog.yaml
-fi
