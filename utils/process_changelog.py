@@ -14,6 +14,7 @@ class ChangelogEntry(BaseModel):
     
     config_key: str = Field(alias='config-key')
     description: str
+    seq_lens: list[str] = Field(alias='seq-lens')
 
 
 class Config(BaseModel):

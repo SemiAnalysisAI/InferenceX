@@ -1,5 +1,5 @@
 changelog:
-- config-key: dsr1-fp8-h200-trt
+- config-keys:
+  - dsr1-fp8-h200-trt
   description: Test change abc
-  date: 2025-12-02 22:19 UTC
-  author: Cam Quilici
+  seq-lens: [ 1k1k, 1k8k, 8k1k ]
