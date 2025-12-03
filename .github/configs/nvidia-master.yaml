@@ -840,6 +840,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         additional-settings:
         - "PREFILL_NODES=6"
         - "N_ADDITIONAL_FRONTENDS=9"
+        - "SCRIPT_MODE=1p_4d"
       decode:
         num-worker: 1
         tp: 1

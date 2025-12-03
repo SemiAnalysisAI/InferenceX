@@ -35,4 +35,5 @@ bash ./submit_disagg.sh $PREFILL_NODES \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
     $N_ADDITIONAL_FRONTENDS \
-    $ISL $OSL "${CONC_LIST// /x}" inf
+    $ISL $OSL "${CONC_LIST// /x}" inf \
+    $SCRIPT_MODE
