@@ -12,7 +12,6 @@ def find_eval_sets(root: Path) -> List[Path]:
     New structure: each downloaded artifact is placed under
     eval_results/<artifact-name>/ with flat files inside, e.g.:
       - meta_env.json
-      - SUMMARY.md
       - results_*.json
 
     We first check immediate child directories for meta_env.json to avoid
@@ -51,6 +50,23 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
     recursive search for backward compatibility.
     """
     def scan_jsons(paths: List[Path]) -> Tuple[List[Tuple[float, Path]], List[Tuple[float, Path]]]:
+        """Classify JSON files into lm-eval vs lighteval buckets.
+
+        Returns two lists of (mtime, path) where:
+          - The first list contains candidates that look like lm-eval outputs.
+          - The second list contains candidates that look like lighteval outputs.
+
+        Heuristics used (order matters):
+          - If a JSON has keys like 'lm_eval_version' or 'pretty_env_info',
+            we treat it as an lm-eval result file.
+          - If it has both 'config_general' and 'results', we treat it as
+            a lighteval result file.
+          - If it only has a top-level 'results' but none of the stronger
+            signals above, we fall back to classifying it as lm-eval.
+
+        We keep the file modification time to later choose the most recent
+        candidate; if obtaining mtime fails, we fall back to 0.
+        """
         lm: List[Tuple[float, Path]] = []
         le: List[Tuple[float, Path]] = []
         for p in paths:
@@ -59,13 +75,14 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
             data = load_json(p)
             if not isinstance(data, dict):
                 continue
-            # Heuristics similar to utils/lm_eval_to_md.py
             if 'lm_eval_version' in data or 'pretty_env_info' in data:
+                # lm-eval harness output
                 try:
                     lm.append((p.stat().st_mtime, p))
                 except Exception:
                     lm.append((0, p))
             elif 'config_general' in data and 'results' in data:
+                # lighteval output structure
                 try:
                     le.append((p.stat().st_mtime, p))
                 except Exception:
@@ -109,19 +126,92 @@ def parse_pretty_env(pretty_env: str) -> str:
 def extract_lm_metrics(json_path: Path, task: Optional[str] = None) -> Dict[str, Any]:
     data = load_json(json_path) or {}
     results = data.get('results') or {}
-    # Pick task
+    # Determine task key robustly:
+    # 1) explicit argument
+    # 2) only key in `results`
+    # 3) only key in `configs`
+    # 4) 'unknown'
     t = task
     if not t:
-        if isinstance(results, dict) and results:
+        if isinstance(results, dict) and len(results) == 1:
             t = next(iter(results.keys()))
         else:
-            t = 'unknown'
+            cfgs = data.get('configs') or {}
+            if isinstance(cfgs, dict) and len(cfgs) == 1:
+                t = next(iter(cfgs.keys()))
+            else:
+                # fallback to arbitrary but stable choice
+                t = next(iter(results.keys()), 'unknown') if isinstance(results, dict) else 'unknown'
 
     res = results.get(t, {}) if isinstance(results, dict) else {}
-    strict = res.get('exact_match,strict-match')
-    flex = res.get('exact_match,flexible-extract')
-    strict_se = res.get('exact_match_stderr,strict-match')
-    flex_se = res.get('exact_match_stderr,flexible-extract')
+
+    # Determine base metric name (e.g., 'exact_match')
+    base_metric: Optional[str] = None
+    hib = (data.get('higher_is_better') or {}).get(t) if isinstance(data.get('higher_is_better'), dict) else None
+    if isinstance(hib, dict) and hib:
+        base_metric = next(iter(hib.keys()))
+    if not base_metric:
+        cfg = (data.get('configs') or {}).get(t, {}) if isinstance(data.get('configs'), dict) else {}
+        ml = cfg.get('metric_list') if isinstance(cfg, dict) else None
+        if isinstance(ml, list) and ml:
+            m0 = ml[0] or {}
+            if isinstance(m0, dict):
+                base_metric = m0.get('metric')
+    if not base_metric:
+        # Fallback: infer from result keys
+        if isinstance(res, dict):
+            for k in res.keys():
+                if isinstance(k, str) and ',' in k:
+                    base_metric = k.split(',', 1)[0]
+                    break
+            if not base_metric and 'exact_match' in res:
+                base_metric = 'exact_match'
+    if not base_metric:
+        base_metric = 'exact_match'
+
+    # Determine filter names and map to strict/flexible logically without guessing
+    strict_name: Optional[str] = None
+    flex_name: Optional[str] = None
+    cfg = (data.get('configs') or {}).get(t, {}) if isinstance(data.get('configs'), dict) else {}
+    fl = cfg.get('filter_list') if isinstance(cfg, dict) else None
+    filter_names: List[str] = []
+    if isinstance(fl, list):
+        for it in fl:
+            if isinstance(it, dict):
+                nm = it.get('name')
+                if isinstance(nm, str):
+                    filter_names.append(nm)
+    # Prefer semantic names when present; otherwise preserve file order
+    for nm in filter_names:
+        if strict_name is None and 'strict' in nm.lower():
+            strict_name = nm
+        if flex_name is None and ('flex' in nm.lower() or 'extract' in nm.lower()):
+            flex_name = nm
+    # Fallback to first/second if semantic match not found
+    if not strict_name and filter_names:
+        strict_name = filter_names[0]
+    if not flex_name and len(filter_names) >= 2:
+        flex_name = filter_names[1]
+
+    # Extract metrics present in results using derived keys
+    def get_pair(fname: Optional[str]) -> Tuple[Optional[float], Optional[float]]:
+        if not fname:
+            # try unfiltered key
+            v = res.get(base_metric)
+            se = res.get(f"{base_metric}_stderr")
+            try:
+                return float(v) if v is not None else None, float(se) if se is not None else None
+            except Exception:
+                return v, se
+        v = res.get(f"{base_metric},{fname}")
+        se = res.get(f"{base_metric}_stderr,{fname}")
+        try:
+            return float(v) if v is not None else None, float(se) if se is not None else None
+        except Exception:
+            return v, se
+
+    strict, strict_se = get_pair(strict_name)
+    flex, flex_se = get_pair(flex_name)
 
     n_eff = None
     ns = data.get('n-samples') or data.get('n_samples') or {}

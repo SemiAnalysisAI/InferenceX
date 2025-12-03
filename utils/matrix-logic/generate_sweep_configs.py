@@ -761,6 +761,11 @@ def main():
         required=True,
         help='One or more configuration files (YAML format)'
     )
+    parent_parser.add_argument(
+        '--run-evals',
+        action='store_true',
+        help='Opt-in flag to mark a subset of generated configs to run evals. When omitted, no evals run.'
+    )
 
     # Create main parser
     parser = argparse.ArgumentParser(
@@ -1016,8 +1021,9 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
 
-    # Choose eval
-    matrix_values = mark_eval_entries(matrix_values)
+    # Choose eval (opt-in via --run-evals)
+    if args.run_evals:
+        matrix_values = mark_eval_entries(matrix_values)
 
     # Validate output before printing
     validate_matrix_output(matrix_values)

@@ -259,7 +259,6 @@ append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
     local task="${EVAL_TASK:-gsm8k}"
     local out_dir="${results_dir}"
-    local summary_md="${out_dir}/SUMMARY.md"
     mkdir -p "$out_dir" || true
 
     # Write minimal meta for collectors that expect it
@@ -267,10 +266,32 @@ append_lm_eval_summary() {
     local model_name="${MODEL_NAME:-$MODEL}"
     local dp_json="false"
     if [ "${DP_ATTENTION}" = "true" ]; then dp_json="true"; fi
+
+    # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
+    # RESULT_FILENAME format (from workflow):
+    #   <exp_name>_<precision>_<framework>_tp<...>_ep<...>_dpa_<...>_conc<...>_<runner>
+    local fw="${FRAMEWORK:-}"
+    local prec="${PRECISION:-}"
+    if [[ -z "$fw" || -z "$prec" ]]; then
+        if [[ -n "${RESULT_FILENAME}" ]]; then
+            # Extract the two fields immediately before "_tp"
+            # Handles arbitrary underscores in exp_name by matching from the end
+            local parsed
+            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
+            local p1="${parsed%% *}"
+            local p2="${parsed#* }"
+            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
+                prec="$p1"
+            fi
+            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
+                fw="$p2"
+            fi
+        fi
+    fi
     cat > "${meta_json}" <<META
 {
-  "framework": "${FRAMEWORK:-unknown}",
-  "precision": "${PRECISION:-unknown}",
+  "framework": "${fw:-unknown}",
+  "precision": "${prec:-unknown}",
   "tp": ${TP:-1},
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
@@ -278,36 +299,14 @@ append_lm_eval_summary() {
 }
 META
 
-    PYTHONNOUSERSITE=1 PYTHONPATH="" python3 -S utils/lm_eval_to_md.py \
-        --results-dir "$out_dir" \
-        --task "${task}" \
-        --framework "${FRAMEWORK}" \
-        --precision "${PRECISION}" \
-        --tp "${TP:-1}" \
-        --ep "${EP_SIZE:-1}" \
-        --dp-attention "${DP_ATTENTION:-false}" \
-        > "$summary_md" || true
-
-    # If running inside a GitHub Actions step on this same machine, append there too
-    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        local GH_SUM_DIR
-        GH_SUM_DIR="$(dirname "$GITHUB_STEP_SUMMARY")"
-        if [ -d "$GH_SUM_DIR" ] && [ -w "$GH_SUM_DIR" ]; then
-            cat "$summary_md" >> "$GITHUB_STEP_SUMMARY" || true
-        fi
-    fi
-
     # Move eval artifacts into PWD (no new directories in workspace)
-    if [ -f "${summary_md}" ]; then
-        mv -f "${summary_md}" ./ || true
-    fi
     if [ -f "${meta_json}" ]; then
         mv -f "${meta_json}" ./ || true
     fi
     if [ -d "${out_dir}" ]; then
         while IFS= read -r -d '' jf; do
             base=$(basename "$jf")
-            if [ "$base" != "meta_env.json" ] && [ "$base" != "SUMMARY.md" ]; then
+            if [ "$base" != "meta_env.json" ]; then
                 mv -f "$jf" ./ || true
             fi
         done < <(find "${out_dir}" -type f -name "*.json" -print0 2>/dev/null)

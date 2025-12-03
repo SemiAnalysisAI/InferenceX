@@ -29,7 +29,7 @@ jobs:
 
       - name: Summarize evals
         run: |
-          echo "## 📋 Eval Summary - ${{ inputs.exp-name || 'all' }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Eval Summary - ${{ inputs.exp-name || 'all' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           python3 utils/collect_eval_results.py eval_results/ ${{ inputs.exp-name || 'all' }} >> $GITHUB_STEP_SUMMARY
 

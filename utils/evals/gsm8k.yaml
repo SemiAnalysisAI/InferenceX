@@ -1,3 +1,5 @@
+# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
+# Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 tag:
   - math_word_problems
 task: gsm8k

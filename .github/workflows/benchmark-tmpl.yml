@@ -173,7 +173,6 @@ jobs:
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
           path: |
-            SUMMARY.md
             meta_env.json
             results*.json
           if-no-files-found: ignore
@@ -181,6 +180,6 @@ jobs:
       - name: Cleanup eval outputs (post-upload)
         if: ${{ env.RUN_EVAL == 'true' }}
         run: |
-          rm -f SUMMARY.md meta_env.json || true
+          rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true

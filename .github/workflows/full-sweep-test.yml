@@ -63,21 +63,21 @@ jobs:
 
                   # Generate dsr1 configs (only if we have valid runner types for DSR1)
                   if [ "${{ inputs.run_1k1k }}" = "true" ] && [ -n "$DSR1_RUNNER_TYPES" ]; then
-                      DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      DSR1_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "dsr1-1k1k=$DSR1_1K1K" >> $GITHUB_OUTPUT
                   else
                       echo "dsr1-1k1k=[]" >> $GITHUB_OUTPUT
                   fi
 
                   if [ "${{ inputs.run_1k8k }}" = "true" ] && [ -n "$DSR1_RUNNER_TYPES" ]; then
-                      DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      DSR1_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "dsr1-1k8k=$DSR1_1K8K" >> $GITHUB_OUTPUT
                   else
                       echo "dsr1-1k8k=[]" >> $GITHUB_OUTPUT
                   fi
 
                   if [ "${{ inputs.run_8k1k }}" = "true" ] && [ -n "$DSR1_RUNNER_TYPES" ]; then
-                      DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      DSR1_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix dsr1 --runner-type $DSR1_RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "dsr1-8k1k=$DSR1_8K1K" >> $GITHUB_OUTPUT
                   else
                       echo "dsr1-8k1k=[]" >> $GITHUB_OUTPUT
@@ -85,21 +85,21 @@ jobs:
 
                   # Generate gptoss configs (only if we have runner types selected)
                   if [ "${{ inputs.run_1k1k }}" = "true" ] && [ -n "$RUNNER_TYPES" ]; then
-                      GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      GPTOSS_1K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "gptoss-1k1k=$GPTOSS_1K1K" >> $GITHUB_OUTPUT
                   else
                       echo "gptoss-1k1k=[]" >> $GITHUB_OUTPUT
                   fi
 
                   if [ "${{ inputs.run_1k8k }}" = "true" ] && [ -n "$RUNNER_TYPES" ]; then
-                      GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      GPTOSS_1K8K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 1k8k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "gptoss-1k8k=$GPTOSS_1K8K" >> $GITHUB_OUTPUT
                   else
                       echo "gptoss-1k8k=[]" >> $GITHUB_OUTPUT
                   fi
 
                   if [ "${{ inputs.run_8k1k }}" = "true" ] && [ -n "$RUNNER_TYPES" ]; then
-                      GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                      GPTOSS_8K1K=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py full-sweep --config-files ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml --seq-lens 8k1k --model-prefix gptoss --runner-type $RUNNER_TYPES --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml --run-evals)
                       echo "gptoss-8k1k=$GPTOSS_8K1K" >> $GITHUB_OUTPUT
                   else
                       echo "gptoss-8k1k=[]" >> $GITHUB_OUTPUT
