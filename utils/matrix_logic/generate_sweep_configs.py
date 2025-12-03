@@ -370,6 +370,128 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
     return matrix_values
 
 
+def generate_test_config_sweep(args, all_config_data):
+    """Generate full sweep for specific config keys.
+
+    Validates that all specified config keys exist before generating.
+    Expands all configs fully without any filtering.
+    """
+    # Validate all config keys exist
+    missing_keys = [key for key in args.config_keys if key not in all_config_data]
+    if missing_keys:
+        available_keys = sorted(all_config_data.keys())
+        raise ValueError(
+            f"Config key(s) not found: {', '.join(missing_keys)}.\n"
+            f"Available keys: {', '.join(available_keys)}"
+        )
+
+    matrix_values = []
+
+    for key in args.config_keys:
+        val = all_config_data[key]
+        is_multinode = val.get(Fields.MULTINODE.value, False)
+
+        image = val[Fields.IMAGE.value]
+        model = val[Fields.MODEL.value]
+        model_code = val[Fields.MODEL_PREFIX.value]
+        precision = val[Fields.PRECISION.value]
+        framework = val[Fields.FRAMEWORK.value]
+        runner = val[Fields.RUNNER.value]
+        disagg = val.get(Fields.DISAGG.value, False)
+
+        for seq_len_config in val[Fields.SEQ_LEN_CONFIGS.value]:
+            isl = seq_len_config[Fields.ISL.value]
+            osl = seq_len_config[Fields.OSL.value]
+            seq_len_str = seq_len_to_str(isl, osl)
+
+            for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
+                if is_multinode:
+                    # Multinode config
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    prefill = bmk[Fields.PREFILL.value]
+                    decode = bmk[Fields.DECODE.value]
+
+                    # Get concurrency values
+                    if Fields.CONC_LIST.value in bmk:
+                        conc_values = bmk[Fields.CONC_LIST.value]
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= 2
+                            if conc > conc_end:
+                                conc = conc_end
+
+                    entry = {
+                        Fields.IMAGE.value: image,
+                        Fields.MODEL.value: model,
+                        Fields.MODEL_PREFIX.value: model_code,
+                        Fields.PRECISION.value: precision,
+                        Fields.FRAMEWORK.value: framework,
+                        Fields.RUNNER.value: runner,
+                        Fields.ISL.value: isl,
+                        Fields.OSL.value: osl,
+                        Fields.SPEC_DECODING.value: spec_decoding,
+                        Fields.PREFILL.value: prefill,
+                        Fields.DECODE.value: decode,
+                        Fields.CONC.value: conc_values,
+                        Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                        Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                        Fields.DISAGG.value: disagg,
+                    }
+                    matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
+                else:
+                    # Single-node config
+                    tp = bmk[Fields.TP.value]
+                    ep = bmk.get(Fields.EP.value)
+                    dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+
+                    # Get concurrency values
+                    if Fields.CONC_LIST.value in bmk:
+                        conc_values = bmk[Fields.CONC_LIST.value]
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= 2
+                            if conc > conc_end:
+                                conc = conc_end
+
+                    for conc in conc_values:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner,
+                            Fields.ISL.value: isl,
+                            Fields.OSL.value: osl,
+                            Fields.TP.value: tp,
+                            Fields.CONC.value: conc,
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.EP.value: ep if ep is not None else 1,
+                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                            Fields.DISAGG.value: disagg,
+                        }
+                        matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+
+    return matrix_values
+
+
 def main():
     # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
@@ -511,6 +633,25 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: test-config
+    test_config_keys_parser = subparsers.add_parser(
+        'test-config',
+        parents=[parent_parser],
+        add_help=False,
+        help='Generate full sweep for specific config keys. Validates that all specified keys exist before generating.'
+    )
+    test_config_keys_parser.add_argument(
+        '--config-keys',
+        nargs='+',
+        required=True,
+        help='One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)'
+    )
+    test_config_keys_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     args = parser.parse_args()
 
     # Load and validate configuration files (validation happens by default in load functions)
@@ -523,6 +664,8 @@ def main():
     elif args.command == 'runner-model-sweep':
         matrix_values = generate_runner_model_sweep_config(
             args, all_config_data, runner_data)
+    elif args.command == 'test-config':
+        matrix_values = generate_test_config_sweep(args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
 
