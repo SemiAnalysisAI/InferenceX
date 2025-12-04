@@ -10,14 +10,7 @@ on:
     types: [labeled, synchronize]
 
 jobs:
-  approve-gate:
-    runs-on: ubuntu-latest
-    environment: fork-pr-validation
-    steps:
-      - run: echo "Approved"
-
   get-jobs:
-    needs: approve-gate
     runs-on: ubuntu-latest
     environment: fork-pr-validation
     outputs:
@@ -90,12 +83,15 @@ jobs:
 
   validate:
     needs: get-jobs
-    if: ${{ needs.get-jobs.outputs.search-space-config != '[]' }}
+    if: ${{ always() && needs.get-jobs.result == 'success' && needs.get-jobs.outputs.search-space-config != '[]' }}
     uses: ./.github/workflows/benchmark-tmpl.yml
     strategy:
       fail-fast: false
       matrix:
-        config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+        # The '|| '[]'' fallback is required because GitHub evaluates the matrix expression
+        # before the 'if' condition. Without it, fromJson() throws a parse error when the
+        # output is empty/undefined (e.g., when get-jobs is pending approval or was skipped).
+        config: ${{ fromJson(needs.get-jobs.outputs.search-space-config || '[]') }}
     secrets: inherit
     name: validate ${{ matrix.config.runner }}
     with:
@@ -114,14 +110,14 @@ jobs:
       conc: ${{ matrix.config.conc }}
 
   collect-results:
-    needs: [approve-gate, validate]
-    if: ${{ always() && needs.approve-gate.result == 'success' }}
+    needs: [get-jobs, validate]
+    if: ${{ always() && needs.get-jobs.result == 'success' }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
 
   calc-success-rate:
-    needs: [approve-gate, collect-results]
-    if: ${{ always() && needs.approve-gate.result == 'success' }}
+    needs: [get-jobs, collect-results]
+    if: ${{ always() && needs.get-jobs.result == 'success' }}
     runs-on: ubuntu-latest
 
     env:
