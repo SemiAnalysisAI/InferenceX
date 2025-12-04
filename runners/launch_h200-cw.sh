@@ -23,7 +23,6 @@ fi
 
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
---container-writable \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-mount-home \
 --container-workdir=/workspace/ \
