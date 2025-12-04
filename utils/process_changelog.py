@@ -53,7 +53,6 @@ def main():
         return
 
     changelog_data = yaml.safe_load(added_yaml)
-    pprint(changelog_data)
 
     if not changelog_data:
         print("No new changelog entries found")
@@ -76,19 +75,10 @@ def main():
             )
         except subprocess.CalledProcessError as e:
             print(e.stderr)
-            
 
         all_results.extend(json.loads(result.stdout))
 
-        # for config_key in entry.config_keys:
-        #     if config_key not in master_config_data:
-        #         raise ValueError(
-        #             f"Config key '{config_key}' does not exist in master config files."
-        #         )
-
-        # # print(f"Config keys: {entry.config_keys}")
-        # # print(f"Seq lens: {entry.seq_lens}")
-        # # print(f"Description: {entry.description}")
+    print(json.dumps(all_results))
 
 
 if __name__ == "__main__":
