@@ -114,14 +114,14 @@ jobs:
       conc: ${{ matrix.config.conc }}
 
   collect-results:
-    needs: validate
-    if: ${{ always() }}
+    needs: [approve-gate, validate]
+    if: ${{ always() && needs.approve-gate.result == 'success' }}
     uses: ./.github/workflows/collect-results.yml
     secrets: inherit
 
   calc-success-rate:
-    needs: collect-results
-    if: ${{ always() }}
+    needs: [approve-gate, collect-results]
+    if: ${{ always() && needs.approve-gate.result == 'success' }}
     runs-on: ubuntu-latest
 
     env:
