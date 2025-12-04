@@ -63,15 +63,17 @@ def main():
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
 
-        result = subprocess.run(
-            ["python3", "utils/matrix_logic/generate_sweep_configs.py",
-                f"--config-keys={' '.join(entry.config_keys)}", f"--config-files={' '.join(MASTER_CONFIGS)}",
-                f"--runner-config={RUNNER_CONFIG}"],
+        result = subprocess.run([
+            "python3", "utils/matrix_logic/generate_sweep_configs.py", "test-config",
+            "--config-keys", *entry.config_keys,
+            "--config-files", *MASTER_CONFIGS,
+            "--runner-config", RUNNER_CONFIG
+        ],
             capture_output=True,
             text=True,
             check=True
         )
-        
+
         all_results.extend(json.loads(result.stdout))
 
         # for config_key in entry.config_keys:
