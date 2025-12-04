@@ -20,8 +20,6 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-
 python3 -m sglang.launch_server \
     --attention-backend aiter \
     --model-path $MODEL \

@@ -15,8 +15,6 @@ export SGLANG_USE_AITER=1
 export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-
-
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
