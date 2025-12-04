@@ -63,16 +63,20 @@ def main():
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
 
-        result = subprocess.run([
-            "python3", "utils/matrix_logic/generate_sweep_configs.py", "test-config",
-            "--config-keys", *entry.config_keys,
-            "--config-files", *MASTER_CONFIGS,
-            "--runner-config", RUNNER_CONFIG
-        ],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        try:
+            result = subprocess.run([
+                "python3", "utils/matrix_logic/generate_sweep_configs.py", "test-config",
+                "--config-keys", *entry.config_keys,
+                "--config-files", *MASTER_CONFIGS,
+                "--runner-config", RUNNER_CONFIG
+            ],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(e.stderr)
+            
 
         all_results.extend(json.loads(result.stdout))
 

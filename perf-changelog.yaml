@@ -2,5 +2,5 @@
   - dsr1-fp8-h200-trt
   description: Test change abc
 - config-keys:
-  - dsr1-fp8-h20-sglang
+  - dsr1-fp8-h200-sglang
   description: Test change 2
