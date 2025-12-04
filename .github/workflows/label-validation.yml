@@ -10,7 +10,14 @@ on:
     types: [labeled, synchronize]
 
 jobs:
+  approve-gate:
+    runs-on: ubuntu-latest
+    environment: fork-pr-validation
+    steps:
+      - run: echo "Approved"
+
   get-jobs:
+    needs: approve-gate
     runs-on: ubuntu-latest
     environment: fork-pr-validation
     outputs:
