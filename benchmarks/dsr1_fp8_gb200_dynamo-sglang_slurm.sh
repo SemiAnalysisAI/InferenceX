@@ -12,7 +12,11 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
 
 # Always clone and setup Dynamo
 echo "Cloning Dynamo repository..."
-git clone --branch ishan/sa-1.1-sgl-dsr1 https://github.com/ai-dynamo/dynamo.git
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    git clone --branch ishan/sa-1.1-sgl-dsr1-fp8 https://github.com/ai-dynamo/dynamo.git
+else
+    git clone --branch update-result-file-name https://github.com/Elnifio/dynamo.git
+fi
 
 cd "$SGL_SLURM_JOBS_PATH"
 
@@ -21,7 +25,6 @@ export TIME_LIMIT="04:00:00"
 export MODEL_PATH=$MODEL_PATH
 export CONFIG_DIR=$CONFIG_DIR
 export CONTAINER_IMAGE=$IMAGE
-export GPU_TYPE="gb200-fp8"
 
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
@@ -33,5 +36,4 @@ bash ./submit_disagg.sh $PREFILL_NODES \
     $DECODE_NUM_WORKERS \
     $N_ADDITIONAL_FRONTENDS \
     $ISL $OSL "${CONC_LIST// /x}" inf \
-    $GPU_TYPE \
     $SCRIPT_MODE
