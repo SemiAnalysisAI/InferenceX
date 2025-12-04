@@ -890,74 +890,74 @@ dsr1-fp8-gb200-dynamo-sglang:
         additional-settings:
         - "DECODE_NODES=8"
 
-  dsr1-fp4-gb200-dynamo-sglang:
-    # TODO: swap
-    image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
-    # TODO: what is the right name?
-    model: deepseek-ai/DeepSeek-R1-0528-fp4-v2
-    model-prefix: dsr1
-    runner: gb200
-    precision: fp4
-    framework: dynamo-sglang
-    multinode: true
-    disagg: true
-    seq-len-configs:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # Low latency (1 prefill worker at DEP4 and 2 decode workers at DEP4)
-      - spec-decoding: "none"
-        conc-list: [ 4, 8, 32, 64, 128, 112, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "N_ADDITIONAL_FRONTENDS=8"
-        decode:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=2"
+dsr1-fp4-gb200-dynamo-sglang:
+  # TODO: swap
+  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
+  # TODO: what is the right name?
+  model: deepseek-ai/DeepSeek-R1-0528-fp4-v2
+  model-prefix: dsr1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Low latency (1 prefill worker at DEP4 and 2 decode workers at DEP4)
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32, 64, 128, 112, 128, 256 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+      decode:
+        num-worker: 2
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=2"
 
-      # Mid curve (1 prefill worker at DEP4 and 1 decode workers at DEP48)
-      - spec-decoding: "none"
-        conc-list: [ 512, 1024, 2048, 4096, 8192 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "N_ADDITIONAL_FRONTENDS=8"
-        decode:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=12"
+    # Mid curve (1 prefill worker at DEP4 and 1 decode workers at DEP48)
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048, 4096, 8192 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+      decode:
+        num-worker: 2
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=12"
 
-      # Top of curve (1 prefill worker at DEP4 and 1 decode worker at DEP32)
-      - spec-decoding: "none"
-        conc-list: [ 8192, 12000, 15000 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "N_ADDITIONAL_FRONTENDS=8"
-        decode:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=8"
+    # Top of curve (1 prefill worker at DEP4 and 1 decode worker at DEP32)
+    - spec-decoding: "none"
+      conc-list: [ 8192, 12000, 15000 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+      decode:
+        num-worker: 2
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"
