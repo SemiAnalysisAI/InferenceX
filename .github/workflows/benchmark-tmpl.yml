@@ -134,6 +134,7 @@ jobs:
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
+          RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP_SIZE }}_dpa_${{ env.DP_ATTENTION }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.

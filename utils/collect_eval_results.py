@@ -293,12 +293,9 @@ def main():
         else:
             continue
 
-        # Merge with meta
-        # Only use explicit hardware label written to meta_env.json ('hw')
-        hw_value = meta.get('hw', 'Unknown GPU')
         row = {
             'model': m.get('model') or meta.get('model') or 'unknown',
-            'hw': hw_value,
+            'hw': meta.get('hw'),
             'framework': (meta.get('framework') or 'unknown').lower(),
             'precision': (meta.get('precision') or 'unknown').lower(),
             'tp': int(meta.get('tp') or 1),
