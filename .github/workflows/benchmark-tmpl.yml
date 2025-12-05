@@ -11,6 +11,9 @@ on:
       model:
         required: true
         type: string
+      model-prefix:
+        required: true
+        type: string
       precision:
         required: true
         type: string
@@ -41,6 +44,12 @@ on:
       conc:
         required: true
         type: string
+      spec-decoding:
+        required: true
+        type: string
+      disagg:
+        required: true
+        type: string
       random-range-ratio:
         required: false
         type: string
@@ -51,6 +60,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
   MODEL: ${{ inputs.model }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
@@ -62,6 +72,8 @@ env:
   EP_SIZE: ${{ inputs.ep }}
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
+  SPEC_DECODING: ${{ inputs.spec-decoding }}
+  DISAGG: ${{ inputs.disagg }}
 
 permissions:
   contents: read

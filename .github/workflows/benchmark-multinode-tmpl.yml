@@ -12,6 +12,9 @@ on:
       model:
         required: true
         type: string
+      model-prefix:
+        required: true
+        type: string
       framework:
         required: true
         type: string
@@ -27,27 +30,81 @@ on:
       osl:
         required: true
         type: string
+      conc-list:
+        required: true
+        type: string
+      spec-decoding:
+        required: true
+        type: string
+      disagg:
+        required: true
+        type: string
+
       max-model-len:
         required: true
         type: string
       random-range-ratio:
         required: false
         type: string
-        default: '0.8'
-      mtp-mode:
+        default: "0.8"
+
+      prefill-num-worker:
         required: true
         type: string
+      prefill-tp:
+        required: true
+        type: string
+      prefill-ep:
+        required: true
+        type: string
+      prefill-dp-attn:
+        required: true
+        type: string
+      prefill-additional-settings:
+        required: false
+        type: string
+        default: "[]"
+
+      decode-num-worker:
+        required: true
+        type: string
+      decode-tp:
+        required: true
+        type: string
+      decode-ep:
+        required: true
+        type: string
+      decode-dp-attn:
+        required: true
+        type: string
+      decode-additional-settings:
+        required: false
+        type: string
+        default: "[]"
 
 env:
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
   RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
-  MTP_MODE: ${{ inputs.mtp-mode }}
+  CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
+  SPEC_DECODING: ${{ inputs.spec-decoding }}
+  DISAGG: ${{ inputs.disagg }}
+
+  PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
+  PREFILL_TP: ${{ inputs.prefill-tp }}
+  PREFILL_EP: ${{ inputs.prefill-ep }}
+  PREFILL_DP_ATTN: ${{ inputs.prefill-dp-attn }}
+
+  DECODE_NUM_WORKERS: ${{ inputs.decode-num-worker }}
+  DECODE_TP: ${{ inputs.decode-tp }}
+  DECODE_EP: ${{ inputs.decode-ep }}
+  DECODE_DP_ATTN: ${{ inputs.decode-dp-attn }}
 
 permissions:
   contents: read
@@ -56,7 +113,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} mtp-${{ inputs.mtp-mode }}'
+    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} specdecod-${{ inputs.spec-decoding }}"
 
     steps:
       - name: Resource cleanup
@@ -76,8 +133,10 @@ jobs:
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_mtp-${{ env.MTP_MODE }}_${{ runner.name }}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_ptp${{ env.PREFILL_TP }}pep${{ env.PREFILL_EP}}_dtp${{ env.DECODE_TP}}dep${{ env.DECODE_EP }}_${{ env.FRAMEWORK }}_specdec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
+          set -x
+          export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           # Check if at least one result file was created
           if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
@@ -103,7 +162,7 @@ jobs:
               
               if [ -n "$gpus" ]; then
                 echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
-                TP=$gpus RESULT_FILENAME=${result_file%.json} EP_SIZE=1 DP_ATTENTION=false PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
+                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
             fi
           done

@@ -1,71 +1,103 @@
 # How to Test Workflows
 
-In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix-logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config,runner-model-sweep,runner-sweep,custom} ...
+usage: generate_sweep_configs.py [-h] {full-sweep,runner-model-sweep} ...
 
 Generate benchmark configurations from YAML config files
 
 positional arguments:
-  {full-sweep,test-config,runner-model-sweep,runner-sweep,custom}
+  {full-sweep,runner-model-sweep}
                         Available commands
-    full-sweep          Generate full sweep configurations with optional filtering by model, precision, framework, runner type, and sequence lengths
-    test-config         Given a config key, run that configuration as specified. Optionally specify --test-mode to only run one parallelism-concurrency pair for the config.
-    runner-model-sweep  Given a runner type, find all configurations matching the type, and     run that configuration on all individual runner nodes for the specified runner type. This is meant to validate
-                        that all runner nodes work on all configurations for a runner type. For instance, to validate that all configs that specify an h200 runner successfully run across all h200 runner
-                        nodes.
-    runner-sweep        Given a model (and optionally a precision and framework), find all configurations matching the inputs, and run those configurations across all compatible runner nodes. This is
-                        meant to validate all runner nodes that should run a particular model can. For instance, this should be used to validate that all runners nodes that should run gptoss-120b
-                        actually do so successfully.
-    custom              Enter custom values
+    full-sweep          Generate full sweep configurations with optional
+                        filtering by model, precision, framework, runner type,
+                        and sequence lengths
+    runner-model-sweep  Given a runner type, find all configurations matching
+                        the type, and run that configuration on all individual
+                        runner nodes for the specified runner type. This is
+                        meant to validate that all runner nodes work on all
+                        configurations for a runner type. For instance, to
+                        validate that all configs that specify an h200 runner
+                        successfully run across all h200 runner nodes.
 
 options:
   -h, --help            show this help message and exit
 ```
 
-Instead of explaining each command at a high level, let's just walk through some common testing scenarios and describe how to run them.
+## `full-sweep` Command
 
-**Scenario 1**: I want to change increase the concurrency from 128 to 256 in the 1k1k scenario for the `dsr1-fp4-b200-sglang` config (from `.github/configs/nvidia-master.yaml`) and then test it.
-
-Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the text following command as the text input:
-```
-test-config --key dsr1-fp4-b200-sglang --seq-len 1k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
-```
-
-Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986046399
-
-If we wanted to also test 1k8k or 8k1k scenarios, we would simply append `1k8k` or `8k1k` to `--seq-len`, respectively.
-
-Further, if we wanted to run that config on *one specific* runner node, we could specify that by appending `--runner-node` to the argument list. Note that if the specified runner node is not compatible with the specified config key (as dictated by `.github/configs/runners.yaml`), then the workflow will error:
+The `full-sweep` command generates benchmark configurations with optional filtering. It requires specifying either `--single-node` or `--multi-node`.
 
 ```
-test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --key dsr1-fp4-b200-sglang --seq-len 1k1k --runner-node mi300x-amd_0
-
-ValueError: Runner node 'mi300x-amd_0' is not compatible with config 'dsr1-fp4-b200-sglang' which runs on runner type 'b200'. Available runner nodes for this config are 'b200-nb_0, b200-nb_1, b200-nvd_0, b200-nvd_1, b200-nvd_2, b200-nvd_3, b200-tg_0'.
+usage: generate_sweep_configs.py full-sweep
+    --config-files CONFIG_FILES [CONFIG_FILES ...]
+    --runner-config RUNNER_CONFIG
+    [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
+    [--precision PRECISION [PRECISION ...]]
+    [--framework FRAMEWORK [FRAMEWORK ...]]
+    [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
+    [--seq-lens {1k1k,1k8k,8k1k} [{1k1k,1k8k,8k1k} ...]]
+    [--step-size STEP_SIZE]
+    [--max-conc MAX_CONC]
+    [--max-tp MAX_TP]
+    [--max-ep MAX_EP]
+    (--single-node | --multi-node)
 ```
 
-Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986053019/job/54229839736
+### Examples
 
-**Scenario 2**: I just made a change to the `benchmarks/dsr1_fp8_b200_docker.sh` and I need to verify that these changes work across all B200 runners.
-
-Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the text following command as the text input:
+**Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
-runner-sweep --runner-type b200 --model-prefix dsr1 --precision fp8 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
 
-Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986283169
+**Test all single-node fp8 precision configs for 1k8k workloads:**
+```
+full-sweep --single-node --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
+```
 
-This will run a test (just the highest available parallelism and lowest available concurrency) for each B200 runner node for each Deepseek config that runs on B200 with fp8 precision. I.e., this can be used to "sweep" across runners for a particular model to test that all runners still work with changes that have been made.
+**Test all single-node TRT configs on H200 runners:**
+```
+full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+```
 
-**Scenario 3**: I just upgraded the CUDA drivers on all H200 runners and need to verify that all models that use H200 still work correctly across all H200 nodes.
+**Test specific single-node model on specific hardware with specific sequence lengths:**
+```
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+```
+
+**Limit concurrency and parallelism for faster testing:**
+```
+full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+```
+
+**Test all multi-node configurations:**
+```
+full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+```
+
+## `runner-model-sweep` Command
+
+The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. It requires specifying either `--single-node` or `--multi-node`.
+
+```
+usage: generate_sweep_configs.py runner-model-sweep
+    --config-files CONFIG_FILES [CONFIG_FILES ...]
+    --runner-config RUNNER_CONFIG
+    --runner-type RUNNER_TYPE
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    (--single-node | --multi-node)
+```
+
+### Scenario: Validating Runner Infrastructure
+
+I just upgraded the CUDA drivers on all H200 runners and need to verify that all models that use H200 still work correctly across all H200 nodes.
 
 Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the following command as the text input:
 ```
-runner-model-sweep --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+runner-model-sweep --single-node --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
 ```
-
-Workflow Run Example: https://github.com/InferenceMAX/InferenceMAX/actions/runs/18986292917
 
 This will run a test (just the highest available parallelism and lowest available concurrency) for each configuration that specifies the `h200` runner type, across all H200 runner nodes defined in `.github/configs/runners.yaml`.
 
@@ -76,49 +108,110 @@ This is particularly useful when:
 - You've added new runner nodes and want to validate they work with all existing model configurations
 - You want to verify that all models remain compatible with a specific GPU type after system updates
 
-**Key difference from Scenario 2**:
-- `runner-sweep`: Fix a **model**, sweep across runners → "Does this model work on all its runners?"
-- `runner-model-sweep`: Fix a **runner type**, sweep across models → "Do all models work on this runner type?"
+### Filtering Runner Nodes
 
-## Additional Use Cases with `full-sweep`
-
-The `full-sweep` command supports multiple filters that can be combined for targeted testing:
-
-**Test all gptoss configurations on B200 with 1k1k sequence lengths:**
+Use `--runner-node-filter` to only test a subset of runner nodes:
 ```
-full-sweep --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300x-amd --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
 ```
 
-**Test all fp8 precision configs across all runners for 1k8k workloads:**
-```
-full-sweep --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
+This will only include runner nodes whose names contain "mi300x-amd"
+
+## Validation Architecture
+
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+
+### Validation Methodology
+
+The system validates **both ends** of the configuration pipeline:
+
+1. **Input Validation (Master Configs)**: Validates the structure of `.github/configs/*.yaml` files before any processing occurs
+2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
+
+This dual-validation approach ensures:
+- No malformed configurations enter the pipeline
+- No invalid parameters reach the benchmark workflows
+- Workflow templates (`benchmark-tmpl.yml`, `benchmark-multinode-tmpl.yml`) can assume all inputs are valid—no runtime validation needed
+
+### Input Validation: Master Config Files
+
+Master config files (e.g., `nvidia-master.yaml`, `amd-master.yaml`) are validated against strict Pydantic schemas:
+
+- **`SingleNodeMasterConfigEntry`**: Validates single-node configurations
+- **`MultiNodeMasterConfigEntry`**: Validates multi-node configurations
+
+Each config must specify:
+- Required fields: `image`, `model`, `model-prefix`, `precision`, `framework`, `runner`, `multinode`
+- Sequence length configs with search spaces defining TP, EP, concurrency ranges, etc.
+- Optional fields like `disagg`, `spec-decoding`, `dp-attn`
+
+Invalid or missing fields raise immediate validation errors before any matrix generation.
+
+### Output Validation: Matrix Entries
+
+Generated matrix entries (the actual workflow inputs) are validated against:
+
+- **`SingleNodeMatrixEntry`**: Matches the inputs expected by `benchmark-tmpl.yml`
+- **`MultiNodeMatrixEntry`**: Matches the inputs expected by `benchmark-multinode-tmpl.yml`
+
+These Pydantic models mirror the workflow template input definitions exactly. For example, `benchmark-tmpl.yml` expects:
+```yaml
+inputs:
+  runner: required
+  image: required
+  model: required
+  model-prefix: required
+  precision: required
+  framework: required
+  ...
 ```
 
-**Test all TRT configs on H200 runners:**
+The corresponding `SingleNodeMatrixEntry` enforces these same fields with appropriate types.
+
+### Key Design Principles
+
+1. **No defaults in output validation**: Matrix entry models don't set defaults. Missing values must fail validation rather than silently using fallbacks.
+
+2. **`extra='forbid'`**: Unknown fields are rejected, preventing typos or deprecated fields from slipping through.
+
+3. **Strict typing**: Fields like `spec-decoding` use `Literal["mtp", "draft_model", "none"]` to restrict values to known options.
+
+4. **Concurrency validation**: The system ensures either `conc-list` OR `conc-start`/`conc-end` is provided, but not both.
+
+### Validation Flow
+
 ```
-full-sweep --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+.github/configs/*.yaml
+        │
+        ▼
+┌─────────────────────────┐
+│  validate_master_config │  ← Input validation (Pydantic)
+└─────────────────────────┘
+        │
+        ▼
+┌─────────────────────────┐
+│  generate_sweep_configs │  ← Matrix generation
+└─────────────────────────┘
+        │
+        ▼
+┌─────────────────────────┐
+│  validate_matrix_entry  │  ← Output validation (Pydantic)
+└─────────────────────────┘
+        │
+        ▼
+  benchmark-tmpl.yml or
+  benchmark-multinode-tmpl.yml
 ```
 
-**Quick smoke test of all configs (highest TP, lowest concurrency only):**
-```
-full-sweep --test-mode --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
+## Utility Scripts
+
+### `utils/summarize.py`
+
+Aggregates benchmark results from a directory of JSON files and outputs a markdown summary table. Used after `collect-results.yml` downloads all artifacts.
+
+Usage:
+```bash
+python utils/summarize.py <results_directory>
 ```
 
-**Test specific model on specific hardware with specific sequence lengths:**
-```
-full-sweep --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
-```
-
-## Custom One-off Tests
-
-**Scenario 4**: I want to run a quick test with a custom image, model, or configuration that isn't in the config files yet.
-
-Use the `custom` command to specify all parameters manually:
-```
-custom --runner-label b200-nb_0 --image vllm/vllm-openai:v0.11.0 --model meta-llama/Llama-3.1-70B --framework vllm --precision fp8 --exp-name llama70b_test --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
-```
-
-This runs a single 1k1k test job with your custom parameters on the specified runner node. Useful for:
-- Testing new images before adding them to config files
-- Quick validation of new models
-- Experimenting with different frameworks or precisions
+Outputs GitHub-flavored markdown tables with metrics including TTFT, TPOT, interactivity, E2EL, and throughput per GPU for both single-node and multi-node results.

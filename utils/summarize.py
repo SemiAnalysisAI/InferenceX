@@ -1,44 +1,127 @@
 import sys
 import json
 from pathlib import Path
+from tabulate import tabulate
 
+# Header constants
+MODEL = "Model"
+SERVED_MODEL = "Served Model"
+HARDWARE = "Hardware"
+FRAMEWORK = "Framework"
+PRECISION = "Precision"
+ISL = "ISL"
+OSL = "OSL"
+TP = "TP"
+EP = "EP"
+DP_ATTENTION = "DP Attention"
+CONC = "Conc"
+TTFT = "TTFT (ms)"
+TPOT = "TPOT (ms)"
+INTERACTIVITY = "Interactivity (tok/s/user)"
+E2EL = "E2EL (s)"
+TPUT_PER_GPU = "TPUT per GPU"
+OUTPUT_TPUT_PER_GPU = "Output TPUT per GPU"
+INPUT_TPUT_PER_GPU = "Input TPUT per GPU"
+PREFILL_TP = "Prefill TP"
+PREFILL_EP = "Prefill EP"
+PREFILL_DP_ATTN = "Prefill DP Attn"
+PREFILL_WORKERS = "Prefill Workers"
+PREFILL_GPUS = "Prefill GPUs"
+DECODE_TP = "Decode TP"
+DECODE_EP = "Decode EP"
+DECODE_DP_ATTN = "Decode DP Attn"
+DECODE_WORKERS = "Decode Workers"
+DECODE_GPUS = "Decode GPUs"
 
 results = []
 results_dir = Path(sys.argv[1])
-for result_path in results_dir.rglob(f'*.json'):
+for result_path in results_dir.rglob('*.json'):
     with open(result_path) as f:
         result = json.load(f)
     results.append(result)
-results.sort(key=lambda r: (r.get('model', 'unknown'), r['hw'], r.get('framework', 'vllm'), r.get('precision', 'fp8'), r.get('isl', 0), r.get('osl', 0), r['tp'], r['ep'], r['conc']))
 
-summary_header = f'''\
-| Model | Hardware | Framework | Precision | ISL | OSL | TP | EP | DP Attention | Conc | TTFT (ms) | TPOT (ms) | Interactivity (tok/s/user) | E2EL (s) | TPUT per GPU | Output TPUT per GPU | Input TPUT per GPU |
-| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |\
-'''
-print(summary_header)
+single_node_results = [r for r in results if not r['is_multinode']]
+multinode_results = [r for r in results if r['is_multinode']]
 
-for result in results:
-    framework = result.get('framework', 'vllm')
-    precision = result.get('precision', 'fp8')
-    model = result.get('model', 'unknown')
-    isl = result.get('isl', 'N/A')
-    osl = result.get('osl', 'N/A')
-    print(
-        f"| {model} "
-        f"| {result['hw'].upper()} "
-        f"| {framework.upper()} "
-        f"| {precision.upper()} "
-        f"| {isl} "
-        f"| {osl} "
-        f"| {result['tp']} "
-        f"| {result['ep']} "
-        f"| {result['dp_attention']} "
-        f"| {result['conc']} "
-        f"| {(result['median_ttft'] * 1000):.4f} "
-        f"| {(result['median_tpot'] * 1000):.4f} "
-        f"| {result['median_intvty']:.4f} "
-        f"| {result['median_e2el']:.4f} "
-        f"| {result['tput_per_gpu']:.4f} "
-        f"| {result['output_tput_per_gpu']:.4f} "
-        f"| {result['input_tput_per_gpu']:.4f} |"
-    )
+# Single-node and multi-node results have different fields and therefore need to be printed separately
+if single_node_results:
+    single_node_results.sort(key=lambda r: (
+        r['infmax_model_prefix'], r['hw'], r['framework'], r['precision'], r['isl'], r['osl'], r['tp'], r['ep'], r['conc']))
+
+    single_node_headers = [
+        MODEL, SERVED_MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL, TP, EP, DP_ATTENTION,
+        CONC, TTFT, TPOT, INTERACTIVITY, E2EL, TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
+    ]
+
+    single_node_rows = [
+        [
+            r['infmax_model_prefix'],
+            r['model'],
+            r['hw'].upper(),
+            r['framework'].upper(),
+            r['precision'].upper(),
+            r['isl'],
+            r['osl'],
+            r['tp'],
+            r['ep'],
+            r['dp_attention'],
+            r['conc'],
+            f"{r['median_ttft'] * 1000:.4f}",
+            f"{r['median_tpot'] * 1000:.4f}",
+            f"{r['median_intvty']:.4f}",
+            f"{r['median_e2el']:.4f}",
+            f"{r['tput_per_gpu']:.4f}",
+            f"{r['output_tput_per_gpu']:.4f}",
+            f"{r['input_tput_per_gpu']:.4f}",
+        ]
+        for r in single_node_results
+    ]
+
+    print("## Single-Node Results\n")
+    print(tabulate(single_node_rows, headers=single_node_headers, tablefmt="github"))
+    print("\n")
+
+if multinode_results:
+    multinode_results.sort(key=lambda r: (r['infmax_model_prefix'], r['hw'], r['framework'], r['precision'], r['isl'],
+                           r['osl'], r['prefill_tp'], r['prefill_ep'], r['decode_tp'], r['decode_ep'], r['conc']))
+
+    multinode_headers = [
+        MODEL, SERVED_MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL,
+        PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS, PREFILL_GPUS,
+        DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS, DECODE_GPUS,
+        CONC, TTFT, TPOT, INTERACTIVITY, E2EL, TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
+    ]
+
+    multinode_rows = [
+        [
+            r['infmax_model_prefix'],
+            r['model'],
+            r['hw'].upper(),
+            r['framework'].upper(),
+            r['precision'].upper(),
+            r['isl'],
+            r['osl'],
+            r['prefill_tp'],
+            r['prefill_ep'],
+            r['prefill_dp_attention'],
+            r['prefill_num_workers'],
+            r['num_prefill_gpu'],
+            r['decode_tp'],
+            r['decode_ep'],
+            r['decode_dp_attention'],
+            r['decode_num_workers'],
+            r['num_decode_gpu'],
+            r['conc'],
+            f"{r['median_ttft'] * 1000:.4f}",
+            f"{r['median_tpot'] * 1000:.4f}",
+            f"{r['median_intvty']:.4f}",
+            f"{r['median_e2el']:.4f}",
+            f"{r['tput_per_gpu']:.4f}",
+            f"{r['output_tput_per_gpu']:.4f}",
+            f"{r['input_tput_per_gpu']:.4f}",
+        ]
+        for r in multinode_results
+    ]
+
+    print("## Multi-Node Results\n")
+    print(tabulate(multinode_rows, headers=multinode_headers, tablefmt="github"))

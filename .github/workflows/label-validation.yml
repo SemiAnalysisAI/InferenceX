@@ -56,12 +56,11 @@ jobs:
 
               for label in matching:
                   result = subprocess.run([
-                      'python3', f"{os.environ['GITHUB_WORKSPACE']}/utils/matrix-logic/generate_sweep_configs.py",
+                      'python3', f"{os.environ['GITHUB_WORKSPACE']}/utils/matrix_logic/generate_sweep_configs.py",
                       'full-sweep',
                       '--runner-type', label['runner-type'],
                       '--model-prefix', label['model-prefix'],
                       '--seq-lens', '1k1k',
-                      '--test-mode',
                       '--config-files',
                       f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/nvidia-master.yaml",
                       f"{os.environ['GITHUB_WORKSPACE']}/.github/configs/amd-master.yaml",
@@ -102,12 +101,15 @@ jobs:
       runner: ${{ matrix.config.runner }}
       image: ${{ matrix.config.image }}
       model: ${{ matrix.config.model }}
+      model-prefix: ${{ matrix.config.model-prefix }}
       framework: ${{ matrix.config.framework }}
       precision: ${{ matrix.config.precision }}
       tp: ${{ matrix.config.tp }}
       ep: ${{ matrix.config.ep }}
       dp-attn: ${{ matrix.config.dp-attn }}
       conc: ${{ matrix.config.conc }}
+      spec-decoding: ${{ matrix.config.spec-decoding }}
+      disagg: ${{ matrix.config.disagg }}
 
   collect-results:
     needs: [get-jobs, validate]

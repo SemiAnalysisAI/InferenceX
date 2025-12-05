@@ -5,6 +5,7 @@ dsr1-fp4-mi355x-sglang:
   runner: mi355x
   precision: fp4
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -27,6 +28,7 @@ dsr1-fp8-mi300x-sglang:
   runner: mi300x
   precision: fp8
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -48,6 +50,7 @@ dsr1-fp8-mi325x-sglang:
   runner: mi325x
   precision: fp8
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -69,6 +72,7 @@ dsr1-fp8-mi355x-sglang:
   runner: mi355x
   precision: fp8
   framework: sglang
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -90,6 +94,7 @@ gptoss-fp4-mi300x-vllm:
   runner: mi300x
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -120,6 +125,7 @@ gptoss-fp4-mi325x-vllm:
   runner: mi325x
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -150,6 +156,7 @@ gptoss-fp4-mi355x-vllm:
   runner: mi355x
   precision: fp4
   framework: vllm
+  multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
