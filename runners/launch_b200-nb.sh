@@ -7,6 +7,9 @@ FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 NCCL_IB_HCA="mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_11"
 UCX_NET_DEVICES=mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_11:1
 
+# Cleanup any stale enroot locks from previous runs
+find /var/cache/enroot-container-images/$UID -type f -name "*.lock" | xargs rm
+
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
 --container-image=$IMAGE \
