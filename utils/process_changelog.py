@@ -5,8 +5,6 @@ import subprocess
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pprint import pprint
-
 from matrix_logic.validation import load_config_files
 
 MASTER_CONFIGS = [".github/configs/amd-master.yaml",
@@ -30,7 +28,16 @@ def get_added_lines(base_ref, head_ref, filepath):
 
     added_lines = []
     for line in result.stdout.split('\n'):
-        if line.startswith('+') and not line.startswith('+++'):
+        if line.startswith('-') and not line.startswith('---'):
+            # Don't allow deletions in the changelog
+            # By convention, it should act as a running log of performance changes,
+            # so we only want to see additions
+            raise ValueError(
+                f"Deletions are not allowed in {filepath}. "
+                f"Only additions to the changelog are permitted. "
+                f"Found deleted line: {line[1:]}"
+            )
+        elif line.startswith('+') and not line.startswith('+++'):
             added_lines.append(line[1:])
 
     return '\n'.join(added_lines)
