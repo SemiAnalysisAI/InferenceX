@@ -12,14 +12,14 @@ jobs:
     get-configs:
         runs-on: ubuntu-latest
         outputs:
-            dsr1-configs: ${{ steps.get-dsr1-configs.outputs }}
-            gptoss-configs: ${{ steps.get-gptoss-configs.outputs }}
+            dsr1-configs: ${{ steps.get-configs.outputs.dsr1-configs }}
+            gptoss-configs: ${{ steps.get-configs.outputs.gptoss-configs }}
         steps:
             - name: Checkout code
               uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
-            - id:
-                
+            - id: get-configs
+
     get-dsr1-configs:
         runs-on: ubuntu-latest
         outputs:
