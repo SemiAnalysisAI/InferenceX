@@ -50,8 +50,6 @@ def main():
     parser.add_argument('--changelog-file', type=str, required=True)
     args = parser.parse_args()
 
-    master_config_data = load_config_files(MASTER_CONFIGS)
-
     added_yaml = get_added_lines(
         args.base_ref, args.head_ref, args.changelog_file)
 
