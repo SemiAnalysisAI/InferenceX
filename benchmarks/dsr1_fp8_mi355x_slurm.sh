@@ -12,11 +12,14 @@
 
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
 export SGLANG_USE_AITER=1
+export RCCL_MSCCL_ENABLE=0
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
 python3 -m sglang.launch_server \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
@@ -27,7 +30,8 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
-    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
+    --cuda-graph-max-bs 128 \
+    --enable-torch-compile > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
