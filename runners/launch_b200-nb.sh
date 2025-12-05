@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache/"
+HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache-${USER: -1}/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
@@ -17,4 +17,4 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
 --no-container-mount-home --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL,PORT_OFFSET=${USER: -1},UCX_NET_DEVICES=$UCX_NET_DEVICES \
-bash -c "umask 002 && bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh"
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh
