@@ -293,6 +293,7 @@ append_lm_eval_summary() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "tp": ${TP:-1},
+  "conc": ${CONC:-1},
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "model": "${model_name:-}",

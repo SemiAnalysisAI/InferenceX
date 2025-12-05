@@ -300,6 +300,7 @@ def main():
             'precision': (meta.get('precision') or 'unknown').lower(),
             'tp': int(meta.get('tp') or 1),
             'ep': int(meta.get('ep') or 1),
+            'conc': int(meta.get('conc') or 0),
             'dp_attention': str(meta.get('dp_attention') or 'false'),
             'task': m.get('task') or 'unknown',
             'em_strict': m.get('strict'),
@@ -312,14 +313,17 @@ def main():
         rows.append(row)
 
     # Sort for stable output
-    rows.sort(key=lambda r: (r.get('model',''), r.get('hw',''), r.get('framework',''), r.get('precision',''), r.get('tp',0), r.get('ep',0)))
+    rows.sort(key=lambda r: (
+        r.get('hw',''), r.get('framework',''),
+        r.get('precision',''), r.get('tp',0), r.get('conc',0)
+    ))
 
     if not rows:
         print('> No eval results found to summarize.')
     else:
         # Print Markdown summary table
-        print('| Model | Hardware | Framework | Precision | TP | EP | DPA | Task | EM Strict | EM Flexible | N (eff) |')
-        print('| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |')
+        print('| Model | Hardware | Framework | Precision | TP | EP | Conc | DPA | Task | EM Strict | EM Flexible | N (eff) |')
+        print('| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |')
         for r in rows:
             print(
                 f"| {r['model']} "
@@ -328,6 +332,7 @@ def main():
                 f"| {r['precision'].upper()} "
                 f"| {r['tp']} "
                 f"| {r['ep']} "
+                f"| {r['conc']} "
                 f"| {r['dp_attention']} "
                 f"| {r['task']} "
                 f"| {pct(r['em_strict'])}{se(r['em_strict_se'])} "
