@@ -29,7 +29,9 @@ jobs:
           pattern: ${{ inputs.exp-name && format('{0}_*', inputs.exp-name) || '*' }}
 
       - name: Print summary
-        run: python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
+        run: |
+          pip install tabulate
+          python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
 
       - name: Aggregate results
         run: python3 utils/collect_results.py results/ ${{ inputs.exp-name || 'all' }}
