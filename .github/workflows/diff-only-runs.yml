@@ -36,7 +36,7 @@ jobs:
         # never be a mix of multi-node and single-node entries as output from generate_sweep_configs.py).
         if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill != null }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node
+        name: multi-node /
         strategy:
             fail-fast: false
             matrix:
@@ -73,7 +73,7 @@ jobs:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill == null }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: single-node
+        name: single-node /
         strategy:
             fail-fast: false
             matrix:
