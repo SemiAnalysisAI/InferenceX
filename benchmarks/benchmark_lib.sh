@@ -78,7 +78,7 @@ wait_for_server_ready() {
     fi
 
     # Show logs until server is ready
-    tail -f "$server_log" &
+    tail -f -n +1 "$server_log" &
     local TAIL_PID=$!
     until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
         if ! kill -0 "$server_pid" 2>/dev/null; then
