@@ -48,7 +48,7 @@ decode_eplb_num_slots=0
 
 sbatch --nodes=${total_nodes} \
     --ntasks=${total_tasks} \
-    --ntasks-per-node=${NTASKS_PER_NODE} \
+    --ntasks-per-node=${ntasks_per_node} \
     --segment=${total_nodes} ${additional_slurm_args} \
     benchmark_disagg.slurm \
     ${PREFILL_NUM_WORKERS} ${PREFILL_TP} \
