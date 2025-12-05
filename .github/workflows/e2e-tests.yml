@@ -1,5 +1,5 @@
 name: End-to-End Tests
-run-name: e2e Test - ${{ github.event.inputs.generate-cli-command }}
+run-name: e2e Test - ${{ inputs.test-name || github.event.inputs.generate-cli-command }}
 
 on:
     workflow_dispatch:
@@ -7,6 +7,10 @@ on:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: true
+                type: string
+            test-name:
+                description: "Name for this test run"
+                required: false
                 type: string
 
 jobs:
@@ -21,13 +25,57 @@ jobs:
             - id: get-jobs
               run: |
                   pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix-logic/generate_sweep_configs.py ${{ inputs.generate-cli-command }})
+                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
+                    ${{ inputs.generate-cli-command }} \
+                    --runner-config .github/configs/runners.yaml \
+                    --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml)
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    test-sweep:
+    test-sweep-multi-node:
         needs: get-jobs
+        # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests.
+        # We only need to check the first entry because by design, all entries in the matrix will be of the same type (there will
+        # never be a mix of multi-node and single-node entries as output from generate_sweep_configs.py).
+        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill != null }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: ${{ inputs.generate-cli-command }} multi-node
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+        secrets: inherit
+        with:
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.exp-name }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+
+            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
+            prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-ep: ${{ matrix.config.prefill.ep }}
+            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
+            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
+
+            decode-num-worker: ${{ matrix.config.decode.num-worker }}
+            decode-tp: ${{ matrix.config.decode.tp }}
+            decode-ep: ${{ matrix.config.decode.ep }}
+            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
+            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+
+    test-sweep-single-node:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill == null }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: ${{ inputs.generate-cli-command }}
+        name: ${{ inputs.generate-cli-command }} single-node
         strategy:
             fail-fast: false
             matrix:
@@ -41,15 +89,18 @@ jobs:
             runner: ${{ matrix.config.runner }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
 
     collect-results:
-        needs: test-sweep
+        needs: [test-sweep-multi-node, test-sweep-single-node]
         if: ${{ always() }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
