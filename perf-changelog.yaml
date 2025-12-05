@@ -1,6 +1,3 @@
 - config-keys:
   - gptoss-fp4-mi300x-vllm
   description: Test change abc
-- config-keys:
-  - gptoss-fp4-mi325x-vllm
-  description: Test change abc
