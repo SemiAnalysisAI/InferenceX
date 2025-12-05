@@ -4,7 +4,7 @@ HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
-UCX_NET_DEVICES=eth0
+UCX_NET_DEVICES=mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_11:1
 
 # Cleanup any stale enroot locks from previous runs
 find /var/cache/enroot-container-images/$UID -type f -name "*.lock" | xargs rm
@@ -17,4 +17,4 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
 --no-container-mount-home --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL,PORT_OFFSET=${USER: -1},UCX_NET_DEVICES=$UCX_NET_DEVICES \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh
+bash -c "umask 002 && bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_slurm.sh"
