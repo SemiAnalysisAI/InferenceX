@@ -13,10 +13,9 @@
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 cat > config.yaml << EOF
-compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
 async-scheduling: true
 no-enable-prefix-caching: true
-cuda-graph-sizes: 2048
+max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 max-model-len: 10240
 EOF
@@ -30,7 +29,7 @@ PYTHONNOUSERSITE=1 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
 --max-num-seqs=$CONC  \
---disable-log-requests > $SERVER_LOG 2>&1 &
+ > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
