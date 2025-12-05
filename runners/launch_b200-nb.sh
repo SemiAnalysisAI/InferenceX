@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-HF_HUB_CACHE_MOUNT="/root/hf_hub_cache-${USER: -1}/"
+HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
