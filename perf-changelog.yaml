@@ -1,6 +1,3 @@
 - config-keys:
-  - dsr1-fp8-h200-trt
+  - gptoss-fp4-h100-vllm
   description: Test change abc
-- config-keys:
-  - dsr1-fp8-h200-sglang
-  description: Test change 2
