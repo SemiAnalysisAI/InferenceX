@@ -160,7 +160,6 @@ run_benchmark_serving() {
 
 _install_lm_eval_deps() {
     python3 -m pip install -q --no-cache-dir "lm-eval[api]" || true
-    # Temporary: workaround issue by using main
     python3 -m pip install -q --no-cache-dir --no-deps \
         "git+https://github.com/EleutherAI/lm-evaluation-harness.git@b315ef3b05176acc9732bb7fdec116abe1ecc476" || true
 }
@@ -356,7 +355,7 @@ META
 # ------------------------------
 
 _install_lighteval_deps() {
-    python3 -m pip install -q --no-cache-dir "lighteval[api]" "litellm" || true
+    python3 -m pip install -q --no-cache-dir "lighteval==0.13.0" "litellm==1.80.7" || true
 }
 
 # Patch lighteval's LiteLLMClient to handle reasoning content and Python name mangling
@@ -615,7 +614,7 @@ run_lighteval_eval() {
     local base_url="http://0.0.0.0:${port}/v1"
     export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 
-    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,top_p=1,max_new_tokens:2048},concurrent_requests=${concurrent_requests}"
+    local MODEL_ARGS="model_name=${lite_model},base_url=${base_url},api_key=${OPENAI_API_KEY},generation_parameters={temperature:0.0,top_p:1,max_new_tokens:2048},concurrent_requests=${concurrent_requests}"
     local TASK_SPEC="${task}|${num_fewshot}"
 
     # Respect absolute paths (e.g., /tmp/eval_out); otherwise write under /workspace

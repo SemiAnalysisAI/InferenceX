@@ -39,8 +39,6 @@ export TORCH_CUDA_ARCH_LIST="9.0"
 PORT=$(( 8888 + $PORT_OFFSET ))
 MODEL_NAME=${MODEL##*/}
 
-export TORCH_CUDA_ARCH_LIST="9.0"
-
 PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
  --config config.yaml \
  --gpu-memory-utilization 0.9 \
