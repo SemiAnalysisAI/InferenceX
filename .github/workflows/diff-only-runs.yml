@@ -31,8 +31,8 @@ jobs:
                       --base-ref origin/main \
                       --head-ref ${{ github.sha }})
 
-                  CONFIG_JSON_MULTI_NODE=$(echo "$CONFIG_JSON" | jq '[.[] | select(.prefill != null)]')
-                  CONFIG_JSON_SINGLE_NODE=$(echo "$CONFIG_JSON" | jq '[.[] | select(.prefill == null)]')
+                  CONFIG_JSON_MULTI_NODE=$(echo "$CONFIG_JSON" | jq -c '[.[] | select(.prefill != null)]')
+                  CONFIG_JSON_SINGLE_NODE=$(echo "$CONFIG_JSON" | jq -c '[.[] | select(.prefill == null)]')
 
                   echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
                   echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
