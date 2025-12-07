@@ -1,3 +1,3 @@
 - config-keys:
-  - gptoss-fp4-mi300x-*
+  - gptoss-fp4-*&
   description: Test change abc
