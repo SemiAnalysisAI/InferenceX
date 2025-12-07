@@ -29,6 +29,6 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash -c 'bash benchmarks/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}_slurm.sh; rm -rf /dev/shm/sagemaker_sessions'
+bash -c "bash benchmarks/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}_slurm.sh; rm -rf /dev/shm/sagemaker_sessions"
 
 scancel $JOB_ID
