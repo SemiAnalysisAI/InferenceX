@@ -13,13 +13,15 @@ jobs:
     get-jobs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
+            multi-node-search-space-config: ${{ steps.get-jobs.outputs.multi-node-search-space-config }}
+            single-node-search-space-config: ${{ steps.get-jobs.outputs.single-node-search-space-config }}
         steps:
             - name: Checkout code
               uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
               with:
                   fetch-depth: 0
 
+            # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests
             - id: get-jobs
               run: |
                   pip install pydantic
@@ -27,20 +29,21 @@ jobs:
                       --changelog-file ${GITHUB_WORKSPACE}/perf-changelog.yaml \
                       --base-ref origin/main \
                       --head-ref ${{ github.sha }})
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+                  CONFIG_JSON_MULTI_NODE=$(echo "$CONFIG_JSON" | jq '[.[] | select(.prefill != null)]')
+                  CONFIG_JSON_SINGLE_NODE=$(echo "$CONFIG_JSON" | jq '[.[] | select(.prefill == null)]')
+
+                  echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
+                  echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
         needs: get-jobs
-        # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests.
-        # We only need to check the first entry because by design, all entries in the matrix will be of the same type (there will
-        # never be a mix of multi-node and single-node entries as output from generate_sweep_configs.py).
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill != null }}
+        if: ${{ needs.get-jobs.outputs.multi-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
             isl: ${{ matrix.config.isl }}
@@ -71,13 +74,12 @@ jobs:
 
     test-sweep-single-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill == null }}
+        if: ${{ needs.get-jobs.outputs.single-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: single-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.single-node-search-space-config) }}
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
