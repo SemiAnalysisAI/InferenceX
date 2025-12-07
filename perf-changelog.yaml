@@ -1,3 +1,5 @@
 - config-keys:
-  - dsr1-*
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-trt
+  - dsr1-fp8-b200-sglang
   description: Test change abc
