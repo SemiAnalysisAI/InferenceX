@@ -33,6 +33,20 @@ jobs:
 
                   CONFIG_JSON_MULTI_NODE=$(echo "$CONFIG_JSON" | jq -c '[.[] | select(.prefill != null)]')
                   CONFIG_JSON_SINGLE_NODE=$(echo "$CONFIG_JSON" | jq -c '[.[] | select(.prefill == null)]')
+ 
+                    # Check matrix size limits (GitHub max is 256)
+                    MULTI_NODE_COUNT=$(echo "$CONFIG_JSON_MULTI_NODE" | jq 'length')
+                    SINGLE_NODE_COUNT=$(echo "$CONFIG_JSON_SINGLE_NODE" | jq 'length')
+ 
+                    if [ "$MULTI_NODE_COUNT" -gt 256 ]; then
+                        echo "Error: multi-node config count ($MULTI_NODE_COUNT) exceeds GitHub matrix limit of 256"
+                        exit 1
+                    fi
+ 
+                    if [ "$SINGLE_NODE_COUNT" -gt 256 ]; then
+                        echo "Error: single-node config count ($SINGLE_NODE_COUNT) exceeds GitHub matrix limit of 256"
+                        exit 1
+                    fi
 
                   echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
                   echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
@@ -41,6 +55,7 @@ jobs:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node /
         strategy:
             fail-fast: false
             matrix:
@@ -77,6 +92,7 @@ jobs:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.single-node-search-space-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
+        name: single-node /
         strategy:
             fail-fast: false
             matrix:
