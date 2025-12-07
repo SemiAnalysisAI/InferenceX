@@ -24,7 +24,6 @@ jobs:
             # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests
             - id: get-jobs
               run: |
-                  set -x
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/process_changelog.py \
                       --changelog-file ${GITHUB_WORKSPACE}/perf-changelog.yaml \
