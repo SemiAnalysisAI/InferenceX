@@ -4,7 +4,7 @@ HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache-${USER: -1}/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 
-UCX_NET_DEVICES=mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_11:1
+UCX_NET_DEVICES=eth0
 
 # Cleanup any stale enroot locks from previous runs
 find /var/cache/enroot-container-images/$UID -type f -name "*.lock" | xargs rm

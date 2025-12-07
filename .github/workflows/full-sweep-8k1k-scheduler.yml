@@ -51,6 +51,7 @@ jobs:
                 config: ${{ fromJson(needs.get-dsr1-configs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
+            exp-name: "dsr1_8k1k"
             isl: 8192
             osl: 1024
             max-model-len: 9416
@@ -60,7 +61,6 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            exp-name: "dsr1_8k1k"
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -116,6 +116,7 @@ jobs:
                 config: ${{ fromJson(needs.get-gptoss-configs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
+            exp-name: "gptoss_8k1k"
             isl: 8192
             osl: 1024
             max-model-len: 9416
@@ -125,7 +126,6 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            exp-name: "dsr1_8k1k"
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
