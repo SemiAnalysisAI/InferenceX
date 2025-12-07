@@ -1,5 +1,6 @@
 import yaml
 import json
+import re
 import argparse
 import subprocess
 
@@ -15,7 +16,7 @@ RUNNER_CONFIG = ".github/configs/runners.yaml"
 class ChangelogEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
-    config_keys: list[str] = Field(alias='config-keys')
+    config_keys: list[str] = Field(alias='config-keys', min_length=1)
     description: str
 
 
@@ -43,6 +44,23 @@ def get_added_lines(base_ref, head_ref, filepath):
     return '\n'.join(added_lines)
 
 
+def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> list[str]:
+    resolved_keys = set()
+    for key in config_keys:
+        if "*" in key:
+            pattern = re.compile(re.escape(key).replace(r"\*", ".*"))
+            matched_keys = [k for k in master_config if pattern.fullmatch(k)]
+            if not matched_keys:
+                raise ValueError(
+                    f"No config keys matched the wildcard pattern '{key}' in master configs.")
+            resolved_keys.update(matched_keys)
+        elif key not in master_config:
+            raise ValueError(f"Config key '{key}' not found in master configs.")
+        else:
+            resolved_keys.add(key)
+    return list(resolved_keys)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--base-ref', type=str, required=True)
@@ -66,11 +84,13 @@ def main():
     all_results = []
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
+        configs_to_run = get_config_keys_from_master(
+            entry.config_keys, load_config_files(MASTER_CONFIGS))
 
         try:
             result = subprocess.run([
                 "python3", "utils/matrix_logic/generate_sweep_configs.py", "test-config",
-                "--config-keys", *entry.config_keys,
+                "--config-keys", *configs_to_run,
                 "--config-files", *MASTER_CONFIGS,
                 "--runner-config", RUNNER_CONFIG
             ],

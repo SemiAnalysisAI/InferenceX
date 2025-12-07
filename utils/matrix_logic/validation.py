@@ -344,6 +344,13 @@ def load_config_files(config_files: List[str], validate: bool = True) -> dict:
                 assert isinstance(
                     config_data, dict), f"Config file '{config_file}' must contain a dictionary"
 
+                # Don't allow '*' wildcard in master config keys as we need to reserve these
+                # for expansion in process_changelog.py
+                for key in all_config_data.keys():
+                    if "*" in key:
+                        raise ValueError(
+                            f" Wildcard '*' is not allowed in master config keys: '{key}'")
+
                 # Check for duplicate keys
                 duplicate_keys = set(all_config_data.keys()) & set(
                     config_data.keys())
