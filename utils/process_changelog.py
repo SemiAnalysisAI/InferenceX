@@ -5,7 +5,6 @@ import argparse
 import subprocess
 
 from pydantic import BaseModel, ConfigDict, Field
-from pprint import pprint
 
 from matrix_logic.validation import load_config_files
 
@@ -21,7 +20,7 @@ class ChangelogEntry(BaseModel):
     description: str
 
 
-def get_added_lines(base_ref, head_ref, filepath):
+def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     result = subprocess.run(
         ["git", "diff", base_ref, head_ref, "--", filepath],
         capture_output=True,
@@ -56,10 +55,10 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
                     f"No config keys matched the wildcard pattern '{key}' in master configs.")
             resolved_keys.update(matched_keys)
         elif key not in master_config:
-            raise ValueError(f"Config key '{key}' not found in master configs.")
+            raise ValueError(
+                f"Config key '{key}' not found in master configs.")
         else:
             resolved_keys.add(key)
-    pprint(list(resolved_keys))
     return list(resolved_keys)
 
 
