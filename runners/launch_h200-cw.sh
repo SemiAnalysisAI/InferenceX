@@ -21,12 +21,14 @@ else
     CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
 fi
 
+# The 'rm -rf /dev/shm/sagemaker_sessions' is to clean up shared memory used by sagemaker sessions inside the container
+# This seems to have been introduced in vLLM 0.11.2, but the issue is specific to CoreWeave runners.
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash -c 'bash benchmarks/'"${EXP_NAME%%_*}_${PRECISION}"'_h200_slurm.sh; rm -rf /dev/shm/sagemaker_sessions'
+bash -c 'bashbenchmarks/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}_slurm.sh; rm -rf /dev/shm/sagemaker_sessions'
 
 scancel $JOB_ID

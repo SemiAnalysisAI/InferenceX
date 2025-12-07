@@ -116,6 +116,7 @@ jobs:
                 config: ${{ fromJson(needs.get-gptoss-configs.outputs.multi-node-search-space-config) }}
         secrets: inherit
         with:
+            exp-name: "gptoss_1k1k"
             isl: 1024
             osl: 1024
             max-model-len: 2248
@@ -125,7 +126,6 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            exp-name: "dsr1_1k1k"
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
