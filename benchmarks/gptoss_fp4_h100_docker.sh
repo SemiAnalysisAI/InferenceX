@@ -48,6 +48,6 @@ run_benchmark_serving \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
     --num-prompts $(( $CONC * 10 )) \
-    --max-concurrency 512 \
+    --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
