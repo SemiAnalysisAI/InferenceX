@@ -1,13 +1,12 @@
-name: "Diff Only Runs"
+name: "Run Sweep"
 
 on:
     workflow_dispatch:
     push:
         branches:
             - main
-            - diff-only-runs
-        # paths:
-        #     - "perf-changelog.yaml"
+        paths:
+            - "perf-changelog.yaml"
 
 jobs:
     get-jobs:

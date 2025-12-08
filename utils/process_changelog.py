@@ -7,10 +7,7 @@ import subprocess
 from pydantic import BaseModel, ConfigDict, Field
 
 from matrix_logic.validation import load_config_files
-
-MASTER_CONFIGS = [".github/configs/amd-master.yaml",
-                  ".github/configs/nvidia-master.yaml"]
-RUNNER_CONFIG = ".github/configs/runners.yaml"
+from constants import MASTER_CONFIGS, RUNNER_CONFIG, GENERATE_SWEEPS_PY_SCRIPT
 
 
 class ChangelogEntry(BaseModel):
@@ -90,7 +87,7 @@ def main():
 
         try:
             result = subprocess.run([
-                "python3", "utils/matrix_logic/generate_sweep_configs.py", "test-config",
+                "python3", GENERATE_SWEEPS_PY_SCRIPT, "test-config",
                 "--config-keys", *configs_to_run,
                 "--config-files", *MASTER_CONFIGS,
                 "--runner-config", RUNNER_CONFIG
