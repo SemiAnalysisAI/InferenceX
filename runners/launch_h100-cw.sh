@@ -7,7 +7,7 @@ SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
-SAGEMAKER_SHM_PATH=$(mktemp -d /dev/shm/shm-XXXXXX)
+SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
 
 set -x
 srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
