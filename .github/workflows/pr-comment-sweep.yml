@@ -1,4 +1,4 @@
-name: Sweep
+name: Slash Command Sweep
 
 on:
   # PR comment trigger
