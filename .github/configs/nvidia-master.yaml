@@ -930,28 +930,6 @@ gptoss-fp4-gb200-dynamo-trt:
         - "DECODE_MAX_BATCH_SIZE=1536"
         - "DECODE_GPU_MEM_FRACTION=0.9"
 
- # P: 1xTP1   D:1xDEP2
-    - spec-decoding: "none"
-      conc-list: [  ]
-      prefill:
-        num-worker: 1
-        tp: 1
-        ep: 1
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_NODES=1"
-        - "PREFILL_MAX_NUM_TOKENS=20000"
-        - "PREFILL_MAX_BATCH_SIZE=64"
-      decode:
-        num-worker: 1
-        tp: 2
-        ep: 2
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=1"
-        - "DECODE_MAX_NUM_TOKENS=1536"
-        - "DECODE_MAX_BATCH_SIZE=1536"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
 
     # Right of pareto
     # P: 1xTP1   D:1xTP4
