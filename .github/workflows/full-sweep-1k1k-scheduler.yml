@@ -18,13 +18,14 @@ jobs:
             - id: get-dsr1-configs
               run: |
                   pip install pydantic
-                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
-                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 1k1k --model-prefix dsr1 --config-files ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_MULTI_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py full-sweep --multi-node --seq-lens 1k1k --model-prefix dsr1 --framework dynamo-sglang --runner-type gb200 --config-files ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
+                  CONFIG_JSON_SINGLE_NODE=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py full-sweep --single-node --seq-lens 1k1k --model-prefix dsr1 --framework dynamo-sglang --runner-type gb200 --config-files ${GITHUB_WORKSPACE}/.github/configs/amd-master.yaml ${GITHUB_WORKSPACE}/.github/configs/nvidia-master.yaml --runner-config ${GITHUB_WORKSPACE}/.github/configs/runners.yaml)
                   echo "multi-node-search-space-config=$CONFIG_JSON_MULTI_NODE" >> $GITHUB_OUTPUT
                   echo "single-node-search-space-config=$CONFIG_JSON_SINGLE_NODE" >> $GITHUB_OUTPUT
 
     get-gptoss-configs:
         runs-on: ubuntu-latest
+        if: ${{ false }}
         outputs:
             multi-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.multi-node-search-space-config }}
             single-node-search-space-config: ${{ steps.get-gptoss-configs.outputs.single-node-search-space-config }}
