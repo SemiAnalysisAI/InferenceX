@@ -1,8 +1,9 @@
 - config-keys:
-    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-*-trt
   description: |
-    Updating vllm version for mi300x
-- config-keys:
-    - gptoss-fp4-mi300x-vllm
-  description: |
-    Updating vllm version for mi325x
+    - Upgrade GPT-OSS TRT images from 'release:1.1.0rc2.post2' to '1.2.0rc0.post1'
+    - Add NCCL_GRAPH_REGISTER=0 to benchmarks/gptoss_fp4_b200_trt_slurm.sh
+    - Change kv_cache_config.dtype from 'auto' to 'fp8' in benchmarks/gptoss_fp4_b200_trt_slurm.sh
+    - Remove MOE_BACKEND=CUTLASS, now just defaults to TRTLLM
+    PR: https://github.com/InferenceMAX/InferenceMAX/pull/110
+
