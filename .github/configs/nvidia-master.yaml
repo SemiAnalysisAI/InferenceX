@@ -874,7 +874,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
 gptoss-fp4-gb200-dynamo-trt:
   #image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0
-  image: docker.io/jwillthomson/dynamo-trtllm-1.2.0rc2-min-tokens-fix
+  image: docker.io#jwillthomson/dynamo-trtllm-1.2.0rc2-min-tokens-fix
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: gb200
