@@ -14,12 +14,7 @@ export SLURM_JOB_NAME="benchmark-dynamo.job"
 
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-    # Set IMAGE based on ISL/OSL
-    if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-        export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.5.post2.sqsh"
-    else
-        export IMAGE="/mnt/lustre01/artifacts/containers/dynamo-sglang.sqsh"
-    fi
+    export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.5.post2.sqsh"
     export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
