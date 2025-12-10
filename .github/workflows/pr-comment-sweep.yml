@@ -47,14 +47,12 @@ jobs:
           PR_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
-          # Allow optional leading whitespace before /sweep
-          cmd_line=$(printf "%s" "$BODY" | awk '/^[[:space:]]*\/sweep/{print; exit}')
+          # Require /sweep at the start of the line
+          cmd_line=$(printf "%s" "$BODY" | awk '/^\/sweep/{print; exit}')
           if [[ -z "$cmd_line" ]]; then
-            echo "No /sweep command found in comment" >&2
+            echo "No /sweep command found at comment start" >&2
             exit 1
           fi
-          # Trim leading spaces then strip the /sweep prefix
-          cmd_line=$(echo "$cmd_line" | sed 's/^[[:space:]]*//')
           if [[ "$cmd_line" == "/sweep" ]]; then
             cmd_args=""
           else
@@ -100,7 +98,7 @@ jobs:
 
   approval:
     needs: get-jobs
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' }}
+    if: ${{ needs.get-jobs.outputs.generator-args != '' }}
     runs-on: ubuntu-latest
     name: approval
     environment: bryan-test
@@ -109,7 +107,7 @@ jobs:
 
   validate:
     needs: [get-jobs, approval]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' }}
+    if: ${{ needs.get-jobs.outputs.generator-args != '' }}
     uses: ./.github/workflows/e2e-tests.yml
     name: validate
     secrets: inherit
