@@ -942,7 +942,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         - "N_ADDITIONAL_FRONTENDS=8"
         - "SCRIPT_MODE=1k1k-middle-curve"
       decode:
-        num-worker: 2
+        num-worker: 1
         tp: 1
         ep: 1
         dp-attn: true
@@ -962,7 +962,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         - "N_ADDITIONAL_FRONTENDS=8"
         - "SCRIPT_MODE=1k1k-max-tpt"
       decode:
-        num-worker: 2
+        num-worker: 1
         tp: 1
         ep: 1
         dp-attn: true
