@@ -7,13 +7,6 @@
     - Remove MOE_BACKEND=CUTLASS, now just defaults to TRTLLM
     PR: https://github.com/InferenceMAX/InferenceMAX/pull/110
 - config-keys:
-    - gptoss*
-    - dsr1*
-  description: |
-    - Remove Llama 70B runs to make room for multi-node disagg prefill+wideEP on 
-      h100/h200/b200/mi300/mi325/mi355
-    PR: https://github.com/InferenceMAX/InferenceMAX/pull/149
-- config-keys:
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
     - gptoss-fp4-h200-vllm
