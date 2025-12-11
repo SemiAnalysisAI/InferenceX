@@ -7,8 +7,11 @@ from collections import defaultdict
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
 from matrix_logic.generate_sweep_configs import seq_len_to_str
-from matrix_logic.validation import ChangelogEntry, ChangelogMatrixEntry, load_config_files
-from pydantic import BaseModel, ConfigDict, Field
+from matrix_logic.validation import (
+    ChangelogEntry,
+    ChangelogMatrixEntry,
+    load_config_files,
+)
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -49,8 +52,7 @@ def get_config_keys_from_master(
                 )
             resolved_keys.update(matched_keys)
         elif key not in master_config:
-            raise ValueError(
-                f"Config key '{key}' not found in master configs.")
+            raise ValueError(f"Config key '{key}' not found in master configs.")
         else:
             resolved_keys.add(key)
     return list(resolved_keys)
@@ -63,8 +65,7 @@ def main():
     parser.add_argument("--changelog-file", type=str, required=True)
     args = parser.parse_args()
 
-    added_yaml = get_added_lines(
-        args.base_ref, args.head_ref, args.changelog_file)
+    added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
 
     if not added_yaml.strip():
         raise ValueError("No additions found in the changelog file.")
@@ -83,7 +84,7 @@ def main():
             "entries": changelog_data,
         },
     }
-    
+
     all_results = []
     # Deduplicate repeated configs, if for some reason a config key appears multiple times
     # in one commit, we don't want to run that config two times (there will just be twice as many
@@ -132,7 +133,7 @@ def main():
         else:
             final_results["single_node"][seq_len_str].append(result)
 
-    # Validate final results structure 
+    # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)
     print(validated.model_dump_json(by_alias=True))
 
