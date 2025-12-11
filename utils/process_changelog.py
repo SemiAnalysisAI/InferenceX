@@ -67,14 +67,12 @@ def main():
         args.base_ref, args.head_ref, args.changelog_file)
 
     if not added_yaml.strip():
-        print("No new changelog entries found")
-        return
+        raise ValueError("No additions found in the changelog file.")
 
     changelog_data = yaml.safe_load(added_yaml)
 
     if not changelog_data:
-        print("No new changelog entries found")
-        return
+        raise ValueError("No valid YAML entries found in the changelog additions.")
 
     final_results = {
         "single_node": defaultdict(list),
