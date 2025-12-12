@@ -54,20 +54,9 @@ jobs:
 
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
-    test:
-        needs: setup
-        runs-on: ubuntu-latest
-        steps:
-            - name: Test
-              run: |
-                echo "${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) }}"
-                echo "${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node) }}"
-                echo "${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) }}"
-                echo "${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node) }}"
-
     sweep-multi-node-1k1k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.multi_node['1k1k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
@@ -104,7 +93,7 @@ jobs:
 
     sweep-multi-node-1k8k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.multi_node['1k8k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k8k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k8k /
         strategy:
@@ -116,7 +105,7 @@ jobs:
 
     sweep-multi-node-8k1k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.multi_node['8k1k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
@@ -128,7 +117,7 @@ jobs:
 
     sweep-single-node-1k1k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.single_node['1k1k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
@@ -156,7 +145,7 @@ jobs:
 
     sweep-single-node-1k8k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.single_node['1k8k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k8k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k8k /
         strategy:
@@ -168,7 +157,7 @@ jobs:
 
     sweep-single-node-8k1k:
         needs: setup
-        if: ${{ needs.setup.outputs.search-space-config.single_node['8k1k'] != '[]' }}
+        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
