@@ -184,7 +184,7 @@ jobs:
 
     upload-changelog-metadata:
         needs: [setup, collect-results]
-        if: ${{ needs.setup.result != 'skipped' }}
+        if: ${{ always() && needs.setup.result != 'skipped' }}
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
