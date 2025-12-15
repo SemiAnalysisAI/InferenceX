@@ -2,8 +2,6 @@ name: "Full Sweep Scheduler - 8k1k"
 
 on:
     workflow_dispatch:
-    schedule:
-        - cron: "0 0 * * *"
 
 jobs:
     get-dsr1-configs:
