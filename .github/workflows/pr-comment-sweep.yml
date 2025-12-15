@@ -156,7 +156,7 @@ jobs:
 
   approval:
     needs: get-jobs
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' }}
+    if: ${{ (github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '') || (github.event_name == 'push' && needs.get-jobs.outputs.generator-args != '') }}
     runs-on: ubuntu-latest
     name: approval
     environment: bryan-test
@@ -165,7 +165,7 @@ jobs:
 
   validate:
     needs: [get-jobs, approval]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' }}
+    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.approval.result == 'success' }}
     uses: ./.github/workflows/e2e-tests.yml
     name: validate
     secrets: inherit
@@ -175,8 +175,8 @@ jobs:
       ref: refs/pull/${{ needs.get-jobs.outputs.pr-number }}/head
 
   validate-nonpr:
-    needs: get-jobs
-    if: ${{ github.event_name != 'issue_comment' && needs.get-jobs.outputs.generator-args != '' }}
+    needs: [get-jobs, approval]
+    if: ${{ needs.get-jobs.outputs.generator-args != '' && ((github.event_name == 'push' && needs.approval.result == 'success') || github.event_name == 'workflow_dispatch') }}
     uses: ./.github/workflows/e2e-tests.yml
     name: validate (manual/push)
     secrets: inherit
