@@ -31,6 +31,62 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
+def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Mark entries that should run evaluation.
+    
+    For each unique (model, runner, framework, precision, isl, osl) combination:
+    - Mark highest TP with highest conc
+    - Mark lowest TP with highest conc
+    """
+    from collections import defaultdict
+
+    # Group entries by (model, runner, framework, precision, isl, osl)
+    # This ensures we compare within the same configuration, not across different frameworks
+    groups = defaultdict(list)
+    for i, entry in enumerate(matrix_values):
+        key = (
+            entry[Fields.MODEL.value], 
+            entry[Fields.RUNNER.value], 
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.ISL.value], 
+            entry[Fields.OSL.value]
+        )
+        groups[key].append((i, entry))
+
+    # For each group, find highest TP/highest conc and lowest TP/highest conc
+    eval_indices = set()
+    for key, entries in groups.items():
+        if not entries:
+            continue
+
+        # Find min and max TP values
+        min_tp = min(e[Fields.TP.value] for _, e in entries)
+        max_tp = max(e[Fields.TP.value] for _, e in entries)
+
+        # Find highest conc for highest TP
+        highest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == max_tp]
+        if highest_tp_entries:
+            max_conc_highest_tp = max(e[Fields.CONC.value] for _, e in highest_tp_entries)
+            for i, e in highest_tp_entries:
+                if e[Fields.CONC.value] == max_conc_highest_tp:
+                    eval_indices.add(i)
+
+        # Find highest conc for lowest TP (only if different from max_tp)
+        if min_tp != max_tp:
+            lowest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == min_tp]
+            if lowest_tp_entries:
+                max_conc_lowest_tp = max(e[Fields.CONC.value] for _, e in lowest_tp_entries)
+                for i, e in lowest_tp_entries:
+                    if e[Fields.CONC.value] == max_conc_lowest_tp:
+                        eval_indices.add(i)
+
+    # Mark the selected entries
+    for i, entry in enumerate(matrix_values):
+        entry[Fields.FIELD_RUN_EVAL.value] = i in eval_indices
+
+    return matrix_values
+
 
 def generate_full_sweep(args, all_config_data, runner_data):
     """Generate full sweep configurations with optional filtering.
@@ -511,6 +567,12 @@ def main():
         required=True,
         help='Configuration file holding runner information (YAML format)'
     )
+    parent_parser.add_argument(
+        '--run-evals',
+        action='store_true',
+        required=False,
+        help='When specifiedm run evals on a subset of configs.'
+    )
 
     # Create main parser
     parser = argparse.ArgumentParser(
@@ -673,6 +735,10 @@ def main():
         matrix_values = generate_test_config_sweep(args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
+        
+    # Choose eval (opt-in via --run-evals)
+    if args.run_evals:
+        matrix_values = mark_eval_entries(matrix_values)
 
     print(json.dumps(matrix_values))
     return matrix_values

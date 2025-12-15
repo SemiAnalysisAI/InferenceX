@@ -51,6 +51,9 @@ class Fields(Enum):
     EXP_NAME = 'exp-name'
     DISAGG = 'disagg'
 
+    # Eval
+    FIELD_RUN_EVAL = 'run-eval'
+
 
 """
     Below is the validation logic for the OUTPUT of utils/matrix_logic/generate_sweep_configs.py, i.e., 
@@ -85,6 +88,7 @@ class SingleNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
+    run_eval: bool = Field(alias='run-eval', default=False)
 
 
 class WorkerConfig(BaseModel):
@@ -121,6 +125,7 @@ class MultiNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
+    run_eval: bool = Field(alias='run-eval', default=False)
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
@@ -330,8 +335,7 @@ class ChangelogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
-    description: list[str] = Field(min_length=1)
-    pr_link: str = Field(alias="pr-link")
+    description: str
 
 
 class ChangelogMetadata(BaseModel):
