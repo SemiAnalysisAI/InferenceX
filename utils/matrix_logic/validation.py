@@ -3,6 +3,7 @@ from typing import List, Optional, Union, Literal
 from enum import Enum
 
 import pprint
+import yaml
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -315,3 +316,118 @@ def validate_runner_config(runner_configs: dict) -> List[dict]:
                 f"Runner config entry '{key}' cannot be an empty list")
 
     return runner_configs
+
+
+"""
+    Below is the validation logic for the changelog entries found in perf-changelog.yaml.
+    This ensures that the changelog entries conform to the expected structure before
+    proceeding with processing.
+"""
+
+
+class ChangelogEntry(BaseModel):
+    """Pydantic model for validating changelog entry structure."""
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    config_keys: list[str] = Field(alias="config-keys", min_length=1)
+    description: str
+
+
+class ChangelogMetadata(BaseModel):
+    """Pydantic model for validating changelog metadata structure."""
+    model_config = ConfigDict(extra="forbid")
+
+    base_ref: str
+    head_ref: str
+    entries: list[ChangelogEntry]
+
+
+class ChangelogMatrixEntry(BaseModel):
+    """Pydantic model for validating final changelog matrix entry structure.
+    This imposes a strict contract on the output of process_changelog.py, dictated by
+    the expected input to the run-sweep.yml workflow file.
+    """
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    single_node: dict[str, list[SingleNodeMatrixEntry]
+                      ] = Field(default_factory=dict)
+    multi_node: dict[str, list[MultiNodeMatrixEntry]
+                     ] = Field(default_factory=dict)
+    changelog_metadata: ChangelogMetadata
+
+
+# =============================================================================
+# File Loading Functions
+# =============================================================================
+
+
+def load_config_files(config_files: List[str], validate: bool = True) -> dict:
+    """Load and merge configuration files.
+
+    Args:
+        config_files: List of paths to YAML configuration files.
+        validate: If True, run validate_master_config on loaded data. Defaults to True.
+
+    Returns:
+        Merged configuration dictionary.
+
+    Raises:
+        ValueError: If file doesn't exist, isn't a dict, or has duplicate keys.
+    """
+    all_config_data = {}
+    for config_file in config_files:
+        try:
+            with open(config_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+                assert isinstance(
+                    config_data, dict), f"Config file '{config_file}' must contain a dictionary"
+
+                # Don't allow '*' wildcard in master config keys as we need to reserve these
+                # for expansion in process_changelog.py
+                for key in config_data.keys():
+                    if "*" in key:
+                        raise ValueError(
+                            f" Wildcard '*' is not allowed in master config keys: '{key}'")
+
+                # Check for duplicate keys
+                duplicate_keys = set(all_config_data.keys()) & set(
+                    config_data.keys())
+                if duplicate_keys:
+                    raise ValueError(
+                        f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
+                    )
+
+                all_config_data.update(config_data)
+        except FileNotFoundError:
+            raise ValueError(f"Input file '{config_file}' does not exist.")
+
+    if validate:
+        validate_master_config(all_config_data)
+
+    return all_config_data
+
+
+def load_runner_file(runner_file: str, validate: bool = True) -> dict:
+    """Load runner configuration file.
+
+    Args:
+        runner_file: Path to the runner YAML configuration file.
+        validate: If True, run validate_runner_config on loaded data. Defaults to True.
+
+    Returns:
+        Runner configuration dictionary.
+
+    Raises:
+        ValueError: If file doesn't exist or fails validation.
+    """
+    try:
+        with open(runner_file, 'r') as f:
+            runner_config = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise ValueError(
+            f"Runner config file '{runner_file}' does not exist.")
+
+    if validate:
+        validate_runner_config(runner_config)
+
+    return runner_config

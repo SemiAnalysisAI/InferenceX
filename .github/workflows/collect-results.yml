@@ -3,7 +3,7 @@ name: Template - Collect Results
 on:
   workflow_call:
     inputs:
-      exp-name:
+      result-prefix:
         required: false
         type: string
         default: ''
@@ -26,7 +26,7 @@ jobs:
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: results/
-          pattern: ${{ inputs.exp-name && format('{0}_*', inputs.exp-name) || '*' }}
+          pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
       - name: Print summary
         run: |
@@ -34,10 +34,10 @@ jobs:
           python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
 
       - name: Aggregate results
-        run: python3 utils/collect_results.py results/ ${{ inputs.exp-name || 'all' }}
+        run: python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: results_${{ inputs.exp-name || 'all' }}
-          path: agg_${{ inputs.exp-name || 'all' }}.json
+          name: results_${{ inputs.result-prefix || 'all' }}
+          path: agg_${{ inputs.result-prefix || 'all' }}.json
