@@ -14,6 +14,8 @@ from validation import (
     validate_matrix_entry,
     validate_master_config,
     validate_runner_config,
+    load_config_files,
+    load_runner_file,
 )
 
 
@@ -738,3 +740,130 @@ class TestValidateRunnerConfig:
         assert "h200" in result
         assert "mi300x" in result
         assert "gb200" in result
+
+
+# =============================================================================
+# Test load_config_files
+# =============================================================================
+
+class TestLoadConfigFiles:
+    """Tests for load_config_files function."""
+
+    def test_load_single_file_with_validation(self, tmp_path, valid_single_node_master_config):
+        """Should load and validate a single config file."""
+        config_file = tmp_path / "config.yaml"
+        import yaml
+        config_file.write_text(yaml.dump({"test-config": valid_single_node_master_config}))
+        result = load_config_files([str(config_file)])
+        assert "test-config" in result
+        assert result["test-config"]["image"] == valid_single_node_master_config["image"]
+
+    def test_load_single_file_without_validation(self, tmp_path):
+        """Should load a single config file without validation when validate=False."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+test-config:
+  image: test-image
+  model: test-model
+""")
+        result = load_config_files([str(config_file)], validate=False)
+        assert "test-config" in result
+        assert result["test-config"]["image"] == "test-image"
+
+    def test_load_multiple_files(self, tmp_path):
+        """Should merge multiple config files."""
+        config1 = tmp_path / "config1.yaml"
+        config1.write_text("""
+config-one:
+  value: 1
+""")
+        config2 = tmp_path / "config2.yaml"
+        config2.write_text("""
+config-two:
+  value: 2
+""")
+        result = load_config_files([str(config1), str(config2)], validate=False)
+        assert "config-one" in result
+        assert "config-two" in result
+
+    def test_duplicate_keys_raise_error(self, tmp_path):
+        """Duplicate keys across files should raise error."""
+        config1 = tmp_path / "config1.yaml"
+        config1.write_text("""
+duplicate-key:
+  value: 1
+""")
+        config2 = tmp_path / "config2.yaml"
+        config2.write_text("""
+duplicate-key:
+  value: 2
+""")
+        with pytest.raises(ValueError) as exc_info:
+            load_config_files([str(config1), str(config2)], validate=False)
+        assert "Duplicate configuration keys" in str(exc_info.value)
+
+    def test_nonexistent_file_raises_error(self):
+        """Nonexistent file should raise error."""
+        with pytest.raises(ValueError) as exc_info:
+            load_config_files(["nonexistent.yaml"])
+        assert "does not exist" in str(exc_info.value)
+
+    def test_validation_runs_by_default(self, tmp_path):
+        """Validation should run by default and catch invalid configs."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+invalid-config:
+  image: test-image
+  # Missing required fields like model, model-prefix, precision, etc.
+""")
+        with pytest.raises(ValueError) as exc_info:
+            load_config_files([str(config_file)])
+        assert "failed validation" in str(exc_info.value)
+
+
+# =============================================================================
+# Test load_runner_file
+# =============================================================================
+
+class TestLoadRunnerFile:
+    """Tests for load_runner_file function."""
+
+    def test_load_runner_file_with_validation(self, tmp_path):
+        """Should load and validate runner config file."""
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text("""
+h100:
+- h100-node-0
+- h100-node-1
+""")
+        result = load_runner_file(str(runner_file))
+        assert "h100" in result
+        assert len(result["h100"]) == 2
+
+    def test_load_runner_file_without_validation(self, tmp_path):
+        """Should load runner config file without validation when validate=False."""
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text("""
+h100:
+- h100-node-0
+- h100-node-1
+""")
+        result = load_runner_file(str(runner_file), validate=False)
+        assert "h100" in result
+        assert len(result["h100"]) == 2
+
+    def test_nonexistent_runner_file(self):
+        """Nonexistent runner file should raise error."""
+        with pytest.raises(ValueError) as exc_info:
+            load_runner_file("nonexistent.yaml")
+        assert "does not exist" in str(exc_info.value)
+
+    def test_validation_runs_by_default(self, tmp_path):
+        """Validation should run by default and catch invalid configs."""
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text("""
+h100: not-a-list
+""")
+        with pytest.raises(ValueError) as exc_info:
+            load_runner_file(str(runner_file))
+        assert "must be a list" in str(exc_info.value)
