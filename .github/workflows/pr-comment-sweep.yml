@@ -29,6 +29,7 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  pull-requests: write
 
 jobs:
   get-jobs:
@@ -65,12 +66,14 @@ jobs:
           echo "pr-number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Reply with run link
-        if: ${{ github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/sweep') }}
+        if: ${{ github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/sweep') && github.repository_owner == 'InferenceMAX' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        continue-on-error: true
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.event.comment.user.login }}
         with:
+          github-token: ${{ github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -114,13 +117,15 @@ jobs:
           echo "generator-args=$gen_args" >> "$GITHUB_OUTPUT"
 
       - name: Reply with run link (manual trigger)
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.resolve.outputs.pr-number != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.resolve.outputs.pr-number != '' && github.repository_owner == 'InferenceMAX' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        continue-on-error: true
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.actor }}
           ISSUE_NUMBER: ${{ steps.resolve.outputs.pr-number }}
         with:
+          github-token: ${{ github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -131,13 +136,15 @@ jobs:
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
       - name: Reply with run link (push trigger)
-        if: ${{ github.event_name == 'push' && steps.resolve.outputs.pr-number != '' }}
+        if: ${{ github.event_name == 'push' && steps.resolve.outputs.pr-number != '' && github.repository_owner == 'InferenceMAX' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        continue-on-error: true
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.actor }}
           ISSUE_NUMBER: ${{ steps.resolve.outputs.pr-number }}
         with:
+          github-token: ${{ github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
