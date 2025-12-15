@@ -2,8 +2,6 @@ name: "Full Sweep Scheduler - 1k1k"
 
 on:
     workflow_dispatch:
-    schedule:
-        - cron: "0 0 * * *"
 
 jobs:
     get-dsr1-configs:
@@ -177,7 +175,7 @@ jobs:
                 benchmark-dsr1-single-node,
                 benchmark-dsr1-multi-node,
             ]
-        if: ${{ always() && needs.get-dsr1-configs.result == 'success' && needs.get-dsr1-configs.outputs.single-node-search-space-config != '[]' && needs.get-dsr1-configs.outputs.multi-node-search-space-config != '[]'  }}
+        if: ${{ always() && needs.get-dsr1-configs.result == 'success' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
@@ -190,7 +188,7 @@ jobs:
                 benchmark-gptoss-single-node,
                 benchmark-gptoss-multi-node,
             ]
-        if: ${{ always() && needs.get-gptoss-configs.result == 'success' && needs.get-gptoss-configs.outputs.single-node-search-space-config != '[]' && needs.get-gptoss-configs.outputs.multi-node-search-space-config != '[]' }}
+        if: ${{ always() && needs.get-gptoss-configs.result == 'success' }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
@@ -213,7 +211,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Download results artifacts
-              uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+              uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
               with:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
@@ -224,7 +222,7 @@ jobs:
             - name: Calculate success rate
               run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
-            - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
