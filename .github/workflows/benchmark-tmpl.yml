@@ -75,6 +75,8 @@ env:
   EP_SIZE: ${{ inputs.ep }}
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
+  SPEC_DECODING: ${{ inputs.spec-decoding }}
+  DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
 
 permissions:
