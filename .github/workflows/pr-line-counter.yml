@@ -2,9 +2,9 @@ name: PR Line Counter
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review]
     paths:
-      - 'utils/matrix-logic/**'
+      - 'utils/matrix_logic/generate_sweep_configs.py'
 
 permissions:
   contents: read
@@ -17,11 +17,11 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      TARGET_FILE: utils/matrix-logic/generate_sweep_configs.py
+      TARGET_FILE: utils/matrix_logic/generate_sweep_configs.py
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Generate summary
         run: |
-          echo "## 📊 Line Count Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Line Count Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           FILE_EXISTS="${{ steps.line-count.outputs.file_exists }}"
@@ -94,20 +94,20 @@ jobs:
               echo "**Base Lines:** $BASE_LINE_COUNT" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               if [ "$LINE_DIFF" -gt 0 ]; then
-                echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** +$LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
               elif [ "$LINE_DIFF" -lt 0 ]; then
-                echo "**Change:** $LINE_DIFF lines 📉" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** $LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
               else
-                echo "**Change:** No change ➡️" >> $GITHUB_STEP_SUMMARY
+                echo "**Change:** No change" >> $GITHUB_STEP_SUMMARY
               fi
             else
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "**Base Lines:** 0 (new file)" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Change:** +$LINE_DIFF lines 📈" >> $GITHUB_STEP_SUMMARY
+              echo "**Change:** +$LINE_DIFF lines" >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "⚠️ **File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
+            echo "**File not found:** \`$TARGET_FILE\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Comment on PR

@@ -11,6 +11,9 @@ on:
       model:
         required: true
         type: string
+      model-prefix:
+        required: true
+        type: string
       precision:
         required: true
         type: string
@@ -41,6 +44,12 @@ on:
       conc:
         required: true
         type: string
+      spec-decoding:
+        required: true
+        type: string
+      disagg:
+        required: true
+        type: string
       random-range-ratio:
         required: false
         type: string
@@ -51,6 +60,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
   MODEL: ${{ inputs.model }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
@@ -62,6 +72,8 @@ env:
   EP_SIZE: ${{ inputs.ep }}
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
+  SPEC_DECODING: ${{ inputs.spec-decoding }}
+  DISAGG: ${{ inputs.disagg }}
 
 permissions:
   contents: read
@@ -122,7 +134,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -155,7 +167,7 @@ jobs:
         run: |
           python3 utils/process_result.py
       - name: Upload result
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: ${{ env.RESULT_FILENAME }}
+          name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json

@@ -3,7 +3,7 @@ name: Template - Collect Results
 on:
   workflow_call:
     inputs:
-      exp-name:
+      result-prefix:
         required: false
         type: string
         default: ''
@@ -17,37 +17,27 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
 
       - name: Download JSON artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           path: results/
-          pattern: ${{ inputs.exp-name && format('{0}_*', inputs.exp-name) || '*' }}
+          pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
       - name: Print summary
-        run: python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
+        run: |
+          pip install tabulate
+          python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
 
       - name: Aggregate results
-        run: python3 utils/collect_results.py results/ ${{ inputs.exp-name || 'all' }}
+        run: python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
 
       - name: Upload aggregated results
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: results_${{ inputs.exp-name || 'all' }}
-          path: agg_${{ inputs.exp-name || 'all' }}.json
-
-      - name: Plot performance
-        run: |
-          pip install -q matplotlib
-          python3 utils/plot_perf.py results/ ${{ inputs.exp-name || 'all' }}
-      - name: Upload performance graphs
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        with:
-          name: graphs_${{ inputs.exp-name || 'all' }}
-          path: |
-            tput_vs_intvty_*_${{ inputs.exp-name || 'all' }}.png
-            tput_vs_e2el_*_${{ inputs.exp-name || 'all' }}.png
+          name: results_${{ inputs.result-prefix || 'all' }}
+          path: agg_${{ inputs.result-prefix || 'all' }}.json

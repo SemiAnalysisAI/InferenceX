@@ -1,9 +1,10 @@
 name: Test Matrix Logic
+run-name: "Config Parsing Pytests PR #${{ github.event.pull_request.number }}"
 
 on:
   pull_request:
     paths:
-      - 'utils/matrix-logic/**'
+      - 'utils/matrix_logic/**'
 
 permissions:
   contents: read
@@ -17,7 +18,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Set up Python
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
@@ -29,7 +30,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pydantic pyyaml
 
-      - name: Run pytest
+      - name: test_generate_sweep_configs tests
         run: |
-          cd utils/matrix-logic
+          cd utils/matrix_logic
           pytest test_generate_sweep_configs.py -v
+
+      - name: test_validation tests
+        run: |
+          cd utils/matrix_logic
+          pytest test_validation.py -v
