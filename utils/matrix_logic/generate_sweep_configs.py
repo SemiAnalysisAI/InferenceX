@@ -83,7 +83,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
-        entry[Fields.FIELD_RUN_EVAL.value] = i in eval_indices
+        entry[Fields.RUN_EVAL.value] = i in eval_indices
 
     return matrix_values
 
@@ -746,7 +746,7 @@ def main():
         matrix_values = mark_eval_entries(matrix_values)
         # IF --evals-only is specified, filter to only eval entries
         if args.evals_only:
-            matrix_values = [e for e in matrix_values if e.get(Fields.FIELD_RUN_EVAL.value, False)]
+            matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
 
     print(json.dumps(matrix_values))
     return matrix_values

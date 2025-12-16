@@ -98,6 +98,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            run-eval: ${{ matrix.config.run-eval }}
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]

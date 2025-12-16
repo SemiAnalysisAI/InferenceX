@@ -50,14 +50,13 @@ on:
       disagg:
         required: true
         type: string
+      run-eval:
+        type: boolean
+        required: true
       random-range-ratio:
         required: false
         type: string
         default: '0.8'
-      run-eval:
-        type: boolean
-        required: false
-        default: false
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
