@@ -971,60 +971,60 @@ dsr1-fp4-gb200-dynamo-sglang:
   - isl: 8192
     osl: 1024
     search-space:
-    # - spec-decoding: "none"
-    #   conc-list: [ 4, 8, 32, 64 ]
-    #   prefill:
-    #     num-worker: 1
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: false
-    #     additional-settings:
-    #     - "PREFILL_NODES=1"
-    #     - "N_ADDITIONAL_FRONTENDS=8"
-    #     - "SCRIPT_MODE=8k1k-low-latency"
-    #   decode:
-    #     num-worker: 4
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: true
-    #     additional-settings:
-    #     - "DECODE_NODES=4"
-    # - spec-decoding: "none"
-    #   conc-list: [ 512, 1024, 2048, 4096 ]
-    #   prefill:
-    #     num-worker: 6
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: false
-    #     additional-settings:
-    #     - "PREFILL_NODES=6"
-    #     - "N_ADDITIONAL_FRONTENDS=9"
-    #     - "SCRIPT_MODE=8k1k-middle-curve"
-    #   decode:
-    #     num-worker: 1
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: true
-    #     additional-settings:
-    #     - "DECODE_NODES=12"
-    # - spec-decoding: "none"
-    #   conc-list: [ 1024, 2048 ]
-    #   prefill:
-    #     num-worker: 10
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: true
-    #     additional-settings:
-    #     - "PREFILL_NODES=10"
-    #     - "N_ADDITIONAL_FRONTENDS=8"
-    #     - "SCRIPT_MODE=8k1k-max-tpt"
-    #   decode:
-    #     num-worker: 1
-    #     tp: 1
-    #     ep: 1
-    #     dp-attn: true
-    #     additional-settings:
-    #     - "DECODE_NODES=8"
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32, 64 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-low-latency"
+      decode:
+        num-worker: 4
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=4"
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048, 4096 ]
+      prefill:
+        num-worker: 6
+        tp: 1
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=6"
+        - "N_ADDITIONAL_FRONTENDS=9"
+        - "SCRIPT_MODE=8k1k-middle-curve"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=12"
+    - spec-decoding: "none"
+      conc-list: [ 1024, 2048, ]
+      prefill:
+        num-worker: 10
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=10"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-max-tpt"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"
     - spec-decoding: "none"
       conc-list: [ 8192 ]
       prefill:
