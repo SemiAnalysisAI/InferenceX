@@ -126,3 +126,13 @@
   description:
     - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description: |
+    - Update vLLM image for NVIDIA configs from vLLM 0.11.2 to vLLM 0.12.0
+    - Adds VLLM_MXFP4_USE_MARLIN=1 to benchmarks/gptoss_fp4_h100_docker.sh and benchmarks/gptoss_fp4_h200_slurm.sh
+    - Adds VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 to benchmarks/gptoss_fp4_h100_slurm.sh
+    PR: https://github.com/InferenceMAX/InferenceMAX/pull/327
