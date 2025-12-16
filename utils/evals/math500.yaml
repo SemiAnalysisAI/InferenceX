@@ -9,7 +9,7 @@ dataset_name: algebra
 output_type: generate_until
 training_split: train
 test_split: test
-doc_to_text: "You are solving competition math problems.\n\nFormat rules:\n- Answer in a new. That line must start with `Answer: ` (capital A, colon, one space).\n- After `Answer: `, write ONLY the answer as inline LaTeX.\n- Use ONLY ASCII LaTeX commands (e.g. \\pi, \\frac{1}{2}, -). NO Unicode symbols.\n- Do NOT wrap the answer in $, $$, \\( \\), \\[ \\], or any other delimiters.\n- Do NOT use \\displaystyle or any display-style commands. Answer only this problem, the rest are examples. Problem: {{problem}}\n"
+doc_to_text: "You are solving competition math problems.\n\nFormat rules:\n- Answer in a new line that starts with `Answer: `.\n- After `Answer: `, write ONLY the answer as inline LaTeX.\n- Use ONLY ASCII LaTeX commands (e.g. \\pi, \\frac{1}{2}, -). NO Unicode symbols.\n- Do NOT wrap the answer in $, $$, \\( \\), \\[ \\], or any other delimiters.\n- Do NOT use \\displaystyle or any display-style commands. Answer only this problem, the rest are examples. Problem: {{problem}}\n"
 process_results: !function utils.process_results
 doc_to_target: "{{answer}}"
 generation_kwargs:
