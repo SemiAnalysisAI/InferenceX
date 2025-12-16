@@ -3,7 +3,7 @@ name: Template - Collect Evals
 on:
   workflow_call:
     inputs:
-      exp-name:
+      result-prefix:
         required: false
         type: string
         default: ''
@@ -25,19 +25,19 @@ jobs:
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: eval_results/
-          pattern: ${{ inputs.exp-name && format('eval_{0}_*', inputs.exp-name) || 'eval_*' }}
+          pattern: ${{ inputs.result-prefix && format('eval_{0}_*', inputs.result-prefix) || 'eval_*' }}
 
       - name: Summarize evals
         run: |
-          echo "## Eval Summary - ${{ inputs.exp-name || 'all' }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Eval Summary - ${{ inputs.result-prefix || 'all' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          python3 utils/collect_eval_results.py eval_results/ ${{ inputs.exp-name || 'all' }} >> $GITHUB_STEP_SUMMARY
+          python3 utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
 
       - name: Upload aggregated evals
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: eval_results_${{ inputs.exp-name || 'all' }}
-          path: agg_eval_${{ inputs.exp-name || 'all' }}.json
+          name: eval_results_${{ inputs.result-prefix || 'all' }}
+          path: agg_eval_${{ inputs.result-prefix || 'all' }}.json
 
       - name: Cleanup downloaded eval artifacts
         if: ${{ always() }}

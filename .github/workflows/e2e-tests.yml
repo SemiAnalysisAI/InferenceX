@@ -105,8 +105,14 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
 
+    collect-evals:
+        needs: [test-sweep-multi-node, test-sweep-single-node]
+        if: ${{ always() }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
+
     calc-success-rate:
-        needs: collect-results
+        needs: [collect-results, collect-evals]
         if: ${{ always() }}
         runs-on: ubuntu-latest
 
