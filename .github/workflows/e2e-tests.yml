@@ -105,6 +105,8 @@ jobs:
         if: ${{ always() }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
+        with:
+            result-prefix: "bmk"
 
     collect-evals:
         needs: [test-sweep-multi-node, test-sweep-single-node]

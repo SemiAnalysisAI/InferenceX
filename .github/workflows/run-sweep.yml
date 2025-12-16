@@ -199,8 +199,6 @@ jobs:
         if: ${{ always() && needs.setup.result != 'skipped' }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
-        with:
-            result-prefix: "bmk"
 
     upload-changelog-metadata:
         needs: [setup, collect-results]
