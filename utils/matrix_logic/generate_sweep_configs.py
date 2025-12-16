@@ -567,11 +567,16 @@ def main():
         required=True,
         help='Configuration file holding runner information (YAML format)'
     )
-    parent_parser.add_argument(
+    eval_group = parent_parser.add_mutually_exclusive_group()
+    eval_group.add_argument(
         '--run-evals',
         action='store_true',
-        required=False,
-        help='When specified, run evals on a subset of configs.'
+        help='When specified, run evals on a subset of configs (in addition to all configs).'
+    )
+    eval_group.add_argument(
+        '--evals-only',
+        action='store_true',
+        help='When specified, run ONLY the eval subset (excludes non-eval configs).'
     )
 
     # Create main parser
@@ -736,9 +741,12 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Choose eval (opt-in via --run-evals)
-    if args.run_evals:
+    # Handle eval options (mutually exclusive)
+    if args.run_evals or args.evals_only:
         matrix_values = mark_eval_entries(matrix_values)
+        # IF --evals-only is specified, filter to only eval entries
+        if args.evals_only:
+            matrix_values = [e for e in matrix_values if e.get(Fields.FIELD_RUN_EVAL.value, False)]
 
     print(json.dumps(matrix_values))
     return matrix_values
