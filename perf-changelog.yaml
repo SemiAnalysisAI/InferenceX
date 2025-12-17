@@ -63,7 +63,7 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/233
 
 - config-keys:
-    - "*gb200-sglang"
+    - "*gb200-dynamo-sglang"
   description:
     - "Introduce improvements in GB200 SGLang DSR1 submission"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/257
