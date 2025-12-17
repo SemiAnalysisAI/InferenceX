@@ -29,6 +29,7 @@ jobs:
 
       - name: Summarize evals
         run: |
+          pip install tabulate
           echo "## Eval Summary - ${{ inputs.result-prefix || 'all' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           python3 utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY

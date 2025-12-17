@@ -34,7 +34,9 @@ jobs:
           python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
 
       - name: Aggregate results
-        run: python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
+        run: |
+          pip install tabulate
+          python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
