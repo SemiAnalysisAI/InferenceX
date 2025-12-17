@@ -1,9 +1,9 @@
-- config-keys:
-    - 70b-fp8-*-vllm
-  description:
-    - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
-    - "6-7% uplift for llama for 6/8 configs"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/95
+# - config-keys:
+#     - 70b-fp8-*-vllm
+#   description:
+#     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
+#     - "6-7% uplift for llama for 6/8 configs"
+#   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/95
 
 - config-keys:
     - gptoss-fp4-*-trt
