@@ -39,6 +39,9 @@ jobs:
     outputs:
       pr-number: ${{ steps.parse.outputs.pr-number || steps.resolve.outputs.pr-number }}
       generator-args: ${{ steps.parse.outputs.generator-args || steps.resolve.outputs.generator-args }}
+      author-can-bypass: ${{ steps.auth.outputs.can-bypass }}
+      # IMPORTANT: immutable ref (commit SHA) to prevent TOCTOU on refs/pull/<n>/head
+      ref: ${{ steps.ref_comment.outputs.ref || steps.ref_other.outputs.ref }}
     steps:
       - name: Parse PR comment (/sweep ...)
         id: parse
@@ -65,6 +68,41 @@ jobs:
           echo "generator-args=$cmd_args" >> "$GITHUB_OUTPUT"
           echo "pr-number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
+      - name: Check author permissions (PR comments)
+        id: auth
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const username = context.payload.comment?.user?.login;
+            let permission = 'none';
+            try {
+              const res = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+              permission = res.data?.permission || 'none';
+            } catch (e) {
+              permission = 'none';
+            }
+            const canBypass = ['admin','maintain','write'].includes(permission);
+            core.info(`Author ${username} permission: ${permission}; bypass=${canBypass}`);
+            core.setOutput('can-bypass', canBypass ? 'true' : 'false');
+
+      # ---- PR SHA pinning (issue_comment path) ----
+      - name: Resolve immutable PR ref (pin to head SHA)
+        id: ref_comment
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/sweep') }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.issue.number;
+            const res = await github.rest.pulls.get({ owner, repo, pull_number: pr });
+            const sha = res.data.head.sha;
+            core.info(`Resolved PR #${pr} head SHA: ${sha}`);
+            core.setOutput('ref', sha);
+
       - name: Reply with run link
         if: ${{ github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/sweep') && github.repository_owner == 'InferenceMAX' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -72,6 +110,9 @@ jobs:
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.event.comment.user.login }}
+          GEN_CMD: ${{ steps.parse.outputs.generator-args }}
+          CAN_BYPASS: ${{ steps.auth.outputs.can-bypass }}
+          PINNED_REF: ${{ steps.ref_comment.outputs.ref }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -80,7 +121,12 @@ jobs:
             const issue_number = context.issue.number;
             const runUrl = process.env.RUN_URL;
             const author = process.env.AUTHOR;
-            const body = `@${author} thanks! Kicking off a sweep.\n\nRun: ${runUrl}\nApproval: required in environment 'bryan-test'.`;
+            const genCmd = process.env.GEN_CMD || '';
+            const canBypass = (process.env.CAN_BYPASS || '').toLowerCase() === 'true';
+            const pinned = process.env.PINNED_REF || '';
+            const shortSha = pinned ? pinned.slice(0, 7) : '';
+            const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'bryan-test'.";
+            const body = `@${author} thanks! Kicking off a sweep.\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n${approvalMsg}`;
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
       - name: Find PR for this branch (if any)
@@ -116,6 +162,30 @@ jobs:
           echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
           echo "generator-args=$gen_args" >> "$GITHUB_OUTPUT"
 
+      # ---- Immutable ref for push/dispatch:
+      # If this is tied to an open PR, pin to PR head SHA; else use the pushed commit SHA.
+      - name: Resolve immutable ref (pin PR to head SHA; else use event SHA)
+        id: ref_other
+        if: ${{ github.event_name != 'issue_comment' }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr-number }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prStr = process.env.PR_NUMBER || '';
+            if (prStr) {
+              const pr = Number(prStr);
+              const res = await github.rest.pulls.get({ owner, repo, pull_number: pr });
+              const sha = res.data.head.sha;
+              core.info(`Resolved PR #${pr} head SHA: ${sha}`);
+              core.setOutput('ref', sha);
+            } else {
+              core.info(`No PR detected; using event SHA: ${context.sha}`);
+              core.setOutput('ref', context.sha);
+            }
+
       - name: Reply with run link (manual trigger)
         if: ${{ github.event_name == 'workflow_dispatch' && steps.resolve.outputs.pr-number != '' && github.repository_owner == 'InferenceMAX' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -124,6 +194,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.actor }}
           ISSUE_NUMBER: ${{ steps.resolve.outputs.pr-number }}
+          GEN_CMD: ${{ steps.resolve.outputs.generator-args }}
+          PINNED_REF: ${{ steps.ref_other.outputs.ref }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -132,7 +204,10 @@ jobs:
             const issue_number = process.env.ISSUE_NUMBER;
             const runUrl = process.env.RUN_URL;
             const author = process.env.AUTHOR;
-            const body = `@${author} triggered a manual sweep.\n\nRun: ${runUrl}\n(Manual run on branch ${context.ref})`;
+            const genCmd = process.env.GEN_CMD || '';
+            const pinned = process.env.PINNED_REF || '';
+            const shortSha = pinned ? pinned.slice(0, 7) : '';
+            const body = `@${author} triggered a manual sweep.\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n(Manual run on branch ${context.ref})`;
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
       - name: Reply with run link (push trigger)
@@ -143,6 +218,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTHOR: ${{ github.actor }}
           ISSUE_NUMBER: ${{ steps.resolve.outputs.pr-number }}
+          GEN_CMD: ${{ steps.resolve.outputs.generator-args }}
+          PINNED_REF: ${{ steps.ref_other.outputs.ref }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -151,28 +228,47 @@ jobs:
             const issue_number = process.env.ISSUE_NUMBER;
             const runUrl = process.env.RUN_URL;
             const author = process.env.AUTHOR;
-            const body = `@${author} pushed changes and triggered a sweep.\n\nRun: ${runUrl}\n(Push on ${context.ref})`;
+            const genCmd = process.env.GEN_CMD || '';
+            const pinned = process.env.PINNED_REF || '';
+            const shortSha = pinned ? pinned.slice(0, 7) : '';
+            const body = `@${author} pushed changes and triggered a sweep.\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n(Push on ${context.ref})`;
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
   approval:
     needs: get-jobs
-    if: ${{ (github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '') || (github.event_name == 'push' && needs.get-jobs.outputs.generator-args != '') }}
+    # Require environment approval when:
+    # - push events (unchanged), or
+    # - PR comments from non-trusted authors
+    if: ${{ (github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass != 'true') || (github.event_name == 'push' && needs.get-jobs.outputs.generator-args != '') }}
     runs-on: ubuntu-latest
     name: approval
     environment: bryan-test
     steps:
       - run: echo "approved"
 
+  validate-trusted:
+    needs: [get-jobs]
+    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass == 'true' }}
+    uses: ./.github/workflows/e2e-tests.yml
+    name: validate (trusted author)
+    secrets: inherit
+    with:
+      generate-cli-command: ${{ needs.get-jobs.outputs.generator-args }}
+      test-name: PR #${{ needs.get-jobs.outputs.pr-number }} sweep
+      # Use pinned SHA to prevent TOCTOU on refs/pull/<n>/head
+      ref: ${{ needs.get-jobs.outputs.ref }}
+
   validate:
     needs: [get-jobs, approval]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.approval.result == 'success' }}
+    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass != 'true' && needs.approval.result == 'success' }}
     uses: ./.github/workflows/e2e-tests.yml
     name: validate
     secrets: inherit
     with:
       generate-cli-command: ${{ needs.get-jobs.outputs.generator-args }}
       test-name: PR #${{ needs.get-jobs.outputs.pr-number }} sweep
-      ref: refs/pull/${{ needs.get-jobs.outputs.pr-number }}/head
+      # Use pinned SHA to prevent TOCTOU on refs/pull/<n>/head
+      ref: ${{ needs.get-jobs.outputs.ref }}
 
   validate-nonpr:
     needs: [get-jobs, approval]
@@ -183,7 +279,8 @@ jobs:
     with:
       generate-cli-command: ${{ needs.get-jobs.outputs.generator-args }}
       test-name: Manual/Push sweep
-      ref: ${{ needs.get-jobs.outputs.pr-number && format('refs/pull/{0}/head', needs.get-jobs.outputs.pr-number) || '' }}
+      # For push/dispatch, this is either PR head SHA (if PR found) or event SHA.
+      ref: ${{ needs.get-jobs.outputs.ref }}
 
   note-ignored:
     # Inform when comment doesn't meet criteria (non-PR or not a /sweep)
