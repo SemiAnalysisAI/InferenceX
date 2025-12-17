@@ -81,3 +81,8 @@
     - Update vLLM image for NVIDIA configs from vLLM 0.11.0 to vLLM 0.11.2
     - Adds kv-cache-dtype: fp8 to benchmarks/gptoss_fp4_b200_docker.sh
     PR: https://github.com/InferenceMAX/InferenceMAX/pull/273
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description: |
+    - Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1 
+    PR: https://github.com/InferenceMAX/InferenceMAX/pull/330

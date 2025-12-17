@@ -11,6 +11,7 @@
 # RESULT_FILENAME
 # NUM_PROMPTS
 export SGLANG_USE_AITER=1
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 PREFILL_SIZE=196608
 if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
@@ -30,7 +31,9 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --disable-radix-cache \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=$PREFILL_SIZE \
---cuda-graph-max-bs=128 > $SERVER_LOG 2>&1 &
+--cuda-graph-max-bs=128 \
+--attention-backend aiter \
+--kv-cache-dtype fp8_e4m3 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
