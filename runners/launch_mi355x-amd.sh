@@ -16,6 +16,8 @@ else
   export NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
+export ENROOT_RUNTIME_PATH=/tmp
+
 set -x
 salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
