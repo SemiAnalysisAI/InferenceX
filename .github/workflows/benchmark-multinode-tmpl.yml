@@ -86,7 +86,7 @@ env:
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
-  MODEL_PATH: ${{ inputs.model-path }}
+  MODEL: ${{ inputs.model }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   ISL: ${{ inputs.isl }}

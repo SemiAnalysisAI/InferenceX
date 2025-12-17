@@ -20,7 +20,7 @@ srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import 
 export IMAGE=$SQUASH_FILE
 
 # MODEL_PATH is set in `nvidia-master.yaml` or any other yaml files
-export MODEL_PATH=$MODEL_PATH
+export MODEL_PATH=$MODEL
 
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
