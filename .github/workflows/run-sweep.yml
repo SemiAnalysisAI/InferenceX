@@ -40,7 +40,7 @@ jobs:
                   pip install pydantic
 
                   if [ "${{ github.event_name }}" == "pull_request" ]; then
-                      BASE_REF="origin/${{ github.base_ref }}"
+                      BASE_REF="0291997555a6d6f7aa58dbf19f56077162aca21a"
                       HEAD_REF="${{ github.event.pull_request.head.sha }}"
                   else
                       BASE_REF="${{ github.event.before }}"
