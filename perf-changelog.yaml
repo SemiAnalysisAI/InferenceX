@@ -86,3 +86,8 @@
   description: |
     - Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1 
     PR: https://github.com/InferenceMAX/InferenceMAX/pull/330
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description: |
+    - Add benchmark script for GPTOSS FP4 B200 TRT-LLM
+    PR: https://github.com/InferenceMAX/InferenceMAX/pull/256
