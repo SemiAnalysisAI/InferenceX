@@ -9,14 +9,16 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+# NUM_PROMPTS
+
 export SGLANG_USE_AITER=1
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 PREFILL_SIZE=196608
 if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
         if [[ "$CONC" -gt "32" ]]; then
-                PREFILL_SIZE=32768
-        fi
+		PREFILL_SIZE=32768
+	fi
 fi
 
 set -x
@@ -29,7 +31,8 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=$PREFILL_SIZE \
 --cuda-graph-max-bs=128 \
-> $SERVER_LOG 2>&1 &
+--attention-backend aiter \
+--kv-cache-dtype fp8_e4m3 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -46,7 +49,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

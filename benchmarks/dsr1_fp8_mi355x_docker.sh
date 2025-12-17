@@ -9,6 +9,7 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+# NUM_PROMPTS
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
@@ -36,16 +37,6 @@ source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
-  if [[ "$OSL" == "8192" ]]; then
-    NUM_PROMPTS=$(( CONC * 20 ))
-  else
-    NUM_PROMPTS=$(( CONC * 50 ))
-  fi
-else
-  NUM_PROMPTS=$(( CONC * 10 ))
-fi
 
 run_benchmark_serving \
     --model "$MODEL" \
