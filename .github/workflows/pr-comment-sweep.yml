@@ -125,7 +125,7 @@ jobs:
             const canBypass = (process.env.CAN_BYPASS || '').toLowerCase() === 'true';
             const pinned = process.env.PINNED_REF || '';
             const shortSha = pinned ? pinned.slice(0, 7) : '';
-            const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'bryan-test'.";
+            const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'Outside Collaborator E2E Test'.";
             const body = `@${author} thanks! Kicking off a sweep.\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n${approvalMsg}`;
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
@@ -242,7 +242,7 @@ jobs:
     if: ${{ (github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass != 'true') || (github.event_name == 'push' && needs.get-jobs.outputs.generator-args != '') }}
     runs-on: ubuntu-latest
     name: approval
-    environment: bryan-test
+    environment: Outside Collaborator E2E Test
     steps:
       - run: echo "approved"
 
