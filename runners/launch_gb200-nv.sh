@@ -19,22 +19,15 @@ srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import 
 # Update the IMAGE variable to the squash file
 export IMAGE=$SQUASH_FILE
 
+# MODEL_PATH is set in `nvidia-master.yaml` or any other yaml files
+export MODEL_PATH=$MODEL_PATH
+
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-
-    if [[ $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
-    else
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
-    fi
-
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
 else
-
-    export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
 fi
-
 
 export ISL="$ISL"
 export OSL="$OSL"
