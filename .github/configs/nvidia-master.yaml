@@ -773,7 +773,7 @@ dsr1-fp4-gb200-dynamo-trt:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp8-gb200-dynamo-sglang:
-  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
+  image: lmsysorg/sglang:v0.5.5.post2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb200
@@ -895,8 +895,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         - "DECODE_NODES=8"
 
 dsr1-fp4-gb200-dynamo-sglang:
-  # TODO: swap
-  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
+  image: lmsysorg/sglang:v0.5.5.post2
   # TODO: what is the right name?
   model: deepseek-ai/DeepSeek-R1-0528-fp4-v2
   model-prefix: dsr1

@@ -13,8 +13,13 @@ export SLURM_JOB_NAME="benchmark-dynamo.job"
 # For now we add conditionals to this script to use newer code for the 1k1k configs
 
 ### FRAMEWORK_DIFF_IF_STATEMENT #1 - difference in setting up envvars
+SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
+# Update the IMAGE variable to the squash file
+export IMAGE=$SQUASH_FILE
+
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-    export IMAGE="/mnt/lustre01/artifacts/containers/lmsysorg+sglang+v0.5.5.post2.sqsh"
 
     if [[ $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
@@ -25,11 +30,6 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
 else
-    SQUASH_FILE="/mnt/lustre01/users/sa-shared/images/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-
-    # Update the IMAGE variable to the squash file
-    export IMAGE=$SQUASH_FILE
 
     export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
