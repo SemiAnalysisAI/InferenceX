@@ -333,7 +333,7 @@ gptoss-fp4-h200-vllm:
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
   # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
-  model: /mnt/lustre01/models/deepseek-r1-0528
+  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2
   model-prefix: dsr1
   runner: gb200
   precision: fp4
