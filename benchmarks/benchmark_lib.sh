@@ -116,6 +116,7 @@ run_benchmark_serving() {
     local max_concurrency=""
     local result_filename=""
     local result_dir=""
+    local workspace_dir=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -158,6 +159,10 @@ run_benchmark_serving() {
                 ;;
             --result-dir)
                 result_dir="$2"
+                shift 2
+                ;;
+            --bench-serving-dir)
+                workspace_dir="$2"
                 shift 2
                 ;;
             *)
@@ -220,15 +225,13 @@ run_benchmark_serving() {
         fi
     fi
 
-    if [[ -z "$GITHUB_WORKSPACE" ]]; then
-        echo "Warning: 'GITHUB_WORKSPACE' is not set, indicating that this script may not be running \
-        in a GitHub Actions environment. Setting 'GITHUB_WORKSPACE' to current directory for benchmark execution."
-        export GITHUB_WORKSPACE=$(pwd)
+    if [[ -z "$workspace_dir" ]]; then
+        workspace_dir=$(pwd)
     fi
 
     # Run benchmark serving
     set -x
-    python3 "$GITHUB_WORKSPACE/utils/bench_serving/benchmark_serving.py" \
+    python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py" \
         --model "$model" \
         --backend "$backend" \
         --base-url "http://0.0.0.0:$port" \
