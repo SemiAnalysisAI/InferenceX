@@ -642,6 +642,8 @@ async def benchmark(
         multi_modal_content=test_mm_content,
         ignore_eos=ignore_eos,
     )
+    
+    print(f"DEBUG: prefill_len={test_prompt_len}, decode_len={test_output_len}")
 
     # Take from vLLM ready_checker.py
     # https://github.com/vllm-project/vllm/blob/e6ba2000aef3e61ca84bb114472badecbd533ee9/vllm/benchmarks/lib/ready_checker.py#L14
