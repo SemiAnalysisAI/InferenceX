@@ -371,7 +371,7 @@ def sample_random_requests(
     range_ratio: float,
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
-) -> List[Tuple[str, int, int]]:
+) -> List[Tuple[str, int, int]]:    
     prefix_token_ids = np.random.randint(0, tokenizer.vocab_size, size=prefix_len).tolist()
 
     if use_chat_template:
@@ -392,6 +392,13 @@ def sample_random_requests(
 
     input_lens = sample_uniform(input_len)
     output_lens = sample_uniform(output_len)
+
+    # Make the first request have maximum possible length to ensure the benchmark
+    # fails early if max_model_len is set too low
+    max_input_len = int(input_len * (1.0 + range_ratio + 0.02))
+    max_output_len = int(output_len * (1.0 + range_ratio + 0.02))
+    input_lens[0] = max_input_len
+    output_lens[0] = max_output_len
     offsets = np.random.randint(0, tokenizer.vocab_size, size=num_prompts)
 
     input_requests = []
@@ -643,7 +650,6 @@ async def benchmark(
         ignore_eos=ignore_eos,
     )
     
-    print(f"DEBUG: prefill_len={test_prompt_len}, decode_len={test_output_len}")
 
     # Take from vLLM ready_checker.py
     # https://github.com/vllm-project/vllm/blob/e6ba2000aef3e61ca84bb114472badecbd533ee9/vllm/benchmarks/lib/ready_checker.py#L14
@@ -655,13 +661,9 @@ async def benchmark(
         if t % delay == 0:
             try:
                 test_output = await request_func(request_func_input=test_input)
-                print(f"\n[DEBUG] Test attempt {t}: success={test_output.success}, "
-                    f"error={test_output.error}, "
-                    f"status_code={getattr(test_output, 'status_code', 'N/A')}")
                 if test_output.success:
                     break
             except aiohttp.ClientConnectorError as e:
-                print(f"\n[DEBUG] Connection error at {t}s: {e}")
                 pass
             await asyncio.sleep(delay)
     else:

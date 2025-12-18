@@ -50,14 +50,6 @@ on:
       disagg:
         required: true
         type: string
-      random-range-ratio:
-        required: false
-        type: string
-        default: '0.8'
-      ref:
-        description: "Git ref (branch/sha) to checkout"
-        required: false
-        type: string
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -68,7 +60,7 @@ env:
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
-  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
+  RANDOM_RANGE_RATIO: 0.2
   IMAGE: ${{ inputs.image }}
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}

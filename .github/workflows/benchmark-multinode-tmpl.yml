@@ -43,10 +43,6 @@ on:
       max-model-len:
         required: true
         type: string
-      random-range-ratio:
-        required: false
-        type: string
-        default: "0.8"
 
       prefill-num-worker:
         required: true
@@ -96,7 +92,7 @@ env:
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
-  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
+  RANDOM_RANGE_RATIO: 0.2
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
