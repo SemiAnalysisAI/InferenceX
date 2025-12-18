@@ -4,7 +4,7 @@ export HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-${USER: -1}/"
 export PORT_OFFSET=${USER: -1}
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/tmp/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   if [[ "$OSL" == "8192" ]]; then
