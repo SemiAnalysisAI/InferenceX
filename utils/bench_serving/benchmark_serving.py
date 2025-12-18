@@ -653,9 +653,13 @@ async def benchmark(
         if t % delay == 0:
             try:
                 test_output = await request_func(request_func_input=test_input)
+                print(f"\n[DEBUG] Test attempt {t}: success={test_output.success}, "
+                    f"error={test_output.error}, "
+                    f"status_code={getattr(test_output, 'status_code', 'N/A')}")
                 if test_output.success:
                     break
-            except aiohttp.ClientConnectorError:
+            except aiohttp.ClientConnectorError as e:
+                print(f"\n[DEBUG] Connection error at {t}s: {e}")
                 pass
             await asyncio.sleep(delay)
     else:
