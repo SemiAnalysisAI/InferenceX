@@ -40,7 +40,7 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
-mpirun -n 1 --oversubscribe --allow-run-as-root \
+PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
 --max_num_tokens 20000 \
