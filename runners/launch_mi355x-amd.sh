@@ -26,7 +26,6 @@ srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
---container-mount-home \
 --container-writable \
 --container-remap-root \
 --container-workdir=/workspace/ \
