@@ -330,7 +330,8 @@ class ChangelogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
-    description: str
+    description: list[str] = Field(min_length=1)
+    pr_link: str = Field(alias="pr-link")
 
 
 class ChangelogMetadata(BaseModel):
