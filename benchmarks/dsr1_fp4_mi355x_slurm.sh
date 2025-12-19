@@ -23,6 +23,8 @@ if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
 	fi
 fi
 
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+
 set -x
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --host=0.0.0.0 --port=$PORT \
