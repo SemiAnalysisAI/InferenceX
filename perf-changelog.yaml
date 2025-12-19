@@ -95,3 +95,11 @@
   description:
     - "Add benchmark script for GPTOSS FP4 B200 TRT-LLM"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/256
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
+  description:
+    - "Add more configurations for GB200 SGLang DSR1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/335
