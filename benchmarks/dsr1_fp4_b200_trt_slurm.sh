@@ -86,6 +86,7 @@ set -x
 
 MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 4096 ? MAX_MODEL_LEN : 4096 ))
+MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 4096 ? MAX_NUM_TOKENS : 4096 ))
 
 # Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
