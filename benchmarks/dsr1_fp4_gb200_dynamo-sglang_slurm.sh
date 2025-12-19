@@ -22,7 +22,7 @@ export TIME_LIMIT="04:00:00"
 export MODEL_PATH=$MODEL_PATH
 export CONFIG_DIR=$CONFIG_DIR
 export CONTAINER_IMAGE=$IMAGE
-export GPU_TYPE="gb200-fp8"
+export GPU_TYPE="gb200-fp4"
 
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
