@@ -35,3 +35,8 @@ bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh
 
 scancel $JOB_ID
 
+if ls gpucore.* 1> /dev/null 2>&1; then
+  echo "gpucore files exist. not good"
+  rm -f gpucore.*
+fi
+
