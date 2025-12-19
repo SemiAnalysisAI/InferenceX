@@ -30,7 +30,7 @@ srun --jobid=$JOB_ID \
 --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash -c "rm -rf /hf-hub-cache/.locks/* && benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh"
+bash -c "rm -rf /mnt/hf_hub_cache/.locks/* && bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh"
 
 scancel $JOB_ID
 
