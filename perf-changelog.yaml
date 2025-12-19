@@ -97,3 +97,9 @@
   description:
     - "Add more configurations for GB200 SGLang DSR1"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/335
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/330
