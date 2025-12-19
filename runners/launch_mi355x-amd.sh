@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-${USER: -1}/"
+export HF_HUB_CACHE_MOUNT="/hf-hub-cache
 export PORT_OFFSET=${USER: -1}
 
 PARTITION="compute"
