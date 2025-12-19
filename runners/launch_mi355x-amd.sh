@@ -23,7 +23,7 @@ salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --jobid=$JOB_ID bash -c "rm -rf /hf-hub-cache/.locks/*"
+srun --jobid=$JOB_ID bash -c "sudo rm -rf /hf-hub-cache/.locks/*"
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
