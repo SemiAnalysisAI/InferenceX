@@ -12,7 +12,6 @@
 # NUM_PROMPTS
 # PORT_OFFSET
 
-
 export SGLANG_USE_AITER=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
