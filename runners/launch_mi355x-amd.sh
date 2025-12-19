@@ -1,23 +1,10 @@
 #!/usr/bin/env bash
 
-# === Workflow-defined Env Vars ===
-# IMAGE
-# MODEL
-# TP
-# HF_HUB_CACHE
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# CONC
-# GITHUB_WORKSPACE
-# RESULT_FILENAME
-# HF_TOKEN
+export HF_HUB_CACHE_MOUNT="/hf-hub-cache"
+export PORT_OFFSET=${USER: -1}
 
-HF_HUB_CACHE_MOUNT="/nfsdata/hf_hub_cache-1/"  # Temp solution
-PORT=8888
-
-server_name="bmk-server"
+PARTITION="compute"
+SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
   if [[ "$OSL" == "8192" ]]; then
@@ -29,19 +16,27 @@ else
   export NUM_PROMPTS=$(( CONC * 10 ))
 fi
 
+export ENROOT_RUNTIME_PATH=/tmp
+
 set -x
-docker run --rm --ipc=host --shm-size=16g --network=host --name=$server_name \
---privileged --cap-add=CAP_SYS_ADMIN --device=/dev/kfd --device=/dev/dri --device=/dev/mem \
---cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
--v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
--v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
--e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e PORT=$PORT -e NUM_PROMPTS \
--e ISL -e OSL -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RANDOM_RANGE_RATIO -e RESULT_FILENAME  \
---entrypoint=/bin/bash \
-$IMAGE \
-benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_docker.sh"
+salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
+JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+
+srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+srun --jobid=$JOB_ID bash -c "sudo chmod -R a+rwX /hf-hub-cache/"
+srun --jobid=$JOB_ID \
+--container-image=$SQUASH_FILE \
+--container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-mount-home \
+--container-writable \
+--container-workdir=/workspace/ \
+--no-container-entrypoint --export=ALL \
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh
+
+scancel $JOB_ID
 
 if ls gpucore.* 1> /dev/null 2>&1; then
   echo "gpucore files exist. not good"
   rm -f gpucore.*
 fi
+
