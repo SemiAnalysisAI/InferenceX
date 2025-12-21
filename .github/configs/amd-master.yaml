@@ -182,7 +182,7 @@ dsr1-fp8-mi355x-sglang-standalone:
   image: rocm/sgl-dev:sglang-0.5.6.post1-rocm700-mi35x-mori-1218
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: mi355x-di
+  runner: mi355x
   precision: fp8
   framework: sglang-standalone
   multinode: true
