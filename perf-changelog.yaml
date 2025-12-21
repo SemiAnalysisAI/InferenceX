@@ -103,3 +103,10 @@
   description:
     - "Update MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/330
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
+  description:
+    - "fix: Pruning unnecessary concurrencies "
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/358
