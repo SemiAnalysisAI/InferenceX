@@ -93,6 +93,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -121,6 +122,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            ref: ${{ inputs.ref }}
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]
