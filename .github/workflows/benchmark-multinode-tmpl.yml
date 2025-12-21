@@ -138,7 +138,6 @@ jobs:
 
       - name: Launch multi-node job script
         env:
-          IS_MULTINODE: true
           RUNNER_NAME: ${{ runner.name }}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_ptp${{ env.PREFILL_TP }}pep${{ env.PREFILL_EP}}_dtp${{ env.DECODE_TP}}dep${{ env.DECODE_EP }}_${{ env.FRAMEWORK }}_specdec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
