@@ -5,10 +5,6 @@ on:
   issue_comment:
     types: [created]
 
-concurrency:
-  group: "PR#${{ github.event.issue.number || github.ref_name }}"
-  cancel-in-progress: true
-
 permissions:
   contents: read
   issues: write
@@ -121,21 +117,13 @@ jobs:
     steps:
       - run: echo "approved"
 
-  validate-trusted:
-    needs: [get-jobs]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass == 'true' }}
-    uses: ./.github/workflows/e2e-tests.yml
-    name: validate (trusted author)
-    secrets: inherit
-    with:
-      generate-cli-command: ${{ needs.get-jobs.outputs.generator-args }}
-      test-name: PR #${{ needs.get-jobs.outputs.pr-number }} sweep
-      # Use pinned SHA to prevent TOCTOU on refs/pull/<n>/head
-      ref: ${{ needs.get-jobs.outputs.ref }}
-
   validate:
     needs: [get-jobs, approval]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass != 'true' && needs.approval.result == 'success' }}
+    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && (needs.get-jobs.outputs.author-can-bypass == 'true' || needs.approval.result == 'success') }}
+    # Concurrency at job level so non-/sweep comments don't cancel active runs
+    concurrency:
+      group: "sweep-PR#${{ needs.get-jobs.outputs.pr-number }}"
+      cancel-in-progress: true
     uses: ./.github/workflows/e2e-tests.yml
     name: validate
     secrets: inherit
