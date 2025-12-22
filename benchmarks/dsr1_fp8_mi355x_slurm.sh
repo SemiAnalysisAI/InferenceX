@@ -10,16 +10,16 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # NUM_PROMPTS
+# PORT_OFFSET
 
-export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
 export SGLANG_USE_AITER=1
 export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 MAX_JOBS=128
+PORT=$(( 8888 + $PORT_OFFSET ))
 
-set -x
 python3 -m sglang.launch_server \
     --attention-backend aiter \
     --model-path $MODEL \
@@ -28,8 +28,7 @@ python3 -m sglang.launch_server \
     --tensor-parallel-size $TP \
     --trust-remote-code \
     --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 \
-    --disable-radix-cache \
+    --mem-fraction-static 0.8 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
     --cuda-graph-max-bs 128 \
@@ -56,3 +55,4 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+

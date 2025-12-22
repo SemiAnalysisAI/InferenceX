@@ -1,0 +1,112 @@
+- config-keys:
+    - 70b-fp8-*-vllm
+  description:
+    - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
+    - "6-7% uplift for llama for 6/8 configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/95
+
+- config-keys:
+    - gptoss-fp4-*-trt
+  description:
+    - "Upgrade GPT-OSS TRT images from 'release:1.1.0rc2.post2' to '1.2.0rc0.post1'"
+    - "Add NCCL_GRAPH_REGISTER=0 to benchmarks/gptoss_fp4_b200_trt_slurm.sh"
+    - "Change kv_cache_config.dtype from 'auto' to 'fp8' in benchmarks/gptoss_fp4_b200_trt_slurm.sh"
+    - "Remove MOE_BACKEND=CUTLASS, now just defaults to TRTLLM"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/110
+
+- config-keys:
+    - gptoss*
+    - dsr1*
+  description:
+    - "Remove Llama 70B runs to make room for multi-node disagg prefill+wideEP on h100/h200/b200/mi300/mi325/mi355"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/149
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Upgrade vLLM from 0.10.2 to 0.11.0 for GPT-OSS NVIDIA single-node configs"
+    - 'Add compilation-config ''{"cudagraph_mode":"PIECEWISE"}'' since vLLM 0.11.0 now defaults to FULL_AND_PIECEWISE'
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/159
+
+- config-keys:
+    - dsr1*
+  description:
+    - "Fix bug where 1k8k and 8k1k full sweeps had incorrect max-model-len for DeepSeek"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/163
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Consolidate H200 and B200 SGLang configurations to use unified v0.5.5-cu129-amd64 image tag"
+    - "Update deprecated SGLang server arguments to current equivalents"
+    - "Replace --enable-ep-moe with --ep-size $EP_SIZE"
+    - "Replace --enable-flashinfer-trtllm-moe with --moe-runner-backend flashinfer_trtllm"
+    - "Add -e EP_SIZE to Docker run commands in launch scripts"
+    - "Set ep:4 for all tp:4 entries, ep:8 for all tp:8 entries"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/204
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Extend concurrency to 128 for gptoss mi355x/b200 vllm configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/209
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Extend concurrency to 128 for gptoss b200 TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/233
+
+- config-keys:
+    - "*gb200-dynamo-sglang"
+  description:
+    - "Introduce improvements in GB200 SGLang DSR1 submission"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/257
+
+- config-keys:
+    - dsr1-fp8-h200-trt
+  description:
+    - "Update TRT image from nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc0.post1 to nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2"
+    - "Increase concurrency for some configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/266
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image for NVIDIA configs from vLLM 0.11.0 to vLLM 0.11.2"
+    - "Add kv-cache-dtype: fp8 to benchmarks/gptoss_fp4_b200_docker.sh"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/273
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Add benchmark script for GPTOSS FP4 B200 TRT-LLM"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/256
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
+  description:
+    - "Add more configurations for GB200 SGLang DSR1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/335
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/330
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
+  description:
+    - "fix: Pruning unnecessary concurrencies "
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/358
