@@ -8,6 +8,7 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+# NUM_PROMPTS
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
@@ -62,7 +63,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

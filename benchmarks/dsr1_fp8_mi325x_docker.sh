@@ -9,6 +9,7 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+# NUM_PROMPTS
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
@@ -41,6 +42,7 @@ source "$(dirname "$0")/benchmark_lib.sh"
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -48,7 +50,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

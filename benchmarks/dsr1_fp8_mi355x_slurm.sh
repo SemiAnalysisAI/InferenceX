@@ -9,6 +9,7 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+# NUM_PROMPTS
 
 export HF_MODULES_CACHE="/tmp/hf_modules_cache/"
 export SGLANG_USE_AITER=1
@@ -51,7 +52,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
