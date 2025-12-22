@@ -191,7 +191,24 @@ dsr1-fp8-mi355x-sglang-disagg:
   - isl: 1024
     osl: 1024
     search-space:
-    # "Top of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
+    # "Top of curve" (1 prefill worker at DEP8 and 1 decode worker at DEP16)
+    - spec-decoding: "eagle"
+      conc-list: [ 2048 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 16
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=2"
+    # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "eagle"
       conc-list: [ 256, 512, 1024 ]
       prefill:
@@ -271,7 +288,24 @@ dsr1-fp8-mi355x-sglang-disagg:
   - isl: 8192
     osl: 1024
     search-space:
-    # "Top of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
+    # "Top of curve" (1 prefill worker at DEP8 and 1 decode worker at DEP16)
+    - spec-decoding: "eagle"
+      conc-list: [ 2048 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 16
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=2"
+    # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "eagle"
       conc-list: [ 256, 512, 1024 ]
       prefill:

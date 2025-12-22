@@ -10,7 +10,10 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
     PREFILL_NODES DECODE_NODES SGL_SLURM_JOBS_PATH # SGL_SLURM_JOBS_PATH FIXME
 
 # Always clone and setup sglang_disagg
-git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
+# git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
+
+# Switch to origin repo url for supporting wide ep configs
+git clone --branch main https://github.com/billishyahao/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH"
 
