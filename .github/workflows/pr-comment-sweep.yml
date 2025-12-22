@@ -119,7 +119,8 @@ jobs:
 
   validate:
     needs: [get-jobs, approval]
-    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && (needs.get-jobs.outputs.author-can-bypass == 'true' || needs.approval.result == 'success') }}
+    # always() is required to evaluate this condition when 'approval' is skipped (trusted author)
+    if: ${{ always() && needs.get-jobs.result == 'success' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && (needs.get-jobs.outputs.author-can-bypass == 'true' || needs.approval.result == 'success') }}
     # Concurrency at job level so non-/sweep comments don't cancel active runs
     concurrency:
       group: "sweep-PR#${{ needs.get-jobs.outputs.pr-number }}"
