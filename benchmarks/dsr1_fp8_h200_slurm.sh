@@ -73,11 +73,11 @@ run_benchmark_serving \
 # Stop profiling and collect the generated trace if profiling was enabled
 if [[ "${PROFILE:-}" == "1" ]]; then
     echo "[PROFILE] Stopping profiling"
-    curl -s -X POST "http://0.0.0.0:$PORT/end_profile" || true
+    curl -s -X POST "http://0.0.0.0:$PORT/stop_profile" || true
 
     PROFILE_OUT_DIR="${SGLANG_TORCH_PROFILER_DIR:-/workspace/profiles}"
     # Prefer merged trace if present
-    TRACE_FILE=$(ls -t "$PROFILE_OUT_DIR"/merged-*.trace.json.gz 2>/dev/null | head -n1)
+    TRACE_FILE=$(ls -t "$PROFILE_OUT_DIR"/*.trace.json* 2>/dev/null | head -n1)
     if [[ -z "$TRACE_FILE" ]]; then
         TRACE_FILE=$(ls -t "$PROFILE_OUT_DIR"/*.trace.json.gz 2>/dev/null | head -n1)
     fi
