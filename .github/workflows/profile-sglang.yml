@@ -238,7 +238,7 @@ jobs:
         id: push-dispatch
         env:
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
-          PERFETTO_RELAY_URL: ${{ vars.PERFETTO_RELAY_URL }}
+          PERFETTO_RELAY_URL: https://oseltamivir.github.io/profiler-storage
         shell: bash
         run: |
           set -euo pipefail
@@ -382,7 +382,7 @@ jobs:
         id: push-push
         env:
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
-          PERFETTO_RELAY_URL: ${{ vars.PERFETTO_RELAY_URL }}
+          PERFETTO_RELAY_URL: https://oseltamivir.github.io/profiler-storage
         shell: bash
         run: |
           set -euo pipefail
