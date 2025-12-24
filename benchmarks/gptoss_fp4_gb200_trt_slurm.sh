@@ -12,6 +12,8 @@
 # PORT_OFFSET
 # DP_ATTENTION
 # EP_SIZE
+# NUM_NODES (set by launch script for multi-node)
+# GPUS_PER_NODE (set by launch script)
 
 # GPTOSS TRTLLM Deployment Guide:
 # https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
@@ -20,6 +22,7 @@ echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 echo "MODEL_PATH: /models (mounted from $MODEL_PATH)"
+echo "NUM_NODES: ${NUM_NODES:-1}, GPUS_PER_NODE: ${GPUS_PER_NODE:-$TP}"
 
 # Use direct model path - mounted at /models inside container
 # This avoids HuggingFace permission issues on shared filesystem
@@ -70,16 +73,32 @@ set -x
 MAX_NUM_TOKENS=20000
 
 # Launch TRT-LLM server using direct model path
-mpirun -n 1 --oversubscribe --allow-run-as-root \
-    trtllm-serve $LOCAL_MODEL_PATH --port=$PORT \
-    --trust_remote_code \
-    --backend=pytorch \
-    --max_batch_size 512 \
-    --max_seq_len=$MAX_MODEL_LEN \
-    --max_num_tokens=$MAX_NUM_TOKENS \
-    --tp_size=$TP --ep_size=$EP_SIZE \
-    --extra_llm_api_options=$EXTRA_CONFIG_FILE \
-    > $SERVER_LOG 2>&1 &
+# For multi-node, mpirun uses SLURM's allocated nodes
+if [[ "${NUM_NODES:-1}" -gt 1 ]]; then
+    echo "Multi-node launch: $TP processes across $NUM_NODES nodes ($GPUS_PER_NODE GPUs/node)"
+    mpirun -n $TP --map-by ppr:${GPUS_PER_NODE}:node --allow-run-as-root \
+        trtllm-serve $LOCAL_MODEL_PATH --port=$PORT \
+        --trust_remote_code \
+        --backend=pytorch \
+        --max_batch_size 512 \
+        --max_seq_len=$MAX_MODEL_LEN \
+        --max_num_tokens=$MAX_NUM_TOKENS \
+        --tp_size=$TP --ep_size=$EP_SIZE \
+        --extra_llm_api_options=$EXTRA_CONFIG_FILE \
+        > $SERVER_LOG 2>&1 &
+else
+    echo "Single-node launch: $TP GPUs"
+    mpirun -n 1 --oversubscribe --allow-run-as-root \
+        trtllm-serve $LOCAL_MODEL_PATH --port=$PORT \
+        --trust_remote_code \
+        --backend=pytorch \
+        --max_batch_size 512 \
+        --max_seq_len=$MAX_MODEL_LEN \
+        --max_num_tokens=$MAX_NUM_TOKENS \
+        --tp_size=$TP --ep_size=$EP_SIZE \
+        --extra_llm_api_options=$EXTRA_CONFIG_FILE \
+        > $SERVER_LOG 2>&1 &
+fi
 
 SERVER_PID=$!
 
