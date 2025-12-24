@@ -225,11 +225,43 @@ jobs:
           name: profile_${{ env.RESULT_FILENAME }}
           path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
 
-      - name: Print artifact + instructions
+      - name: Checkout storage repo
+        uses: actions/checkout@v4
+        with:
+          repository: Oseltamivir/profiler-storage
+          path: storage
+          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
+          fetch-depth: 0
+
+      - name: Push profile to storage repo
+        id: push-dispatch
+        env:
+          TRACE_LOCAL: ${{ steps.run.outputs.trace }}
         run: |
-          echo "Artifact uploaded: profile_${RESULT_FILENAME}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "https://ui.perfetto.dev" | tee -a "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          mkdir -p "$dest_dir"
+          cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+          pushd storage >/dev/null
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git push
+          popd >/dev/null
+          RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/HEAD/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print Perfetto link
+        env:
+          RAW_URL: ${{ steps.push-dispatch.outputs.raw-url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          enc="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
+          perfetto_url="https://ui.perfetto.dev/#!/?url=${enc}"
+          echo "Perfetto URL: $perfetto_url"
+          printf "\nPerfetto: %s\n" "$perfetto_url" >> "$GITHUB_STEP_SUMMARY"
 
   profile-push:
     if: ${{ github.event_name == 'push' }}
@@ -321,8 +353,40 @@ jobs:
           name: profile_${{ env.RESULT_FILENAME }}
           path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
 
-      - name: Print artifact + instructions
+      - name: Checkout storage repo
+        uses: actions/checkout@v4
+        with:
+          repository: Oseltamivir/profiler-storage
+          path: storage
+          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
+          fetch-depth: 0
+
+      - name: Push profile to storage repo
+        id: push-push
+        env:
+          TRACE_LOCAL: ${{ steps.run.outputs.trace }}
         run: |
-          echo "Artifact uploaded: profile_${RESULT_FILENAME}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "Open Perfetto UI (https://ui.perfetto.dev) and load profile_${RESULT_FILENAME}.trace.json.gz from the artifact." | tee -a "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          mkdir -p "$dest_dir"
+          cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+          pushd storage >/dev/null
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git push
+          popd >/dev/null
+          RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/HEAD/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
+          
+      - name: Print Perfetto link
+        env:
+          RAW_URL: ${{ steps.push-dispatch.outputs.raw-url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          enc="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
+          perfetto_url="https://ui.perfetto.dev/#!/?url=${enc}"
+          echo "Perfetto URL: $perfetto_url"
+          printf "\nPerfetto: %s\n" "$perfetto_url" >> "$GITHUB_STEP_SUMMARY"
