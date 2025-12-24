@@ -185,14 +185,14 @@ gptoss-fp4-b200-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 8 }
+    #- { tp: 8, conc-start: 4, conc-end: 8 }
     - { tp: 2, ep: 2, dp-attn: true, conc-start: 32, conc-end: 128 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 64 }
     - { tp: 2, dp-attn: true, conc-start: 32, conc-end: 128 }
     - { tp: 4, dp-attn: true, conc-start: 32, conc-end: 64 }
-    - { tp: 1, conc-start: 128, conc-end: 128 }
-    - { tp: 2, conc-start: 4, conc-end: 32 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    #- { tp: 1, conc-start: 128, conc-end: 128 }
+    #- { tp: 2, conc-start: 4, conc-end: 32 }
+    #- { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     search-space:

@@ -56,9 +56,9 @@ moe_config:
 EOF
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    export TRTLLM_MOE_ALLTOALL_BACKEND="mnnvlthroughput"
-    export TRTLLM_FORCE_ALLTOALL_METHOD="MNNVL"
-    export TRTLLM_MOE_A2A_WORKSPACE_MB="2048"
+    #export TRTLLM_MOE_ALLTOALL_BACKEND="mnnvlthroughput"
+    export TRTLLM_FORCE_ALLTOALL_METHOD="NotEnabled"
+    #export TRTLLM_MOE_A2A_WORKSPACE_MB="2048"
     cat << EOF >> $EXTRA_CONFIG_FILE
 attention_dp_config:
     enable_balance: true
