@@ -13,7 +13,7 @@ on:
         type: string
   push:
     branches:
-      - '**'
+      - 'profiling'
 
 permissions:
   contents: read
@@ -238,31 +238,46 @@ jobs:
         id: push-dispatch
         env:
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
+          PERFETTO_RELAY_URL: ${{ vars.PERFETTO_RELAY_URL }}
+        shell: bash
         run: |
           set -euo pipefail
+
           dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+
           pushd storage >/dev/null
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
           git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
           git push
+          STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
-          RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/HEAD/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Print Perfetto link
+          export RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+
+          enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
+          enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
+
+          relay="${PERFETTO_RELAY_URL%/}"
+          RELAY_URL="${relay}/?src=${enc_src}&title=${enc_title}"
+
+          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
+          echo "relay-url=$RELAY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print Perfetto link (relay)
         env:
+          RELAY_URL: ${{ steps.push-dispatch.outputs.relay-url }}
           RAW_URL: ${{ steps.push-dispatch.outputs.raw-url }}
         shell: bash
         run: |
           set -euo pipefail
-          enc="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
-          perfetto_url="https://ui.perfetto.dev/#!/?url=${enc}"
-          echo "Perfetto URL: $perfetto_url"
-          printf "\nPerfetto: %s\n" "$perfetto_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "RAW trace URL: $RAW_URL"
+          echo "Perfetto Relay URL: $RELAY_URL"
+          printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"
 
   profile-push:
     if: ${{ github.event_name == 'push' }}
@@ -373,31 +388,46 @@ jobs:
           (timeout 5 bash -lc 'cat < /dev/null > /dev/tcp/ssh.github.com/443') && echo "port443 ok" || echo "port443 blocked"
 
       - name: Push profile to storage repo
-        id: push-push
+        id: push-dispatch
         env:
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
+          PERFETTO_RELAY_URL: ${{ vars.PERFETTO_RELAY_URL }}
+        shell: bash
         run: |
           set -euo pipefail
+
           dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+
           pushd storage >/dev/null
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
           git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
           git push
+          STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
-          RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/HEAD/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Print Perfetto link
+          export RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+
+          enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
+          enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
+
+          relay="${PERFETTO_RELAY_URL%/}"
+          RELAY_URL="${relay}/?src=${enc_src}&title=${enc_title}"
+
+          echo "raw-url=$RAW_URL" >> "$GITHUB_OUTPUT"
+          echo "relay-url=$RELAY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print Perfetto link (relay)
         env:
+          RELAY_URL: ${{ steps.push-push.outputs.relay-url }}
           RAW_URL: ${{ steps.push-push.outputs.raw-url }}
         shell: bash
         run: |
           set -euo pipefail
-          enc="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
-          perfetto_url="https://ui.perfetto.dev/#!/?url=${enc}"
-          echo "Perfetto URL: $perfetto_url"
-          printf "\nPerfetto: %s\n" "$perfetto_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "RAW trace URL: $RAW_URL"
+          echo "Perfetto Relay URL: $RELAY_URL"
+          printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"

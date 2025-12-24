@@ -72,7 +72,7 @@ if [[ "${PROFILE:-}" == "1" ]]; then
   echo "[PROFILE] Will start mid-run; dir=$SGLANG_TORCH_PROFILER_DIR"
 
   # Wait until the run has ramped up (tune this)
-  sleep "${PROFILE_DELAY_SECS:-60}"
+  #sleep "${PROFILE_DELAY_SECS:-60}"
 
   # Start a SMALL bounded capture (this auto-stops; do NOT call stop_profile)
   curl -sf -X POST "http://127.0.0.1:$PORT/start_profile" \
