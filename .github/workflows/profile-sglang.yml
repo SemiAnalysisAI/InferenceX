@@ -161,6 +161,21 @@ jobs:
           trace_path="profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
+            # Try to locate corresponding TP-0 traces produced by SGLang profiler
+            merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
+            if [ -n "${merged_latest}" ] && [ -f "${merged_latest}" ]; then
+              ts_name="${merged_latest##*/}"
+              ts_name="${ts_name#merged-}"
+              ts_name="${ts_name%.trace.json.gz}"
+              tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
+              tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
+              if [ -f "${tp0_decode}" ]; then
+                echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
+              fi
+              if [ -f "${tp0_extend}" ]; then
+                echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
+              fi
+            fi
           else
             echo "Profile trace not found: $trace_path" >&2
             exit 1
@@ -177,6 +192,20 @@ jobs:
         with:
           name: profile_${{ env.RESULT_FILENAME }}
           path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
+
+      - name: Upload TP-0-DECODE trace as artifact
+        if: ${{ steps.run.outputs.tp0_decode != '' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
+          path: ${{ steps.run.outputs.tp0_decode }}
+
+      - name: Upload TP-0-EXTEND trace as artifact
+        if: ${{ steps.run.outputs.tp0_extend != '' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
+          path: ${{ steps.run.outputs.tp0_extend }}
 
       - name: Checkout storage repo
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
