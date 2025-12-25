@@ -21,7 +21,6 @@ cd "$SGL_SLURM_JOBS_PATH" || exit 1
 export TIME_LIMIT="04:00:00"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME="DeepSeek-R1"
-export CONFIG_DIR=$CONFIG_DIR
 export CONTAINER_IMAGE=$IMAGE
 
 
