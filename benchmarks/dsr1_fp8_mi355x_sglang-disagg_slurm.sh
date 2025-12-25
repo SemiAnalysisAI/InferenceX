@@ -15,7 +15,7 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
 # Switch to origin repo url for supporting wide ep configs
 git clone --branch main https://github.com/billishyahao/sglang_disagg.git
 
-cd "$SGL_SLURM_JOBS_PATH"
+cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
 # Set up SGL launch script-specific environment variables
 export TIME_LIMIT="04:00:00"
@@ -28,7 +28,7 @@ export CONTAINER_IMAGE=$IMAGE
 export PREFILL_ENABLE_EP=true
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 export PREFILL_ENABLE_DP=true
-else 
+else
 export PREFILL_ENABLE_DP=false
 fi
 
@@ -42,7 +42,7 @@ fi
 
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
-# by a list of numbers delimted by 'x'. This is because of how the underlying launch script
+# by a list of numbers delimited by 'x'. This is because of how the underlying launch script
 # expects the concurrencies.
 bash ./submit_disagg.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
