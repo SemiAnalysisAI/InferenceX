@@ -179,7 +179,7 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "dsr1_1k8k"
+            result-prefix: "bmk_dsr1_1k8k"
 
     collect-gptoss-results:
         needs:
@@ -192,7 +192,7 @@ jobs:
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
-            exp-name: "gptoss_1k8k"
+            result-prefix: "bmk_gptoss_1k8k"
 
     calc-success-rate:
         needs: [collect-dsr1-results, collect-gptoss-results]
