@@ -79,7 +79,7 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     -H "Content-Type: application/json" \
     -d "{
       \"output_dir\": \"$SGLANG_TORCH_PROFILER_DIR\",
-      \"num_steps\": 10,
+      \"num_steps\": 5,
       \"start_step\": 0,
       \"activities\": [\"GPU\", \"CPU\"],
       \"merge_profiles\": true,
