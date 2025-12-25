@@ -8,13 +8,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
   # Set up environment variables for SLURM
   export SLURM_ACCOUNT="$USER"
   export SLURM_PARTITION="compute"
-  export SLURM_JOB_NAME="benchmark-sglang-standalone.job"
+  export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
   export SGL_SLURM_JOBS_PATH="sglang_disagg"
 
   export MODEL_NAME="DeepSeek-R1"
-  # export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
-  # export MODEL_PATH="/apps/data/models"
   export MODEL_PATH="/nfsdata"
   export ISL="$ISL"
   export OSL="$OSL"
@@ -37,7 +35,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
   # Process results from all configurations
 
-  # TODO(billishyahao): process the log file...
   # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
   # Find the latest log directory that contains the data
 
