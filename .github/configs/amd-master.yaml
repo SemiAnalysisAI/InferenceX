@@ -316,7 +316,7 @@ dsr1-fp8-mi355x-sglang-disagg:
     osl: 8192
     search-space:
     # "Top of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
-    - spec-decoding: "eagle"
+    - spec-decoding: "mtp"
       conc-list: [ 256, 512, 1024 ]
       prefill:
         num-worker: 1
@@ -334,7 +334,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_NODES=2"
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
-    - spec-decoding: "eagle"
+    - spec-decoding: "mtp"
       conc-list: [ 32, 64, 128 ]
       prefill:
         num-worker: 1
