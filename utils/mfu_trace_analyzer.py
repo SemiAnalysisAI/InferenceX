@@ -3,7 +3,7 @@
 MFU (Model FLOPS Utilization) Trace Analyzer for PyTorch Profiler Traces
 
 This script analyzes PyTorch profiler traces and adds MFU metrics to matmul operations.
-Designed for H200 SXM GPUs running SGLang with DeepSeek models.
+Supports multiple GPU types (B200, H200, H100, A100) and configurable model parameters.
 
 Features:
 - MFU (Model FLOPS Utilization) calculation
@@ -11,9 +11,24 @@ Features:
 - Arithmetic Intensity analysis
 - Roofline model theoretical TFLOPS
 - Layer-wise time breakdown (QKVO projection, SDPA, FFN)
+- Support for FP4, FP8, BF16, FP16 data types
+- Configurable tensor parallelism and batch sizes
+
+Supported GPUs:
+- B200: FP4 (9000 TFLOPS), FP8 (4500), BF16 (2250), 8 TB/s HBM, 128MB L2
+- H200: FP8 (1979 TFLOPS), BF16 (989), 4.8 TB/s HBM, 80MB L2
+- H100: FP8 (1979 TFLOPS), BF16 (989), 3.35 TB/s HBM, 50MB L2
+- A100: BF16 (312 TFLOPS), 2 TB/s HBM, 40MB L2
 
 Usage:
-    python mfu_trace_analyzer.py input_trace.json output_trace.json [--gpu H200]
+    # Basic usage with H200
+    python mfu_trace_analyzer.py input_trace.json --summary-only
+    
+    # With B200 and custom config
+    python mfu_trace_analyzer.py input_trace.json --gpu B200 --tp 8 --decode-batch-size 64
+    
+    # Full analysis with output
+    python mfu_trace_analyzer.py input_trace.json output_trace.json --gpu H200
 """
 
 import json
@@ -32,34 +47,52 @@ class GPUSpecs:
     name: str
     fp16_tflops: float      # BF16/FP16 peak TFLOPS
     fp8_tflops: float       # FP8 peak TFLOPS (if supported)
+    fp4_tflops: float       # FP4 peak TFLOPS (if supported, 0 if not)
     memory_bw_tb_s: float   # Memory bandwidth in TB/s
     num_sms: int
+    l2_cache_mb: float = 50.0  # L2 cache size in MB
     nvlink_bw_gb_s: float = 900.0  # NVLink bandwidth per GPU (GB/s, bidirectional)
     
 # GPU specifications database
 GPU_SPECS = {
+    "B200": GPUSpecs(
+        name="NVIDIA B200 SXM",
+        fp16_tflops=2250.0,     # BF16 Tensor Core peak (dense)
+        fp8_tflops=4500.0,      # FP8 Tensor Core peak (2x BF16)
+        fp4_tflops=9000.0,      # FP4 Tensor Core peak (4x BF16)
+        memory_bw_tb_s=8.0,     # HBM3e bandwidth (8 TB/s)
+        num_sms=160,            # Blackwell SM count
+        l2_cache_mb=128.0,      # 128 MB L2 cache
+        nvlink_bw_gb_s=1800.0   # NVLink 5.0: 1.8 TB/s bidirectional
+    ),
     "H200": GPUSpecs(
         name="NVIDIA H200 SXM",
         fp16_tflops=989.4,      # BF16 Tensor Core peak
         fp8_tflops=1978.9,      # FP8 Tensor Core peak (2x BF16)
+        fp4_tflops=0.0,         # H200 doesn't have FP4
         memory_bw_tb_s=4.8,     # HBM3e bandwidth
         num_sms=132,
+        l2_cache_mb=80.0,       # 80 MB L2 cache
         nvlink_bw_gb_s=900.0    # NVLink 4.0: 900 GB/s bidirectional
     ),
     "H100": GPUSpecs(
         name="NVIDIA H100 SXM", 
         fp16_tflops=989.4,
         fp8_tflops=1978.9,
+        fp4_tflops=0.0,         # H100 doesn't have FP4
         memory_bw_tb_s=3.35,    # HBM3 bandwidth
         num_sms=132,
+        l2_cache_mb=50.0,       # 50 MB L2 cache
         nvlink_bw_gb_s=900.0    # NVLink 4.0
     ),
     "A100": GPUSpecs(
         name="NVIDIA A100 SXM",
         fp16_tflops=312.0,
         fp8_tflops=312.0,       # A100 doesn't have FP8
+        fp4_tflops=0.0,         # A100 doesn't have FP4
         memory_bw_tb_s=2.0,     # HBM2e bandwidth
         num_sms=108,
+        l2_cache_mb=40.0,       # 40 MB L2 cache
         nvlink_bw_gb_s=600.0    # NVLink 3.0
     ),
 }
@@ -188,58 +221,150 @@ NORM_KERNEL_PATTERNS = {
 # Format: (kernel_pattern, grid_pattern) -> (M, N, K, dtype, layer_type)
 # grid_pattern: tuple of grid dimensions, or None to match any grid
 
-# DeepSeek-R1 model architecture for dimension inference
-DEEPSEEK_R1_CONFIG = {
+# Default model configuration for dimension inference
+# These can be overridden via command line arguments
+DEFAULT_MODEL_CONFIG = {
     'hidden_size': 7168,
     'num_experts': 256,
-    'expert_intermediate_size': 2048,  # Per expert
+    'expert_intermediate_size': 2048,  # Per expert (total, before TP division)
     'decode_batch_size': 64,  # Common decode batch size
+    'tp_degree': 8,  # Tensor parallelism degree - divides expert_intermediate
 }
 
+# Global model config that will be updated from command line args
+MODEL_CONFIG = DEFAULT_MODEL_CONFIG.copy()
+
 def infer_cuda_graph_kernel_dims(kernel_name: str, grid: List[int], 
-                                  model_config: Dict = None) -> Optional[Tuple[int, int, int, str, str]]:
+                                  model_config: Dict = None,
+                                  sibling_dims: Dict = None) -> Optional[Tuple[int, int, int, str, str]]:
     """
     Infer dimensions for CUDA Graph replayed kernels based on kernel name and grid.
+    
+    CUDA Graph replayed kernels (cudaGraphLaunch) don't have External ID linkage 
+    because they bypass PyTorch's operator dispatch during replay.
+    
+    Inference strategies (in order of priority):
+    1. Match to "sibling" kernels - same kernel type that HAS External ID (prefill versions)
+    2. Use model architecture knowledge (DeepSeek-R1 dimensions)
+    
+    Args:
+        sibling_dims: Dict mapping kernel_signature -> (N, K) from kernels with External ID
+                      e.g., {"nvjet_tst_64x64": (256, 7168)} 
     
     Returns (M, N, K, dtype, layer_type) or None if cannot infer.
     """
     if model_config is None:
-        model_config = DEEPSEEK_R1_CONFIG
+        model_config = MODEL_CONFIG
     
     hidden = model_config.get('hidden_size', 7168)
-    expert_intermediate = model_config.get('expert_intermediate_size', 2048)
+    tp_degree = model_config.get('tp_degree', 8)
+    # With TP=8, expert_intermediate is divided: 2048/8 = 256
+    expert_intermediate_per_gpu = model_config.get('expert_intermediate_size', 2048) // tp_degree
     decode_batch = model_config.get('decode_batch_size', 64)
     
     name_lower = kernel_name.lower()
     grid_tuple = tuple(grid) if grid else ()
     
-    # nvjet_tst_64x8_64x16_2x1_v_bz_TNT - MoE expert FFN during decode
-    if 'nvjet_tst_64x8' in name_lower:
-        # These are MoE expert FFN operations
-        # Two patterns based on grid:
-        # grid [2, 64, 1]: Up projection - [M, hidden] @ [hidden, intermediate]
-        # grid [2, 16, 1]: Down projection - [M, intermediate] @ [intermediate, hidden]
+    # Strategy 1: Use sibling dims to get architecture parameters, but use grid for direction
+    # nvjet_tst_64x64 with External ID gives us N=256 (intermediate), K=7168 (hidden)
+    # nvjet_tst_64x8 has same architecture but different grid patterns for UP vs DOWN
+    if sibling_dims and 'nvjet_tst_64x8' in name_lower and 'nvjet_tst_64x64' in sibling_dims:
+        # nvjet_tst_64x64 gives [hidden, intermediate_per_gpu] -> N=256, K=7168
+        # This is the UP projection: hidden -> intermediate
+        intermediate_per_gpu, hidden_from_sibling = sibling_dims['nvjet_tst_64x64']
         
+        # Use grid to determine if this is UP or DOWN projection
         if grid_tuple == (2, 64, 1):
-            # Likely up projection: more output tiles (N is larger)
-            # [64, 7168] @ [7168, 2048] or similar
-            return (decode_batch, expert_intermediate, hidden, 'bf16', 'FFN')
+            # More tiles → DOWN projection: intermediate -> hidden
+            # [M, intermediate] @ [intermediate, hidden] -> [M, hidden]
+            return (decode_batch, hidden_from_sibling, intermediate_per_gpu, 'bf16', 'FFN')
         elif grid_tuple == (2, 16, 1):
-            # Likely down projection: fewer output tiles
-            # [64, 2048] @ [2048, 7168]
-            return (decode_batch, hidden, expert_intermediate, 'bf16', 'FFN')
+            # Fewer tiles → UP projection: hidden -> intermediate
+            # [M, hidden] @ [hidden, intermediate] -> [M, intermediate]
+            return (decode_batch, intermediate_per_gpu, hidden_from_sibling, 'bf16', 'FFN')
     
-    # nvjet_tst_128x8 - likely same as known pattern
+    # Strategy 2: Use model architecture knowledge
+    # nvjet_tst_64x8 - MoE expert FFN during decode
+    # Reference: nvjet_tst_64x64 with M=992, N=256, K=7168 (N=256 = 2048/8)
+    if 'nvjet_tst_64x8' in name_lower:
+        # MoE FFN with TP=8: N = expert_intermediate / TP = 256
+        if grid_tuple == (2, 64, 1):
+            # More tiles → likely DOWN projection (output to hidden)
+            # [M, 256] @ [256, 7168] → [M, 7168]
+            return (decode_batch, hidden, expert_intermediate_per_gpu, 'bf16', 'FFN')
+        elif grid_tuple == (2, 16, 1):
+            # Fewer tiles → likely UP projection (output to intermediate_per_gpu)
+            # [M, 7168] @ [7168, 256] → [M, 256]
+            return (decode_batch, expert_intermediate_per_gpu, hidden, 'bf16', 'FFN')
+    
+    # nvjet_tst_128x8 - Shared expert (larger intermediate, not divided by TP?)
     if 'nvjet_tst_128x8' in name_lower:
-        # From known: [[1, 7168], [7168, 16160]]
+        # From traces with External ID: [[1, 7168], [7168, 16160]]
         return (1, 16160, hidden, 'bf16', 'FFN')
+    
+    # nvjet_tst_64x64 - Has External ID linkage in traces
+    if 'nvjet_tst_64x64' in name_lower:
+        # Let External ID linkage handle this (known: M=992, N=256, K=7168)
+        return None
     
     # router_gemm - MoE router kernel
     if 'router_gemm' in name_lower:
+        num_experts = model_config.get('num_experts', 256)
+        return (decode_batch, num_experts, hidden, 'bf16', 'FFN')
+    
+    return None
+
+
+def build_sibling_dims_map(events: List[Dict], cpu_op_dims: Dict) -> Dict[str, Tuple[int, int]]:
+    """
+    Build a map of kernel signatures to their known (N, K) dimensions.
+    
+    This finds kernels that DO have External ID linkage (typically from prefill phase)
+    and extracts their N, K dimensions. These can be used to infer dimensions for
+    "sibling" kernels in CUDA Graphs that don't have External ID.
+    
+    Returns: Dict mapping kernel_signature -> (N, K)
+             e.g., {"nvjet_tst_64x64": (256, 7168)}
+    """
+    sibling_dims = {}
+    
+    for event in events:
+        if event.get('cat') != 'kernel':
+            continue
+        
+        name = event.get('name', '')
+        ext_id = event.get('args', {}).get('External id')
+        
+        if ext_id is None:
+            continue
+        
+        # Extract kernel signature (e.g., "nvjet_tst_64x64" from full name)
+        if 'nvjet_tst_' in name.lower():
+            import re
+            match = re.search(r'nvjet_tst_(\d+x\d+)', name.lower())
+            if match:
+                sig = f"nvjet_tst_{match.group(1)}"
+                
+                # Find dimensions from CPU op
+                tp_rank = extract_tp_rank(event.get('pid'))
+                for key_ext_id in [ext_id, ext_id - 1, ext_id + 1]:
+                    key = (tp_rank, key_ext_id)
+                    if key in cpu_op_dims:
+                        dims = cpu_op_dims[key]
+                        if len(dims) >= 3:
+                            m, n, k = dims[0], dims[1], dims[2]
+                            if sig not in sibling_dims:
+                                sibling_dims[sig] = (n, k)
+                        break
+    
+    return sibling_dims
+    if 'router_gemm' in name_lower:
         # MoE routing: [M, hidden] @ [hidden, num_experts]
         num_experts = model_config.get('num_experts', 256)
-        # Estimate M from grid if possible
+        decode_batch = model_config.get('decode_batch_size', 64)
         return (decode_batch, num_experts, hidden, 'bf16', 'FFN')
+    
+    return None
     
     return None
 
@@ -426,11 +551,13 @@ class GemmInfo:
     m: int
     n: int
     k: int
-    dtype: str
-    duration_us: float
-    flops: int
-    tflops: float
-    mfu: float
+    dtype: str  # Primary dtype for display (e.g., 'fp8' or 'bf16')
+    input_dtype: str = ""  # Dtype of A and B matrices
+    output_dtype: str = ""  # Dtype of C matrix
+    duration_us: float = 0.0
+    flops: int = 0
+    tflops: float = 0.0
+    mfu: float = 0.0
     bytes_accessed: int = 0
     achieved_bw_tb_s: float = 0.0
     mbu: float = 0.0
@@ -440,12 +567,22 @@ class GemmInfo:
     kernel_name: str = ""
     external_id: int = 0
     layer_type: str = ""  # QKVO, SDPA, FFN, Other
+    # L2 cache-aware metrics
+    activation_bytes: int = 0      # A + C bytes (through HBM when weight cached)
+    weight_bytes: int = 0          # B bytes (may be served from L2 cache)
+    effective_mbu: float = 0.0     # MBU assuming weight is in L2 cache
+    l2_cache_benefit: float = 0.0  # Ratio of theoretical to effective bytes
 
 
-def get_bytes_per_element(dtype: str) -> int:
-    """Get bytes per element for a dtype"""
+def get_bytes_per_element(dtype: str) -> float:
+    """Get bytes per element for a dtype.
+    
+    Returns float to handle sub-byte types like FP4 (0.5 bytes).
+    """
     dtype_lower = dtype.lower()
-    if 'float8' in dtype_lower or 'fp8' in dtype_lower or 'e4m3' in dtype_lower or 'e5m2' in dtype_lower:
+    if 'float4' in dtype_lower or 'fp4' in dtype_lower or 'e2m1' in dtype_lower:
+        return 0.5  # FP4 is 4 bits = 0.5 bytes
+    elif 'float8' in dtype_lower or 'fp8' in dtype_lower or 'e4m3' in dtype_lower or 'e5m2' in dtype_lower:
         return 1  # FP8 is 1 byte
     elif 'float16' in dtype_lower or 'fp16' in dtype_lower or 'bfloat16' in dtype_lower or 'bf16' in dtype_lower:
         return 2  # FP16/BF16 is 2 bytes
@@ -461,16 +598,43 @@ def calculate_gemm_bytes(m: int, n: int, k: int, input_dtype: str, output_dtype:
     A: [M, K], B: [K, N], C: [M, N]
     
     For FP8 GEMMs, inputs are FP8, output is BF16
+    For FP4 GEMMs, inputs are FP4, output is typically BF16/FP16
     """
     input_bytes = get_bytes_per_element(input_dtype)
     output_bytes = get_bytes_per_element(output_dtype)
     
     # Read A, B; Write C
-    bytes_a = m * k * input_bytes
-    bytes_b = k * n * input_bytes
-    bytes_c = m * n * output_bytes
+    bytes_a = int(m * k * input_bytes)
+    bytes_b = int(k * n * input_bytes)
+    bytes_c = int(m * n * output_bytes)
     
     return bytes_a + bytes_b + bytes_c
+
+
+def calculate_gemm_bytes_breakdown(m: int, n: int, k: int, input_dtype: str, output_dtype: str = 'bf16') -> Tuple[int, int, int]:
+    """
+    Calculate bytes breakdown for GEMM: C = A @ B
+    A: [M, K], B: [K, N], C: [M, N]
+    
+    Returns (activation_bytes, weight_bytes, total_bytes)
+    where activation_bytes = A + C (through HBM when weight cached)
+          weight_bytes = B (may be served from L2 cache)
+    
+    For inference workloads, weight matrix B is often reused and may be cached in L2.
+    """
+    input_bytes = get_bytes_per_element(input_dtype)
+    output_bytes = get_bytes_per_element(output_dtype)
+    
+    # A = input activations, B = weight, C = output activations
+    bytes_a = int(m * k * input_bytes)
+    bytes_b = int(k * n * input_bytes)  # Weight matrix
+    bytes_c = int(m * n * output_bytes)
+    
+    activation_bytes = bytes_a + bytes_c
+    weight_bytes = bytes_b
+    total_bytes = bytes_a + bytes_b + bytes_c
+    
+    return (activation_bytes, weight_bytes, total_bytes)
 
 
 def calculate_gemm_flops(m: int, n: int, k: int) -> int:
@@ -531,10 +695,21 @@ def calculate_mbu(bytes_accessed: int, duration_us: float, peak_bw_tb_s: float) 
 
 
 def get_dtype_peak_tflops(dtype: str, gpu_specs: GPUSpecs) -> float:
-    """Get peak TFLOPS based on data type"""
+    """Get peak TFLOPS based on data type.
+    
+    Falls back to lower precision peak if higher precision not supported.
+    """
     dtype_lower = dtype.lower()
-    if 'float8' in dtype_lower or 'fp8' in dtype_lower or 'e4m3' in dtype_lower or 'e5m2' in dtype_lower:
-        return gpu_specs.fp8_tflops
+    if 'float4' in dtype_lower or 'fp4' in dtype_lower or 'e2m1' in dtype_lower:
+        # FP4 support - fall back to FP8 if not available
+        if gpu_specs.fp4_tflops > 0:
+            return gpu_specs.fp4_tflops
+        elif gpu_specs.fp8_tflops > 0:
+            return gpu_specs.fp8_tflops
+        else:
+            return gpu_specs.fp16_tflops
+    elif 'float8' in dtype_lower or 'fp8' in dtype_lower or 'e4m3' in dtype_lower or 'e5m2' in dtype_lower:
+        return gpu_specs.fp8_tflops if gpu_specs.fp8_tflops > 0 else gpu_specs.fp16_tflops
     else:
         return gpu_specs.fp16_tflops
 
@@ -673,12 +848,16 @@ def parse_deep_gemm_kernel_dims(kernel_name: str, grid: List[int],
     return (m, n, k, dtype)
 
 
-def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int, str]]:
+def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int, str, str]]:
     """
-    Extract M, N, K dimensions and dtype from CPU op.
+    Extract M, N, K dimensions and dtypes from CPU op.
+    
     For sglang::deep_gemm_fp8_fp8_bf16_nt:
+      Input types: ['c10::Float8_e4m3fn', 'float', 'c10::Float8_e4m3fn', 'float', 'c10::BFloat16']
       Input Dims: [[M, K], [M, ?], [N, K], [?, ?], [M, N]]
-      A = [M, K], B = [N, K].T, C = [M, N]
+      A = [M, K] (fp8), B = [N, K].T (fp8), C = [M, N] (bf16)
+    
+    Returns (M, N, K, input_dtype, output_dtype) or None
     """
     args = event.get('args', {})
     input_dims = args.get('Input Dims', [])
@@ -688,20 +867,35 @@ def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int,
     if not input_dims:
         return None
     
-    # Get dtype from first input type
-    dtype = 'bf16'  # default
+    # Parse input and output dtypes
+    input_dtype = 'bf16'  # default
+    output_dtype = 'bf16'  # default
+    
     if input_types:
-        for t in input_types:
+        # For deep_gemm: types are [A_type, A_scale, B_type, B_scale, C_type]
+        # For aten::mm: types are [A_type, B_type]
+        for i, t in enumerate(input_types):
             if t and isinstance(t, str):
-                if 'float8' in t.lower() or 'e4m3' in t.lower() or 'e5m2' in t.lower():
-                    dtype = 'fp8'
-                    break
-                elif 'bfloat16' in t.lower():
-                    dtype = 'bf16'
-                    break
-                elif 'float16' in t.lower():
-                    dtype = 'fp16'
-                    break
+                t_lower = t.lower()
+                if 'float8' in t_lower or 'e4m3' in t_lower or 'e5m2' in t_lower:
+                    if i == 0:  # First tensor is input A
+                        input_dtype = 'fp8'
+                elif 'bfloat16' in t_lower:
+                    # Check if this is the output tensor (last significant type)
+                    # For deep_gemm, index 4 is output; for aten::mm, output is same as input
+                    if 'deep_gemm' in name and i == 4:
+                        output_dtype = 'bf16'
+                    elif 'deep_gemm' not in name:
+                        input_dtype = 'bf16'
+                        output_dtype = 'bf16'
+                elif 'float16' in t_lower:
+                    if i == 0:
+                        input_dtype = 'fp16'
+                    output_dtype = 'fp16' if 'deep_gemm' not in name else 'bf16'
+    
+    # For FP8 GEMMs, output is always BF16
+    if input_dtype == 'fp8':
+        output_dtype = 'bf16'
     
     # sglang::deep_gemm_fp8_fp8_bf16_nt format:
     if 'deep_gemm' in name and len(input_dims) >= 5:
@@ -719,7 +913,7 @@ def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int,
         else:
             return None
             
-        return (m, n, k, dtype)
+        return (m, n, k, input_dtype, output_dtype)
     
     # aten::mm format: Input Dims: [[M, K], [K, N]]
     if 'aten::mm' in name and len(input_dims) >= 2:
@@ -737,7 +931,7 @@ def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int,
         else:
             return None
             
-        return (m, n, k, dtype)
+        return (m, n, k, input_dtype, output_dtype)
     
     # aten::linear format
     if 'aten::linear' in name and len(input_dims) >= 2:
@@ -755,7 +949,7 @@ def extract_dimensions_from_cpu_op(event: Dict) -> Optional[Tuple[int, int, int,
         else:
             return None
             
-        return (m, n, k, dtype)
+        return (m, n, k, input_dtype, output_dtype)
     
     return None
 
@@ -790,7 +984,7 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
     # =========================================================================
     # STEP 1: Build CPU op dimensions map for External ID correlation
     # =========================================================================
-    cpu_op_dims = {}  # (tp_rank, ext_id) -> (m, n, k, dtype)
+    cpu_op_dims = {}  # (tp_rank, ext_id) -> (m, n, k, input_dtype, output_dtype)
     
     for event in events:
         if event.get('cat') != 'cpu_op':
@@ -804,22 +998,24 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
         tp_rank = extract_tp_rank(event.get('pid'))
         dims = None
         
-        # Check each CPU op pattern
+        # Check each CPU op pattern and extract dimensions with dtypes
         for pattern_name, pattern in CPU_OP_GEMM_PATTERNS.items():
             if pattern['match'](name):
-                # Use appropriate extraction method based on pattern
-                if pattern_name == 'deep_gemm_fp8':
-                    dims = extract_dimensions_from_cpu_op(event)
-                elif pattern_name == 'aten_mm':
-                    dims = extract_dims_from_aten_mm(event)
-                elif pattern_name == 'aten_linear':
-                    dims = extract_dims_from_aten_linear(event)
+                # Use unified extraction that returns (m, n, k, input_dtype, output_dtype)
+                dims = extract_dimensions_from_cpu_op(event)
                 break
         
         if dims:
             cpu_op_dims[(tp_rank, ext_id)] = dims
             # Child kernels often have ext_id + 1
             cpu_op_dims[(tp_rank, ext_id + 1)] = dims
+    
+    # =========================================================================
+    # STEP 1.5: Build sibling dimensions map for CUDA Graph kernels
+    # =========================================================================
+    # This finds kernels with External ID (prefill) that can inform dimensions
+    # for similar kernels without External ID (decode in CUDA Graphs)
+    sibling_dims = build_sibling_dims_map(events, cpu_op_dims)
     
     # =========================================================================
     # STEP 2: Process all GPU kernels
@@ -872,15 +1068,20 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
         if dims is None and classification.source == 'deep_gemm':
             parsed = parse_deep_gemm_kernel_dims(name, grid, None)
             if parsed:
-                dims = parsed
+                # parse_deep_gemm_kernel_dims returns (m, n, k, dtype)
+                # For deep_gemm, input is fp8 and output is bf16
+                m, n, k, dtype = parsed
+                dims = (m, n, k, dtype, 'bf16')  # Extend to 5-tuple
         
         # Method 3: Infer from CUDA Graph kernel pattern (for replayed kernels)
         inferred_layer_type = None
         if dims is None and ext_id is None:
-            inferred = infer_cuda_graph_kernel_dims(name, grid)
+            inferred = infer_cuda_graph_kernel_dims(name, grid, sibling_dims=sibling_dims)
             if inferred:
                 m, n, k, dtype, inferred_layer_type = inferred
-                dims = (m, n, k, dtype)
+                # For inferred kernels, determine output dtype
+                output_dtype = 'bf16' if dtype == 'fp8' else dtype
+                dims = (m, n, k, dtype, output_dtype)
         
         # Track unmatched kernels for debugging
         if dims is None:
@@ -888,20 +1089,33 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
             unmatched_gemm_kernels[classification.subcategory]['time_us'] += duration_us
             continue
         
-        m, n, k, dtype = dims
+        # Unpack dimensions and dtypes (handle both 4 and 5 element tuples)
+        if len(dims) == 5:
+            m, n, k, input_dtype, output_dtype = dims
+        else:
+            m, n, k, input_dtype = dims
+            output_dtype = 'bf16' if input_dtype == 'fp8' else input_dtype
+        
         if m <= 0 or n <= 0 or k <= 0:
             continue
         
-        # Override dtype from classification if extraction didn't provide it
-        if dtype == 'bf16' and classification.dtype:
-            dtype = classification.dtype
+        # Override input_dtype from classification if extraction didn't provide it
+        if input_dtype == 'bf16' and classification.dtype:
+            input_dtype = classification.dtype
+            if input_dtype == 'fp8':
+                output_dtype = 'bf16'  # FP8 GEMMs always output BF16
+        
+        # Primary dtype for display
+        dtype = input_dtype
         
         # -----------------------------------------------------------------
         # STEP 4: Calculate metrics
         # -----------------------------------------------------------------
         flops = calculate_gemm_flops(m, n, k)
-        bytes_accessed = calculate_gemm_bytes(m, n, k, dtype, 'bf16')
-        peak_tflops = get_dtype_peak_tflops(dtype, gpu_specs)
+        # Use correct input and output dtypes for byte calculation
+        bytes_accessed = calculate_gemm_bytes(m, n, k, input_dtype, output_dtype)
+        activation_bytes, weight_bytes, _ = calculate_gemm_bytes_breakdown(m, n, k, input_dtype, output_dtype)
+        peak_tflops = get_dtype_peak_tflops(input_dtype, gpu_specs)
         
         duration_s = duration_us / 1e6
         achieved_tflops = (flops / 1e12) / duration_s
@@ -909,6 +1123,13 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
         
         mfu = calculate_mfu(flops, duration_us, peak_tflops)
         mbu = calculate_mbu(bytes_accessed, duration_us, gpu_specs.memory_bw_tb_s)
+        
+        # Calculate effective MBU assuming weight matrix is cached in L2
+        # This is relevant when MBU > 100% (impossible without caching)
+        # H200 has 80MB L2 cache, weight matrices up to this size can be cached
+        effective_mbu = calculate_mbu(activation_bytes, duration_us, gpu_specs.memory_bw_tb_s)
+        l2_cache_benefit = bytes_accessed / activation_bytes if activation_bytes > 0 else 1.0
+        
         arithmetic_intensity = calculate_arithmetic_intensity(flops, bytes_accessed)
         roofline_tflops, roofline_bound = calculate_roofline_tflops(
             arithmetic_intensity, gpu_specs, peak_tflops
@@ -920,6 +1141,8 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
         gemm_info = GemmInfo(
             m=m, n=n, k=k,
             dtype=dtype,
+            input_dtype=input_dtype,
+            output_dtype=output_dtype,
             duration_us=duration_us,
             flops=flops,
             tflops=achieved_tflops,
@@ -932,7 +1155,11 @@ def analyze_all_gemm_kernels(events: List[Dict], gpu_specs: GPUSpecs) -> List[Ge
             roofline_bound=roofline_bound,
             kernel_name=name,
             external_id=ext_id if ext_id else 0,
-            layer_type=layer_type
+            layer_type=layer_type,
+            activation_bytes=activation_bytes,
+            weight_bytes=weight_bytes,
+            effective_mbu=effective_mbu,
+            l2_cache_benefit=l2_cache_benefit
         )
         gemm_infos.append(gemm_info)
     
@@ -998,9 +1225,9 @@ def analyze_layer_time_breakdown(events: List[Dict]) -> Dict[str, Dict]:
         name_lower = name.lower()
         
         # Communication kernels (NCCL, cross-device reduce, etc.)
-        # Skip warmup/graph capture barriers (>1 second)
+        # Skip warmup barriers (>1 second)
         if any(x in name_lower for x in ['nccl', 'ncclkernel', 'cross_device_reduce', 'allreduce', 'allgather', 'all_gather', 'reducescatter', 'reduce_scatter']):
-            if dur < 1e6:
+            if dur < 1e6:  # Only count non-warmup communication
                 layer_type = 'Communication'
             else:
                 continue  # Skip warmup barriers entirely
@@ -1493,23 +1720,34 @@ def add_mfu_to_trace(trace_data: Dict, gpu_specs: GPUSpecs) -> Dict:
                 inferred = infer_cuda_graph_kernel_dims(name, grid)
                 if inferred:
                     m, n, k, dtype, inferred_layer_type = inferred
-                    dims = (m, n, k, dtype)
+                    output_dtype = 'bf16' if dtype == 'fp8' else dtype
+                    dims = (m, n, k, dtype, output_dtype)
             
             if dims is None:
                 continue
             
-            m, n, k, dtype = dims
+            # Unpack dimensions and dtypes (handle both 4 and 5 element tuples)
+            if len(dims) == 5:
+                m, n, k, input_dtype, output_dtype = dims
+            else:
+                m, n, k, input_dtype = dims
+                output_dtype = 'bf16' if input_dtype == 'fp8' else input_dtype
+            
             if m <= 0 or n <= 0 or k <= 0:
                 continue
             
             # Override dtype from classification if needed
-            if dtype == 'bf16' and classification.dtype:
-                dtype = classification.dtype
+            if input_dtype == 'bf16' and classification.dtype:
+                input_dtype = classification.dtype
+                if input_dtype == 'fp8':
+                    output_dtype = 'bf16'
+            
+            dtype = input_dtype  # For display
             
             # Calculate all metrics
             flops = calculate_gemm_flops(m, n, k)
-            bytes_accessed = calculate_gemm_bytes(m, n, k, dtype, 'bf16')
-            peak_tflops = get_dtype_peak_tflops(dtype, gpu_specs)
+            bytes_accessed = calculate_gemm_bytes(m, n, k, input_dtype, output_dtype)
+            peak_tflops = get_dtype_peak_tflops(input_dtype, gpu_specs)
             
             duration_s = duration_us / 1e6
             achieved_tflops = (flops / 1e12) / duration_s
@@ -1556,7 +1794,14 @@ def add_mfu_to_trace(trace_data: Dict, gpu_specs: GPUSpecs) -> Dict:
             
             dims = extract_dimensions_from_cpu_op(event)
             if dims:
-                m, n, k, dtype = dims
+                # Unpack dimensions and dtypes (handle both 4 and 5 element tuples)
+                if len(dims) == 5:
+                    m, n, k, input_dtype, output_dtype = dims
+                else:
+                    m, n, k, input_dtype = dims
+                    output_dtype = 'bf16' if input_dtype == 'fp8' else input_dtype
+                
+                dtype = input_dtype  # For display
                 ext_id = event.get('args', {}).get('External id')
                 tp_rank = extract_tp_rank(event.get('pid'))
                 key = (tp_rank, ext_id) if ext_id is not None else None
@@ -1568,8 +1813,8 @@ def add_mfu_to_trace(trace_data: Dict, gpu_specs: GPUSpecs) -> Dict:
                 
                 if duration_us > 0:
                     flops = calculate_gemm_flops(m, n, k)
-                    bytes_accessed = calculate_gemm_bytes(m, n, k, dtype, 'bf16')
-                    peak_tflops = get_dtype_peak_tflops(dtype, gpu_specs)
+                    bytes_accessed = calculate_gemm_bytes(m, n, k, input_dtype, output_dtype)
+                    peak_tflops = get_dtype_peak_tflops(input_dtype, gpu_specs)
                     
                     duration_s = duration_us / 1e6
                     achieved_tflops = (flops / 1e12) / duration_s
@@ -1628,9 +1873,12 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
     print("GEMM/MatMul Analysis Summary (MFU, MBU, Roofline)")
     print("="*80)
     print(f"GPU: {gpu_specs.name} (x{num_gpus} GPUs in trace)")
+    if gpu_specs.fp4_tflops > 0:
+        print(f"Peak FP4 TFLOPS: {gpu_specs.fp4_tflops:.1f}")
     print(f"Peak FP8 TFLOPS: {gpu_specs.fp8_tflops:.1f}")
     print(f"Peak BF16 TFLOPS: {gpu_specs.fp16_tflops:.1f}")
     print(f"Peak Memory BW: {gpu_specs.memory_bw_tb_s:.2f} TB/s")
+    print(f"L2 Cache: {gpu_specs.l2_cache_mb:.0f} MB")
     print("-"*80)
     print(f"Total GEMM kernels analyzed: {len(gemm_infos)} (with known M dimension)")
     print(f"Total GEMM FLOPs: {total_flops / 1e12:.2f} TFLOPs ({per_gpu_flops / 1e12:.2f} per GPU)")
@@ -1641,11 +1889,20 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
     print(f"Weighted Average MBU: {avg_mbu:.2f}%")
     
     # Group by dtype
+    fp4_ops = [g for g in gemm_infos if g.dtype == 'fp4']
     fp8_ops = [g for g in gemm_infos if g.dtype == 'fp8']
-    bf16_ops = [g for g in gemm_infos if g.dtype != 'fp8']
+    bf16_ops = [g for g in gemm_infos if g.dtype in ('bf16', 'fp16')]
+    other_ops = [g for g in gemm_infos if g.dtype not in ('fp4', 'fp8', 'bf16', 'fp16')]
     
     print("-"*80)
     print("By Data Type:")
+    
+    if fp4_ops:
+        fp4_time = sum(g.duration_us for g in fp4_ops)
+        fp4_avg_mfu = sum(g.mfu * g.duration_us for g in fp4_ops) / fp4_time if fp4_time > 0 else 0
+        fp4_avg_mbu = sum(g.mbu * g.duration_us for g in fp4_ops) / fp4_time if fp4_time > 0 else 0
+        print(f"  FP4: {len(fp4_ops)} ops, {fp4_time/1000/num_gpus:.2f} ms/GPU, MFU: {fp4_avg_mfu:.2f}%, MBU: {fp4_avg_mbu:.2f}%")
+    
     if fp8_ops:
         fp8_time = sum(g.duration_us for g in fp8_ops)
         fp8_avg_mfu = sum(g.mfu * g.duration_us for g in fp8_ops) / fp8_time if fp8_time > 0 else 0
@@ -1656,7 +1913,18 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
         bf16_time = sum(g.duration_us for g in bf16_ops)
         bf16_avg_mfu = sum(g.mfu * g.duration_us for g in bf16_ops) / bf16_time if bf16_time > 0 else 0
         bf16_avg_mbu = sum(g.mbu * g.duration_us for g in bf16_ops) / bf16_time if bf16_time > 0 else 0
-        print(f"  BF16: {len(bf16_ops)} ops, {bf16_time/1000/num_gpus:.2f} ms/GPU, MFU: {bf16_avg_mfu:.2f}%, MBU: {bf16_avg_mbu:.2f}%")
+        bf16_avg_eff_mbu = sum(g.effective_mbu * g.duration_us for g in bf16_ops) / bf16_time if bf16_time > 0 else 0
+        if bf16_avg_mbu > 100:
+            print(f"  BF16: {len(bf16_ops)} ops, {bf16_time/1000/num_gpus:.2f} ms/GPU, MFU: {bf16_avg_mfu:.2f}%, MBU: {bf16_avg_mbu:.2f}%")
+            print(f"        WARNING: MBU>100% likely indicates dimension inference errors")
+        else:
+            print(f"  BF16: {len(bf16_ops)} ops, {bf16_time/1000/num_gpus:.2f} ms/GPU, MFU: {bf16_avg_mfu:.2f}%, MBU: {bf16_avg_mbu:.2f}%")
+    
+    if other_ops:
+        other_time = sum(g.duration_us for g in other_ops)
+        other_avg_mfu = sum(g.mfu * g.duration_us for g in other_ops) / other_time if other_time > 0 else 0
+        other_avg_mbu = sum(g.mbu * g.duration_us for g in other_ops) / other_time if other_time > 0 else 0
+        print(f"  Other: {len(other_ops)} ops, {other_time/1000/num_gpus:.2f} ms/GPU, MFU: {other_avg_mfu:.2f}%, MBU: {other_avg_mbu:.2f}%")
     
     # Group by roofline bound
     memory_bound = [g for g in gemm_infos if g.roofline_bound == 'memory']
@@ -1695,12 +1963,19 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
         dc_time = sum(g.duration_us for g in decode_ops)
         dc_avg_mfu = sum(g.mfu * g.duration_us for g in decode_ops) / dc_time if dc_time > 0 else 0
         dc_avg_mbu = sum(g.mbu * g.duration_us for g in decode_ops) / dc_time if dc_time > 0 else 0
+        dc_avg_eff_mbu = sum(g.effective_mbu * g.duration_us for g in decode_ops) / dc_time if dc_time > 0 else 0
         dc_avg_bw = sum(g.achieved_bw_tb_s * g.duration_us for g in decode_ops) / dc_time * 1000 if dc_time > 0 else 0
         common_m = max(set(g.m for g in decode_ops), key=lambda x: sum(1 for g in decode_ops if g.m == x))
         print(f"  Decode (M={common_m}): {len(decode_ops)} ops, {dc_time/1000/num_gpus:.2f} ms/GPU ({dc_time/total_time_us*100:.1f}%)")
-        print(f"                  MFU: {dc_avg_mfu:.1f}%, MBU: {dc_avg_mbu:.1f}%, BW: {dc_avg_bw:.0f} GB/s")
-        print(f"                  Note: Low MBU in decode is expected - small batch size limits")
-        print(f"                        parallelism needed to saturate memory bandwidth.")
+        if dc_avg_mbu > 100:
+            print(f"                  MFU: {dc_avg_mfu:.1f}%, MBU: {dc_avg_mbu:.1f}% (WARNING: likely inference error)")
+            print(f"                  BW: {dc_avg_bw:.0f} GB/s")
+            print(f"                  Note: MBU>100% is physically impossible. This indicates")
+            print(f"                        CUDA Graph kernels with incorrect dimension inference.")
+        else:
+            print(f"                  MFU: {dc_avg_mfu:.1f}%, MBU: {dc_avg_mbu:.1f}%, BW: {dc_avg_bw:.0f} GB/s")
+            print(f"                  Note: Low MBU in decode is expected - small batch size limits")
+            print(f"                        parallelism needed to saturate memory bandwidth.")
     
     # Top 10 by MFU
     print("\n" + "-"*80)
@@ -1709,7 +1984,10 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
     for i, g in enumerate(sorted_by_mfu):
         roofline_eff = (g.tflops / g.roofline_tflops * 100) if g.roofline_tflops > 0 else 0
         print(f"  {i+1}. M={g.m}, N={g.n}, K={g.k}, {g.dtype}, {g.layer_type}:")
-        print(f"      MFU={g.mfu:.2f}%, MBU={g.mbu:.1f}%, Roofline Eff={roofline_eff:.1f}%")
+        if g.mbu > 100:
+            print(f"      MFU={g.mfu:.2f}%, MBU={g.mbu:.1f}% (INVALID - dimension inference error)")
+        else:
+            print(f"      MFU={g.mfu:.2f}%, MBU={g.mbu:.1f}%, Roofline Eff={roofline_eff:.1f}%")
         print(f"      Achieved={g.tflops:.1f} TFLOPS, BW={g.achieved_bw_tb_s*1000:.0f} GB/s")
         print(f"      AI={g.arithmetic_intensity:.1f} FLOP/B, {g.duration_us:.2f}us, {g.roofline_bound}-bound")
     
@@ -1727,10 +2005,25 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict, gpu_specs: GPUS
     # Top 10 by MBU (memory bandwidth utilization)
     print("\n" + "-"*80)
     print("Top 10 GEMMs by MBU (Memory Bandwidth Utilization):")
+    
+    # Check if there are ops with MBU > 100% (indicates dimension inference error)
+    high_mbu_ops = [g for g in gemm_infos if g.mbu > 100]
+    if high_mbu_ops:
+        print("  WARNING: MBU > 100% indicates likely dimension inference error!")
+        print("           Physical constraint: weight load time from HBM must be <= kernel time.")
+        print("           These kernels lack External ID and dimensions were estimated.")
+        print()
+    
     sorted_by_mbu = sorted(gemm_infos, key=lambda g: g.mbu, reverse=True)[:10]
     for i, g in enumerate(sorted_by_mbu):
         print(f"  {i+1}. M={g.m}, N={g.n}, K={g.k}, {g.dtype}, {g.layer_type}:")
-        print(f"      MBU={g.mbu:.1f}%, BW={g.achieved_bw_tb_s*1000:.0f} GB/s (peak: 4800 GB/s)")
+        if g.mbu > 100:
+            # Flag as unreliable
+            weight_time_us = g.weight_bytes / 4.8e12 * 1e6
+            print(f"      MBU={g.mbu:.1f}% (INVALID - weight load takes {weight_time_us:.1f}µs > kernel {g.duration_us:.1f}µs)")
+            print(f"      Likely cause: incorrect dimension inference for CUDA Graph kernel")
+        else:
+            print(f"      MBU={g.mbu:.1f}%, BW={g.achieved_bw_tb_s*1000:.0f} GB/s (peak: 4800 GB/s)")
         print(f"      MFU={g.mfu:.2f}%, AI={g.arithmetic_intensity:.1f} FLOP/B, {g.roofline_bound}-bound")
     
     # Top 10 by time
@@ -2003,21 +2296,52 @@ def main():
     parser.add_argument('output_trace', nargs='?', default=None,
                         help='Output trace file (optional)')
     parser.add_argument('--gpu', default='H200', choices=list(GPU_SPECS.keys()),
-                        help='GPU model for peak FLOPS calculation')
+                        help='GPU model for peak FLOPS calculation (default: H200)')
     parser.add_argument('--compress', action='store_true',
                         help='Compress output with gzip')
     parser.add_argument('--summary-only', action='store_true',
                         help='Only print summary, do not modify trace')
     parser.add_argument('--batch-size', type=int, default=992,
-                        help='Batch size hint for kernels without External ID (default: 992)')
+                        help='Prefill batch size hint for kernels without External ID (default: 992)')
+    
+    # Model configuration options
+    parser.add_argument('--decode-batch-size', type=int, default=64,
+                        help='Decode batch size for CUDA Graph kernels (default: 64)')
+    parser.add_argument('--tp', '--tp-degree', type=int, default=8, dest='tp_degree',
+                        help='Tensor parallelism degree (default: 8)')
+    parser.add_argument('--hidden-size', type=int, default=7168,
+                        help='Model hidden size (default: 7168 for DeepSeek-R1)')
+    parser.add_argument('--expert-intermediate-size', type=int, default=2048,
+                        help='Expert intermediate size before TP division (default: 2048)')
+    parser.add_argument('--num-experts', type=int, default=256,
+                        help='Number of experts for MoE models (default: 256)')
     
     args = parser.parse_args()
     
+    # Update global model config from command line args
+    global MODEL_CONFIG
+    MODEL_CONFIG = {
+        'hidden_size': args.hidden_size,
+        'num_experts': args.num_experts,
+        'expert_intermediate_size': args.expert_intermediate_size,
+        'decode_batch_size': args.decode_batch_size,
+        'tp_degree': args.tp_degree,
+    }
+    
     gpu_specs = GPU_SPECS[args.gpu]
     print(f"Using GPU specs: {gpu_specs.name}")
+    if gpu_specs.fp4_tflops > 0:
+        print(f"  FP4 Peak: {gpu_specs.fp4_tflops} TFLOPS")
     print(f"  FP8 Peak: {gpu_specs.fp8_tflops} TFLOPS")
     print(f"  BF16 Peak: {gpu_specs.fp16_tflops} TFLOPS")
     print(f"  Memory BW: {gpu_specs.memory_bw_tb_s} TB/s")
+    print(f"  L2 Cache: {gpu_specs.l2_cache_mb} MB")
+    
+    print(f"\nModel config:")
+    print(f"  TP degree: {MODEL_CONFIG['tp_degree']}")
+    print(f"  Decode batch size: {MODEL_CONFIG['decode_batch_size']}")
+    print(f"  Hidden size: {MODEL_CONFIG['hidden_size']}")
+    print(f"  Expert intermediate (per GPU): {MODEL_CONFIG['expert_intermediate_size'] // MODEL_CONFIG['tp_degree']}")
     
     # Load trace
     print(f"\nLoading trace from {args.input_trace}...")

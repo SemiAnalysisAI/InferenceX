@@ -43,13 +43,13 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CLI_ARGS="${{ inputs.generate-cli-command }}"
           else
-            CLI_ARGS="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type h200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc 64"
+            CLI_ARGS="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type b200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc 64"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
-        name: Filter to single-node SGLang on H200
+        name: Filter single-node SGLang jobs
         shell: python
         run: |
           import json, os, sys
@@ -66,7 +66,6 @@ jobs:
           filt = [d for d in data 
                   if d.get('framework') == 'sglang' 
                   and d.get('prefill') is None 
-                  and d.get('runner') == 'h200'
                   and (not is_push or int(d.get('conc', 0)) == 64)]
           
           out = json.dumps(filt)
@@ -79,9 +78,9 @@ jobs:
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "No single-node sglang H200 entries produced by your CLI. Please constrain your args." >&2
+            echo "No single-node sglang entries produced by your CLI. Please constrain your args or check runner filters." >&2
           else
-            echo "No matching 1k1k@64 sglang H200 entries found from configs." >&2
+            echo "No matching 1k1k@64 sglang entries found from configs." >&2
           fi
           exit 1
 
@@ -133,11 +132,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
 
-      - name: Launch + Profile (H200 single-node sglang)
+      - name: Launch + Profile (single-node sglang)
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
