@@ -23,6 +23,8 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   RANDOM_RANGE_RATIO: '0.8'
   PERFETTO_RELAY_URL: https://oseltamivir.github.io/profiler-storage
+  # Single source of truth for push-time concurrency filter
+  PUSH_CONC: '128'
 
 jobs:
   get-jobs:
@@ -43,7 +45,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CLI_ARGS="${{ inputs.generate-cli-command }}"
           else
-            CLI_ARGS="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type h200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc 64"
+            CLI_ARGS="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type h200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc ${PUSH_CONC}"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
@@ -63,10 +65,14 @@ jobs:
             raise
 
           is_push = '${{ github.event_name }}' == 'push'
+          try:
+            push_conc = int(os.getenv('PUSH_CONC', '64'))
+          except Exception:
+            push_conc = 64
           filt = [d for d in data 
                   if d.get('framework') == 'sglang' 
                   and d.get('prefill') is None 
-                  and (not is_push or int(d.get('conc', 0)) == 64)]
+                  and (not is_push or int(d.get('conc', 0)) == push_conc)]
           
           out = json.dumps(filt)
           print(out)
@@ -80,7 +86,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "No single-node sglang entries produced by your CLI. Please constrain your args or check runner filters." >&2
           else
-            echo "No matching 1k1k@64 sglang entries found from configs." >&2
+            echo "No matching 1k1k@${PUSH_CONC} sglang entries found from configs." >&2
           fi
           exit 1
 
