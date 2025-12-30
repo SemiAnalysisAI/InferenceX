@@ -61,7 +61,7 @@ run_benchmark_serving \
   --input-len "$ISL" \
   --output-len "$OSL" \
   --random-range-ratio "$RANDOM_RANGE_RATIO" \
-  --num-prompts $((CONC * 5)) \
+  --num-prompts $((CONC * 2)) \
   --max-concurrency "$CONC" \
   --result-filename "$RESULT_FILENAME" \
   --result-dir /workspace/ \
@@ -83,7 +83,8 @@ if [[ "${PROFILE:-}" == "1" ]]; then
       \"start_step\": 0,
       \"activities\": [\"GPU\", \"CPU\"],
       \"merge_profiles\": true,
-      \"profile_by_stage\": true
+      \"profile_by_stage\": true,
+      \"record_shapes\": true
     }" || true
 fi
 
