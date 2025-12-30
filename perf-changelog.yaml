@@ -110,3 +110,9 @@
   description:
     - "fix: Pruning unnecessary concurrencies "
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/358
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369
