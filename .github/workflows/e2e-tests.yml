@@ -1,5 +1,5 @@
 name: End-to-End Tests
-run-name: e2e Test - ${{ inputs.test-name || github.event.inputs.generate-cli-command }}
+run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
 
 on:
     workflow_dispatch:
@@ -12,6 +12,24 @@ on:
                 description: "Name for this test run"
                 required: false
                 type: string
+            ref:
+                description: "Ref (branch/sha) to checkout for generating configs"
+                required: false
+                type: string
+    workflow_call:
+        inputs:
+            generate-cli-command:
+                description: "Command passed to generate matrix script"
+                required: true
+                type: string
+            test-name:
+                description: "Name for this test run"
+                required: false
+                type: string
+            ref:
+                description: "Ref (branch/sha) to checkout for generating configs"
+                required: false
+                type: string
 
 jobs:
     get-jobs:
@@ -19,16 +37,21 @@ jobs:
         outputs:
             search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
         steps:
-            - name: Checkout code
+            - name: Checkout code (ref)
+              if: ${{ inputs.ref && inputs.ref != '' }}
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+              with:
+                ref: ${{ inputs.ref }}
+
+            - name: Checkout code (default)
+              if: ${{ !inputs.ref || inputs.ref == '' }}
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
             - id: get-jobs
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
-                    ${{ inputs.generate-cli-command }} \
-                    --runner-config .github/configs/runners.yaml \
-                    --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml)
+                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
@@ -70,6 +93,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -98,6 +122,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            ref: ${{ inputs.ref }}
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]
