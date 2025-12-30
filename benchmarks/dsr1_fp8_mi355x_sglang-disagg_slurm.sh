@@ -13,7 +13,7 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
 
 # Switch to origin repo url for supporting wide ep configs
-git clone --branch mi355x-disagg https://github.com/cquil11/sglang_disagg.git
+git clone --branch main https://github.com/cquil11/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
