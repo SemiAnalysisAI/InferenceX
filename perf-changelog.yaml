@@ -85,16 +85,6 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/273
 
 - config-keys:
-    - gptoss-fp4-b200-vllm
-    - gptoss-fp4-h100-vllm
-    - gptoss-fp4-h200-vllm
-  description: |
-    - Update vLLM image for NVIDIA configs from vLLM 0.11.2 to vLLM 0.12.0
-    - Adds VLLM_MXFP4_USE_MARLIN=1 to benchmarks/gptoss_fp4_h100_docker.sh and benchmarks/gptoss_fp4_h200_slurm.sh
-    - Adds VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 to benchmarks/gptoss_fp4_h100_slurm.sh
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/327
-
-- config-keys:
     - gptoss-fp4-b200-trt
   description:
     - "Add benchmark script for GPTOSS FP4 B200 TRT-LLM"
@@ -131,8 +121,7 @@
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
     - gptoss-fp4-h200-vllm
-  description: |
-    - Update vLLM image for NVIDIA configs from vLLM 0.11.2 to vLLM 0.12.0
-    - Adds VLLM_MXFP4_USE_MARLIN=1 to benchmarks/gptoss_fp4_h100_docker.sh and benchmarks/gptoss_fp4_h200_slurm.sh
-    - Adds VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 to benchmarks/gptoss_fp4_h100_slurm.sh
-    PR: https://github.com/InferenceMAX/InferenceMAX/pull/327
+  description: 
+    - "Update vLLM image from v0.11.2 to v0.13.0"
+    - "Add VLLM_MXFP4_USE_MARLIN=1 to H100 and H200 benchmark scripts"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/327
