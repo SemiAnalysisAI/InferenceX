@@ -160,6 +160,7 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          pip install ijson
           # Process each result file
           for result_file in ${RESULT_FILENAME}_*.json; do
             if [ -f "$result_file" ]; then

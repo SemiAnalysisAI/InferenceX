@@ -3,6 +3,16 @@ import json
 import os
 from pathlib import Path
 
+import ijson
+
+# Fields explicitly required from benchmark result JSON
+REQUIRED_BMK_FIELDS = {'max_concurrency', 'model_id', 'total_token_throughput', 'output_throughput'}
+
+
+def _is_needed_field(key):
+    """Check if a field should be parsed from the benchmark result."""
+    return key in REQUIRED_BMK_FIELDS or key.endswith('ms') or 'tpot' in key
+
 
 def get_required_env_vars(required_vars):
     """Load and validate required environment variables."""
@@ -39,8 +49,13 @@ isl = base_env['ISL']
 osl = base_env['OSL']
 image = base_env['IMAGE']
 
-with open(f'{result_filename}.json') as f:
-    bmk_result = json.load(f)
+# Use ijson for memory-efficient streaming JSON parsing (only parse needed fields)
+# This solves OOM on extremely large result files (like multinode 1k8k benchmarks)
+bmk_result = {}
+with open(f'{result_filename}.json', 'rb') as f:
+    for key, value in ijson.kvitems(f, ''):
+        if _is_needed_field(key):
+            bmk_result[key] = value
 
 data = {
     'hw': hw,
