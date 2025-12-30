@@ -99,13 +99,6 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/335
 
 - config-keys:
-    - dsr1-fp8-mi300x-sglang
-    - dsr1-fp8-mi325x-sglang
-    - dsr1-fp8-mi355x-sglang
-  description: |
-    - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
-    PR: https://github.com/InferenceMAX/InferenceMAX/pull/332
-- config-keys:
     - dsr1-fp4-mi355x-sglang
   description:
     - "Update MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post1"
@@ -123,3 +116,11 @@
   description:
     - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description: |
+    - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
+    PR: https://github.com/InferenceMAX/InferenceMAX/pull/307
