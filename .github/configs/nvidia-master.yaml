@@ -332,7 +332,8 @@ gptoss-fp4-h200-vllm:
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
-  model: deepseek-r1-fp4
+  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
+  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2
   model-prefix: dsr1
   runner: gb200
   precision: fp4
@@ -773,8 +774,10 @@ dsr1-fp4-gb200-dynamo-trt:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp8-gb200-dynamo-sglang:
-  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.1-rc0.pre1
-  model: deepseek-ai/DeepSeek-R1-0528
+  image: lmsysorg/sglang:v0.5.5.post2
+  # model: deepseek-ai/DeepSeek-R1-0528
+  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
+  model: /mnt/lustre01/models/deepseek-r1-0528
   model-prefix: dsr1
   runner: gb200
   precision: fp8
@@ -798,6 +801,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         additional-settings:
         - "PREFILL_NODES=4"
         - "N_ADDITIONAL_FRONTENDS=9"
+        - "SCRIPT_MODE=1k1k-max-tpt"
       decode:
         num-worker: 1
         tp: 1
@@ -819,7 +823,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         additional-settings:
         - "PREFILL_NODES=1"
         - "N_ADDITIONAL_FRONTENDS=9"
-        - "SCRIPT_MODE=1p_4d"
+        - "SCRIPT_MODE=1k1k-low-latency"
       decode:
         num-worker: 4
         tp: 1
@@ -841,6 +845,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         additional-settings:
         - "PREFILL_NODES=6"
         - "N_ADDITIONAL_FRONTENDS=9"
+        - "SCRIPT_MODE=1k1k-max-tpt"
       decode:
         num-worker: 1
         tp: 1
@@ -852,22 +857,193 @@ dsr1-fp8-gb200-dynamo-sglang:
   - isl: 8192
     osl: 1024
     search-space:
+    # Low latency (1 prefill worker at DEP4 and 1 decode worker at DEP4)
     - spec-decoding: "none"
-      conc-list: [ 128, 256, 384, 448, 512, 576, 1024, 2048, 4096 ]
+      conc-list: [ 4, 8, 16, 32 ]
       prefill:
-        num-worker: 6
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
+        num-worker: 1
         tp: 1
         ep: 1
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=12"
+        - "PREFILL_NODES=1"
         - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-low-latency"
       decode:
         num-worker: 1
         tp: 1
         ep: 1
         dp-attn: true
         additional-settings:
-        - "DECODE_NODES=6"
+        - "DECODE_NODES=1"
+
+    # Middle and top of curve (5 prefill workers each at DEP8 and 1 decode worker at DEP32)
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048, 6144 ]
+      prefill:
+        num-worker: 5
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=10"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-max-tpt"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"
+
+dsr1-fp4-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.5.post2
+  # TODO: what is the right name?
+  # model: deepseek-ai/DeepSeek-R1-0528-fp4-v2
+  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
+  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2
+  model-prefix: dsr1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Low latency (1 prefill worker at DEP4 and 2 decode workers at DEP4)
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32, 64 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=1k1k-low-latency"
+      decode:
+        num-worker: 2
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=2"
+
+    # Mid curve (1 prefill worker at DEP4 and 1 decode workers at DEP48)
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048, 4096, 8192 ]
+      prefill:
+        num-worker: 4
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=4"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=1k1k-middle-curve"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=12"
+
+    # Top of curve (1 prefill worker at DEP4 and 1 decode worker at DEP32)
+    - spec-decoding: "none"
+      conc-list: [ 8192, 12000, 15000 ]
+      prefill:
+        num-worker: 4
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=4"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=1k1k-max-tpt"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32, 64 ]
+      prefill:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-low-latency"
+      decode:
+        num-worker: 4
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=4"
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048, 4096 ]
+      prefill:
+        num-worker: 6
+        tp: 1
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=6"
+        - "N_ADDITIONAL_FRONTENDS=9"
+        - "SCRIPT_MODE=8k1k-middle-curve"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=12"
+    - spec-decoding: "none"
+      conc-list: [ 1024, 2048, ]
+      prefill:
+        num-worker: 10
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=10"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-max-tpt"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"
+    - spec-decoding: "none"
+      conc-list: [ 8192 ]
+      prefill:
+        num-worker: 10
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=10"
+        - "N_ADDITIONAL_FRONTENDS=8"
+        - "SCRIPT_MODE=8k1k-max-tpt"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 1
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=8"

@@ -51,9 +51,7 @@ jobs:
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
-                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }} \
-                    --runner-config .github/configs/runners.yaml \
-                    --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml)
+                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
@@ -95,6 +93,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -123,6 +122,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            ref: ${{ inputs.ref }}
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]

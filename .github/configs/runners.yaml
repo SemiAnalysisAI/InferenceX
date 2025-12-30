@@ -42,17 +42,10 @@ mi325x:
 - 'mi325x-amd_1'
 - 'mi325x-amd_2'
 - 'mi325x-amd_3'
-- 'mi325x-tw_0'
-- 'mi325x-tw_1'
-- 'mi325x-tw_2'
-- 'mi325x-tw_3'
 mi355x:
-# 0-3 undergoing maintenance, 4-5 are temporary nodes
-# - 'mi355x-amd_0'
-# - 'mi355x-amd_1'
-# - 'mi355x-amd_2'
-# - 'mi355x-amd_3'
-- 'mi355x-amd_4'
-- 'mi355x-amd_5'
+- 'mi355x-amd_0'
+- 'mi355x-amd_1'
+- 'mi355x-amd_2'
+- 'mi355x-amd_3'
 gb200:
 - gb200-nv_0

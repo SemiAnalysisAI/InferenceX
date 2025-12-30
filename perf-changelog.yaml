@@ -92,7 +92,22 @@
     - Update vLLM image for NVIDIA configs from vLLM 0.11.2 to vLLM 0.12.0
     - Adds VLLM_MXFP4_USE_MARLIN=1 to benchmarks/gptoss_fp4_h100_docker.sh and benchmarks/gptoss_fp4_h200_slurm.sh
     - Adds VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 to benchmarks/gptoss_fp4_h100_slurm.sh
-    PR: https://github.com/InferenceMAX/InferenceMAX/pull/327
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/327
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Add benchmark script for GPTOSS FP4 B200 TRT-LLM"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/256
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
+  description:
+    - "Add more configurations for GB200 SGLang DSR1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/335
+
 - config-keys:
     - dsr1-fp4-mi355x-sglang
   description:
@@ -100,7 +115,14 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/330
 
 - config-keys:
-    - gptoss-fp4-b200-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-sglang
   description:
-    - "Add benchmark script for GPTOSS FP4 B200 TRT-LLM"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/256
+    - "fix: Pruning unnecessary concurrencies "
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/358
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369

@@ -54,6 +54,10 @@ on:
         required: false
         type: string
         default: '0.8'
+      ref:
+        description: "Git ref (branch/sha) to checkout"
+        required: false
+        type: string
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -134,10 +138,13 @@ jobs:
             done
           fi
 
+          sudo find . -not -user $USER -exec rm -rf {} +
+
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Launch job script
         env:
