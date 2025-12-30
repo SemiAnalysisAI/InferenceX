@@ -47,6 +47,7 @@ def base_env_vars():
         "OSL": "1024",
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
+        "IMAGE": "test-image:latest",
     }
 
 
