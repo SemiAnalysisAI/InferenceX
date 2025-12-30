@@ -54,20 +54,6 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     mkdir -p "$SGLANG_TORCH_PROFILER_DIR"
 fi
 
-run_benchmark_serving \
-  --model "$MODEL" \
-  --port "$PORT" \
-  --backend vllm \
-  --input-len "$ISL" \
-  --output-len "$OSL" \
-  --random-range-ratio "$RANDOM_RANGE_RATIO" \
-  --num-prompts $((CONC * 2)) \
-  --max-concurrency "$CONC" \
-  --result-filename "$RESULT_FILENAME" \
-  --result-dir /workspace/ \
-  &
-BENCH_PID=$!
-
 if [[ "${PROFILE:-}" == "1" ]]; then
   echo "[PROFILE] Will start mid-run; dir=$SGLANG_TORCH_PROFILER_DIR"
 
@@ -87,6 +73,20 @@ if [[ "${PROFILE:-}" == "1" ]]; then
       \"record_shapes\": true
     }" || true
 fi
+
+run_benchmark_serving \
+  --model "$MODEL" \
+  --port "$PORT" \
+  --backend vllm \
+  --input-len "$ISL" \
+  --output-len "$OSL" \
+  --random-range-ratio "$RANDOM_RANGE_RATIO" \
+  --num-prompts $((CONC * 2)) \
+  --max-concurrency "$CONC" \
+  --result-filename "$RESULT_FILENAME" \
+  --result-dir /workspace/ \
+  &
+BENCH_PID=$!
 
 wait "$BENCH_PID"
 
