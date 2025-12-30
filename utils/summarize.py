@@ -38,7 +38,9 @@ results_dir = Path(sys.argv[1])
 for result_path in results_dir.rglob('*.json'):
     with open(result_path) as f:
         result = json.load(f)
-    results.append(result)
+    # Skip aggregated result files (lists) and only process individual results (dicts)
+    if isinstance(result, dict) and 'is_multinode' in result:
+        results.append(result)
 
 single_node_results = [r for r in results if not r['is_multinode']]
 multinode_results = [r for r in results if r['is_multinode']]

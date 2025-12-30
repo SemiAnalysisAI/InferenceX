@@ -10,7 +10,9 @@ agg_results = []
 for result_path in results_dir.rglob(f'*.json'):
     with open(result_path) as f:
         result = json.load(f)
-    agg_results.append(result)
+    # Skip aggregated result files (lists) and only process individual results (dicts)
+    if isinstance(result, dict) and 'is_multinode' in result:
+        agg_results.append(result)
 
 with open(f'agg_{exp_name}.json', 'w') as f:
     json.dump(agg_results, f, indent=2)
