@@ -27,7 +27,7 @@ fi
 
 cat > config.yaml << EOF
 kv-cache-dtype: fp8
-compilation-config: '{"pass_config":{"enable_fi_allreduce_fusion":true,"enable_noop":true}}'
+compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true}}'
 async-scheduling: true
 no-enable-prefix-caching: true
 max-cudagraph-capture-size: 2048
