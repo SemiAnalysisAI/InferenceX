@@ -116,7 +116,15 @@
   description:
     - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369
-
+    
+- config-keys:
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update NVIDIA DeepSeek sglang Docker image from v0.5.5 to v0.5.6"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/276
+  
 - config-keys:
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
