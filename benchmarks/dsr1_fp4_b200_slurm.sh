@@ -2,7 +2,7 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
+# PORT_OFFSET
 # TP
 # CONC
 # ISL
@@ -22,6 +22,7 @@ nvidia-smi
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=$(( 8888 + $PORT_OFFSET ))
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
