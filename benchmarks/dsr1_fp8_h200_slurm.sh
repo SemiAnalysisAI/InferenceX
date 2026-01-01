@@ -11,14 +11,11 @@
 # PORT_OFFSET
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
-
-pip3 install --user sentencepiece
 hf download $MODEL
 PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 export TORCH_CUDA_ARCH_LIST="9.0"
-
 
 # === Monkey Patch for MoE Debug Logging ===
 # Create a directory for our patch
@@ -27,6 +24,8 @@ PATCH_DIR=$(mktemp -d /tmp/moe_patch-XXXXXX)
 export MOE_DEBUG_LOG="/workspace/moe_debug_${RESULT_FILENAME}.tp0.log"
 # Only emit logs from TP rank 0
 export MOE_DEBUG_ONLY_RANK="0"
+
+pip3 install --no-deps --target "$PATCH_DIR" sentencepiece
 
 # Create sitecustomize.py - Python automatically imports this at startup
 cat << 'EOF' > "$PATCH_DIR/sitecustomize.py"
@@ -63,6 +62,7 @@ def _log(msg: str) -> None:
     if not _ENABLED:
         return
     global _seq
+    _seq = 0
     global _fh
     if _fh is None:
         os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
@@ -132,9 +132,19 @@ export PYTHONPATH="$PATCH_DIR:${PYTHONPATH:-}"
 echo "[MoE Debug] Patch directory: $PATCH_DIR"
 echo "[MoE Debug] PYTHONPATH: $PYTHONPATH"
 
+ts() { date +"%Y-%m-%d %H:%M:%S%z"; }
+
+marker() {
+  local msg="$1"
+  local line="[$(ts)] [MARK] $msg"
+  echo "$line" >> "$SERVER_LOG"
+  [[ -n "${MOE_DEBUG_LOG:-}" ]] && echo "$line" >> "$MOE_DEBUG_LOG"
+  echo "$line" >> "/workspace/markers_${RESULT_FILENAME}.log"
+}
+
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
-    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 0 \
@@ -143,7 +153,7 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --decode-log-interval 1 --disable-cuda-graph \
     > $SERVER_LOG 2>&1 &
 else
-    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 256 --cuda-graph-max-bs 256 \
@@ -160,6 +170,7 @@ source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+marker "server ready"
 
 # If profiling is enabled, start profiling via SGLang HTTP API
 if [[ "${PROFILE:-}" == "1" ]]; then
@@ -185,6 +196,7 @@ if [[ "${PROFILE:-}" == "1" ]]; then
       \"profile_by_stage\": true,
       \"record_shapes\": true
     }" || true
+  marker "profiling start request sent (server will auto-stop after num_steps)"
 fi
 
 run_benchmark_serving \
@@ -200,6 +212,7 @@ run_benchmark_serving \
   --result-dir /workspace/ \
   &
 BENCH_PID=$!
+marker "benchmark starting: conc=$CONC"
 
 wait "$BENCH_PID"
 
