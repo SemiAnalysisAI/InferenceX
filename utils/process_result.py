@@ -119,7 +119,7 @@ for key, value in bmk_result.items():
         data[key.replace('_ms', '')] = float(value) / 1000.0
     if 'tpot' in key:
         data[key.replace('_ms', '').replace(
-            'tpot', 'intvty')] = 1000.0 / float(value)
+            'tpot', 'intvty')] = 1000.0 / (float(value)+1e-8)
 
 print(json.dumps(data, indent=2))
 
