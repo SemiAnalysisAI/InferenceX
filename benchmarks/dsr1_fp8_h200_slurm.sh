@@ -62,6 +62,7 @@ _lock = threading.Lock()
 def _log(msg: str) -> None:
     if not _ENABLED:
         return
+    global _seq
     global _fh
     if _fh is None:
         os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
@@ -69,7 +70,8 @@ def _log(msg: str) -> None:
         atexit.register(lambda: _fh and _fh.close())
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     with _lock:
-        _fh.write(f"{ts} [pid={os.getpid()} rank={_RANK}] {msg}\n")
+        _seq += 1
+        _fh.write(f"seq={_seq} {ts} [pid={os.getpid()} rank={_RANK}] {msg}\n")
         _fh.flush()
 
 def _patching_import(name, globals=None, locals=None, fromlist=(), level=0):

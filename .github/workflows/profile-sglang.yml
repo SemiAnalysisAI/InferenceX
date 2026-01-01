@@ -24,7 +24,7 @@ env:
   RANDOM_RANGE_RATIO: '0.8'
   PERFETTO_RELAY_URL: https://oseltamivir.github.io/profiler-storage
   # Single source of truth for push-time concurrency filter
-  PUSH_CONC: '256'
+  PUSH_CONC: '64'
 
 jobs:
   get-jobs:
