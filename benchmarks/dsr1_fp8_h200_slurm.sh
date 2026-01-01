@@ -56,14 +56,14 @@ _ENABLED = (_RANK == _ONLY_RANK)
 # ---- File logger ----
 _LOG_PATH = os.environ.get("MOE_DEBUG_LOG", "/tmp/moe_debug.tp0.log")
 _fh = None
+_seq = 0
 _lock = threading.Lock()
 
 def _log(msg: str) -> None:
     if not _ENABLED:
         return
-    global _seq
-    _seq = 0
     global _fh
+    global _seq
     if _fh is None:
         os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
         _fh = open(_LOG_PATH, "a", buffering=1)  # line-buffered
@@ -172,6 +172,8 @@ source "$(dirname "$0")/benchmark_lib.sh"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 marker "server ready"
 
+sleep 60
+
 # If profiling is enabled, start profiling via SGLang HTTP API
 if [[ "${PROFILE:-}" == "1" ]]; then
     SGLANG_TORCH_PROFILER_DIR="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
@@ -196,7 +198,7 @@ if [[ "${PROFILE:-}" == "1" ]]; then
       \"profile_by_stage\": true,
       \"record_shapes\": true
     }" || true
-  marker "profiling start request sent (server will auto-stop after num_steps)"
+  marker "profiling start request sent"
 fi
 
 run_benchmark_serving \
