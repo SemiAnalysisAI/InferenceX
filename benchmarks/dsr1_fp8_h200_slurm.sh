@@ -10,7 +10,7 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
-echo "JOB \$SLURM_JOB_ID running on \$SLURMD_NODENAME"
+echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
 pip3 install --user sentencepiece
 hf download $MODEL
@@ -21,11 +21,31 @@ export TORCH_CUDA_ARCH_LIST="9.0"
 
 
 # === Monkey Patch for MoE Debug Logging ===
-cat << 'EOF' > /tmp/moe_debug_patch.py
-import torch
+# Create a directory for our patch
+PATCH_DIR=$(mktemp -d /tmp/moe_patch-XXXXXX)
 
-def apply_moe_debug_patch():
-    import sglang.srt.layers.moe.fused_moe_triton.fused_moe as fused_moe_module
+# Create sitecustomize.py - Python automatically imports this at startup
+cat << 'EOF' > "$PATCH_DIR/sitecustomize.py"
+import sys
+import builtins
+
+_original_import = builtins.__import__
+
+_patched = False
+
+def _patching_import(name, globals=None, locals=None, fromlist=(), level=0):
+    global _patched
+    module = _original_import(name, globals, locals, fromlist, level)
+    
+    # Patch after sglang's fused_moe module is loaded
+    if not _patched and name == "sglang.srt.layers.moe.fused_moe_triton.fused_moe":
+        _patched = True
+        _apply_moe_debug_patch(module)
+    
+    return module
+
+def _apply_moe_debug_patch(fused_moe_module):
+    import torch
     
     original_fused_experts_impl = fused_moe_module.fused_experts_impl
     
@@ -64,15 +84,20 @@ def apply_moe_debug_patch():
     fused_moe_module.fused_experts_impl = patched_fused_experts_impl
     print("[MoE Debug] Patch applied successfully", flush=True)
 
-apply_moe_debug_patch()
+# Install the patching import hook
+builtins.__import__ = _patching_import
+print("[MoE Debug] Import hook installed", flush=True)
 EOF
 
-# === Apply patch by injecting into sglang's startup ===
-PATCH_INJECTION="import sys; sys.path.insert(0, '/tmp'); import moe_debug_patch;"
+# Set PYTHONPATH so sitecustomize.py is found and loaded automatically
+export PYTHONPATH="$PATCH_DIR:${PYTHONPATH:-}"
+
+echo "[MoE Debug] Patch directory: $PATCH_DIR"
+echo "[MoE Debug] PYTHONPATH: $PYTHONPATH"
 
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
-    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 0 \
@@ -81,7 +106,7 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --decode-log-interval 1 --disable-cuda-graph \
     > $SERVER_LOG 2>&1 &
 else
-    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 256 --cuda-graph-max-bs 256 \
