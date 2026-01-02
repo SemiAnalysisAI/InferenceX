@@ -136,8 +136,6 @@ if [[ "${MOE_DEBUG:-}" == "1" ]]; then
     echo "[MoE Debug] PYTHONPATH: $PYTHONPATH"
     ts() { date +"%Y-%m-%d %H:%M:%S%z"; }
 
-    ts() { date +"%Y-%m-%d %H:%M:%S%z"; }
-
     marker() {
     local msg="$1"
     local line="[$(ts)] [MARK] $msg"
@@ -150,16 +148,15 @@ else
 fi
 
 
-
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
-    --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
+    --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 0 \
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
-    --decode-log-interval 1 \
+    --decode-log-interval 1 --disable-cuda-graph \
     > $SERVER_LOG 2>&1 &
 else
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
@@ -199,13 +196,12 @@ run_benchmark_serving \
   --input-len "$ISL" \
   --output-len "$OSL" \
   --random-range-ratio "$RANDOM_RANGE_RATIO" \
-  --num-prompts 2 \
+  --num-prompts 4 \
   --max-concurrency "$CONC" \
   --result-filename "$RESULT_FILENAME" \
   --result-dir /workspace/ \
   &
 BENCH_PID=$!
-marker "benchmark starting: conc=$CONC"
 
 wait "$BENCH_PID"
 
@@ -226,7 +222,7 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     MERGED_TRACE=$(ls -t "$SGLANG_TORCH_PROFILER_DIR"/merged-*.trace.json* 2>/dev/null | head -n1)
     if [[ -n "$MERGED_TRACE" ]]; then
       echo "[PROFILE] Running MFU analyzer on merged trace: $MERGED_TRACE"
-      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$MERGED_TRACE" "$MERGED_TRACE" --gpu H200 --tp $TP --decode-batch-size $CONC || echo "[PROFILE] MFU analyzer failed; continuing without modification"
+      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$MERGED_TRACE" "$MERGED_TRACE" --gpu H200 --tp $TP --decode-batch-size 2 || echo "[PROFILE] MFU analyzer failed; continuing without modification"
     fi
     echo "[PROFILE] Found trace: $TRACE_FILE -> $DEST_TRACE"
     cp "$TRACE_FILE" "$DEST_TRACE"
