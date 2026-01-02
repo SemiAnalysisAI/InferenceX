@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
 
-# Source benchmark utilities early
-source "$(dirname "$0")/benchmark_lib.sh"
-
-check_env_vars \
-    MODEL \
-    TP \
-    CONC \
-    ISL \
-    OSL \
-    MAX_MODEL_LEN \
-    RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    NUM_PROMPTS \
-    PORT_OFFSET
+# === Required Env Vars ===
+# MODEL
+# PORT
+# TP
+# CONC
+# ISL
+# OSL
+# RANDOM_RANGE_RATIO
+# RESULT_FILENAME
+# PORT_OFFSET
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
