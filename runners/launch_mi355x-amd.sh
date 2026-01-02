@@ -21,13 +21,27 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}_slurm.sh"
 
-    # Wait for all jobs to complete
-    echo "Waiting for all jobs to complete..."
-    while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-        echo "Jobs still running..."
-        squeue --steps -u $USER
-        sleep 30
+    # Wait for job to complete
+    JOB_ID=$(squeue -u $USER --noheader --format='%i')
+    LOG_FILE="$SGL_SLURM_JOBS_PATH/slurm_job-${JOB_ID}.out"
+
+    # Wait for log file to appear
+    while [ ! -f "$LOG_FILE" ]; do
+        sleep 5
     done
+
+    # Poll for job completion in background
+    (
+        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+            sleep 10
+        done
+    ) &
+    POLL_PID=$!
+
+    # Tail the log file until job completes
+    tail -f -n+1 "$LOG_FILE" --pid=$POLL_PID
+
+    wait $POLL_PID
 
     # FIXME: The below is bad and is a result of the indirection of the ways in which
     # Dynamo jobs are launched. In a follow-up PR, the location of the result file should not
