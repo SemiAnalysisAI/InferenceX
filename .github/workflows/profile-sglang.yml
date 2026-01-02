@@ -150,7 +150,7 @@ jobs:
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
-          PROFILE: '1'
+          PROFILE: '0'
           SGLANG_TORCH_PROFILER_DIR: /workspace/
           MOE_DEBUG: ${{ github.event_name == 'workflow_dispatch' && inputs.moe-debug && '1' || '' }}
           MOE_DEBUG_LOG: ${{ (github.event_name == 'workflow_dispatch' && inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}

@@ -16,7 +16,6 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 export TORCH_CUDA_ARCH_LIST="9.0"
-export PROFILED="0"
 export MOE_DEBUG="1"
 
 # === Monkey Patch for MoE Debug Logging (optional) ===
