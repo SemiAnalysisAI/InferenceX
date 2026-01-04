@@ -18,7 +18,7 @@ git clone --branch main https://github.com/cquil11/sglang_disagg.git
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
 # Set up SGL launch script-specific environment variables
-export TIME_LIMIT="04:00:00"
+export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME="DeepSeek-R1"
 export CONTAINER_IMAGE=$IMAGE
