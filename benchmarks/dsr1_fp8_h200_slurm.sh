@@ -16,7 +16,6 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 export TORCH_CUDA_ARCH_LIST="9.0"
-export MOE_DEBUG="1"
 
 # === Monkey Patch for MoE Debug Logging (optional) ===
 # Enable by setting MOE_DEBUG=1. When enabled, we set MOE_DEBUG_LOG (if not provided)
@@ -154,10 +153,10 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
-    --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 0 \
+    --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
-    --decode-log-interval 1 --disable-cuda-graph \
+    --decode-log-interval 1 \
     > $SERVER_LOG 2>&1 &
 else
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \

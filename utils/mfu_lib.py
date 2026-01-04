@@ -110,6 +110,16 @@ class Config:
         """
         return max(self.num_experts // max(self.ep_degree, 1), 1)
 
+    def estimate_activated_experts(self, batch_size: int, top_k: int) -> int:
+        """Estimate activated experts for a given batch size."""
+        import math
+        max_experts = self.local_experts
+        if batch_size <= 0:
+            return top_k
+        saturation = 1.0 - math.exp(-batch_size / self.expert_saturation_scale)
+        activated = top_k + (max_experts - top_k) * saturation
+        return min(int(activated), max_experts)
+
 
 @dataclass
 class KernelClassification:
@@ -502,36 +512,6 @@ def get_dtype_peak_tflops(dtype: str, gpu_specs: GPUSpecs) -> float:
     if any(x in dtype_lower for x in ["float8", "fp8", "e4m3", "e5m2"]):
         return gpu_specs.fp8_tflops if gpu_specs.fp8_tflops > 0 else gpu_specs.fp16_tflops
     return gpu_specs.fp16_tflops
-
-def estimate_activated_experts(batch_size: int, top_k: int = 8, max_experts: int = 257) -> int:
-    """Estimate number of activated experts based on batch size.
-    
-    Models the saturation curve where:
-    - batch_size=1 → top_k experts (each token picks top_k)
-    - batch_size→∞ → max_experts (all experts eventually used)
-    
-    Uses a logarithmic saturation model fitted to empirical observations
-    from DeepSeek R1 with top-k=8 routing.
-    
-    The model: activated = top_k + (max_experts - top_k) * (1 - exp(-batch_size / scale))
-    where scale controls how quickly saturation occurs.
-    """
-    import math
-    
-    if batch_size <= 0:
-        return top_k
-    
-    # Scale factor controls saturation speed
-    # Tuned so that:
-    #   - batch_size=64 → ~140-180 experts
-    #   - batch_size=200 → ~200-220 experts  
-    #   - batch_size=1000 → ~250+ experts
-    scale = 150.0  # Adjust based on your empirical data
-    
-    saturation = 1.0 - math.exp(-batch_size / scale)
-    activated = top_k + (max_experts - top_k) * saturation
-    
-    return min(int(activated), max_experts)
 
 ###############################################################################
 # Dimension extraction from CPU operations and kernels
