@@ -176,3 +176,25 @@ gptoss-fp4-mi355x-vllm:
     - { tp: 1, conc-start: 4, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 4 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
+
+dsr1-fp8-mi355x-atom:
+  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp8
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
