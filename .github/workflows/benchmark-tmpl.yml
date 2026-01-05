@@ -120,10 +120,13 @@ jobs:
                 # nvidia-smi --gpu-reset -i 0,1,2,3,4,5,6,7 2>/dev/null || true
               fi
             else
-              echo "[Docker] Cleaning up bmk-server container ..."
-              docker stop bmk-server 2>/dev/null || true
-              docker rm -f bmk-server 2>/dev/null || true
-              docker network rm bmk-net 2>/dev/null || true
+              echo "[Docker] Cleaning up resources ..."
+              docker ps -aq | xargs -r docker rm -f
+              docker network prune -f
+              while [ -n "$(docker ps -aq)" ]; do
+                docker ps -a
+                sleep 5
+              done
             fi
           fi
           if command -v squeue >/dev/null 2>&1; then
