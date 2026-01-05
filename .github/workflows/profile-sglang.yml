@@ -50,7 +50,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CLI_ARGS="${{ inputs.generate-cli-command }}"
           else
-            CLI_ARGS="full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type mi325x --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc ${PUSH_CONC}"
+            CLI_ARGS="full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang --runner-type mi300x --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc ${PUSH_CONC}"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
