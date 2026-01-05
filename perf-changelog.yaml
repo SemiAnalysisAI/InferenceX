@@ -140,4 +140,4 @@
     - dsr1-fp8-mi355x-sglang
   description:
     - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/307
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/332
