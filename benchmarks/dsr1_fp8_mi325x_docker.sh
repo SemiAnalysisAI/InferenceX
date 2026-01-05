@@ -196,8 +196,11 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     DEST_TRACE="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
     MERGED_TRACE=$(ls -t "$SGLANG_TORCH_PROFILER_DIR"/merged-*.trace.json* 2>/dev/null | head -n1)
     if [[ -n "$MERGED_TRACE" ]]; then
-      echo "[PROFILE] Merged trace found: $MERGED_TRACE"
-      echo "[PROFILE] Skipping MFU analyzer on MI325x (NVIDIA-only today)"
+      echo "[PROFILE] Running MFU analyzer on merged trace: $MERGED_TRACE (GPU=MI325X)"
+      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$MERGED_TRACE" "$MERGED_TRACE" --gpu MI325X --tp $TP --decode-batch-size 2 || echo "[PROFILE] MFU analyzer failed; continuing without modification"
+    else
+      echo "[PROFILE] No merged trace found; analyzing selected trace: $TRACE_FILE (GPU=MI325X)"
+      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$TRACE_FILE" "$TRACE_FILE" --gpu MI325X --tp $TP --decode-batch-size 2 || echo "[PROFILE] MFU analyzer failed; continuing without modification"
     fi
     echo "[PROFILE] Found trace: $TRACE_FILE -> $DEST_TRACE"
     cp "$TRACE_FILE" "$DEST_TRACE"
