@@ -9,12 +9,10 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 
-# Print SLURM job info if running in SLURM environment
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# Ensure model is downloaded (no-op if already cached)
 hf download "$MODEL"
 
 # Reference
