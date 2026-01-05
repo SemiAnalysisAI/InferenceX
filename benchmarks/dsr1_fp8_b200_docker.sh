@@ -53,6 +53,7 @@ pip install -q datasets pandas
 if [[ "${PROFILE:-}" == "1" ]]; then
   SGLANG_TORCH_PROFILER_DIR="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
   mkdir -p "$SGLANG_TORCH_PROFILER_DIR"
+  echo "[PROFILE] Using benchmark_serving managed profiling (--profile); dir=$SGLANG_TORCH_PROFILER_DIR"
 fi
 
 run_benchmark_serving \
@@ -69,17 +70,12 @@ run_benchmark_serving \
     &
 BENCH_PID=$!
 
-if [[ "${PROFILE:-}" == "1" ]]; then
-  echo "[PROFILE] Starting capture; dir=$SGLANG_TORCH_PROFILER_DIR"
-  curl -sf -X POST "http://127.0.0.1:$PORT/start_profile" \
-    -H "Content-Type: application/json" \
-    -d "{\"output_dir\": \"$SGLANG_TORCH_PROFILER_DIR\", \"num_steps\": 5, \"start_step\": 0, \"activities\": [\"GPU\", \"CPU\"], \"merge_profiles\": true, \"profile_by_stage\": true }" || true
-fi
-
 wait "$BENCH_PID"
 
+ls -lt "$SGLANG_TORCH_PROFILER_DIR"
+
 if [[ "${PROFILE:-}" == "1" ]]; then
-  ls -lt "$SGLANG_TORCH_PROFILER_DIR" || true
+  # Wait briefly for the file to appear (auto-stop writes it)
   TRACE_FILE=""
   for _ in {1..180}; do
     TRACE_FILE=$(ls -t "$SGLANG_TORCH_PROFILER_DIR"/*.trace.json* 2>/dev/null | head -n1)
@@ -89,11 +85,11 @@ if [[ "${PROFILE:-}" == "1" ]]; then
 
   if [[ -n "$TRACE_FILE" ]]; then
     DEST_TRACE="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
-    # Run MFU analysis on merged trace if present
+    # If a merged profile exists, run MFU analyzer on it before copying
     MERGED_TRACE=$(ls -t "$SGLANG_TORCH_PROFILER_DIR"/merged-*.trace.json* 2>/dev/null | head -n1)
     if [[ -n "$MERGED_TRACE" ]]; then
-      echo "[PROFILE] Running MFU analyzer on merged trace (B200 FP8): $MERGED_TRACE"
-      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$MERGED_TRACE" "$MERGED_TRACE" --gpu B200 --tp $TP --decode-batch-size $CONC || echo "[PROFILE] MFU analyzer failed; continuing"
+      echo "[PROFILE] Running MFU analyzer on merged trace: $MERGED_TRACE"
+      PYTHONNOUSERSITE=1 python3 utils/mfu_trace_analyzer.py "$MERGED_TRACE" "$MERGED_TRACE" --gpu B200 --tp $TP --decode-batch-size $CONC || echo "[PROFILE] MFU analyzer failed; continuing without modification"
     fi
     echo "[PROFILE] Found trace: $TRACE_FILE -> $DEST_TRACE"
     cp "$TRACE_FILE" "$DEST_TRACE"

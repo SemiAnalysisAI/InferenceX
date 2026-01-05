@@ -177,16 +177,12 @@ source "$(dirname "$0")/benchmark_lib.sh"
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-sleep 20
-
 # If profiling is enabled, start profiling via SGLang HTTP API
 if [[ "${PROFILE:-}" == "1" ]]; then
     SGLANG_TORCH_PROFILER_DIR="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
     mkdir -p "$SGLANG_TORCH_PROFILER_DIR"
-fi
+    echo "[PROFILE] Using benchmark_serving managed profiling (--profile); dir=$SGLANG_TORCH_PROFILER_DIR"
 
-if [[ "${PROFILE:-}" == "1" ]]; then
-  echo "[PROFILE] Using benchmark_serving managed profiling (--profile); dir=$SGLANG_TORCH_PROFILER_DIR"
 fi
 
 run_benchmark_serving \
@@ -196,7 +192,7 @@ run_benchmark_serving \
   --input-len "$ISL" \
   --output-len "$OSL" \
   --random-range-ratio "$RANDOM_RANGE_RATIO" \
-  --num-prompts $(( CONC * 10 )) \
+  --num-prompts $(( CONC * 5 )) \
   --max-concurrency "$CONC" \
   --result-filename "$RESULT_FILENAME" \
   --result-dir /workspace/ \

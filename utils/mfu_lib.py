@@ -1986,7 +1986,7 @@ def print_summary(gemm_infos: List[GemmInfo], layer_times: Dict[str, Any], gpu_s
             if w1_ops or w2_ops:
                 sample = w1_ops[0] if w1_ops else (w2_ops[0] if w2_ops else None)
                 if sample:
-                    print(f"  Dimensions (inferred): {sample.num_tokens} tokens × top_{sample.top_k} experts")
+                    print(f"  Dimensions (inferred): {sample.decode_batch_size} tokens × top_{sample.top_k} experts")
                     print(f"              {sample.num_experts} experts, hidden={sample.hidden_size}")
                     print(f"              w1_inter={sample.w1_intermediate if w1_ops else 0} (gate+up), w2_inter={sample.w2_intermediate if w2_ops else 0} (down)")
                     print()
