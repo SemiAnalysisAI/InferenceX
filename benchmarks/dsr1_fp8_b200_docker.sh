@@ -33,12 +33,14 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 ps aux
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+--host 0.0.0.0 --port $PORT --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs 128 --max-running-requests 128 \
---mem-fraction-static 0.82 --kv-cache-dtype fp8_e4m3 --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
---attention-backend trtllm_mla --stream-interval 30 --ep-size $EP_SIZE --moe-runner-backend flashinfer_trtllm --quantization fp8 > $SERVER_LOG 2>&1 &
+--disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
+--chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
+--attention-backend flashinfer --stream-interval 10 \
+--decode-log-interval 1 \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -63,7 +65,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$NUM_PROMPTS" \
+    --num-prompts $(( CONC * 5)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
