@@ -19,7 +19,11 @@ HF_HUB_CACHE_MOUNT="/mnt/hf_hub_cache/"  # Temp solution
 PORT=8888
 
 # Determine framework suffix for benchmark script
-FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
+if [[ "$FRAMEWORK" == "atom" ]]; then
+    FRAMEWORK_SUFFIX="_atom"
+else
+    FRAMEWORK_SUFFIX=""
+fi
 
 network_name="bmk-net"
 server_name="bmk-server"
