@@ -20,12 +20,18 @@ b200-trt:
 - 'b200-nb_0'
 - 'b200-nb_1'
 b200:
+# Docker-only nodes
 - 'b200-nvd_0'
 - 'b200-nvd_1'
 - 'b200-nvd_2'
 - 'b200-nvd_3'
 - 'b200-dgxc_1'
 - 'b200-dgxc_2'
+# Slurm nodes (also have b200 label, can run docker workloads)
+- 'b200-nv_0'
+- 'b200-nv_1'
+- 'b200-nb_0'
+- 'b200-nb_1'
 mi300x:
 - 'mi300x-amd_0'
 - 'mi300x-amd_1'

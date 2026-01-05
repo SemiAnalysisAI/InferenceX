@@ -24,6 +24,8 @@ fi
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-remap-root \
+--container-writable \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
