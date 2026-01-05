@@ -45,7 +45,7 @@ docker run --rm --init --network host --name $server_name \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e NUM_PROMPTS \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
-benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}_docker.sh"
+benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}.sh"
 
 # Try graceful first
 docker stop -t 90 "$server_name" || true

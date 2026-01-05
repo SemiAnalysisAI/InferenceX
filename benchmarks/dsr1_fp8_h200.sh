@@ -10,10 +10,13 @@
 # RESULT_FILENAME
 # PORT_OFFSET
 
-echo "JOB \$SLURM_JOB_ID running on \$SLURMD_NODENAME"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
 pip3 install --user sentencepiece
-hf download $MODEL
+
+hf download "$MODEL"
 PORT=$(( 8888 + $PORT_OFFSET ))
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 

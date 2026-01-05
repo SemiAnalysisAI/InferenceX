@@ -1,43 +1,46 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
+# === Required Env Vars ===
 # MODEL
-# PORT
 # TP
-# EP_SIZE
-# DP_ATTENTION
 # CONC
 # ISL
 # OSL
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
-# NUM_PROMPTS
 # RESULT_FILENAME
+# PORT_OFFSET
+# DP_ATTENTION
+# EP_SIZE
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
-# GPTOSS TRTLLM Deployment Guide:
-# https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
-MOE_BACKEND="TRTLLM"
+hf download "$MODEL"
+
+# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+MOE_BACKEND="CUTLASS"
+
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
-EXTRA_CONFIG_FILE="gptoss-fp4.yml"
-export TRTLLM_ENABLE_PDL=1
-export NCCL_GRAPH_REGISTER=0
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=$(( 8888 + $PORT_OFFSET ))
+EXTRA_CONFIG_FILE="dsr1-fp8.yml"
 
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: $CONC
+    max_batch_size: 128
 enable_attention_dp: $DP_ATTENTION
+print_iter_log: true
 kv_cache_config:
     dtype: fp8
-    enable_block_reuse: false
-    free_gpu_memory_fraction: 0.85
-print_iter_log: true
-stream_interval: 20
-num_postprocess_workers: 4
+    free_gpu_memory_fraction: 0.75
+    enable_block_reuse: false 
+stream_interval: 10
 moe_config:
     backend: $MOE_BACKEND
 EOF
@@ -45,28 +48,27 @@ EOF
 if [[ "$DP_ATTENTION" == "true" ]]; then
     cat << EOF >> $EXTRA_CONFIG_FILE
 attention_dp_config:
+    batching_wait_iters: 0
     enable_balance: true
+    timeout_iters: 60
 EOF
 fi
 
-echo "Generated config file contents:"
-cat $EXTRA_CONFIG_FILE
-
 set -x
 
-MAX_NUM_TOKENS=20000
+MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
 
 # Launch TRT-LLM server
-mpirun -n 1 --oversubscribe --allow-run-as-root \
+PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
     --backend=pytorch \
-    --max_batch_size 512 \
     --max_seq_len=$MAX_MODEL_LEN \
     --max_num_tokens=$MAX_NUM_TOKENS \
     --tp_size=$TP --ep_size=$EP_SIZE \
-    --extra_llm_api_options=$EXTRA_CONFIG_FILE > $SERVER_LOG 2>&1 &
-
+    --extra_llm_api_options=$EXTRA_CONFIG_FILE \
+    > $SERVER_LOG 2>&1 &
+    
 SERVER_PID=$!
 
 # Source benchmark utilities
@@ -75,8 +77,6 @@ source "$(dirname "$0")/benchmark_lib.sh"
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-pip install -q datasets pandas
-
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -84,7 +84,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$NUM_PROMPTS" \
+    --num-prompts $(( $CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

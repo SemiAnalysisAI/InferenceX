@@ -12,9 +12,11 @@
 # DP_ATTENTION
 # EP_SIZE
 
-echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
-hf download $MODEL
+hf download "$MODEL"
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 

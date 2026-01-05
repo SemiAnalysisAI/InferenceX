@@ -31,7 +31,7 @@ srun --jobid=$JOB_ID \
 --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x.sh
 
 scancel $JOB_ID
 
