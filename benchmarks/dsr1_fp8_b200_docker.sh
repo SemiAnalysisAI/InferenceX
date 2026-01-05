@@ -36,9 +36,9 @@ set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
 --host 0.0.0.0 --port $PORT --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
---disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
+--disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 0 \
 --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
---attention-backend flashinfer --stream-interval 10 \
+--attention-backend flashinfer --stream-interval 10 --disable-cuda-graph \
 --decode-log-interval 1 \
 > $SERVER_LOG 2>&1 &
 
@@ -65,7 +65,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( CONC * 5)) \
+    --num-prompts $(( CONC * 2)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
