@@ -10,7 +10,7 @@
 # MAX_MODEL_LEN
 
 # Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     CALCULATED_MAX_MODEL_LEN=""
 else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
