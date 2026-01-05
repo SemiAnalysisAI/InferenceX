@@ -38,6 +38,7 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 export TORCH_CUDA_ARCH_LIST="9.0"
+export VLLM_MXFP4_USE_MARLIN=1
 
 PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
  --gpu-memory-utilization 0.9 --tensor-parallel-size $TP --max-num-seqs $CONC  \
