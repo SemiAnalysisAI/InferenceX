@@ -189,4 +189,12 @@ dsr1-fp8-mi355x-atom:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
