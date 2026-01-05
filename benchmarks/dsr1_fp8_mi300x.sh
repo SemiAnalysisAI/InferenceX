@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # === Required Env Vars ===
 # MODEL
@@ -9,12 +9,13 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 
-echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+# Print SLURM job info if running in SLURM environment
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
-hf download $MODEL
-
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=8888
+# Ensure model is downloaded (no-op if already cached)
+hf download "$MODEL"
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
@@ -31,6 +32,9 @@ fi
 
 export SGLANG_USE_AITER=1
 
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
+
 set -x
 python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
@@ -40,8 +44,7 @@ python3 -m sglang.launch_server \
 --chunked-prefill-size=196608 \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=196608 \
---disable-radix-cache \
-> $SERVER_LOG 2>&1 &
+--disable-radix-cache > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

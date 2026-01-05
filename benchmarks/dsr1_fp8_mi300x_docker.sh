@@ -2,13 +2,19 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+
+# Print SLURM job info if running in SLURM environment
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+hf download "$MODEL"
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
@@ -26,6 +32,7 @@ fi
 export SGLANG_USE_AITER=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
 
 set -x
 python3 -m sglang.launch_server \
