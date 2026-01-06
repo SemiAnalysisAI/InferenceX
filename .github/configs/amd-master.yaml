@@ -22,7 +22,7 @@ dsr1-fp4-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi300x-sglang:
-  image: rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi30x-20250915
+  image: rocm/sgl-dev:v0.5.7-rocm700-mi30x-20260105
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x
