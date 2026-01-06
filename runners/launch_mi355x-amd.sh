@@ -118,7 +118,9 @@ PY
 
     echo "All result files processed"
     # Use sync scancel to ensure nfs file handle is released in time
+    set +x
     scancel_sync $JOB_ID
+    set -x
     echo "Canceled the slurm job $JOB_ID"
 
     sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
