@@ -14,6 +14,8 @@
 export VLLM_USE_AITER_UNIFIED_ATTENTION=1
 export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_USE_AITER_FUSED_MOE_A16W4=1
+# DeepSeek R1 FP8 on ROCm Sparse MLA requires KV block size = 1
+export BLOCK_SIZE=${BLOCK_SIZE:-1}
 # Ensure HIP device visibility is set for Ray/ROCm stacks that require it
 if [[ -n "${ROCR_VISIBLE_DEVICES:-}" && -z "${HIP_VISIBLE_DEVICES:-}" ]]; then
   export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
@@ -43,27 +45,34 @@ fi
 
 IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
 
-for pair in "${MATRIX[@]}"; do
-  isl=${pair%%:*}
-  osl=${pair##*:}
+# If SINGLE_SESSION is set, reuse one LLM across all runs.
+if [[ "${SINGLE_SESSION:-0}" == "1" ]]; then
+  # Surface matrix and batches to Python, which will compute filenames.
+  export BATCH_LIST="${batch_list[*]}"
+  python3 utils/offline_benchmark_vllm.py
+else
+  for pair in "${MATRIX[@]}"; do
+    isl=${pair%%:*}
+    osl=${pair##*:}
 
-  if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
-  elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
-  else
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
-  fi
+    if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
+      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
+    elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
+      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
+    else
+      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
+    fi
 
-  for bs in "${batch_list[@]}"; do
-    export ISL="$isl"
-    export OSL="$osl"
-    export CALCULATED_MAX_MODEL_LEN
-    export BATCH_SIZE="$bs"
-    export NUM_PROMPTS="$bs"
-    export CONC="$bs"
-    export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
+    for bs in "${batch_list[@]}"; do
+      export ISL="$isl"
+      export OSL="$osl"
+      export CALCULATED_MAX_MODEL_LEN
+      export BATCH_SIZE="$bs"
+      export NUM_PROMPTS="$bs"
+      export CONC="$bs"
+      export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
 
-    python3 utils/offline_benchmark_vllm.py
+      python3 utils/offline_benchmark_vllm.py
+    done
   done
-done
+fi
