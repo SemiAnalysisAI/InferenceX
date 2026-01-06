@@ -2,8 +2,8 @@
 
 scancel_sync() {
     local jobid=$1
-    local timeout=${2:-30}
-    local interval=5
+    local timeout=${2:-600}
+    local interval=10
     local start
     start=$(date +%s)
 
@@ -14,10 +14,10 @@ scancel_sync() {
         local now
         now=$(date +%s)
         if (( now - start >= timeout )); then
-            echo "[scancel_sync][ERROR] job $jobid still present after ${timeout}s"
+            echo "[scancel_sync][WARN] job $jobid still present after ${timeout}s"
             return 1
         fi
-        echo "[scancel_sync] waiting for job $jobid to exit..."
+        echo "[scancel_sync] waiting for job $jobid to exit. $((timeout-(now-start))) secs remaining..."
         sleep "$interval"
     done
     echo "[scancel_sync] job $jobid exited"
