@@ -93,6 +93,9 @@ PY
     done
 
     echo "All result files processed"
+    scancel $JOB_ID
+    echo "Canceled the slurm job $JOB_ID"
+
     sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
 
 else
