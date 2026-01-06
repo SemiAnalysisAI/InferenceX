@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source benchmark utilities early
-source "$(dirname \"$0\")/benchmark_lib.sh"
+source "$(dirname "$0")/benchmark_lib.sh"
 
 # Validate required environment variables
 check_env_vars MODEL PORT TP CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME
