@@ -180,15 +180,15 @@ gptoss-fp4-b200-trt:
   precision: fp4
   framework: trt
   multinode: false
-  # DP Attn at higher concurrencies, TP attn at middle to lower. TP=1 turns out to be highest as artifact of concurrency limit=128
   seq-len-configs:
+  # DP Attn at higher concurrencies, TP attn at middle to lower. TP=1 turns out to be highest as artifact of concurrency limit=128
   - isl: 1024
     osl: 1024
     search-space:
     - { tp: 1, conc-start: 128, conc-end: 128 }
     - { tp: 2, ep: 2, dp-attn: true, conc-start: 64, conc-end: 128 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
-    - { tp: 2, conc-start: 8, conc-end: 64 }
+    - { tp: 2, conc-start: 8, conc-end: 32 }
     - { tp: 4, conc-start: 4, conc-end: 16 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 1024
@@ -198,6 +198,7 @@ gptoss-fp4-b200-trt:
     - { tp: 2, conc-start: 4, conc-end: 16 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, conc-start: 4, conc-end: 8 }
+  # DP Attn at higher concurrencies, TP attn at middle to lower. TP=1 turns out to be highest as artifact of concurrency limit=128
   - isl: 8192
     osl: 1024
     search-space:
@@ -1308,29 +1309,6 @@ gptoss-fp4-gb200-dynamo-trt:
         - "PREFILL_MAX_BATCH_SIZE=32"
       decode:
         num-worker: 1
-        tp: 2
-        ep: 2
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=1"
-        - "DECODE_MAX_NUM_TOKENS=20000"
-        - "DECODE_MAX_BATCH_SIZE=512"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-
-# P: 2xTP1   D:2xDEP2
-    - spec-decoding: "none"
-      conc-list: [256, 384]
-      prefill:
-        num-worker: 2
-        tp: 1
-        ep: 1
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_NODES=1"
-        - "PREFILL_MAX_NUM_TOKENS=20000"
-        - "PREFILL_MAX_BATCH_SIZE=32"
-      decode:
-        num-worker: 2 
         tp: 2
         ep: 2
         dp-attn: true
