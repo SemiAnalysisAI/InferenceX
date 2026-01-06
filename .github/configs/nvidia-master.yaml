@@ -1216,7 +1216,7 @@ gptoss-fp4-gb200-dynamo-trt:
         - "PREFILL_MAX_NUM_TOKENS=20000"
         - "PREFILL_MAX_BATCH_SIZE=32"
       decode:
-        num-worker: 1  # TODO: Adjust num-worker
+        num-worker: 1  
         tp: 8
         ep: 1
         dp-attn: false
@@ -1238,7 +1238,7 @@ gptoss-fp4-gb200-dynamo-trt:
         - "PREFILL_MAX_NUM_TOKENS=20000"
         - "PREFILL_MAX_BATCH_SIZE=32"
       decode:
-        num-worker: 1  # TODO: Adjust num-worker
+        num-worker: 1  
         tp: 4
         ep: 1
         dp-attn: false
@@ -1262,7 +1262,7 @@ gptoss-fp4-gb200-dynamo-trt:
         - "PREFILL_MAX_NUM_TOKENS=20000"
         - "PREFILL_MAX_BATCH_SIZE=32"
       decode:
-        num-worker: 1  # TODO: Adjust num-worker
+        num-worker: 1  
         tp: 4
         ep: 1
         dp-attn: false
@@ -1285,7 +1285,7 @@ gptoss-fp4-gb200-dynamo-trt:
         - "PREFILL_MAX_NUM_TOKENS=20000"
         - "PREFILL_MAX_BATCH_SIZE=32"
       decode:
-        num-worker: 1  # TODO: Adjust num-worker
+        num-worker: 1  
         tp: 2
         ep: 1
         dp-attn: false
@@ -1317,3 +1317,4 @@ gptoss-fp4-gb200-dynamo-trt:
         - "DECODE_MAX_NUM_TOKENS=20000"
         - "DECODE_MAX_BATCH_SIZE=512"
         - "DECODE_GPU_MEM_FRACTION=0.9"
+        

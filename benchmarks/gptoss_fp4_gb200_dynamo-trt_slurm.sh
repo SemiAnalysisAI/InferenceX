@@ -10,7 +10,7 @@ check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING \
     PREFILL_MAX_NUM_TOKENS PREFILL_MAX_BATCH_SIZE DECODE_MAX_NUM_TOKENS \
     DECODE_MAX_BATCH_SIZE DECODE_GPU_MEM_FRACTION
 
-if [ "$SPEC_DECODING" == "mtp" ]; then
+if [[ "$SPEC_DECODING" == "mtp" ]]; then
     check_env_vars DECODE_MTP_SIZE
 else
     DECODE_MTP_SIZE="0"
@@ -61,3 +61,4 @@ sbatch --nodes=${total_nodes} \
     ${gen_nodes} ${kind} \
     ${MODEL_PATH} ${SERVED_MODEL_NAME} \
     ${IMAGE} ${ISL} ${OSL}
+    
