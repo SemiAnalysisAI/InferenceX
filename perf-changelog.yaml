@@ -124,18 +124,27 @@
   description:
     - "Update NVIDIA DeepSeek sglang Docker image from v0.5.5 to v0.5.6"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/276
-
+  
 - config-keys:
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
     - gptoss-fp4-h200-vllm
-  description:
+  description: 
     - "Update vLLM image from v0.11.2 to v0.13.0"
     - "Add VLLM_MXFP4_USE_MARLIN=1 to H100 and H200 benchmark scripts"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/327
 
 - config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/332
+
+- config-keys:
     - dsr1-fp8-mi355x-sglang-disagg
   description:
-    - "feat: Add PD disaggregation for Mi355X"
+    - "Add PD disaggregation (1P2D) for Mi355X"
+    - "Includes with and without speculative decoding"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
