@@ -13,11 +13,14 @@
 # PORT_OFFSET
 
 export SGLANG_USE_AITER=1
+export RCCL_MSCCL_ENABLE=0
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
 python3 -m sglang.launch_server \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
@@ -27,7 +30,8 @@ python3 -m sglang.launch_server \
     --mem-fraction-static 0.8 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
-    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
+    --cuda-graph-max-bs 128 \
+    --enable-torch-compile > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
