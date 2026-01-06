@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Offline vLLM benchmark helper.
+Offline vLLM benchmark: utils/offline_benchmark_vllm.py
 
 Reads required parameters from environment and performs a batch generate()
 call with vLLM.LLM, then writes a result JSON compatible with
@@ -51,6 +51,38 @@ def _calc_max_model_len_for_pair(isl: int, osl: int) -> int:
     else:
         return isl + osl + 128
 
+# Replace the prompt generation section with this:
+
+def _generate_prompts_for_isl(llm, isl: int, num_prompts: int) -> list[str]:
+    """Generate prompts that will tokenize to approximately ISL tokens."""
+    tokenizer = llm.get_tokenizer()
+    
+    # Base text to repeat
+    base = "The quick brown fox jumps over the lazy dog. This is filler text for benchmarking. "
+    
+    # Estimate tokens per char ratio (roughly 4 chars per token for English)
+    chars_per_token = 4
+    target_chars = isl * chars_per_token
+    
+    # Build a long enough string
+    long_text = base * (target_chars // len(base) + 1)
+    
+    prompts = []
+    for _ in range(num_prompts):
+        # Binary search to find the right length
+        low, high = 0, len(long_text)
+        while low < high:
+            mid = (low + high + 1) // 2
+            tokens = tokenizer.encode(long_text[:mid])
+            if len(tokens) <= isl:
+                low = mid
+            else:
+                high = mid - 1
+        
+        prompt = long_text[:low]
+        prompts.append(prompt)
+    
+    return prompts
 
 def _run_single(llm_ctor_kwargs: dict, llm_runtime_kwargs: dict) -> dict:
     # Instantiate LLM once and run a single workload, returning the result dict.
@@ -59,11 +91,6 @@ def _run_single(llm_ctor_kwargs: dict, llm_runtime_kwargs: dict) -> dict:
     isl = llm_runtime_kwargs["isl"]
     osl = llm_runtime_kwargs["osl"]
     num_prompts = llm_runtime_kwargs["num_prompts"]
-
-    # Build synthetic prompts. Exact token length may vary by tokenizer.
-    base = "The quick brown fox jumps over the lazy dog. "
-    repeat = max(1, ceil(isl / 8))
-    prompts = [(base * repeat)[:1024] for _ in range(num_prompts)]
 
     sp = SamplingParams(max_tokens=osl, temperature=0.0, top_p=1.0)
 
@@ -92,6 +119,8 @@ def _run_single(llm_ctor_kwargs: dict, llm_runtime_kwargs: dict) -> dict:
     if llm is None:
         print("Failed to construct vLLM LLM with provided arguments", file=sys.stderr)
         sys.exit(3)
+
+    prompts = _generate_prompts_for_isl(llm, isl, num_prompts)
 
     start = time.perf_counter()
     outs = llm.generate(prompts, sp)
@@ -227,10 +256,7 @@ def main() -> None:
                 num_prompts = bs
 
                 # Build prompts
-                base = "The quick brown fox jumps over the lazy dog. "
-                repeat = max(1, ceil(isl / 8))
-                prompts = [(base * repeat)[:1024] for _ in range(num_prompts)]
-
+                prompts = _generate_prompts_for_isl(llm, isl, num_prompts)
                 sp = SamplingParams(max_tokens=osl, temperature=0.0, top_p=1.0)
 
                 start = time.perf_counter()

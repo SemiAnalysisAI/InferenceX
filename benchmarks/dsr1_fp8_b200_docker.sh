@@ -26,7 +26,10 @@ export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
 # Defaults for sweep if not provided by workflow
 RESULT_PREFIX=${RESULT_PREFIX:-dsv32_b200}
-DEFAULT_BATCH_LIST="4 16 64"
+DEFAULT_BATCH_LIST="1 2 4 8 16 32 64 128"
+
+MATRIX=("1024:1024" "1024:8192" "8192:1024")
+export TEST_MATRIX=$(IFS=','; echo "${MATRIX[*]}")
 
 set -euo pipefail
 set -x
@@ -37,6 +40,7 @@ export HF_HOME=${HF_HOME:-$HF_HUB_CACHE}
 export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HUB_CACHE}
 export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HUB_CACHE}
 export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HUB_CACHE}
+export VLLM_NO_USAGE_STATS=1
 
 # Force single-session mode only: reuse one LLM across entire matrix inside Python.
 IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"

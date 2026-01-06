@@ -17,31 +17,19 @@ export HF_HOME=${HF_HOME:-$HF_HUB_CACHE}
 export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HUB_CACHE}
 export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HUB_CACHE}
 export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HUB_CACHE}
+export VLLM_NO_USAGE_STATS=1
 if [[ -n "${ROCR_VISIBLE_DEVICES:-}" && -z "${HIP_VISIBLE_DEVICES:-}" ]]; then
   export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
 RESULT_PREFIX=${RESULT_PREFIX:-dsv32_mi355x}
-DEFAULT_BATCH_LIST="4 16 64"
+DEFAULT_BATCH_LIST="1 2 4 8 16 32 64 128"
 
 set -euo pipefail
 set -x
 
-declare -a MATRIX
-if [[ -n "${TEST_MATRIX:-}" ]]; then
-  IFS=',' read -ra pairs <<< "$TEST_MATRIX"
-  for p in "${pairs[@]}"; do MATRIX+=("$p"); done
-elif [[ -n "${ISL_LIST:-}" || -n "${OSL_LIST:-}" ]]; then
-  IFS=' ' read -ra isl_list <<< "${ISL_LIST:-1024}"
-  IFS=' ' read -ra osl_list <<< "${OSL_LIST:-1024}"
-  for isl in "${isl_list[@]}"; do
-    for osl in "${osl_list[@]}"; do
-      MATRIX+=("${isl}:${osl}")
-    done
-  done
-else
-  MATRIX=("1024:1024" "1024:8192" "8192:1024")
-fi
+MATRIX=("1024:1024" "1024:8192" "8192:1024")
+export TEST_MATRIX=$(IFS=','; echo "${MATRIX[*]}")
 
 IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
 # Force single-session mode: reuse one LLM across the entire matrix.
