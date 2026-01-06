@@ -21,7 +21,7 @@ PERFORMANCE_SWEEPS_PATH="components/backends/trtllm/performance_sweeps"
 echo "Cloning Dynamo repository..."
 git clone https://github.com/ai-dynamo/dynamo.git
 cd dynamo
-git checkout jthomson04/gpt-oss-disagg-slurm-v2
+git checkout release/0.5.1-rc0.20260105
 git submodule update --init --recursive
 
 cd "$PERFORMANCE_SWEEPS_PATH"
@@ -61,4 +61,3 @@ sbatch --nodes=${total_nodes} \
     ${gen_nodes} ${kind} \
     ${MODEL_PATH} ${SERVED_MODEL_NAME} \
     ${IMAGE} ${ISL} ${OSL}
-    

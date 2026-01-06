@@ -29,12 +29,12 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     if [[ $MODEL_PREFIX == "gptoss" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
         export SERVED_MODEL_NAME="gpt-oss-120b"
+    elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+        export SERVED_MODEL_NAME="deepseek-r1-fp4"
     else
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss"
         exit 1
     fi
-else
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
 fi
 
 export ISL="$ISL"

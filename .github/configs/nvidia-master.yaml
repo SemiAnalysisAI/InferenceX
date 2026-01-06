@@ -1049,7 +1049,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         - "DECODE_NODES=8"
 
 gptoss-fp4-gb200-dynamo-trt:
-  image: jwillthomson/dynamo-trtllm-1.2.0rc2-min-tokens-fix-v2
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: gb200
