@@ -71,7 +71,12 @@ def main() -> None:
         # Only pass if provided; older vLLM may not support it
         llm_kwargs["kv_cache_dtype"] = kv_cache_dtype
 
-    llm = LLM(**llm_kwargs)
+    # Prefer multiprocessing backend to avoid Ray import/init on ROCm
+    try:
+        llm = LLM(distributed_executor_backend="mp", **llm_kwargs)  # type: ignore[arg-type]
+    except TypeError:
+        # Fallback for older vLLM without the arg
+        llm = LLM(**llm_kwargs)
 
     start = time.perf_counter()
     outs = llm.generate(prompts, sp)

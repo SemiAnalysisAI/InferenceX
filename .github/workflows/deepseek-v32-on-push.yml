@@ -27,8 +27,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run B200 offline sweep (scripts handle ranges)
+        env:
+          RUNNER_NAME: ${{ runner.name }}
         run: |
-          bash runners/launch_b200-nvd.sh
+          echo "Runner name: ${RUNNER_NAME}"
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
       - name: Upload results (B200)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
@@ -52,9 +55,12 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0
-      - name: Run MI355x offline sweep
+      - name: Run MI355x offline sweep (scripts handle ranges)
+        env:
+          RUNNER_NAME: ${{ runner.name }}
         run: |
-          bash runners/launch_mi355x-amd.sh
+          echo "Runner name: ${RUNNER_NAME}"
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
       - name: Upload results (MI355x)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
