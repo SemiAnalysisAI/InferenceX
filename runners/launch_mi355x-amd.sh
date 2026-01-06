@@ -1,5 +1,29 @@
 #!/usr/bin/env bash
 
+scancel_sync() {
+    local jobid=$1
+    local timeout=${2:-30}
+    local interval=5
+    local start
+    start=$(date +%s)
+
+    echo "[scancel_sync] Requesting cancel of job $jobid"
+    scancel "$jobid" || true
+
+    while squeue -j "$jobid" --noheader >/dev/null 2>&1; do
+        local now
+        now=$(date +%s)
+        if (( now - start >= timeout )); then
+            echo "[scancel_sync][ERROR] job $jobid still present after ${timeout}s"
+            return 1
+        fi
+        echo "[scancel_sync] waiting for job $jobid to exit..."
+        sleep "$interval"
+    done
+    echo "[scancel_sync] job $jobid exited"
+    return 0
+}
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
     # This sets up the environment and launches multi-node benchmarks
 
@@ -93,7 +117,8 @@ PY
     done
 
     echo "All result files processed"
-    scancel $JOB_ID
+    # Use sync scancel to ensure nfs file handle is released in time
+    scancel_sync $JOB_ID
     echo "Canceled the slurm job $JOB_ID"
 
     sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
