@@ -14,6 +14,7 @@ jobs:
     runs-on: b200
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HUB_CACHE: /hf-hub-cache
       MODEL: deepseek-ai/DeepSeek-V3.2
       TP: '8'
       RESULT_PREFIX: dsv32_b200
@@ -39,6 +40,7 @@ jobs:
     runs-on: mi355x
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HUB_CACHE: /hf-hub-cache
       MODEL: deepseek-ai/DeepSeek-V3.2
       TP: '8'
       RESULT_PREFIX: dsv32_mi355x
