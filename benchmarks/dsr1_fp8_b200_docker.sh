@@ -20,6 +20,7 @@ sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_l
 
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
+export TP=8
 # Enable FlashInfer MoE kernels with FP8 path on NVIDIA
 export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
@@ -30,47 +31,15 @@ DEFAULT_BATCH_LIST="4 16 64"
 set -euo pipefail
 set -x
 
-# Build matrix of (ISL, OSL) pairs
-declare -a MATRIX
-if [[ -n "${TEST_MATRIX:-}" ]]; then
-  # Comma-separated pairs like "1024:1024,1024:8192,8192:1024"
-  IFS=',' read -ra pairs <<< "$TEST_MATRIX"
-  for p in "${pairs[@]}"; do MATRIX+=("$p"); done
-elif [[ -n "${ISL_LIST:-}" || -n "${OSL_LIST:-}" ]]; then
-  IFS=' ' read -ra isl_list <<< "${ISL_LIST:-1024}"
-  IFS=' ' read -ra osl_list <<< "${OSL_LIST:-1024}"
-  for isl in "${isl_list[@]}"; do
-    for osl in "${osl_list[@]}"; do
-      MATRIX+=("${isl}:${osl}")
-    done
-  done
-else
-  MATRIX=("1024:1024" "1024:8192" "8192:1024")
-fi
+# Persist HF caches inside container (works with mounted host cache)
+export HF_HUB_CACHE=${HF_HUB_CACHE:-${HF_HOME:-/hf-hub-cache}}
+export HF_HOME=${HF_HOME:-$HF_HUB_CACHE}
+export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HUB_CACHE}
+export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HUB_CACHE}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HUB_CACHE}
 
+# Force single-session mode only: reuse one LLM across entire matrix inside Python.
 IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
-
-for pair in "${MATRIX[@]}"; do
-  isl=${pair%%:*}
-  osl=${pair##*:}
-
-  if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
-  elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
-  else
-    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
-  fi
-
-  for bs in "${batch_list[@]}"; do
-    export ISL="$isl"
-    export OSL="$osl"
-    export CALCULATED_MAX_MODEL_LEN
-    export BATCH_SIZE="$bs"
-    export NUM_PROMPTS="$bs"        # single-shot offline run with batch=bs
-    export CONC="$bs"               # recorded as max_concurrency in results
-    export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
-
-    python3 utils/offline_benchmark_vllm.py
-  done
-done
+export SINGLE_SESSION=1
+export BATCH_LIST="${batch_list[*]}"
+python3 utils/offline_benchmark_vllm.py

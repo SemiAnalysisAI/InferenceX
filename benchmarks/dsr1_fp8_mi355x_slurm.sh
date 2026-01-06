@@ -10,6 +10,13 @@ export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_USE_AITER_FUSED_MOE_A16W4=1
 # DeepSeek R1 FP8 on ROCm Sparse MLA requires KV block size = 1
 export BLOCK_SIZE=${BLOCK_SIZE:-1}
+export TP=8
+# Persist HF caches inside container (works with mounted host cache)
+export HF_HUB_CACHE=${HF_HUB_CACHE:-${HF_HOME:-/hf-hub-cache}}
+export HF_HOME=${HF_HOME:-$HF_HUB_CACHE}
+export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HUB_CACHE}
+export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HUB_CACHE}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HUB_CACHE}
 if [[ -n "${ROCR_VISIBLE_DEVICES:-}" && -z "${HIP_VISIBLE_DEVICES:-}" ]]; then
   export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
@@ -37,33 +44,7 @@ else
 fi
 
 IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
-
-if [[ "${SINGLE_SESSION:-0}" == "1" ]]; then
-  export BATCH_LIST="${batch_list[*]}"
-  python3 utils/offline_benchmark_vllm.py
-else
-  for pair in "${MATRIX[@]}"; do
-    isl=${pair%%:*}
-    osl=${pair##*:}
-
-    if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
-      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
-    elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
-      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
-    else
-      CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
-    fi
-
-    for bs in "${batch_list[@]}"; do
-      export ISL="$isl"
-      export OSL="$osl"
-      export CALCULATED_MAX_MODEL_LEN
-      export BATCH_SIZE="$bs"
-      export NUM_PROMPTS="$bs"
-      export CONC="$bs"
-      export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
-
-      python3 utils/offline_benchmark_vllm.py
-    done
-  done
-fi
+# Force single-session mode: reuse one LLM across the entire matrix.
+export SINGLE_SESSION=1
+export BATCH_LIST="${batch_list[*]}"
+python3 utils/offline_benchmark_vllm.py
