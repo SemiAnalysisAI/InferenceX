@@ -18,7 +18,7 @@ jobs:
       MODEL: deepseek-ai/DeepSeek-V3.2
       TP: '8'
       RESULT_PREFIX: dsv32_b200
-      IMAGE: vllm/vllm-openai:v0.13.0
+      IMAGE: vllm/vllm-openai:nightly
       EXP_NAME: dsr1
       PRECISION: fp8
       FRAMEWORK: vllm
@@ -44,7 +44,7 @@ jobs:
       MODEL: deepseek-ai/DeepSeek-V3.2
       TP: '8'
       RESULT_PREFIX: dsv32_mi355x
-      IMAGE: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+      IMAGE: rocm/vllm:rocm7.0.0_vllm_0.11.2_20251210
       EXP_NAME: dsr1
       PRECISION: fp8
       FRAMEWORK: vllm
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0
-      - name: Run MI355x offline sweep (scripts handle ranges)
+      - name: Run MI355x offline sweep
         run: |
           bash runners/launch_mi355x-amd.sh
       - name: Upload results (MI355x)
