@@ -66,8 +66,8 @@ dsr1-fp8-mi325x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi355x-sglang:
-  image: lmsysorg/sglang:v0.5.5.post3-rocm700-mi35x
-  model: deepseek-ai/DeepSeek-R1-0528
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+  model: deepseek-ai/DeepSeek-V3.2
   model-prefix: dsr1
   runner: mi355x
   precision: fp8

@@ -18,46 +18,59 @@ nvidia-smi
 # happens 1% of the time. ref: https://github.com/flashinfer-ai/flashinfer/pull/1779
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+export TORCH_CUDA_ARCH_LIST="10.0"
+export PYTHONNOUSERSITE=1
+# Enable FlashInfer MoE kernels with FP8 path on NVIDIA
+export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
-# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
-if [[ $CONC -ge 16 ]]; then
-  SCHEDULER_RECV_INTERVAL=30
-else
-  SCHEDULER_RECV_INTERVAL=10
-fi
-echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+# Defaults for sweep if not provided by workflow
+RESULT_PREFIX=${RESULT_PREFIX:-dsv32_b200}
+DEFAULT_BATCH_LIST="4 16 64"
 
-ps aux
-
+set -euo pipefail
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs 128 --max-running-requests 128 \
---mem-fraction-static 0.82 --kv-cache-dtype fp8_e4m3 --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
---attention-backend trtllm_mla --stream-interval 30 --ep-size $EP_SIZE --moe-runner-backend flashinfer_trtllm --quantization fp8 > $SERVER_LOG 2>&1 &
 
-SERVER_PID=$!
+# Build matrix of (ISL, OSL) pairs
+declare -a MATRIX
+if [[ -n "${TEST_MATRIX:-}" ]]; then
+  # Comma-separated pairs like "1024:1024,1024:8192,8192:1024"
+  IFS=',' read -ra pairs <<< "$TEST_MATRIX"
+  for p in "${pairs[@]}"; do MATRIX+=("$p"); done
+elif [[ -n "${ISL_LIST:-}" || -n "${OSL_LIST:-}" ]]; then
+  IFS=' ' read -ra isl_list <<< "${ISL_LIST:-1024}"
+  IFS=' ' read -ra osl_list <<< "${OSL_LIST:-1024}"
+  for isl in "${isl_list[@]}"; do
+    for osl in "${osl_list[@]}"; do
+      MATRIX+=("${isl}:${osl}")
+    done
+  done
+else
+  MATRIX=("1024:1024" "1024:8192" "8192:1024")
+fi
 
-# Source benchmark utilities
-source "$(dirname "$0")/benchmark_lib.sh"
+IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
 
-# Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+for pair in "${MATRIX[@]}"; do
+  isl=${pair%%:*}
+  osl=${pair##*:}
 
-pip install -q datasets pandas
+  if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
+  elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
+  else
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
+  fi
 
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend vllm \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$NUM_PROMPTS" \
-    --max-concurrency "$CONC" \
-    --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+  for bs in "${batch_list[@]}"; do
+    export ISL="$isl"
+    export OSL="$osl"
+    export CALCULATED_MAX_MODEL_LEN
+    export BATCH_SIZE="$bs"
+    export NUM_PROMPTS="$bs"        # single-shot offline run with batch=bs
+    export CONC="$bs"               # recorded as max_concurrency in results
+    export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
+
+    python3 utils/offline_benchmark_vllm.py
+  done
+done

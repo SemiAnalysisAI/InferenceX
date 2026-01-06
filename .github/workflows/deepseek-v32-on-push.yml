@@ -1,0 +1,61 @@
+name: DeepSeek V3.2 FP8 (on push)
+
+on:
+  push:
+    branches:
+      - deepseekv3_2
+
+concurrency:
+  group: deepseek-v32-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  b200-v32:
+    runs-on: b200
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      MODEL: deepseek-ai/DeepSeek-V3.2
+      TP: '8'
+      RESULT_PREFIX: dsv32_b200
+      IMAGE: vllm/vllm-openai:v0.13.0
+      EXP_NAME: dsr1
+      PRECISION: fp8
+      FRAMEWORK: vllm
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+      - name: Run B200 offline sweep (scripts handle ranges)
+        run: |
+          bash runners/launch_b200-nvd.sh
+      - name: Upload results (B200)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: results_b200_v32
+          path: |
+            *.json
+
+  mi355x-v32:
+    runs-on: mi355x
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      MODEL: deepseek-ai/DeepSeek-V3.2
+      TP: '8'
+      RESULT_PREFIX: dsv32_mi355x
+      IMAGE: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
+      EXP_NAME: dsr1
+      PRECISION: fp8
+      FRAMEWORK: vllm
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+      - name: Run MI355x offline sweep (scripts handle ranges)
+        run: |
+          bash runners/launch_mi355x-amd.sh
+      - name: Upload results (MI355x)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: results_mi355x_v32
+          path: |
+            *.json

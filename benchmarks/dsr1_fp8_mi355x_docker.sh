@@ -11,46 +11,55 @@
 # RESULT_FILENAME
 # NUM_PROMPTS
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
+export VLLM_USE_AITER_UNIFIED_ATTENTION=1
+export VLLM_ROCM_USE_AITER_MHA=0
+export VLLM_ROCM_USE_AITER_FUSED_MOE_A16W4=1
 
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+RESULT_PREFIX=${RESULT_PREFIX:-dsv32_mi355x}
+DEFAULT_BATCH_LIST="4 16 64"
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+set -euo pipefail
+set -x
 
-python3 -m sglang.launch_server \
-    --attention-backend aiter \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --enable-torch-compile \
-    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
+declare -a MATRIX
+if [[ -n "${TEST_MATRIX:-}" ]]; then
+  IFS=',' read -ra pairs <<< "$TEST_MATRIX"
+  for p in "${pairs[@]}"; do MATRIX+=("$p"); done
+elif [[ -n "${ISL_LIST:-}" || -n "${OSL_LIST:-}" ]]; then
+  IFS=' ' read -ra isl_list <<< "${ISL_LIST:-1024}"
+  IFS=' ' read -ra osl_list <<< "${OSL_LIST:-1024}"
+  for isl in "${isl_list[@]}"; do
+    for osl in "${osl_list[@]}"; do
+      MATRIX+=("${isl}:${osl}")
+    done
+  done
+else
+  MATRIX=("1024:1024" "1024:8192" "8192:1024")
+fi
 
-SERVER_PID=$!
+IFS=' ' read -ra batch_list <<< "${BATCH_LIST:-$DEFAULT_BATCH_LIST}"
 
-# Source benchmark utilities
-source "$(dirname "$0")/benchmark_lib.sh"
+for pair in "${MATRIX[@]}"; do
+  isl=${pair%%:*}
+  osl=${pair##*:}
 
-# Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+  if [[ "$isl" == "1024" && "$osl" == "1024" ]]; then
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 20))
+  elif [[ "$isl" == "8192" || "$osl" == "8192" ]]; then
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 200))
+  else
+    CALCULATED_MAX_MODEL_LEN=$((isl + osl + 128))
+  fi
 
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend vllm \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$NUM_PROMPTS" \
-    --max-concurrency "$CONC" \
-    --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+  for bs in "${batch_list[@]}"; do
+    export ISL="$isl"
+    export OSL="$osl"
+    export CALCULATED_MAX_MODEL_LEN
+    export BATCH_SIZE="$bs"
+    export NUM_PROMPTS="$bs"
+    export CONC="$bs"
+    export RESULT_FILENAME="${RESULT_PREFIX}_isl_${isl}_osl_${osl}_bs${bs}_tp${TP}"
 
+    python3 utils/offline_benchmark_vllm.py
+  done
+done
