@@ -141,3 +141,9 @@
   description:
     - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/332
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+  description:
+    - Add internal AMD ATOM inference engine for DeepSeek R1 Mi355X
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/383
