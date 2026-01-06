@@ -10,7 +10,7 @@ scancel_sync() {
     echo "[scancel_sync] Requesting cancel of job $jobid"
     scancel "$jobid" || true
 
-    while squeue -j "$jobid" --noheader >/dev/null 2>&1; do
+    while [[ -n "$(squeue -j "$jobid" --noheader 2>/dev/null)" ]]; do
         local now
         now=$(date +%s)
         if (( now - start >= timeout )); then
