@@ -188,19 +188,19 @@ dsr1-fp8-b200-trt-mtp:
     osl: 1024
     search-space:
     # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
   - isl: 1024
     osl: 8192
     search-space:
     # If CONC >= 128, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
     # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
 
 dsr1-fp8-h200-sglang:
@@ -271,13 +271,13 @@ dsr1-fp8-h200-trt-mtp:
     osl: 8192
     search-space:
     # If CONC >= 256, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
     # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
 
 gptoss-fp4-b200-trt:
