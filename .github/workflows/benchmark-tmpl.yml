@@ -149,7 +149,40 @@ jobs:
           RUNNER_NAME: ${{ runner.name }}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP_SIZE }}_dpa_${{ env.DP_ATTENTION }}_conc${{ env.CONC }}_${{ runner.name }}
         run: |
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          MAX_ATTEMPTS=2
+          FAST_FAIL_THRESHOLD=120  # 2 minutes - failures under this are likely flaky startup errors
+          
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "=== Attempt $attempt of $MAX_ATTEMPTS ==="
+            START_TIME=$(date +%s)
+            
+            set +e
+            bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+            EXIT_CODE=$?
+            set -e
+            
+            END_TIME=$(date +%s)
+            ELAPSED=$((END_TIME - START_TIME))
+            
+            if [ $EXIT_CODE -eq 0 ]; then
+              break
+            fi
+            
+            # Only retry if it failed fast - likely a flaky server startup error
+            if [ $ELAPSED -ge $FAST_FAIL_THRESHOLD ]; then
+              echo "Job ran for ${ELAPSED}s (>= ${FAST_FAIL_THRESHOLD}s), not retrying."
+              exit $EXIT_CODE
+            fi
+            
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+              echo "Job failed after ${ELAPSED}s (< ${FAST_FAIL_THRESHOLD}s), retrying in 5s..."
+              sleep 5
+            else
+              echo "All $MAX_ATTEMPTS attempts exhausted."
+              exit $EXIT_CODE
+            fi
+          done
+          
           FOUND_RESULT_FILE=
           for i in {1..10}; do
             if [ -f "$RESULT_FILENAME.json" ]; then
