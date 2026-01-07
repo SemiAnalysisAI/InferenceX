@@ -25,8 +25,16 @@ export MODEL_PATH=$MODEL
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
-else
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
+elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
+    if [[ $MODEL_PREFIX == "gptoss" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
+        export SERVED_MODEL_NAME="gpt-oss-120b"
+    elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+        export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    else
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss"
+        exit 1
+    fi
 fi
 
 export ISL="$ISL"
@@ -59,7 +67,7 @@ if [[ $FRAMEWORK == "dynamo-trt" ]]; then
     echo "Found logs directory: $LOGS_DIR"
 
     # Find all result subdirectories in this logs directory
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -name "ctx*_gen*_[td]ep*_batch*_eplb*_mtp*" -type d)
+    RESULT_SUBDIRS=$(find "$LOGS_DIR" -name "ctx*_gen*_*_batch*_eplb*_mtp*" -type d)
 
     if [ -z "$RESULT_SUBDIRS" ]; then
         echo "No result subdirectories found in $LOGS_DIR"
