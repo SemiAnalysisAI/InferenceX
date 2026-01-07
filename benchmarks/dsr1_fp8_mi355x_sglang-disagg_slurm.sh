@@ -7,13 +7,13 @@ source "$(dirname "$0")/benchmark_lib.sh"
 check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
     PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN \
     DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN \
-    PREFILL_NODES DECODE_NODES SGL_SLURM_JOBS_PATH # SGL_SLURM_JOBS_PATH FIXME
+    PREFILL_NODES DECODE_NODES SGL_SLURM_JOBS_PATH RANDOM_RANGE_RATIO SGL_SLURM_JOBS_PATH
 
 # Always clone and setup sglang_disagg
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
 
 # Switch to origin repo url for supporting wide ep configs
-git clone --branch sa-260107 https://github.com/billishyahao/sglang_disagg.git
+git clone --branch sa-260107 https://github.com/cquil11/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
@@ -49,4 +49,5 @@ bash ./submit_disagg.sh $PREFILL_NODES \
     $DECODE_NUM_WORKERS \
     $ISL $OSL "${CONC_LIST// /x}" inf \
     ${PREFILL_ENABLE_EP} ${PREFILL_ENABLE_DP} \
-    ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP}
+    ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP} \
+    ${RANDOM_RANGE_RATIO}
