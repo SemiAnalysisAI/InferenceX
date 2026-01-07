@@ -10,76 +10,25 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # PORT_OFFSET
+# DP_ATTENTION
+# EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 hf download $MODEL
 
-# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC, TP =========
-EP_SIZE="1"
-MOE_BACKEND="TRTLLM"
-DP_ATTENTION=false
-MTP=3
-
-if [[ "$TP" == "4" ]]; then
-    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 16 ]]; then
-            EP_SIZE="$TP"
-        fi
-        if [[ $CONC -ge 128 ]]; then
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-        if [[ $CONC -ge 32 ]]; then
-            EP_SIZE="$TP"
-        fi
-        if [[ $CONC -ge 128 ]]; then
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 32 ]]; then
-            EP_SIZE="$TP"
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    fi
-elif [[ "$TP" == "8" ]]; then
-    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 16 ]]; then
-            EP_SIZE="$TP"
-        fi
-        if [[ $CONC -ge 64 ]]; then
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-        if [[ $CONC -ge 8 ]]; then
-            EP_SIZE="$TP"
-        fi
-        if [[ $CONC -ge 128 ]]; then
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 32 ]]; then
-            EP_SIZE="$TP"
-            DP_ATTENTION=true
-            MOE_BACKEND="CUTLASS"
-            MTP=1
-        fi
-    fi
+# ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    MOE_BACKEND="CUTLASS"
+    MTP=1
+else
+    MOE_BACKEND="TRTLLM"
+    MTP=3
 fi
 
-echo "EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_ATTENTION='$DP_ATTENTION', MTP='$MTP'"
+echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))

@@ -10,32 +10,25 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # PORT_OFFSET
+# DP_ATTENTION
+# EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 hf download $MODEL
 
-# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
-EP_SIZE="$TP"
+# ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
 MOE_BACKEND="CUTLASS"
-DP_ATTENTION=false
-MTP=3
 
-if [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC -ge 256 ]]; then
-        DP_ATTENTION=true
-        MTP=1
-    fi
-elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -ge 64 ]]; then
-        DP_ATTENTION=true
-        MTP=1
-    fi
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    MTP=1
+else
+    MTP=3
 fi
 
-echo "EP_SIZE='$EP_SIZE', MOE_BACKEND='$MOE_BACKEND', DP_ATTENTION='$DP_ATTENTION', MTP='$MTP'"
+echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
