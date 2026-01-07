@@ -11,6 +11,11 @@
 # RESULT_FILENAME
 # NUM_PROMPTS
 # PORT_OFFSET
+# EP_SIZE
+# DP_ATTENTION
+
+set -x
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
@@ -24,6 +29,12 @@ else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
@@ -31,7 +42,7 @@ python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --block-size $BLOCK_SIZE > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
