@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 export HF_HUB_CACHE_MOUNT="/home/hf_hub_cache/"
-export PORT_OFFSET=${USER: -1}
+export PORT=$(( 8888 + ${USER: -1} ))
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')

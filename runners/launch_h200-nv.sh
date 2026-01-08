@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 export HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache_${USER: -1}/"
-export PORT_OFFSET=0  # Doesn't matter when --exclusive
+export PORT=8888  # Doesn't matter when --exclusive
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')

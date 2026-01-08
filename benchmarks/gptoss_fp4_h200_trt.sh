@@ -8,7 +8,6 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
-# PORT_OFFSET
 # DP_ATTENTION
 # EP_SIZE
 
@@ -18,7 +17,7 @@ fi
 
 hf download "$MODEL"
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
+PORT=${PORT:-8888}
 
 
 set +x

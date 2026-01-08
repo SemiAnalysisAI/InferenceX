@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
-export PORT_OFFSET=${USER: -1}
+export PORT=$(( 8888 + ${USER: -1} ))
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

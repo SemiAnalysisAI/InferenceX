@@ -8,7 +8,6 @@
 # OSL
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
-# PORT_OFFSET
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -38,7 +37,7 @@ max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
+PORT=${PORT:-8888}
 
 export TORCH_CUDA_ARCH_LIST="9.0"
 export VLLM_MXFP4_USE_MARLIN=1
