@@ -49,7 +49,6 @@ moe_config:
 EOF
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
-<<<<<<< HEAD:benchmarks/gptoss_fp4_b200_trt_slurm.sh
     # DISABLE All2All for MoE TP
     if [[ "$EP_SIZE" -eq 1 ]]; then
         # DTP Alltoall Environment variables for EP_SIZE == 1
@@ -60,8 +59,6 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
         export TRTLLM_FORCE_ALLTOALL_METHOD="MNNVL"
         export TRTLLM_MOE_A2A_WORKSPACE_MB="2048"
     fi
-=======
->>>>>>> b8c3a37e (add all files):benchmarks/gptoss_fp4_b200_trt.sh
     cat << EOF >> $EXTRA_CONFIG_FILE
 attention_dp_config:
     enable_balance: true
