@@ -41,15 +41,21 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     from collections import defaultdict
 
     # Group entries by (model, runner, framework, precision, isl, osl)
-    # This ensures we compare within the same configuration, not across different frameworks
+    # Only include entries that have a top-level TP (i.e., single-node schema).
+    # This avoids relying on structural hints like prefill/decode which may be
+    # reused by future single-node disaggregated modes.
     groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
+        # Skip entries without a top-level TP field
+        if Fields.TP.value not in entry:
+            continue
+
         key = (
-            entry[Fields.MODEL.value], 
-            entry[Fields.RUNNER.value], 
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
             entry[Fields.FRAMEWORK.value],
             entry[Fields.PRECISION.value],
-            entry[Fields.ISL.value], 
+            entry[Fields.ISL.value],
             entry[Fields.OSL.value]
         )
         groups[key].append((i, entry))

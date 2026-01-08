@@ -53,6 +53,7 @@ on:
       run-eval:
         type: boolean
         required: true
+        default: false
       random-range-ratio:
         required: false
         type: string

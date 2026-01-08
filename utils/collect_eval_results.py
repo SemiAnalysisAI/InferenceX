@@ -8,7 +8,7 @@ from tabulate import tabulate
 # Import shared utilities from summarize
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize import (
-    load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION, 
+    load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL,
     TP, EP, CONC, DP_ATTENTION, TASK, EM_STRICT, EM_FLEXIBLE, N_EFF
 )
 
@@ -207,6 +207,8 @@ def main():
             'hw': meta.get('hw', 'unknown').upper(),
             'framework': meta.get('framework', 'unknown').lower(),
             'precision': meta.get('precision', 'unknown').lower(),
+            'isl': int(meta.get('isl', 0)),
+            'osl': int(meta.get('osl', 0)),
             'tp': int(meta.get('tp', 1)),
             'ep': int(meta.get('ep', 1)),
             'conc': int(meta.get('conc', 0)),
@@ -223,7 +225,7 @@ def main():
 
     # Sort for stable output
     rows.sort(key=lambda r: (
-        r['hw'], r['framework'], r['precision'], r['tp'], r['conc']
+        r['hw'], r['framework'], r['precision'], r['isl'], r['osl'], r['tp'], r['ep'], r['conc']
     ))
 
     if not rows:
@@ -231,7 +233,7 @@ def main():
     else:
         # Print table using tabulate
         headers = [
-            MODEL, HARDWARE, FRAMEWORK, PRECISION, TP, EP, CONC, DP_ATTENTION, 
+            MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL, TP, EP, CONC, DP_ATTENTION, 
             TASK, EM_STRICT, EM_FLEXIBLE, N_EFF
         ]
         
@@ -241,6 +243,8 @@ def main():
                 r['hw'],
                 r['framework'].upper(),
                 r['precision'].upper(),
+                r['isl'],
+                r['osl'],
                 r['tp'],
                 r['ep'],
                 r['conc'],
