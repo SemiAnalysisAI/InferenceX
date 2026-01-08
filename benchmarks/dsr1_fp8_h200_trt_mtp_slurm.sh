@@ -34,6 +34,11 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 EXTRA_CONFIG_FILE="dsr1-fp8-mtp.yml"
 
+# If ISL=8192 and DP_ATTENTION=true, export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:8192
+if [[ "$ISL" == "8192" && "$DP_ATTENTION" == "true" ]]; then
+    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:8192"
+fi
+
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
