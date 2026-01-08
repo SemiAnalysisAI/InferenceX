@@ -149,10 +149,3 @@
     - Explicitly add EP=TP for DP attention configs for B200 AGG nvidia-master file. Multinode Refactor inadvertently changed default EP=1
     - Add GPTOSS DISAGG configurations for GB200 1k1k and 8k1k.
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/387
-
-- config-keys:
-    - dsr1-fp8-mi355x-sglang-disagg
-  description:
-    - "Add PD disaggregation (1P2D) for Mi355X"
-    - "Includes with and without speculative decoding"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
