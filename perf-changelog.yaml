@@ -150,6 +150,13 @@
     - Add GPTOSS DISAGG configurations for GB200 1k1k and 8k1k.
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/387
 
+- config-keys: 
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add PD disaggregation (1P2D) for Mi355X"
+    - "Includes with and without speculative decoding"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
+
 - config-keys:
     - dsr1-fp4-b200-trt-mtp
     - dsr1-fp8-b200-trt-mtp
@@ -157,4 +164,4 @@
   description:
     - Add MTP (Multi-Token Prediction) support for single-node TRT configs
     - Add spec-decoding field to config entries and update launch scripts to select MTP benchmark scripts
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/392 
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/392
