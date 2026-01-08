@@ -2,7 +2,6 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT_OFFSET
 # TP
 # CONC
 # ISL
@@ -12,9 +11,18 @@
 # RESULT_FILENAME
 # NUM_PROMPTS
 
-echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+hf download "$MODEL"
 
 nvidia-smi
+
+# To improve CI stability, we patch this helper function to prevent a race condition that
+# happens 1% of the time. ref: https://github.com/flashinfer-ai/flashinfer/pull/1779
+sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
+
 
 # Calculate max-model-len based on ISL and OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
@@ -40,7 +48,7 @@ export PYTHONNOUSERSITE=1
 export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
+PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
@@ -64,7 +72,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( CONC * 10 )) \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

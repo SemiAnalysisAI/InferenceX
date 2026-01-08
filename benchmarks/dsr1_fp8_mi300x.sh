@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # === Required Env Vars ===
 # MODEL
@@ -6,17 +6,17 @@
 # CONC
 # ISL
 # OSL
-# MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
-echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+hf download "$MODEL"
 
-hf download $MODEL
-
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=8888
+# Reference
+# https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
 
 # If the machine runs a MEC FW older than 177, RCCL
 # cannot reclaim some memory.
@@ -28,22 +28,21 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
   export HSA_NO_SCRATCH_RECLAIM=1
 fi
 
-export VLLM_USE_AITER_UNIFIED_ATTENTION=1
-export VLLM_ROCM_USE_AITER_MHA=0
-export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
+export SGLANG_USE_AITER=1
+
+SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
 
 set -x
-vllm serve $MODEL --port $PORT \
+python3 -m sglang.launch_server \
+--model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
---max-seq-len-to-capture $MAX_MODEL_LEN \
---compilation-config  '{"cudagraph_mode": "FULL_AND_PIECEWISE"}' \
---block-size=64 \
---no-enable-prefix-caching \
---disable-log-requests \
---async-scheduling \
-> $SERVER_LOG 2>&1 &
+--mem-fraction-static=0.8 \
+--cuda-graph-max-bs=128 \
+--chunked-prefill-size=196608 \
+--num-continuous-decode-steps=4 \
+--max-prefill-tokens=196608 \
+--disable-radix-cache > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

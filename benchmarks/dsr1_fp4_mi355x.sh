@@ -2,7 +2,6 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
@@ -10,20 +9,25 @@
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
 # NUM_PROMPTS
-# PORT_OFFSET
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+hf download "$MODEL"
 
 export SGLANG_USE_AITER=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-PORT=$(( 8888 + $PORT_OFFSET ))
 
 PREFILL_SIZE=196608
 if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ "$CONC" -gt "32" ]]; then
+	if [[ "$CONC" -gt "32" ]]; then
 		PREFILL_SIZE=32768
 	fi
 fi
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
 
 set -x
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
@@ -57,4 +61,3 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
-

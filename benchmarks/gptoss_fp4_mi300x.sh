@@ -2,7 +2,6 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
@@ -10,6 +9,12 @@
 # MAX_MODEL_LEN
 # RANDOM_RANGE_RATIO
 # RESULT_FILENAME
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+hf download "$MODEL"
 
 # If the machine runs a MEC FW older than 177, RCCL
 # cannot reclaim some memory.
@@ -27,6 +32,7 @@ export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --port $PORT \

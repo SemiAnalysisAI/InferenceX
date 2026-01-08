@@ -2,7 +2,6 @@
 
 # === Required Env Vars ===
 # MODEL
-# PORT
 # TP
 # CONC
 # ISL
@@ -12,6 +11,12 @@
 # EP_SIZE
 # NUM_PROMPTS
 
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+hf download "$MODEL"
+
 nvidia-smi
 
 # To improve CI stability, we patch this helper function to prevent a race condition that
@@ -19,6 +24,7 @@ nvidia-smi
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+PORT=${PORT:-8888}
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
