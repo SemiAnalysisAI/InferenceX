@@ -156,3 +156,9 @@
     - "Add PD disaggregation (1P2D) for Mi355X"
     - "Includes with and without speculative decoding"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - "adds more SGLang B200 configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/411
