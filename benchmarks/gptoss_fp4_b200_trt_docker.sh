@@ -3,22 +3,19 @@
 # Source benchmark utilities early
 source "$(dirname "$0")/benchmark_lib.sh"
 
-# Validate required environment variables
-check_env_vars MODEL PORT TP EP_SIZE DP_ATTENTION CONC ISL OSL MAX_MODEL_LEN RANDOM_RANGE_RATIO NUM_PROMPTS RESULT_FILENAME
-
-# === Required Env Vars === 
-# MODEL
-# PORT
-# TP
-# EP_SIZE
-# DP_ATTENTION
-# CONC
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# NUM_PROMPTS
-# RESULT_FILENAME
+check_env_vars \
+    MODEL \
+    PORT \
+    TP \
+    EP_SIZE \
+    DP_ATTENTION \
+    CONC \
+    ISL \
+    OSL \
+    MAX_MODEL_LEN \
+    RANDOM_RANGE_RATIO \
+    NUM_PROMPTS \
+    RESULT_FILENAME
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 

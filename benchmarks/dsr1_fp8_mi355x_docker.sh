@@ -3,19 +3,16 @@
 # Source benchmark utilities early
 source "$(dirname "$0")/benchmark_lib.sh"
 
-# Validate required environment variables
-check_env_vars MODEL PORT TP CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME NUM_PROMPTS
-
-# === Required Env Vars ===
-# MODEL
-# PORT
-# TP
-# CONC
-# ISL
-# OSL
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
-# NUM_PROMPTS
+check_env_vars \
+    MODEL \
+    PORT \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME \
+    NUM_PROMPTS
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html

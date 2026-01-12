@@ -3,21 +3,18 @@
 # Source benchmark utilities early
 source "$(dirname "$0")/benchmark_lib.sh"
 
-# Validate required environment variables
-check_env_vars MODEL TP CONC ISL OSL MAX_MODEL_LEN RANDOM_RANGE_RATIO RESULT_FILENAME PORT_OFFSET DP_ATTENTION EP_SIZE
-
-# === Required Env Vars ===
-# MODEL
-# TP
-# CONC
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
-# PORT_OFFSET
-# DP_ATTENTION
-# EP_SIZE
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    MAX_MODEL_LEN \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME \
+    PORT_OFFSET \
+    DP_ATTENTION \
+    EP_SIZE
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
