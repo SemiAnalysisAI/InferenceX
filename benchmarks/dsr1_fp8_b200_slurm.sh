@@ -21,10 +21,6 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
-# Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests)
-# as the maximum concurrency, this will help us save memory from being unnecessary used. 
-MAX_RUNNING_REQUESTS=32
-CUDA_GRAPH_MAX_BATCH_SIZE=32
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $TP -eq 8 ]]; then
   if [[ $CONC -ge 16 ]]; then
@@ -32,6 +28,12 @@ if [[ $TP -eq 8 ]]; then
   else
     SCHEDULER_RECV_INTERVAL=10
   fi
+
+  # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
+  # this will help us save memory from being unnecessary used. 
+  MAX_RUNNING_REQUESTS=128
+  CUDA_GRAPH_MAX_BATCH_SIZE=128
+
   MEM_FRAC_STATIC=0.82
   CHUNKED_PREFILL_SIZE=32768
   MAX_PREFILL_TOKENS=32768
@@ -40,6 +42,12 @@ elif [[ $TP -eq 4 ]]; then
     echo "TP=4 not yet supported for ISL=$ISL OSL=$OSL!"
     exit 1
   fi
+
+  # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
+  # this will help us save memory from being unnecessary used. 
+  MAX_RUNNING_REQUESTS=32
+  CUDA_GRAPH_MAX_BATCH_SIZE=32
+
   MEM_FRAC_STATIC=0.95
   CHUNKED_PREFILL_SIZE=8192
   MAX_PREFILL_TOKENS=8192
