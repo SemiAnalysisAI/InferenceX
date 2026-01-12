@@ -160,5 +160,5 @@
 - config-keys:
     - dsr1-fp8-b200-sglang
   description:
-    - "adds more SGLang B200 configs"
+    - "Adds TP4 configurations to DSR1-FP8 B200 SGLang deployment experiments"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/411
