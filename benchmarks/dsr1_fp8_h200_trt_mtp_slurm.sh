@@ -105,5 +105,4 @@ run_benchmark_serving \
     --num-prompts $(( $CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template
+    --result-dir /workspace/

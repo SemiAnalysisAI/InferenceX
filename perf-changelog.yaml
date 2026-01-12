@@ -158,10 +158,7 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
 
 - config-keys:
-    - dsr1-fp4-b200-trt-mtp
-    - dsr1-fp8-b200-trt-mtp
-    - dsr1-fp8-h200-trt-mtp
+    - dsr1-fp4-mi355x-sglang
   description:
-    - Add MTP (Multi-Token Prediction) support for single-node TRT configs
-    - Add spec-decoding field to config entries and update launch scripts to select MTP benchmark scripts
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/392
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.7"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/395
