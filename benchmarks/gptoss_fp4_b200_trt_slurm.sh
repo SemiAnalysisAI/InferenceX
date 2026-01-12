@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars ===
-# MODEL
-# TP
-# CONC
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
-# PORT_OFFSET
-# DP_ATTENTION
-# EP_SIZE
+# Source benchmark utilities early
+source "$(dirname "$0")/benchmark_lib.sh"
+
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    MAX_MODEL_LEN \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME \
+    PORT_OFFSET \
+    DP_ATTENTION \
+    EP_SIZE
 
 # GPTOSS TRTLLM Deployment Guide:
 # https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md
@@ -85,9 +88,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
-
-# Source benchmark utilities
-source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
