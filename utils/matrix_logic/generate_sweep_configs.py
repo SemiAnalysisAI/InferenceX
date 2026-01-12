@@ -91,6 +91,16 @@ def generate_full_sweep(args, all_config_data, runner_data):
         runner = val[Fields.RUNNER.value]
         model_code = val[Fields.MODEL_PREFIX.value]
 
+        # Compute filtered runner nodes for this config if filter is specified
+        runner_nodes_to_use = None
+        if args.runner_node_filter:
+            runner_nodes = runner_data.get(runner, [])
+            runner_nodes_to_use = [
+                node for node in runner_nodes if args.runner_node_filter in node]
+            if not runner_nodes_to_use:
+                # No matching nodes for this config's runner type, skip this config
+                continue
+
         for seq_config in seq_len_configs:
             isl = seq_config[Fields.ISL.value]
             osl = seq_config[Fields.OSL.value]
@@ -148,26 +158,31 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                     # For multinode, create a single entry with conc as a list
                     seq_len_str = seq_len_to_str(isl, osl)
-                    entry = {
-                        Fields.IMAGE.value: image,
-                        Fields.MODEL.value: model,
-                        Fields.MODEL_PREFIX.value: model_code,
-                        Fields.PRECISION.value: precision,
-                        Fields.FRAMEWORK.value: framework,
-                        Fields.RUNNER.value: runner,
-                        Fields.ISL.value: isl,
-                        Fields.OSL.value: osl,
-                        Fields.SPEC_DECODING.value: spec_decoding,
-                        Fields.PREFILL.value: prefill,
-                        Fields.DECODE.value: decode,
-                        Fields.CONC.value: conc_values,  # Pass the entire list for multinode
-                        Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                        Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                        Fields.DISAGG.value: disagg,
-                    }
 
-                    validate_matrix_entry(entry, is_multinode)
-                    matrix_values.append(entry)
+                    # Determine which runner(s) to use
+                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
+                    for runner_value in runners_for_entry:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner_value,
+                            Fields.ISL.value: isl,
+                            Fields.OSL.value: osl,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.PREFILL.value: prefill,
+                            Fields.DECODE.value: decode,
+                            Fields.CONC.value: conc_values,  # Pass the entire list for multinode
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                            Fields.DISAGG.value: disagg,
+                        }
+
+                        validate_matrix_entry(entry, is_multinode)
+                        matrix_values.append(entry)
                 elif args.single_node:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
@@ -207,32 +222,37 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     conc = conc_start
                     while conc <= conc_end:
                         seq_len_str = seq_len_to_str(isl, osl)
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.TP.value: tp,
-                            Fields.CONC.value: conc,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                            Fields.EP.value: 1,  # Default
-                            Fields.DP_ATTN.value: False,  # Default
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                        }
 
-                        if ep is not None:
-                            entry[Fields.EP.value] = ep
-                        if dp_attn is not None:
-                            entry[Fields.DP_ATTN.value] = dp_attn
+                        # Determine which runner(s) to use
+                        runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                        validate_matrix_entry(entry, is_multinode)
-                        matrix_values.append(entry)
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                                Fields.EP.value: 1,  # Default
+                                Fields.DP_ATTN.value: False,  # Default
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                            }
+
+                            if ep is not None:
+                                entry[Fields.EP.value] = ep
+                            if dp_attn is not None:
+                                entry[Fields.DP_ATTN.value] = dp_attn
+
+                            validate_matrix_entry(entry, is_multinode)
+                            matrix_values.append(entry)
 
                         if conc == conc_end:
                             break
@@ -511,6 +531,11 @@ def main():
         required=True,
         help='Configuration file holding runner information (YAML format)'
     )
+    parent_parser.add_argument(
+        '--runner-node-filter',
+        required=False,
+        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
+    )
 
     # Create main parser
     parser = argparse.ArgumentParser(
@@ -614,11 +639,6 @@ def main():
         '--runner-type',
         required=True,
         help='Runner type (e.g., b200-trt, h100)'
-    )
-    test_config_parser.add_argument(
-        '--runner-node-filter',
-        required=False,
-        help='Filter runner nodes by substring match (e.g., "mi300x-amd" to only include nodes containing that string)'
     )
     test_node_group = test_config_parser.add_mutually_exclusive_group(
         required=True)

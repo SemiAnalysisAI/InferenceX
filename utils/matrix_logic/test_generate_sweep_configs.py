@@ -119,6 +119,7 @@ def full_sweep_args_single_node():
     args.max_conc = None
     args.max_tp = None
     args.max_ep = None
+    args.runner_node_filter = None
     args.single_node = True
     args.multi_node = False
     return args
@@ -137,6 +138,7 @@ def full_sweep_args_multi_node():
     args.max_conc = None
     args.max_tp = None
     args.max_ep = None
+    args.runner_node_filter = None
     args.single_node = False
     args.multi_node = True
     return args
@@ -421,6 +423,50 @@ class TestGenerateFullSweepSingleNode:
             expected_max_model_len = entry["isl"] + entry["osl"] + 200
             assert entry["max-model-len"] == expected_max_model_len
 
+    def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
+        """Runner node filter should expand entries to individual matching nodes."""
+        full_sweep_args_single_node.runner_type = ["mi300x"]
+        full_sweep_args_single_node.runner_node_filter = "amd"
+        full_sweep_args_single_node.seq_lens = ["1k1k"]
+        full_sweep_args_single_node.max_conc = 4  # Limit to single conc value for easier counting
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # 2 amd nodes (mi300x-amd_0, mi300x-amd_1), 1 conc value = 2 entries
+        assert len(result) == 2
+        assert all("amd" in entry["runner"] for entry in result)
+        runners = [entry["runner"] for entry in result]
+        assert "mi300x-amd_0" in runners
+        assert "mi300x-amd_1" in runners
+
+    def test_runner_node_filter_no_match(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
+        """Runner node filter with no matches should skip configs (return empty)."""
+        full_sweep_args_single_node.runner_type = ["mi300x"]
+        full_sweep_args_single_node.runner_node_filter = "nonexistent"
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # No nodes match, so config is skipped
+        assert len(result) == 0
+
+    def test_runner_node_filter_without_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
+        """Runner node filter should work without explicit runner type (uses config's runner)."""
+        full_sweep_args_single_node.runner_node_filter = "amd"
+        full_sweep_args_single_node.seq_lens = ["1k1k"]
+        full_sweep_args_single_node.max_conc = 4
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # Config has runner=mi300x, filter "amd" matches mi300x-amd_0 and mi300x-amd_1
+        assert len(result) == 2
+        assert all("amd" in entry["runner"] for entry in result)
+
 
 # =============================================================================
 # Test generate_full_sweep for multi-node
@@ -471,6 +517,57 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         assert len(result) == 0
+
+    def test_runner_node_filter_multinode(self, sample_runner_config, full_sweep_args_multi_node):
+        """Runner node filter should work with multinode configs."""
+        # Create a multinode config with h200 runner (which has 4 nodes)
+        config = {
+            "test-multinode": {
+                "image": "test-image",
+                "model": "test-model",
+                "model-prefix": "test",
+                "precision": "fp4",
+                "framework": "dynamo-trt",
+                "runner": "h200",
+                "multinode": True,
+                "seq-len-configs": [
+                    {
+                        "isl": 1024,
+                        "osl": 1024,
+                        "search-space": [
+                            {
+                                "conc-list": [100],
+                                "prefill": {
+                                    "num-worker": 1,
+                                    "tp": 4,
+                                    "ep": 4,
+                                    "dp-attn": False,
+                                },
+                                "decode": {
+                                    "num-worker": 1,
+                                    "tp": 8,
+                                    "ep": 8,
+                                    "dp-attn": False,
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        full_sweep_args_multi_node.runner_type = ["h200"]
+        full_sweep_args_multi_node.runner_node_filter = "cw"
+        result = generate_full_sweep(
+            full_sweep_args_multi_node,
+            config,
+            sample_runner_config
+        )
+        # Only h200-cw_0 and h200-cw_1 match "cw" filter
+        assert len(result) == 2
+        assert all("cw" in entry["runner"] for entry in result)
+        runners = [entry["runner"] for entry in result]
+        assert "h200-cw_0" in runners
+        assert "h200-cw_1" in runners
 
 
 # =============================================================================
