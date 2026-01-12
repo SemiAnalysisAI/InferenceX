@@ -21,6 +21,10 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=$(( 8888 + $PORT_OFFSET ))
 
+# Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests)
+# as the maximum concurrency, this will help us save memory from being unnecessary used. 
+MAX_RUNNING_REQUESTS=32
+CUDA_GRAPH_MAX_BATCH_SIZE=32
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $TP -eq 8 ]]; then
   if [[ $CONC -ge 16 ]]; then
@@ -28,16 +32,14 @@ if [[ $TP -eq 8 ]]; then
   else
     SCHEDULER_RECV_INTERVAL=10
   fi
-
-  CG_MAX_BS=128
-  MAX_RUNNING_REQUESTS=128
   MEM_FRAC_STATIC=0.82
   CHUNKED_PREFILL_SIZE=32768
   MAX_PREFILL_TOKENS=32768
 elif [[ $TP -eq 4 ]]; then
-  if [[ $ISL -ne 8192 ]] || [[ $OSL -ne 1024 ]]; then echo "TP=4 not yet supported for ISL=$ISL OSL=$OSL!"; fi
-  CG_MAX_BS=32
-  MAX_RUNNING_REQUESTS=32
+  if [[ $ISL -ne 8192 ]] || [[ $OSL -ne 1024 ]]; then 
+    echo "TP=4 not yet supported for ISL=$ISL OSL=$OSL!"
+    exit 1
+  fi
   MEM_FRAC_STATIC=0.95
   CHUNKED_PREFILL_SIZE=8192
   MAX_PREFILL_TOKENS=8192
@@ -52,7 +54,7 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs $CG_MAX_BS --max-running-requests $MAX_RUNNING_REQUESTS \
+--cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
 --mem-fraction-static $MEM_FRAC_STATIC --kv-cache-dtype fp8_e4m3 --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
 --attention-backend trtllm_mla --stream-interval 30 --ep-size $EP_SIZE --moe-runner-backend flashinfer_trtllm --quantization fp8 > $SERVER_LOG 2>&1 &
