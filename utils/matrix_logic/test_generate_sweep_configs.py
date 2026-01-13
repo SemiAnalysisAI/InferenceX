@@ -491,6 +491,7 @@ class TestGenerateRunnerModelSweepConfig:
         args.model_prefix = None
         args.precision = None
         args.framework = None
+        args.conc = None
         args.single_node = True
         args.multi_node = False
         return args
@@ -658,6 +659,25 @@ class TestGenerateRunnerModelSweepConfig:
         # All filters match, but only 2 amd nodes
         assert len(result) == 2
         assert all("amd" in entry["runner"] for entry in result)
+
+    def test_conc_override(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """--conc should override concurrency for all runs."""
+        # Without override, uses lowest conc from config (conc-start=4)
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert all(entry["conc"] == 4 for entry in result)
+
+        # With override, uses specified value
+        runner_sweep_args.conc = 16
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert all(entry["conc"] == 16 for entry in result)
 
 
 # =============================================================================

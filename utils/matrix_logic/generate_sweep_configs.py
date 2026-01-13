@@ -314,8 +314,12 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             lowest_conc_entry = min(
                 target_config[Fields.SEARCH_SPACE.value], key=get_lowest_conc)
 
-            conc_list = lowest_conc_entry.get(Fields.CONC_LIST.value, [])
-            lowest_conc = min(conc_list) if conc_list else 1
+            # Use args.conc if provided, otherwise use lowest from config
+            if args.conc is not None:
+                conc_value = args.conc
+            else:
+                conc_list = lowest_conc_entry.get(Fields.CONC_LIST.value, [])
+                conc_value = min(conc_list) if conc_list else 1
 
             spec_decoding = lowest_conc_entry.get(
                 Fields.SPEC_DECODING.value, "none")
@@ -347,7 +351,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                         Fields.DP_ATTN.value: decode_config[Fields.DP_ATTN.value],
                         Fields.ADDITIONAL_SETTINGS.value: decode_config.get(Fields.ADDITIONAL_SETTINGS.value, []),
                     },
-                    Fields.CONC.value: [lowest_conc],
+                    Fields.CONC.value: [conc_value],
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
@@ -358,7 +362,12 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             highest_tp_bmk = max(
                 target_config[Fields.SEARCH_SPACE.value], key=lambda x: x[Fields.TP.value])
             highest_tp = highest_tp_bmk[Fields.TP.value]
-            lowest_conc = highest_tp_bmk[Fields.CONC_START.value]
+
+            # Use args.conc if provided, otherwise use lowest from config
+            if args.conc is not None:
+                conc_value = args.conc
+            else:
+                conc_value = highest_tp_bmk[Fields.CONC_START.value]
 
             ep = highest_tp_bmk.get(Fields.EP.value)
             dp_attn = highest_tp_bmk.get(Fields.DP_ATTN.value)
@@ -378,7 +387,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.EP.value: ep if ep is not None else 1,
                     Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                     Fields.SPEC_DECODING.value: spec_decoding,
-                    Fields.CONC.value: lowest_conc,
+                    Fields.CONC.value: conc_value,
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
@@ -650,6 +659,12 @@ def main():
         nargs='+',
         required=False,
         help='Framework(s) to filter by (e.g., vllm, trt, sglang) (optional, can specify multiple)'
+    )
+    test_config_parser.add_argument(
+        '--conc',
+        type=int,
+        required=False,
+        help='Override concurrency value for all runs (default: uses lowest concurrency from config)'
     )
     test_node_group = test_config_parser.add_mutually_exclusive_group(
         required=True)
