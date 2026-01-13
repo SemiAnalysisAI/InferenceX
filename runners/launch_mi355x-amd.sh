@@ -150,6 +150,9 @@ else
     salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
     JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
+    if [[ "$FRAMEWORK" == "atom" ]]; then
+        srun --jobid=$JOB_ID bash -c "sudo rm $SQUASH_FILE"
+    fi
     srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
     srun --jobid=$JOB_ID bash -c "sudo chmod -R a+rwX /hf-hub-cache/"
     srun --jobid=$JOB_ID \
