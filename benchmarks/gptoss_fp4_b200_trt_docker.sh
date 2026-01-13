@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars === 
-# MODEL
-# PORT
-# TP
-# EP_SIZE
-# DP_ATTENTION
-# CONC
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# NUM_PROMPTS
-# RESULT_FILENAME
+# Source benchmark utilities early
+source "$(dirname "$0")/benchmark_lib.sh"
+
+check_env_vars \
+    MODEL \
+    PORT \
+    TP \
+    EP_SIZE \
+    DP_ATTENTION \
+    CONC \
+    ISL \
+    OSL \
+    MAX_MODEL_LEN \
+    RANDOM_RANGE_RATIO \
+    NUM_PROMPTS \
+    RESULT_FILENAME
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
@@ -68,9 +71,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
     --extra_llm_api_options=$EXTRA_CONFIG_FILE > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
-
-# Source benchmark utilities
-source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"

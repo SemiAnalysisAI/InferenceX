@@ -1,13 +1,16 @@
 #!/usr/bin/bash
 
-# === Required Env Vars ===
-# MODEL
-# TP
-# CONC
-# ISL
-# OSL
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
+# Source benchmark utilities early
+source "$(dirname "$0")/benchmark_lib.sh"
+
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME
 
 echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 
@@ -44,9 +47,6 @@ python3 -m sglang.launch_server \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
-
-# Source benchmark utilities
-source "$(dirname "$0")/benchmark_lib.sh"
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"

@@ -21,10 +21,6 @@ b200-trt:
 - 'b200-nb_1'
 b200:
 # Docker-only nodes
-- 'b200-nvd_0'
-- 'b200-nvd_1'
-- 'b200-nvd_2'
-- 'b200-nvd_3'
 - 'b200-dgxc_1'
 - 'b200-dgxc_2'
 # Slurm nodes (also have b200 label, can run docker workloads)

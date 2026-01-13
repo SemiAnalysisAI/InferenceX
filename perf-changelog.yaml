@@ -158,6 +158,12 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.7"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/395
+
+- config-keys:
     - dsr1-fp8-b200-sglang
   description:
     - "Adds TP4 configurations to DSR1-FP8 B200 SGLang deployment experiments"

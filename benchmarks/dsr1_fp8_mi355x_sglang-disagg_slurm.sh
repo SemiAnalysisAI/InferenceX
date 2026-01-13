@@ -4,10 +4,25 @@ set -x
 
 source "$(dirname "$0")/benchmark_lib.sh"
 
-check_env_vars CONC_LIST ISL OSL IMAGE SPEC_DECODING MODEL_PATH \
-    PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN \
-    DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN \
-    PREFILL_NODES DECODE_NODES SGL_SLURM_JOBS_PATH RANDOM_RANGE_RATIO SGL_SLURM_JOBS_PATH
+check_env_vars \
+    CONC_LIST \
+    ISL \
+    OSL \
+    IMAGE \
+    SPEC_DECODING \
+    MODEL_PATH \
+    PREFILL_NUM_WORKERS \
+    PREFILL_TP \
+    PREFILL_EP \
+    PREFILL_DP_ATTN \
+    DECODE_NUM_WORKERS \
+    DECODE_TP \
+    DECODE_EP \
+    DECODE_DP_ATTN \
+    PREFILL_NODES \
+    DECODE_NODES \
+    SGL_SLURM_JOBS_PATH \
+    RANDOM_RANGE_RATIO
 
 # Always clone and setup sglang_disagg
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
