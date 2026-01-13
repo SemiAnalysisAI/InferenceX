@@ -309,7 +309,7 @@ run_lm_eval() {
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "utils/evals/${task}.yaml" \
       --num_fewshot "${num_fewshot}" \
-      --output_path "${results_dir}" \
+      --output_path "${results_dir}" --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=2,num_concurrent=${concurrent_requests},tokenized_requests=False,max_length=${gen_max_tokens}" \
       --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
     set +x
@@ -373,7 +373,7 @@ META
             if [ "$base" != "meta_env.json" ]; then
                 mv -f "$jf" ./ || true
             fi
-        done < <(find "${out_dir}" -type f -name "*.json" -print0 2>/dev/null)
+        done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
     fi
 
     # Best-effort cleanup of the temp directory
