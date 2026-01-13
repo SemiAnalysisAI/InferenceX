@@ -94,7 +94,8 @@ dsr1-fp8-b200-sglang:
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
