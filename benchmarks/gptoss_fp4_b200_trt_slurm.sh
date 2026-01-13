@@ -29,6 +29,7 @@ PORT=$(( 8888 + $PORT_OFFSET ))
 
 # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
 MOE_BACKEND="TRTLLM"
+export DP_ATTENTION=false
 
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
