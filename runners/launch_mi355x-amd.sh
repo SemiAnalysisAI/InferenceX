@@ -129,7 +129,6 @@ else
 
     export HF_HUB_CACHE_MOUNT="/hf-hub-cache"
     export PORT_OFFSET=${USER: -1}
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
 
     PARTITION="compute"
     SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -150,9 +149,6 @@ else
     salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
     JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
-    if [[ "$FRAMEWORK" == "atom" ]]; then
-        srun --jobid=$JOB_ID bash -c "sudo rm $SQUASH_FILE"
-    fi
     srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
     srun --jobid=$JOB_ID bash -c "sudo chmod -R a+rwX /hf-hub-cache/"
     srun --jobid=$JOB_ID \
@@ -162,7 +158,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}_slurm.sh
+        bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x_slurm.sh
 
     scancel $JOB_ID
 

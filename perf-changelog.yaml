@@ -168,11 +168,3 @@
   description:
     - "Adds TP4 configurations to DSR1-FP8 B200 SGLang deployment experiments"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/411
-  
-- config-keys:
-    - dsr1-fp8-mi355x-atom
-    - dsr1-fp4-mi355x-atom
-    - gptoss-fp4-mi355x-atom
-  description:
-    - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/383
