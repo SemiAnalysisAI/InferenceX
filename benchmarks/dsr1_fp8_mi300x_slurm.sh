@@ -33,6 +33,7 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
 fi
 
 export SGLANG_USE_AITER=1
+export SGLANG_AITER_MLA_PERSIST=1
 
 set -x
 python3 -m sglang.launch_server \
@@ -44,6 +45,7 @@ python3 -m sglang.launch_server \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=196608 \
 --disable-radix-cache \
+--kv-cache-dtype fp8_e4m3 \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
