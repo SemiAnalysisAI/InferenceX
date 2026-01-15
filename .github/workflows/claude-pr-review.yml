@@ -12,7 +12,7 @@ jobs:
     # Only run on PR comments (not issue comments) or PR events
     if: >
       (github.event_name == 'pull_request') ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@claude'))
     permissions:
       contents: read
       pull-requests: write
@@ -41,7 +41,7 @@ jobs:
             If you need to analyze benchmark results from a specific run, use:
             ```bash
             gh run download <RUN_ID> --repo ${{ github.repository }} -n results_bmk -D ./results
-            cat ./results/results_bmk/*.json | python3 -m json.tool
+            cat ./results/agg_bmk.json | python3 -m json.tool
             ```
             
             To find recent benchmark runs:
@@ -49,4 +49,8 @@ jobs:
             gh run list --repo ${{ github.repository }} --workflow e2e-tests.yml --limit 5
             ```
             
+            You can analyze the json with:
+            ```bash
+            python3 <<'EOF'\nimport json...
+            ```
             Focus on: code quality, benchmark config changes, and performance impact.
