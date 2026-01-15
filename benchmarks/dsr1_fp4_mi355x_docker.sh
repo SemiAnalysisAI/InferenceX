@@ -41,6 +41,9 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 
 SERVER_PID=$!
 
+mkdir -p /workspace/results/
+touch /workspace/results/hello"
+
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
