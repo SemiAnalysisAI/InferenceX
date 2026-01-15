@@ -166,6 +166,7 @@ run_benchmark_serving() {
             --bench-serving-dir)
                 workspace_dir="$2"
                 shift 2
+                ;;
             --use-chat-template)
                 use_chat_template=true
                 shift
