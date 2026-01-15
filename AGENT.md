@@ -199,3 +199,73 @@ Tests are located in `utils/matrix_logic/`:
 Run with: `python -m pytest utils/matrix_logic/ -v`
 
 Markers available: `slow`, `integration`
+
+## Fetching GitHub Actions Benchmark Results
+
+When asked to analyze benchmark results from a GitHub Actions run URL, use the `gh` CLI.
+
+### Extracting Run ID from URLs
+```
+https://github.com/InferenceMAX/InferenceMAX/actions/runs/200
+
+Run ID: 200
+```
+
+### Commands
+```bash
+# List artifacts for a run
+gh api /repos/InferenceMAX/InferenceMAX/actions/runs/<RUN_ID>/artifacts --jq '.artifacts[].name'
+
+# Download aggregated results
+gh run download <RUN_ID> --repo InferenceMAX/InferenceMAX -n results_bmk -D ./results
+```
+### Parsing Results (IMPORTANT: avoid dumping raw JSON)
+
+The results JSON can be large. Use `jq` to extract and round to see only what you need, for example:
+```bash
+# Count total results
+cat ./results/results_bmk/*.json | jq 'length'
+
+# List unique hardware/framework combinations
+cat ./results/agg_bmk.json | jq -r '[.[] | "\(.hw)/\(.framework)"] | unique | .[]'
+
+# Summary table: hw, model, isl/osl, throughput (rounded)
+cat ./results/agg_bmk.json | jq -r '
+  .[] | [.hw, .infmax_model_prefix, "\(.isl)/\(.osl)", (.tput_per_gpu | round)] 
+  | @tsv' | column -t
+
+# Filter to specific model
+cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")]'
+
+# Get single best result by throughput
+cat ./results/agg_bmk.json | jq 'max_by(.tput_per_gpu)'
+
+# Compact view with rounded values
+cat ./results/agg_bmk.json | jq '
+  .[] | {
+    hw, framework, model: .infmax_model_prefix, 
+    isl, osl, tp, ep, conc,
+    tput: (.tput_per_gpu | round),
+    ttft_p99: (.p99_ttft | .*100 | round | ./100),
+    e2e_mean: (.mean_e2el | .*100 | round | ./100)
+  }'
+```
+
+### Key Metrics
+
+| Field | Description |
+|-------|-------------|
+| `tput_per_gpu` | Total throughput per GPU (tokens/sec) |
+| `output_tput_per_gpu` | Output token throughput |
+| `mean_ttft` / `p99_ttft` | Time to first token |
+| `mean_tpot` | Time per output token |
+| `mean_e2el` | End-to-end latency |
+
+### Artifact Naming
+
+| Pattern | Contents |
+|---------|----------|
+| `results_bmk` | Aggregated benchmark results, `agg_bmk.json` |
+| `results_all` | All results aggregated , might not exist |
+| `eval_results_all` | Eval results, `agg_eval_all.json`, might not exist |
+| `run-stats` | `run_stats.json`, run stats, which nodes were ran and succeeded |
