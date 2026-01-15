@@ -185,3 +185,9 @@
   description:
     - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - Add Conc64 to DSR1-FP8 B200 SGLang 8k1k configurations
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/432
