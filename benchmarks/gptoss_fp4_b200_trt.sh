@@ -52,7 +52,7 @@ moe_config:
 EOF
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    # DISABLE All2All for MoE TP
+    # Set AllToAll environment variables based on EP_SIZE
     if [[ "$EP_SIZE" -eq 1 ]]; then
         # DTP Alltoall Environment variables for EP_SIZE == 1
         export TRTLLM_FORCE_ALLTOALL_METHOD="NotEnabled"

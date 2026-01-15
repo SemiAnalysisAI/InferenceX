@@ -283,7 +283,7 @@ dsr1-fp8-h200-trt-mtp:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 gptoss-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2.post1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200-trt
