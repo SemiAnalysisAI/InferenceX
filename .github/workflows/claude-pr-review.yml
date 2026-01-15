@@ -3,10 +3,16 @@ name: PR Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
+  issue_comment:
+    types: [created]
 
 jobs:
   review:
     runs-on: ubuntu-latest
+    # Only run on PR comments (not issue comments) or PR events
+    if: >
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
     permissions:
       contents: read
       pull-requests: write
