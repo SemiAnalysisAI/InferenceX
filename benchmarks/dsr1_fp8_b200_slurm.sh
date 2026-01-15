@@ -87,3 +87,6 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+mkdir -p /workspace/results/
+mv /workspace/"$RESULT_FILENAME" /workspace/results/"$RESULT_FILENAME"
