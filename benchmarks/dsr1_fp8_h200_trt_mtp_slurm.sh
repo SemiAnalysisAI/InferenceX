@@ -71,9 +71,11 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 else
     MAX_BATCH_SIZE=$CONC
 fi
+# Ensure minimum batch size of 1
+MAX_BATCH_SIZE=$(( MAX_BATCH_SIZE > 0 ? MAX_BATCH_SIZE : 1 ))
 
 # Account for random range ratio - max input length is ISL * (1 + RANDOM_RANGE_RATIO)
-MAX_ISL=$(echo "$ISL * (1 + $RANDOM_RANGE_RATIO)" | bc | cut -d. -f1)
+MAX_ISL=$(awk -v isl="$ISL" -v ratio="$RANDOM_RANGE_RATIO" 'BEGIN {printf "%.0f", isl * (1 + ratio)}')
 MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+MAX_ISL+64+63)/64*64 ))
 
 set -x

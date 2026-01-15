@@ -58,7 +58,7 @@ fi
 set -x
 
 # Account for random range ratio - max input length is ISL * (1 + RANDOM_RANGE_RATIO)
-MAX_ISL=$(echo "$ISL * (1 + $RANDOM_RANGE_RATIO)" | bc | cut -d. -f1)
+MAX_ISL=$(awk -v isl="$ISL" -v ratio="$RANDOM_RANGE_RATIO" 'BEGIN {printf "%.0f", isl * (1 + ratio)}')
 MAX_NUM_TOKENS=$(( ($CONC+$MAX_ISL+64+63)/64*64 ))
 
 # Launch TRT-LLM server
