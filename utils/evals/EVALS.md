@@ -15,14 +15,12 @@ To verify how model outputs are affected by throughput optimizations.
 - Check kernel implementations for correctness
 
 ## How?
-- `run_eval`, definined in `benchmarks/benchmark_lib.sh`, is called in `benchmarks/*`. Either  EleutherAI/lm-evaluation-harness(lmeval) or  lighteval with litellm is ran, using the same endpoint as the throughput benchmark. JSON results are processed and converted to a table with `utils/collect_eval_results.py`.
+- `run_eval`, definined in `benchmarks/benchmark_lib.sh`, is called in `benchmarks/*`. EleutherAI/lm-evaluation-harness(lmeval), using the same endpoint as the throughput benchmark. JSON results are processed and converted to a table with `utils/collect_eval_results.py`.
 
 ## Misc
 Following files are task definitions from lmeval, more info on changes within the files
 - `utils/evals/math500.yaml`
 - `utils/evals/gsm8k.yaml`
-Following files are task definitions from lighteval, more info on changes within the files
-- `utils/evals/custom_gsm8k.py`
 
 
 

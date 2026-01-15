@@ -29,7 +29,7 @@ def find_eval_sets(root: Path) -> List[Path]:
 
 
 def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return (lm_eval_json, lighteval_json) if present.
+    """Return (lm_eval_json) if present.
     
     Checks immediate directory for result JSONs.
     """
@@ -49,10 +49,6 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
             # lm-eval harness - pick latest if multiple
             if lm_path is None or p.stat().st_mtime > lm_path.stat().st_mtime:
                 lm_path = p
-        elif 'config_general' in data and 'results' in data:
-            # lighteval - pick latest if multiple
-            if le_path is None or p.stat().st_mtime > le_path.stat().st_mtime:
-                le_path = p
                 
     return lm_path, le_path
 
@@ -141,43 +137,6 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     return extracted
 
 
-def extract_lighteval_metrics(json_path: Path) -> List[Dict[str, Any]]:
-    """Extract metrics from lighteval result JSON.
-
-    Returns a list of metric dicts, one per task in the results.
-    """
-    data = load_json(json_path) or {}
-    results = data.get('results', {}) or {}
-
-    if not results:
-        return []
-
-    cg = data.get('config_general', {}) or {}
-    model = cg.get('model_name') or cg.get('model_config', {}).get('model_name', '')
-
-    extracted = []
-
-    for task in results.keys():
-        r = results.get(task, {})
-        em = r.get('extractive_match')
-        em_se = r.get('extractive_match_stderr')
-
-        extracted.append({
-            'task': task,
-            'strict': em,
-            'strict_se': em_se,
-            'flex': None,
-            'flex_se': None,
-            'accuracy': None,
-            'accuracy_se': None,
-            'n_eff': None,
-            'model': model,
-            'source': str(json_path)
-        })
-
-    return extracted
-
-
 def pct(x: Any) -> str:
     """Format value as percentage."""
     try:
@@ -249,8 +208,6 @@ def main():
         # Extract metrics (prefer lm-eval) - returns list for multi-task support
         if lm_path:
             metrics_list = extract_lm_metrics(lm_path)
-        elif le_path:
-            metrics_list = extract_lighteval_metrics(le_path)
         else:
             continue
 
