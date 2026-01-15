@@ -23,22 +23,11 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
+          allowed_bots: ''
           
           # Allow gh CLI for fetching artifacts
-          allowed_tools: |
-            Bash(gh run download:*)
-            Bash(gh run list:*)
-            Bash(gh run view:*)
-            Bash(gh api:*)
-            Bash(cat:*)
-            Bash(python3:*)
-            Bash(jq:*)
-            Bash(ls:*)
-            Bash(find:*)
-            Read
-            Glob
-            Grep
-            mcp__github__*
+          claude_args: |
+            --allowedTools "Bash(gh run download:*),Bash(gh run list:*),Bash(gh run view:*),Bash(gh api:*),Bash(cat:*),Bash(python3:*),Bash(jq:*),Bash(ls:*),Bash(find:*),Read,Glob,Grep,mcp__github__*"
 
           prompt: |
             Review this PR for InferenceMAX.
