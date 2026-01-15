@@ -200,6 +200,9 @@ Run with: `python -m pytest utils/matrix_logic/ -v`
 
 Markers available: `slow`, `integration`
 
+## Important Notes
+1. Make sure no new directories are created in `/workspace` during the benchmark. Files are ok.
+
 ## Fetching GitHub Actions Benchmark Results
 
 When asked to analyze benchmark results from a GitHub Actions run URL, use the `gh` CLI.
