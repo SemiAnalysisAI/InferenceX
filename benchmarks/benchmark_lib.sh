@@ -92,7 +92,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required
+# All parameters are required except --use-chat-template
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -104,6 +104,7 @@ wait_for_server_ready() {
 #   --max-concurrency: Max concurrency
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
+#   --use-chat-template: Optional flag to enable chat template
 run_benchmark_serving() {
     set +x
     local model=""
@@ -117,6 +118,7 @@ run_benchmark_serving() {
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
+    local use_chat_template=false
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -164,6 +166,9 @@ run_benchmark_serving() {
             --bench-serving-dir)
                 workspace_dir="$2"
                 shift 2
+            --use-chat-template)
+                use_chat_template=true
+                shift
                 ;;
             *)
                 echo "Unknown parameter: $1"
@@ -218,26 +223,37 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
-    # Run benchmark serving
-    set -x
-    python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py" \
-        --model "$model" \
-        --backend "$backend" \
-        --base-url "http://0.0.0.0:$port" \
-        --dataset-name random \
-        --random-input-len "$input_len" \
-        --random-output-len "$output_len" \
-        --random-range-ratio "$random_range_ratio" \
-        --num-prompts "$num_prompts" \
-        --max-concurrency "$max_concurrency" \
-        --request-rate inf \
-        --ignore-eos \
-        --save-result \
+    # Build benchmark command
+    local benchmark_cmd=(
+        python3 "$BENCH_SERVING_DIR/benchmark_serving.py"
+        --model "$model"
+        --backend "$backend"
+        --base-url "http://0.0.0.0:$port"
+        --dataset-name random
+        --random-input-len "$input_len"
+        --random-output-len "$output_len"
+        --random-range-ratio "$random_range_ratio"
+        --num-prompts "$num_prompts"
+        --max-concurrency "$max_concurrency"
+        --request-rate inf
+        --ignore-eos
+        --save-result
         --num-warmups "$((2 * max_concurrency))" \
-        --percentile-metrics 'ttft,tpot,itl,e2el' \
-        --result-dir "$result_dir" \
+        --percentile-metrics 'ttft,tpot,itl,e2el'
+        --result-dir "$result_dir"
         --result-filename "$result_filename.json"
+    )
+    
+    # Add --use-chat-template if requested
+    if [[ "$use_chat_template" == true ]]; then
+        benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Run benchmark
+    set -x
+    "${benchmark_cmd[@]}"
     local benchmark_exit_code=$?
+
     set +x
 
     if [[ $benchmark_exit_code -ne 0 ]]; then
