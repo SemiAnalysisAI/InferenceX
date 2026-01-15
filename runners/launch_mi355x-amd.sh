@@ -40,9 +40,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export MODEL_PATH="/nfsdata"
 
     NODENAME=$(sinfo -N -h -t idle,mix -o "%N" | head -1)
-    if [[ $node == GPU* ]]; then
+    if [[ $NODENAME == GPU* ]]; then
         export MODEL_PATH="/nfsdata"
-    elif [[ $node == mia1* ]]; then
+    elif [[ $NODENAME == mia1* ]]; then
         export MODEL_PATH="/it-share/data"
     else
         echo "[Error] No available nodes for launching slurm jobs"
