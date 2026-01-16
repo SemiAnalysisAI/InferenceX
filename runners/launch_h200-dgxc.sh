@@ -88,7 +88,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 
 # Wait for this specific job to complete
 echo "Waiting for job $JOB_ID to complete..."
-while squeue -j $JOB_ID --noheader &> /dev/null; do
+while [ -n "$(squeue -j $JOB_ID --noheader 2>/dev/null)" ]; do
     echo "Job $JOB_ID still running..."
     squeue -j $JOB_ID
     sleep 30
