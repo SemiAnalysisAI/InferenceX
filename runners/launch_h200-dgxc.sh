@@ -99,7 +99,7 @@ echo "Collecting results..."
 
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
-LOGS_DIR="outputs/$JOB_ID/logs
+LOGS_DIR="outputs/$JOB_ID/logs"
 
 if [ ! -d "$LOGS_DIR" ]; then
     echo "Warning: Logs directory not found at $LOGS_DIR"
