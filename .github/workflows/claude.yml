@@ -67,60 +67,79 @@ jobs:
             python3 <<'EOF'\nimport json...
             ```
 
-            To trigger the e2e test sweep on a PR, use the `/sweep` command. This runs the e2e-tests.yml workflow against the PR's code.
+            To trigger the e2e test sweep, use the gh CLI to directly run the e2e-tests.yml workflow.
 
             **Syntax:**
             ```bash
-              gh pr comment <PR_NUMBER> --repo ${{ github.repository }} --body "/sweep <generator-cli-args>"
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref <branch-or-sha> \
+              --field generate-cli-command="<generator-cli-args>" \
+              --field test-name="<optional-test-name>"
             ```
-              
-            The `/sweep` command accepts arguments for `generate_sweep_configs.py`. Examples:
+
+            The `generate-cli-command` field accepts arguments for `generate_sweep_configs.py`. Examples:
 
             **Filter by model prefix and Nvidia nodes:**
-            ```
-            /sweep full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1
+            ```bash
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref $BRANCH_OR_SHA \
+              --field generate-cli-command="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1"
             ```
 
             **Filter by framework and AMD nodes:**
-            ```
-            /sweep full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang
+            ```bash
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref $BRANCH_OR_SHA \
+              --field generate-cli-command="full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang"
             ```
 
             **Filter by precision and runner type:**
-            ```
-            /sweep full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --precision fp8 --runner-type h200
+            ```bash
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref $BRANCH_OR_SHA \
+              --field generate-cli-command="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
             **Multiple filters combined:**
-            ```
-            /sweep full-sweep --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1 --framework sglang --precision fp8
+            ```bash
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref $BRANCH_OR_SHA \
+              --field generate-cli-command="full-sweep --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1 --framework sglang --precision fp8"
             ```
 
             **Test specific config keys:**
-            ```
-            /sweep test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --config-keys dsr1-fp4-b200-sglang
+            ```bash
+            gh workflow run e2e-tests.yml \
+              --repo ${{ github.repository }} \
+              --ref $BRANCH_OR_SHA \
+              --field generate-cli-command="test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --config-keys dsr1-fp4-b200-sglang"
             ```
 
             ## Wait for sweep to end whenever triggered for followup.
             ```bash
             # Wait a few seconds for the workflow to start
             sleep 10
-            
-            # Find the most recent slash-sweep run for this PR
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow slash-sweep.yml --limit 5 --json databaseId,headBranch,createdAt --jq '.[0].databaseId')
-            
+
+            # Find the most recent e2e-tests run for this branch/ref
+            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow e2e-tests.yml --limit 5 --json databaseId,headBranch,createdAt --jq '.[0].databaseId')
+
             # Watch it until completion (this blocks until done)
             gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
             ```
             
-            **When to use /sweep:**
+            **When to trigger e2e tests:**
             - When directly asked to run performance tests
             - When performance testing is needed
             - After reviewing code changes that might affect performance
-              
-            **Important:** The `/sweep` command must be at the START of the comment body.
-            The arguments after `/sweep` are passed to the generator CLI.
-              
-            After triggering, the workflow will reply with a link to the run.
-              
+
+            **Important:** Use `gh workflow run e2e-tests.yml` directly instead of posting `/sweep` comments.
+            The `generate-cli-command` field value is passed to the generator CLI.
+
+            After triggering, you can find the run using `gh run list` and watch it with `gh run watch`.
+
             Focus on: code quality, benchmark config changes, and performance impact.
