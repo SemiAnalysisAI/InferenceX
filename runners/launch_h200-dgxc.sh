@@ -69,8 +69,22 @@ cat srtslurm.yaml
 
 # bash benchmarks/"${MODEL_PREFIX}_${PRECISION}_h200_${FRAMEWORK}_slurm.sh"
 
+echo "Running make setup..."
+make setup ARCH=x86_64
+
 echo "Submitting job with srtctl..."
-srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+echo "$SRTCTL_OUTPUT"
+
+# Extract JOB_ID from srtctl output (e.g., "✅ Job 1168 submitted!")
+JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
+
+if [ -z "$JOB_ID" ]; then
+    echo "Error: Failed to extract JOB_ID from srtctl output"
+    exit 1
+fi
+
+echo "Extracted JOB_ID: $JOB_ID"
 
 # Wait for all jobs to complete
 echo "Waiting for all jobs to complete..."
@@ -82,30 +96,52 @@ done
 
 echo "Collecting results..."
 
-# Find the logs directory created by srtctl
-# srtctl creates logs in logs/<job_id>_*P_*D_*/
-LOGS_DIR=$(find logs -maxdepth 1 -type d -name "*_*P_*D_*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+# Use the JOB_ID to find the logs directory
+# srtctl creates logs in outputs/JOB_ID/logs/
+LOGS_DIR="srt-slurm-trtllm/outputs/$JOB_ID/logs"
 
-if [ -z "$LOGS_DIR" ]; then
-    echo "Warning: No srtctl logs directory found"
+if [ ! -d "$LOGS_DIR" ]; then
+    echo "Warning: Logs directory not found at $LOGS_DIR"
     exit 1
 fi
 
 echo "Found logs directory: $LOGS_DIR"
 
-if [ -d "$LOGS_DIR/results" ]; then
-    echo "Processing results from: $LOGS_DIR/results"
-    
-    for result_file in "$LOGS_DIR/results"/*.json; do
-        if [ -f "$result_file" ]; then
-            filename=$(basename "$result_file")
-            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${filename}"
-            cp "$result_file" "$WORKSPACE_RESULT_FILE"
-            echo "Copied result: $result_file -> $WORKSPACE_RESULT_FILE"
-        fi
-    done
+# Find all result subdirectories (e.g., sa-bench_isl_8192_osl_1024)
+RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+
+if [ -z "$RESULT_SUBDIRS" ]; then
+    echo "Warning: No result subdirectories found in $LOGS_DIR"
 else
-    echo "Warning: Results directory not found at $LOGS_DIR/results"
+    # Process results from all configurations
+    for result_subdir in $RESULT_SUBDIRS; do
+        echo "Processing result subdirectory: $result_subdir"
+
+        # Extract configuration info from directory name
+        CONFIG_NAME=$(basename "$result_subdir")
+
+        # Find all result JSON files (e.g., results_concurrency_128_gpus_16_ctx_8_gen_8.json)
+        RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+
+        for result_file in $RESULT_FILES; do
+            if [ -f "$result_file" ]; then
+                # Extract metadata from filename
+                filename=$(basename "$result_file")
+                concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+
+                echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                # Copy the result file to workspace with a unique name
+                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus${gpus}_ctx${ctx}_gen${gen}.json"
+                cp "$result_file" "$WORKSPACE_RESULT_FILE"
+
+                echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+            fi
+        done
+    done
 fi
 
 echo "All result files processed"
