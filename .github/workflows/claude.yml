@@ -34,9 +34,10 @@ jobs:
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
-          
+          model: ${{ contains(github.event.comment.body || github.event.issue.body, '@claude opus') && 'opus' || contains(github.event.comment.body || github.event.issue.body, '@claude haiku') && 'haiku' || 'sonnet' }}
+
           claude_args: |
-            --allowedTools "Write,Edit,mcp__github_inline_comment__create_inline_comment,Bash(*),Read,Glob,Grep,mcp__github__*"
+            --allowedTools "Write,Edit,mcp__github_inline_comment__create_inline_comment,Bash(*,timeout=28800000),Read,Glob,Grep,mcp__github__*"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
