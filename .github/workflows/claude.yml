@@ -28,10 +28,9 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
