@@ -14,9 +14,9 @@ cd "$TRTLLM_REPO_DIR"
 git checkout jthomson04/trtllm-support
 
 echo "Installing srtctl..."
+python3 -m venv --clear .venv
+source .venv/bin/activate
 pip install -e .
-
-cd "$GITHUB_WORKSPACE"
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
@@ -25,24 +25,16 @@ fi
 
 echo "Configs available at: $TRTLLM_REPO_DIR/"
 
-export HF_HUB_CACHE_MOUNT="/scratch/fsw/hf_hub_cache/"
-export PORT_OFFSET=0
+export SLURM_PARTITION="main"
+export SLURM_ACCOUNT="root"
 
-MODEL_CODE="${EXP_NAME%%_*}"
-
-if [[ $MODEL_PREFIX == "gptoss" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/gpt-oss-120b"
-    export SERVED_MODEL_NAME="openai/gpt-oss-120b"
-elif [[ $MODEL_PREFIX == "dsr1" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/deepseek-r1-0528"
-    export SERVED_MODEL_NAME="deepseek-ai/DeepSeek-R1-0528"
+if [[ $MODEL_PREFIX == "dsr1" ]]; then
+    export MODEL_PATH="/models/dsr1-fp8"
+    export SERVED_MODEL_NAME="dsr1-fp8"
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1"
+    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
     exit 1
 fi
-
-export SLURM_PARTITION="${SLURM_PARTITION:-gpu}"
-export SLURM_ACCOUNT="${SLURM_ACCOUNT:-default}"
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -73,7 +65,12 @@ EOF
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-bash benchmarks/"${MODEL_CODE}_${PRECISION}_h200_${FRAMEWORK}_slurm.sh"
+# cd "$GITHUB_WORKSPACE"
+
+# bash benchmarks/"${MODEL_PREFIX}_${PRECISION}_h200_${FRAMEWORK}_slurm.sh"
+
+echo "Submitting job with srtctl..."
+srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 
 # Wait for all jobs to complete
 echo "Waiting for all jobs to complete..."
@@ -112,4 +109,10 @@ else
 fi
 
 echo "All result files processed"
+
+# Cleanup
+echo "Cleaning up..."
+deactivate 2>/dev/null || true
+rm -rf .venv
+echo "Cleanup complete"
 
