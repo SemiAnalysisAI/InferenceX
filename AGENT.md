@@ -200,16 +200,12 @@ Run with: `python -m pytest utils/matrix_logic/ -v`
 
 Markers available: `slow`, `integration`
 
+## Important Notes
+1. Make sure no new directories are created in `/workspace` during the benchmark. Files are ok.
+
 ## Fetching GitHub Actions Benchmark Results
 
 When asked to analyze benchmark results from a GitHub Actions run URL, use the `gh` CLI.
-
-### Extracting Run ID from URLs
-```
-https://github.com/InferenceMAX/InferenceMAX/actions/runs/200
-
-Run ID: 200
-```
 
 ### Commands
 ```bash
@@ -221,7 +217,7 @@ gh run download <RUN_ID> --repo InferenceMAX/InferenceMAX -n results_bmk -D ./re
 ```
 ### Parsing Results (IMPORTANT: avoid dumping raw JSON)
 
-The results JSON can be large. Use `jq` to extract and round to see only what you need, for example:
+The results JSON can be large with multiple decimal places, so avoid dumping the raw JSON. Use `jq` to extract and round to see only what you need, for example:
 ```bash
 # Count total results
 cat ./results/results_bmk/*.json | jq 'length'
