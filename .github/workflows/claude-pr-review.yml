@@ -13,12 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     # Only run if:
     # 1. It's a PR event from someone with write access, OR
-    # 2. It's a comment containing @claude from someone with write access
+    # 2. It's a comment containing @pr-claude from someone with write access
     if: |
       (github.event_name == 'pull_request' && 
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)) ||
       ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') && 
-       contains(github.event.comment.body, '@claude') &&
+       contains(github.event.comment.body, '@pr-claude') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: read
@@ -35,7 +35,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          trigger_phrase: "@claude"
+          trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
           
@@ -48,10 +48,10 @@ jobs:
             You are reviewing code for InferenceMAX. Your job is to provide HIGH-SIGNAL feedback only.
 
             ## Commands:
-            - `@claude review` - Full review of the PR
-            - `@claude re-review` - Re-review only NEW changes since your last review (check your previous comments first)
-            - `@claude review <file>` - Review only a specific file
-            - `@claude` followed by a question - Answer the question about this PR
+            - `@pr-claude review` - Full review of the PR
+            - `@pr-claude re-review` - Re-review only NEW changes since your last review (check your previous comments first)
+            - `@pr-claude review <file>` - Review only a specific file
+            - `@pr-claude` followed by a question - Answer the question about this PR
 
             ## If this is a re-review:
             1. First, check existing review comments on this PR using `gh pr view`
