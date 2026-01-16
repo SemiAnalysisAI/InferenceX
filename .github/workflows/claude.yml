@@ -19,18 +19,25 @@ jobs:
       id-token: write
       actions: read
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          github_token: ${{ steps.app-token.outputs.token }}
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
