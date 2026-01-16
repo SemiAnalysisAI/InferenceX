@@ -86,13 +86,14 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
-# Wait for all jobs to complete
-echo "Waiting for all jobs to complete..."
-while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-    echo "Jobs still running..."
-    squeue --steps -u $USER
+# Wait for this specific job to complete
+echo "Waiting for job $JOB_ID to complete..."
+while squeue -j $JOB_ID --noheader &> /dev/null; do
+    echo "Job $JOB_ID still running..."
+    squeue -j $JOB_ID
     sleep 30
 done
+echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
 
