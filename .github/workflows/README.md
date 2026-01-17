@@ -32,7 +32,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 ```
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
-    --runner-config RUNNER_CONFIG
+    [--runner-config RUNNER_CONFIG]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -84,7 +84,7 @@ The `runner-model-sweep` command validates that all runner nodes of a specific t
 ```
 usage: generate_sweep_configs.py runner-model-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
-    --runner-config RUNNER_CONFIG
+    [--runner-config RUNNER_CONFIG]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
     (--single-node | --multi-node)
