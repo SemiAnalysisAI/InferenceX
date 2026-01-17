@@ -90,22 +90,22 @@ jobs:
 
             **Filter by model prefix and Nvidia nodes:**
             ```
-            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1"
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1"
             ```
 
             **Filter by framework and AMD nodes:**
             ```
-            generate-cli-command: "full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang"
+            generate-cli-command: "full-sweep --config-files .github/configs/amd-master.yaml --single-node --framework sglang"
             ```
 
             **Filter by precision and runner type:**
             ```
-            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --precision fp8 --runner-type h200"
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
             **Test specific config keys:**
             ```
-            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --config-keys dsr1-fp4-b200-sglang"
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**

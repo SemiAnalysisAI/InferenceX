@@ -5,7 +5,7 @@ import subprocess
 from collections import defaultdict
 
 import yaml
-from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
 from matrix_logic.generate_sweep_configs import seq_len_to_str
 from matrix_logic.validation import (
     ChangelogEntry,
@@ -113,8 +113,6 @@ def main():
                     *configs_to_run,
                     "--config-files",
                     *MASTER_CONFIGS,
-                    "--runner-config",
-                    RUNNER_CONFIG,
                 ],
                 capture_output=True,
                 text=True,
