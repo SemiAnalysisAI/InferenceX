@@ -173,6 +173,23 @@ When working with benchmark configurations, use these valid values:
 2. Create launcher script in `runners/` directory
 3. Update relevant master config with new runner type
 
+### Updating Docker Images
+
+When upgrading Docker images in benchmark scripts:
+
+1. Update the image tag in the relevant `benchmarks/*.sh` script(s)
+2. Update any related environment variables or configuration parameters
+3. **MUST**: Add an entry to `perf-changelog.yaml`:
+   ```yaml
+   - config-keys:
+       - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
+     description:
+       - "Update vLLM image from v0.11.2 to v0.13.0"
+       - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
+     pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+   ```
+4. This triggers benchmarks for affected configs and tracks performance changes
+
 ### Debugging Benchmark Failures
 
 1. Check GitHub Actions logs for the failed job
