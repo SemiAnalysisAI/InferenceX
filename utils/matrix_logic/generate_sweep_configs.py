@@ -508,8 +508,8 @@ def main():
     )
     parent_parser.add_argument(
         '--runner-config',
-        required=True,
-        help='Configuration file holding runner information (YAML format)'
+        default='.github/configs/runners.yaml',
+        help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
     )
 
     # Create main parser
