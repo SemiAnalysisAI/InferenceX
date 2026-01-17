@@ -485,7 +485,6 @@ class TestGenerateRunnerModelSweepConfig:
         """Args for runner-model-sweep command (single-node)."""
         args = argparse.Namespace()
         args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
         args.runner_node_filter = None
         args.single_node = True
         args.multi_node = False
