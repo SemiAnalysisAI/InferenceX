@@ -219,12 +219,6 @@ Markers available: `slow`, `integration`
 
 ## Important Notes
 1. Make sure no new directories are created in `/workspace` during the benchmark. Files are ok.
-2. **CRITICAL**: When modifying Docker images in benchmark scripts (e.g., upgrading vLLM, SGLang, TRT, ATOM versions), you MUST add an entry to `perf-changelog.yaml` documenting:
-   - The affected `config-keys` (use wildcards like `dsr1-fp8-*-vllm` to match multiple configs)
-   - A clear description of what changed (image version, environment variables, configuration changes)
-   - The PR link once the PR is created
-
-   This ensures benchmarks are triggered for the affected configurations and performance changes are tracked.
 
 ## Fetching GitHub Actions Benchmark Results
 
