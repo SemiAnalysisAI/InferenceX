@@ -191,7 +191,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         if args.max_tp <= 0:
                             continue  # Skip if max_tp is not positive
                         if tp > args.max_tp:
-                            tp = args.max_tp
+                            tp = args.max_tp + 1
 
                     # Apply max-ep filter if specified
                     # If ep > max_ep, use max_ep instead of skipping (if valid)
