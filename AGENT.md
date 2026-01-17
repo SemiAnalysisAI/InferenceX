@@ -170,11 +170,11 @@ When working with benchmark configurations, use these valid values:
 
 ### Updating Docker Images
 
-When upgrading Docker images in benchmark scripts:
+When upgrading Docker images in benchmark scripts and master configs .yaml:
 
-1. Update the image tag in the relevant `benchmarks/*.sh` script(s)
+1. Update the image tag in the relevant `.github/configs/*-master.yaml` and/or `benchmarks/*.sh` script(s)
 2. Update any related environment variables or configuration parameters
-3. **MUST**: Add an entry to `perf-changelog.yaml`:
+3. **MUST**: Add an entry to `perf-changelog.yaml`: for example:
    ```yaml
    - config-keys:
        - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
