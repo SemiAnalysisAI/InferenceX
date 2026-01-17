@@ -35,6 +35,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: opus
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
