@@ -117,6 +117,7 @@ run_benchmark_serving() {
     local max_concurrency=""
     local result_filename=""
     local result_dir=""
+    local workspace_dir=""
     local use_chat_template=false
 
     # Parse arguments
@@ -160,6 +161,10 @@ run_benchmark_serving() {
                 ;;
             --result-dir)
                 result_dir="$2"
+                shift 2
+                ;;
+            --bench-serving-dir)
+                workspace_dir="$2"
                 shift 2
                 ;;
             --use-chat-template)
@@ -214,25 +219,14 @@ run_benchmark_serving() {
         echo "Error: --result-dir is required"
         return 1
     fi
-    
-    # Check if git is installed, install if missing
-    if ! command -v git &> /dev/null; then
-        echo "git not found, installing..."
-        if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y git
-        else
-            echo "Error: Could not install git. Package manager not found."
-            return 1
-        fi
-    fi
 
-    # Clone benchmark serving repo
-    local BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
-    git clone https://github.com/kimbochen/bench_serving.git "$BENCH_SERVING_DIR"
+    if [[ -z "$workspace_dir" ]]; then
+        workspace_dir=$(pwd)
+    fi
 
     # Build benchmark command
     local benchmark_cmd=(
-        python3 "$BENCH_SERVING_DIR/benchmark_serving.py"
+        python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
@@ -245,6 +239,7 @@ run_benchmark_serving() {
         --request-rate inf
         --ignore-eos
         --save-result
+        --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
@@ -258,5 +253,6 @@ run_benchmark_serving() {
     # Run benchmark
     set -x
     "${benchmark_cmd[@]}"
+    local benchmark_exit_code=$?
     set +x
 }
