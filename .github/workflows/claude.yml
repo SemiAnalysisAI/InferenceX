@@ -43,10 +43,9 @@ jobs:
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
-          model: ${{ contains(github.event.comment.body || github.event.issue.body, '@claude opus') && 'opus' || contains(github.event.comment.body || github.event.issue.body, '@claude haiku') && 'haiku' || 'sonnet' }}
-
           claude_args: |
-            --allowedTools "Write,Edit,mcp__github_inline_comment__create_inline_comment,Bash(*,timeout=28800000),Read,Glob,Grep,WebSearch,mcp__github__*"
+            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude opus') && 'claude-opus-4-5-20251101' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-sonnet-4-5-20250929' }}
+            --allowedTools "Write,Edit,Read,Glob,Grep,mcp__github__*,mcp__github_inline_comment__create_inline_comment,Bash(*,timeout=28800000)"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -71,60 +70,67 @@ jobs:
             python3 <<'EOF'\nimport json...
             ```
 
-            To trigger the e2e test sweep on a PR, use the `/sweep` command. This runs the e2e-tests.yml workflow against the PR's code.
+            To trigger e2e tests, use the `mcp__github__run_workflow` tool to directly dispatch the e2e-tests.yml workflow.
 
             **Syntax:**
-            ```bash
-              gh pr comment <PR_NUMBER> --repo ${{ github.repository }} --body "/sweep <generator-cli-args>"
             ```
-              
-            The `/sweep` command accepts arguments for `generate_sweep_configs.py`. Examples:
+            mcp__github__run_workflow(
+                owner="InferenceMAX",
+                repo="InferenceMAX",
+                workflow_id="e2e-tests.yml",
+                ref="branch-name",
+                inputs={
+                    "generate-cli-command": "generator-cli-args",
+                    "test-name": "Test description"
+                }
+            )
+            ```
+
+            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Examples:
 
             **Filter by model prefix and Nvidia nodes:**
             ```
-            /sweep full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1"
             ```
 
             **Filter by framework and AMD nodes:**
             ```
-            /sweep full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang
+            generate-cli-command: "full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang"
             ```
 
             **Filter by precision and runner type:**
             ```
-            /sweep full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --precision fp8 --runner-type h200
-            ```
-
-            **Multiple filters combined:**
-            ```
-            /sweep full-sweep --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --model-prefix dsr1 --framework sglang --precision fp8
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
             **Test specific config keys:**
             ```
-            /sweep test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --config-keys dsr1-fp4-b200-sglang
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --config-keys dsr1-fp4-b200-sglang"
             ```
 
-            ## Wait for sweep to end whenever triggered for followup.
-            ```bash
-            # Wait a few seconds for the workflow to start
-            sleep 10
-            
-            # Find the most recent slash-sweep run for this PR
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow slash-sweep.yml --limit 5 --json databaseId,headBranch,createdAt --jq '.[0].databaseId')
-            
-            # Watch it until completion (this blocks until done)
-            gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
+            **IMPORTANT: Keep runs precise and efficient:**
+            - Use `--max-conc` to limit concurrent jobs and avoid overwhelming runners
+            - Define specific config keys with `--config-keys` instead of running full sweeps
+            - Filter by specific models, frameworks, or precision when possible
+            - Consider runner availability before triggering large sweeps
+
+            ## Monitor workflow execution
             ```
-            
-            **When to use /sweep:**
+            # Get workflow run details
+            mcp__github__get_workflow_run(owner, repo, run_id)
+
+            # List jobs for the run
+            mcp__github__list_workflow_jobs(owner, repo, run_id)
+
+            # Get logs for failed jobs
+            mcp__github__get_job_logs(owner, repo, run_id=run_id, failed_only=true)
+            ```
+
+            **When to trigger e2e tests:**
             - When directly asked to run performance tests
             - When performance testing is needed
             - After reviewing code changes that might affect performance
-              
-            **Important:** The `/sweep` command must be at the START of the comment body.
-            The arguments after `/sweep` are passed to the generator CLI.
-              
-            After triggering, the workflow will reply with a link to the run.
-              
+
+            After triggering, monitor the workflow run using the returned run_id.
+
             Focus on: code quality, benchmark config changes, and performance impact.
