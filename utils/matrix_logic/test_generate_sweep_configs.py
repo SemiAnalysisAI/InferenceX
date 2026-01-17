@@ -116,6 +116,7 @@ def full_sweep_args_single_node():
     args.runner_type = None
     args.seq_lens = None
     args.step_size = 2
+    args.min_conc = None
     args.max_conc = None
     args.max_tp = None
     args.max_ep = None
@@ -134,6 +135,7 @@ def full_sweep_args_multi_node():
     args.runner_type = None
     args.seq_lens = None
     args.step_size = 2
+    args.min_conc = None
     args.max_conc = None
     args.max_tp = None
     args.max_ep = None
