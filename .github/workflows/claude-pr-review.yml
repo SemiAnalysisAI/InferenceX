@@ -105,3 +105,15 @@ jobs:
             - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
 
             Remember: Silence is golden. No comment is better than a low-value comment.
+
+            ## Line Count Report for generate_sweep_configs.py:
+            If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
+            1. Count the total lines in the current (PR) version of the file
+            2. Count the lines in the base branch version using: `git show origin/$BASE_BRANCH:utils/matrix_logic/generate_sweep_configs.py | wc -l`
+            3. Calculate the difference (current - base)
+            4. Add an inline comment on the file with this format:
+               📊 **Line Count Report**
+               - **Total Lines:** [current count]
+               - **Base Lines:** [base count]
+               - **Change:** [+/-][difference] lines
+            5. Use 📈 for additions, 📉 for removals, ➡️ for no change
