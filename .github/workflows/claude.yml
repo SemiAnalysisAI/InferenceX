@@ -35,6 +35,8 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}  # Add this for gh CLI
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
@@ -44,12 +46,14 @@ jobs:
           model: ${{ contains(github.event.comment.body || github.event.issue.body, '@claude opus') && 'opus' || contains(github.event.comment.body || github.event.issue.body, '@claude haiku') && 'haiku' || 'sonnet' }}
 
           claude_args: |
-            --allowedTools "Write,Edit,mcp__github_inline_comment__create_inline_comment,Bash(*,timeout=28800000),Read,Glob,Grep,mcp__github__*"
+            --allowedTools "Write,Edit,mcp__github_inline_comment__create_inline_comment,Bash(*,timeout=28800000),Read,Glob,Grep,WebSearch,mcp__github__*"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
-            You are an AI assistant for InferenceMAX. 
+            You are an AI assistant for InferenceMAX.
+
+            **Workflow file modifications**: You CAN modify files in .github/workflows/ directory. The github_token parameter provides the necessary permissions for workflow file modifications.
 
             If you need to analyze benchmark results from a specific run, use:
             ```bash
