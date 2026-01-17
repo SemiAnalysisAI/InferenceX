@@ -185,3 +185,34 @@
   description:
     - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
+
+- config-keys:
+    # NVIDIA single-node configs
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b200-trt
+    - dsr1-fp4-b200-trt-mtp
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b200-trt
+    - dsr1-fp8-b200-trt-mtp
+    - dsr1-fp8-h200-sglang
+    - dsr1-fp8-h200-trt
+    - dsr1-fp8-h200-trt-mtp
+    - gptoss-fp4-b200-trt
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-trt
+    - gptoss-fp4-h200-vllm
+    # AMD single-node configs
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-atom
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+    - gptoss-fp4-mi355x-atom
+  description:
+    - "Test entry: Upstream bench_serving script integration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
