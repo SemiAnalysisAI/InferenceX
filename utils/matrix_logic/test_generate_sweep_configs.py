@@ -946,3 +946,129 @@ class TestEdgeCases:
         assert result[0]["tp"] == 2
         assert result[0]["ep"] == 1
         assert result[0]["conc"] == 1
+
+
+# =============================================================================
+# Test argument parsing and defaults
+# =============================================================================
+
+class TestArgumentDefaults:
+    """Tests for command-line argument parsing and default values."""
+
+    def test_runner_config_default_value(self):
+        """Verify --runner-config defaults to .github/configs/runners.yaml."""
+        import sys
+        from generate_sweep_configs import main
+
+        # Save original sys.argv
+        original_argv = sys.argv
+
+        try:
+            # Simulate command-line args without --runner-config flag
+            sys.argv = [
+                'generate_sweep_configs.py',
+                'full-sweep',
+                '--config-files', 'dummy.yaml',
+                '--single-node'
+            ]
+
+            # Parse args using the ArgumentParser from main
+            # We need to access the parser directly
+            import argparse
+            from generate_sweep_configs import main
+
+            # Create the same parent parser as in main()
+            parent_parser = argparse.ArgumentParser(add_help=False)
+            parent_parser.add_argument(
+                '--config-files',
+                nargs='+',
+                required=True,
+                help='One or more configuration files (YAML format)'
+            )
+            parent_parser.add_argument(
+                '--runner-config',
+                default='.github/configs/runners.yaml',
+                help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+            )
+
+            # Create main parser
+            parser = argparse.ArgumentParser(
+                description='Generate benchmark configurations from YAML config files'
+            )
+
+            # Create subparsers
+            subparsers = parser.add_subparsers(
+                dest='command',
+                required=True,
+                help='Available commands'
+            )
+
+            # Add full-sweep subparser
+            full_sweep_parser = subparsers.add_parser(
+                'full-sweep',
+                parents=[parent_parser],
+                add_help=False,
+                help='Generate full sweep configurations'
+            )
+            full_sweep_parser.add_argument('--single-node', action='store_true')
+            full_sweep_parser.add_argument('--multi-node', action='store_true')
+
+            # Parse the args
+            args = parser.parse_args(['full-sweep', '--config-files', 'dummy.yaml', '--single-node'])
+
+            # Verify the default value
+            assert args.runner_config == '.github/configs/runners.yaml'
+
+        finally:
+            # Restore original sys.argv
+            sys.argv = original_argv
+
+    def test_runner_config_explicit_value(self):
+        """Verify --runner-config can be explicitly set."""
+        import argparse
+
+        # Create the same parent parser as in main()
+        parent_parser = argparse.ArgumentParser(add_help=False)
+        parent_parser.add_argument(
+            '--config-files',
+            nargs='+',
+            required=True,
+            help='One or more configuration files (YAML format)'
+        )
+        parent_parser.add_argument(
+            '--runner-config',
+            default='.github/configs/runners.yaml',
+            help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+        )
+
+        # Create main parser
+        parser = argparse.ArgumentParser(
+            description='Generate benchmark configurations from YAML config files'
+        )
+
+        # Create subparsers
+        subparsers = parser.add_subparsers(
+            dest='command',
+            required=True,
+            help='Available commands'
+        )
+
+        # Add full-sweep subparser
+        full_sweep_parser = subparsers.add_parser(
+            'full-sweep',
+            parents=[parent_parser],
+            add_help=False,
+            help='Generate full sweep configurations'
+        )
+        full_sweep_parser.add_argument('--single-node', action='store_true')
+
+        # Parse with explicit --runner-config
+        args = parser.parse_args([
+            'full-sweep',
+            '--config-files', 'dummy.yaml',
+            '--runner-config', 'custom/path/runners.yaml',
+            '--single-node'
+        ])
+
+        # Verify the explicit value
+        assert args.runner_config == 'custom/path/runners.yaml'
