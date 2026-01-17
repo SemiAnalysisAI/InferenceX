@@ -185,3 +185,9 @@
   description:
     - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - Update GPT-OSS FP4 B200 TRT image from 1.2.0rc2 to 1.2.0rc2.post1
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/430

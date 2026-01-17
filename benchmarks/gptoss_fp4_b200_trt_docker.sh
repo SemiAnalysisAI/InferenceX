@@ -46,6 +46,16 @@ moe_config:
 EOF
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
+    # Set AllToAll environment variables based on EP_SIZE
+    if [[ "$EP_SIZE" -eq 1 ]]; then
+        # DTP Alltoall Environment variables for EP_SIZE == 1
+        export TRTLLM_FORCE_ALLTOALL_METHOD="NotEnabled"
+    elif [[ "$EP_SIZE" -gt 1 ]]; then
+        # DEP
+        export TRTLLM_MOE_ALLTOALL_BACKEND="mnnvlthroughput"
+        export TRTLLM_FORCE_ALLTOALL_METHOD="MNNVL"
+        export TRTLLM_MOE_A2A_WORKSPACE_MB="2048"
+    fi
     cat << EOF >> $EXTRA_CONFIG_FILE
 attention_dp_config:
     enable_balance: true
