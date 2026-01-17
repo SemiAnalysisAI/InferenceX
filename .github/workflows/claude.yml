@@ -109,7 +109,8 @@ jobs:
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
-            - Use `--max-conc` to limit concurrent jobs and avoid overwhelming runners
+            - Use `--min-conc` and `--max-conc` together to specify a range of concurrency values for targeted sweeps
+            - Use `--max-conc` alone to limit concurrent jobs and avoid overwhelming runners
             - Define specific config keys with `--config-keys` instead of running full sweeps
             - Filter by specific models, frameworks, or precision when possible
             - Consider runner availability before triggering large sweeps
