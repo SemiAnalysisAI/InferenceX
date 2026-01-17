@@ -59,31 +59,26 @@ python -m pytest matrix_logic/ -v
 ```bash
 # Full sweep with all configs
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
-  --runners-config .github/configs/runners.yaml
+  --master-config .github/configs/nvidia-master.yaml
 
 # Filter by model prefix (dsr1 or gptoss)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --master-config .github/configs/nvidia-master.yaml \
-  --runners-config .github/configs/runners.yaml \
   --model dsr1
 
 # Filter by framework (sglang, trt, vllm, atom, dynamo-trt, dynamo-sglang)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --master-config .github/configs/nvidia-master.yaml \
-  --runners-config .github/configs/runners.yaml \
   --framework sglang
 
 # Filter by precision (fp4, fp8)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --master-config .github/configs/nvidia-master.yaml \
-  --runners-config .github/configs/runners.yaml \
   --precision fp8
 
 # Filter by runner type (b200, h100, h200, gb200, mi300x, mi325x, mi355x)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --master-config .github/configs/nvidia-master.yaml \
-  --runners-config .github/configs/runners.yaml \
   --runner b200
 ```
 
