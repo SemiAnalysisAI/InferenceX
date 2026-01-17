@@ -93,4 +93,15 @@ jobs:
             - If the PR looks good with no issues, just say "LGTM - no blocking issues found" and nothing else
             - For re-reviews, prefix summary with "Re-review:" and note what changed
 
+            ## Master Config and Perf Changelog Validation:
+            When reviewing a PR, check if any of the following master config files were modified:
+            - `.github/configs/amd-master.yaml`
+            - `.github/configs/nvidia-master.yaml`
+
+            If either master config file was edited AND `perf-changelog.yaml` was NOT edited in the same PR:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment that `perf-changelog.yaml` must also be updated when master config files are changed
+            - The perf-changelog entry should document what changed in the config and include the PR link
+            - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
+
             Remember: Silence is golden. No comment is better than a low-value comment.
