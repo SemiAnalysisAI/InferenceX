@@ -215,4 +215,4 @@
     - gptoss-fp4-mi355x-atom
   description:
     - "Test entry: Upstream bench_serving script integration"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/480
