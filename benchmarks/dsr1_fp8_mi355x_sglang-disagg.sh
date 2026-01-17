@@ -1,6 +1,4 @@
-#!/bin/bash
-
-set -x
+#!/usr/bin/env bash
 
 source "$(dirname "$0")/benchmark_lib.sh"
 
@@ -23,6 +21,12 @@ check_env_vars \
     DECODE_NODES \
     SGL_SLURM_JOBS_PATH \
     RANDOM_RANGE_RATIO
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
+set -x
 
 # Always clone and setup sglang_disagg
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git

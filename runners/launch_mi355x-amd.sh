@@ -3,6 +3,15 @@
 export HF_HUB_CACHE_MOUNT="/hf-hub-cache"
 export PORT=$(( 8888 + ${USER: -1} ))
 
+# Determine framework suffix based on FRAMEWORK
+if [[ "$FRAMEWORK" == "atom" ]]; then
+    FRAMEWORK_SUFFIX="_atom"
+elif [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
+    FRAMEWORK_SUFFIX="_sglang-disagg"
+else
+    FRAMEWORK_SUFFIX=""
+fi
+
 PARTITION="compute"
 SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
@@ -31,7 +40,7 @@ srun --jobid=$JOB_ID \
 --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}.sh
 
 scancel $JOB_ID
 

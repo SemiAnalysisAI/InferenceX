@@ -1,43 +1,46 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars ===
-# MODEL
-# TP
-# CONC
-# ISL
-# OSL
-# MAX_MODEL_LEN
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
-# PORT_OFFSET
-# DP_ATTENTION
-# EP_SIZE
+source "$(dirname "$0")/benchmark_lib.sh"
 
-echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    MAX_MODEL_LEN \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME \
+    DP_ATTENTION \
+    EP_SIZE
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
-hf download $MODEL
+hf download "$MODEL"
 
 # ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
+MOE_BACKEND="DEEPGEMM"
+
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    MOE_BACKEND="CUTLASS"
     MTP=1
 else
-    MOE_BACKEND="TRTLLM"
     MTP=3
 fi
 
 echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
-EXTRA_CONFIG_FILE="dsr1-fp4-mtp.yml"
+PORT=${PORT:-8888}
+EXTRA_CONFIG_FILE="dsr1-fp8-mtp.yml"
 
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 512
+    max_batch_size: 256
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:

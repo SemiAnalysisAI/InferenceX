@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars ===
-# MODEL
-# TP
-# CONC
-# ISL
-# OSL
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
+source "$(dirname "$0")/benchmark_lib.sh"
+
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"

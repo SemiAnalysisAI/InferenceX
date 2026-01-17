@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 
-# === Required Env Vars ===
-# MODEL
-# PORT
-# TP
-# CONC
-# ISL
-# OSL
-# RANDOM_RANGE_RATIO
-# RESULT_FILENAME
-# NUM_PROMPTS
-# PORT_OFFSET
-# EP_SIZE
-# DP_ATTENTION
+source "$(dirname "$0")/benchmark_lib.sh"
 
-set -x
+check_env_vars \
+    MODEL \
+    TP \
+    CONC \
+    ISL \
+    OSL \
+    RANDOM_RANGE_RATIO \
+    RESULT_FILENAME \
+    NUM_PROMPTS \
+    EP_SIZE \
+    DP_ATTENTION
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+fi
+
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
+PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 
@@ -38,6 +41,7 @@ fi
 set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
+export ATOM_GPT_OSS_MODEL=1 #TODO remove this
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
