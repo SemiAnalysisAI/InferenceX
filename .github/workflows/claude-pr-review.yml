@@ -8,6 +8,10 @@ on:
   pull_request_review_comment:
     types: [created]
 
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   review:
     runs-on: ubuntu-latest
