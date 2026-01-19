@@ -214,5 +214,5 @@
     - gptoss-fp4-mi355x-vllm
     - gptoss-fp4-mi355x-atom
   description:
-    - "Test entry: Upstream bench_serving script integration"
+    - "Upstream bench_serving script integration and add warmup support"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/480
