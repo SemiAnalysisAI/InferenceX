@@ -105,6 +105,7 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     set +x
     local model=""
@@ -119,6 +120,7 @@ run_benchmark_serving() {
     local result_dir=""
     local workspace_dir=""
     local use_chat_template=false
+    local server_pid=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -170,6 +172,10 @@ run_benchmark_serving() {
             --use-chat-template)
                 use_chat_template=true
                 shift
+                ;;
+            --server-pid)
+                server_pid="$2"
+                shift 2
                 ;;
             *)
                 echo "Unknown parameter: $1"
@@ -250,9 +256,34 @@ run_benchmark_serving() {
         benchmark_cmd+=(--use-chat-template)
     fi
 
-    # Run benchmark
+    # Run benchmark with optional server monitoring
     set -x
-    "${benchmark_cmd[@]}"
-    local benchmark_exit_code=$?
+    if [[ -n "$server_pid" ]]; then
+        # Run benchmark in background and monitor server health
+        "${benchmark_cmd[@]}" &
+        local benchmark_pid=$!
+
+        # Monitor loop: check both benchmark and server status
+        while kill -0 "$benchmark_pid" 2>/dev/null; do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+                echo "ERROR: Server process $server_pid died during benchmark"
+                kill "$benchmark_pid" 2>/dev/null
+                wait "$benchmark_pid" 2>/dev/null
+                set +x
+                return 1
+            fi
+            sleep 2
+        done
+
+        # Benchmark finished, get its exit code
+        wait "$benchmark_pid"
+        local benchmark_exit_code=$?
+    else
+        # No server monitoring, run benchmark directly
+        "${benchmark_cmd[@]}"
+        local benchmark_exit_code=$?
+    fi
     set +x
+
+    return $benchmark_exit_code
 }
