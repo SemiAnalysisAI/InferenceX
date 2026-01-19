@@ -906,7 +906,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
         # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
         tp: 1
-        ep: 1
+        ep: 8
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=4"
@@ -915,7 +915,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 32
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=8"
@@ -928,7 +928,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
         # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=1"
@@ -937,7 +937,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       decode:
         num-worker: 4
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=4"
@@ -950,7 +950,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
         # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
         tp: 1
-        ep: 1
+        ep: 8
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=6"
@@ -959,7 +959,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 48
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=12"
@@ -973,7 +973,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       prefill:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=1"
@@ -982,7 +982,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=1"
@@ -993,7 +993,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       prefill:
         num-worker: 5
         tp: 1
-        ep: 1
+        ep: 8
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=10"
@@ -1002,7 +1002,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 32
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=8"
@@ -1029,7 +1029,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=1"
@@ -1038,7 +1038,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 2
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=2"
@@ -1049,7 +1049,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 4
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=4"
@@ -1058,7 +1058,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 48
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=12"
@@ -1069,7 +1069,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 4
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=4"
@@ -1078,7 +1078,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 32
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=8"
@@ -1090,7 +1090,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
@@ -1099,7 +1099,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 4
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=4"
@@ -1108,7 +1108,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 6
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=6"
@@ -1117,7 +1117,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 48
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=12"
@@ -1126,7 +1126,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 10
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=10"
@@ -1135,7 +1135,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 32
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=8"
@@ -1144,7 +1144,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       prefill:
         num-worker: 10
         tp: 1
-        ep: 1
+        ep: 4
         dp-attn: true
         additional-settings:
         - "PREFILL_NODES=10"
@@ -1153,7 +1153,7 @@ dsr1-fp4-gb200-dynamo-sglang:
       decode:
         num-worker: 1
         tp: 1
-        ep: 1
+        ep: 32
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=8"
