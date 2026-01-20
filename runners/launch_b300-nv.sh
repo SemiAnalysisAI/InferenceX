@@ -60,6 +60,12 @@ srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm-trtllm"
 # Model path aliases
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
+
+use_exclusive_sbatch_directive: true
+
+default_mounts:
+  "/opt/ucx-no-ud": "/usr/local/ucx"
+
 EOF
 
 echo "Generated srtslurm.yaml:"
