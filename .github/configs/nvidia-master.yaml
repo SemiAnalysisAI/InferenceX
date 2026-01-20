@@ -1,5 +1,5 @@
 dsr1-fp4-b300-dynamo-trt:
-  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.0
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.0
   model: deepseek-r1-fp4
   model-prefix: dsr1
   runner: b300-test
