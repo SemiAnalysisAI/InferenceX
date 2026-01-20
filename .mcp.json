@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "inferencemax-repos": {
+      "command": "python",
+      "args": ["-m", ".claude.mcp.server"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
