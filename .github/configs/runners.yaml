@@ -51,5 +51,12 @@ mi355x:
 # - 'mi355x-amd_3'
 - 'mi355x-amds_0'
 - 'mi355x-amds_1'
+- 'mi355x-amds_2'
+- 'mi355x-amds_3'
+- 'mi355x-amds_4'
+- 'mi355x-amds_5'
+- 'mi355x-amds_6'
+- 'mi355x-amds_7'
+- 'mi355x-amds_8'
 gb200:
 - gb200-nv_0
