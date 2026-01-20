@@ -142,7 +142,7 @@ else
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
 
     PARTITION="compute"
-    SQUASH_FILE="/it-share/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     export ENROOT_RUNTIME_PATH=/tmp
 
