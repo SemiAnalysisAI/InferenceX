@@ -264,12 +264,6 @@ EXCLUDE_PATTERNS = [
     '**/*_test.py',
     '**/testing/**',
 
-    # Documentation
-    '**/docs/**',
-    '**/doc/**',
-    '**/*.md',  # Exclude markdown files (except root README)
-    '**/examples/**',
-
     # Build artifacts
     '**/build/**',
     '**/dist/**',

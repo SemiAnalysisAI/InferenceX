@@ -35,17 +35,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup MCP Server
+        run: |
+          pip install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
       - name: PR Review with Claude
         uses: anthropics/claude-code-action@v1
+        env:
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
-          
+
           claude_args: |
             --model 'claude-opus-4-5-20251101'
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax_repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -109,6 +116,27 @@ jobs:
             - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
 
             Remember: Silence is golden. No comment is better than a low-value comment.
+
+            ## vLLM and SGLang Source Code Access:
+            You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
+            - Use `mcp__inferencemax_repos__*` tools to access repository source code
+            - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
+            - The server automatically detects and checks out the version matching InferenceMAX configs
+            - Use the `list_versions` tool to see detected versions
+            - Use the `switch_version` tool to switch to a different version if needed
+
+            **When to use this:**
+            - When reviewing changes that interact with vLLM/SGLang APIs or internals
+            - To verify that code correctly uses vLLM/SGLang features
+            - To check if assumptions about vLLM/SGLang behavior are accurate
+            - To understand how vLLM/SGLang implements features being used/modified
+            - To cross-reference documentation claims with actual implementation
+
+            **Example use cases:**
+            - PR modifies vLLM scheduler usage → Check actual vLLM scheduler implementation
+            - PR adds SGLang integration → Verify SGLang API matches the PR's usage
+            - PR claims feature X works a certain way → Read the source to confirm
+            - PR has a bug related to KV cache → Look at vLLM's KV cache implementation
 
             ## Line Count Report for generate_sweep_configs.py:
             If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
