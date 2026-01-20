@@ -96,10 +96,10 @@ jobs:
             done
           fi
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up resources ..."
-            scancel -u $USER
-            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-              squeue -u $USER
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}"
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
               sleep 5
             done
           fi

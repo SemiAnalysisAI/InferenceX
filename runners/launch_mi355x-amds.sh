@@ -147,8 +147,8 @@ else
     export ENROOT_RUNTIME_PATH=/tmp
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell
-    JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     if [[ "$FRAMEWORK" == "atom" ]]; then
         srun --jobid=$JOB_ID bash -c "rm $SQUASH_FILE"
