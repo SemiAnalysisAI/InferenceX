@@ -137,7 +137,7 @@ PY
 
 else
 
-    export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/hf-hub-cache/"
     export PORT_OFFSET=${USER: -1}
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
 
