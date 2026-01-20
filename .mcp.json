@@ -9,23 +9,3 @@
     }
   }
 }
-  "mcpServers": {
-    "inferencemax-repos": {
-      "command": "python",
-{
-  "mcpServers": {
-    "inferencemax-repos": {
-      "command": "python",
-      "args": [".claude/mcp/server.py"],
-      "env": {
-        "PYTHONPATH": "."
-      }
-    }
-  }
-}
-      "env": {
-        "PYTHONPATH": "."
-      }
-    }
-  }
-}
