@@ -135,8 +135,7 @@ else
 
                 echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                # Copy the result file to workspace with a unique name
-                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus${gpus}_ctx${ctx}_gen${gen}.json"
+                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
                 cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
                 echo "Copied result file to: $WORKSPACE_RESULT_FILE"
