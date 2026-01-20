@@ -30,6 +30,11 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
   export HSA_NO_SCRATCH_RECLAIM=1
 fi
 
+# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
+if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+fi
+
 export VLLM_USE_AITER_UNIFIED_ATTENTION=1
 export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
