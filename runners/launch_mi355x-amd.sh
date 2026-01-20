@@ -38,15 +38,25 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export MODEL_NAME="DeepSeek-R1"
     export MODEL_PATH="/nfsdata"
+
+    NODENAME=$(sinfo -N -h -t idle,mix -o "%N" | head -1)
+    if [[ $NODENAME == GPU* ]]; then
+        export MODEL_PATH="/nfsdata"
+    elif [[ $NODENAME == mia1* ]]; then
+        export MODEL_PATH="/it-share/data"
+    else
+        echo "[Error] No available nodes for launching slurm jobs"
+        exit 1
+    fi
+
     export ISL="$ISL"
     export OSL="$OSL"
 
     sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
 
-    bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}_slurm.sh"
+    JOB_ID=$(bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}_slurm.sh")
 
     # Wait for job to complete
-    JOB_ID=$(squeue -u $USER --noheader --format='%i')
     LOG_FILE="$SGL_SLURM_JOBS_PATH/slurm_job-${JOB_ID}.out"
 
     # Give slurm time to start the job and create log file

@@ -195,6 +195,14 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply min-conc filter if specified
+                    if args.min_conc is not None:
+                        if args.min_conc <= 0:
+                            continue  # Skip if min_conc is not positive
+                        conc_values = [c for c in conc_values if c >= args.min_conc]
+                        if not conc_values:
+                            continue  # Skip if no values meet the min_conc requirement
+
                     # Apply max-conc filter if specified
                     # If max_conc is less than all values, use max_conc directly (if valid)
                     if args.max_conc is not None:
@@ -254,6 +262,15 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             continue  # Skip if max_ep is not positive
                         if ep is not None and ep > args.max_ep:
                             ep = args.max_ep
+
+                    # Apply min-conc filter if specified
+                    # If conc_end < min_conc, skip this config entirely
+                    if args.min_conc is not None:
+                        if args.min_conc <= 0:
+                            continue  # Skip if min_conc is not positive
+                        if conc_end < args.min_conc:
+                            continue  # Skip if entire range is below min_conc
+                        conc_start = max(conc_start, args.min_conc)
 
                     # Apply max-conc filter if specified
                     # If conc_start > max_conc, use max_conc as both start and end (if valid)
@@ -570,8 +587,8 @@ def main():
     )
     parent_parser.add_argument(
         '--runner-config',
-        required=True,
-        help='Configuration file holding runner information (YAML format)'
+        default='.github/configs/runners.yaml',
+        help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(
@@ -640,6 +657,12 @@ def main():
         type=int,
         default=2,
         help='Step size for concurrency values (default: 2)'
+    )
+    full_sweep_parser.add_argument(
+        '--min-conc',
+        type=int,
+        required=False,
+        help='Minimum concurrency value to include (filters out lower concurrency values)'
     )
     full_sweep_parser.add_argument(
         '--max-conc',

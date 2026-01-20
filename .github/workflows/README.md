@@ -32,7 +32,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 ```
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
-    --runner-config RUNNER_CONFIG
+    [--runner-config RUNNER_CONFIG]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -49,32 +49,32 @@ usage: generate_sweep_configs.py full-sweep
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 1k8k workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
 ```
-full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Test all multi-node configurations:**
 ```
-full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
 ```
 
 ## `runner-model-sweep` Command
@@ -84,7 +84,7 @@ The `runner-model-sweep` command validates that all runner nodes of a specific t
 ```
 usage: generate_sweep_configs.py runner-model-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
-    --runner-config RUNNER_CONFIG
+    [--runner-config RUNNER_CONFIG]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
     (--single-node | --multi-node)
@@ -96,7 +96,7 @@ I just upgraded the CUDA drivers on all H200 runners and need to verify that all
 
 Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the following command as the text input:
 ```
-runner-model-sweep --single-node --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml
+runner-model-sweep --single-node --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml
 ```
 
 This will run a test (just the highest available parallelism and lowest available concurrency) for each configuration that specifies the `h200` runner type, across all H200 runner nodes defined in `.github/configs/runners.yaml`.
@@ -112,7 +112,7 @@ This is particularly useful when:
 
 Use `--runner-node-filter` to only test a subset of runner nodes:
 ```
-runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300x-amd --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml
+runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300x-amd --config-files .github/configs/amd-master.yaml
 ```
 
 This will only include runner nodes whose names contain "mi300x-amd"

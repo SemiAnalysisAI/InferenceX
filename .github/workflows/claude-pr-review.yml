@@ -40,6 +40,7 @@ jobs:
           allowed_bots: ''
           
           claude_args: |
+            --model 'claude-opus-4-5-20251101'
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -92,4 +93,27 @@ jobs:
             - If the PR looks good with no issues, just say "LGTM - no blocking issues found" and nothing else
             - For re-reviews, prefix summary with "Re-review:" and note what changed
 
+            ## Master Config and Perf Changelog Validation:
+            When reviewing a PR, check if any of the following master config files were modified:
+            - `.github/configs/amd-master.yaml`
+            - `.github/configs/nvidia-master.yaml`
+
+            If either master config file was edited AND `perf-changelog.yaml` was NOT edited in the same PR:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment that `perf-changelog.yaml` must also be updated when master config files are changed
+            - The perf-changelog entry should document what changed in the config and include the PR link
+            - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
+
             Remember: Silence is golden. No comment is better than a low-value comment.
+
+            ## Line Count Report for generate_sweep_configs.py:
+            If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
+            1. Count the total lines in the current (PR) version of the file
+            2. Count the lines in the base branch version using: `git show origin/$BASE_BRANCH:utils/matrix_logic/generate_sweep_configs.py | wc -l`
+            3. Calculate the difference (current - base)
+            4. Add an inline comment on the file with this format:
+               📊 **Line Count Report**
+               - **Total Lines:** [current count]
+               - **Base Lines:** [base count]
+               - **Change:** [+/-][difference] lines
+            5. Use 📈 for additions, 📉 for removals, ➡️ for no change
