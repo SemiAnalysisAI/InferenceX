@@ -38,11 +38,18 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Setup MCP Server
+        run: |
+          pip install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
@@ -62,7 +69,7 @@ jobs:
 
           claude_args: |
             --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-5-20251101' }}
-            --allowedTools "Write,Edit,Read,Glob,Grep,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__fetch__*,Bash(*,timeout=28800000)"
+            --allowedTools "Write,Edit,Read,Glob,Grep,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__inferencemax_repos__*,mcp__fetch__*,Bash(*,timeout=28800000)"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -150,6 +157,17 @@ jobs:
             - After reviewing code changes that might affect performance
 
             After triggering, monitor the workflow run using the returned run_id.
+
+            ## vLLM and SGLang Source Code Access
+
+            You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
+            - Use `mcp__inferencemax_repos__*` tools to access repository source code
+            - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
+            - The server automatically detects and checks out the version matching InferenceMAX configs
+            - Use the `list_versions` tool to see detected versions
+            - Use the `switch_version` tool to switch to a different version if needed
+
+            This gives you deep context about vLLM and SGLang internals when debugging issues or explaining behavior.
 
             Focus on: code quality, benchmark config changes, and performance impact.
 
