@@ -38,31 +38,33 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Setup MCP Server
+        run: |
+          pip install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
-
-          mcp_config: |
-            {
-              "mcpServers": {
-                "fetch": {
-                  "command": "npx",
-                  "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]
-                }
-              }
-            }
+          additional_permissions: |
+            actions: read
 
           claude_args: |
             --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-5-20251101' }}
-            --allowedTools "Write,Edit,Read,Glob,Grep,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__fetch__*,Bash(*,timeout=28800000)"
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
+            --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -126,11 +128,11 @@ jobs:
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
-            - Use `--min-conc` and `--max-conc` together to specify a range of concurrency values for targeted sweeps
-            - Use `--max-conc` alone to limit concurrent jobs and avoid overwhelming runners
+            - You must use `--min-conc` and `--max-conc` together to specify a single concurrency value for targeted sweeps
+            - You must use `--seq-len` to specify a single sequence length for targeted sweeps
             - Define specific config keys with `--config-keys` instead of running full sweeps
             - Filter by specific models, frameworks, or precision when possible
-            - Consider runner availability before triggering large sweeps
+            - Never do a full sweep without filters unless explicitly instructed.
 
             ## Monitor workflow execution
             ```
@@ -148,10 +150,26 @@ jobs:
             - When directly asked to run performance tests
             - When performance testing is needed
             - After reviewing code changes that might affect performance
+            - For all runs, ensure they have links in the comment.
 
-            After triggering, monitor the workflow run using the returned run_id.
+            After triggering, monitor the workflow run using the returned run_id. Wait until it completes before analyzing results.
+            - Do NOT claim completion until most recent job finishes and results analyzed.
+            - You can do a long `sleep` command to wait for the job to finish.
+            - However, you can analyze an ongoing run, for example if it errors, and start a new run in parallel without finishing the old run. Cancel such old runs.
+            - If jobs cannot be run, say exactly what you could not run and why.
 
-            Focus on: code quality, benchmark config changes, and performance impact.
+            ## vLLM and SGLang Source Code Access
+
+            You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
+            - Use `mcp__inferencemax_repos__*` tools to access repository source code
+            - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
+            - The server automatically detects and checks out the version matching InferenceMAX configs
+            - Use the `list_versions` tool to see detected versions
+            - Use the `switch_version` tool to switch to a different version if needed
+
+            This gives you deep context about vLLM and SGLang internals when debugging issues or explaining behavior.
+
+            Focus on: code quality, benchmark config changes, and performance impact. Do not be lazy.
 
             ## Web Access:
             You have internet access via MCP servers:
