@@ -43,10 +43,6 @@ on:
       max-model-len:
         required: true
         type: string
-      random-range-ratio:
-        required: false
-        type: string
-        default: "0.8"
 
       prefill-num-worker:
         required: true
@@ -87,6 +83,7 @@ on:
         type: string
 
 env:
+  RANDOM_RANGE_RATIO: 0.8
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
@@ -96,7 +93,6 @@ env:
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
-  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}

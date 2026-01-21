@@ -21,6 +21,10 @@ InferenceMAX is an open-source, automated benchmarking system that continuously 
 │   │   ├── generate_sweep_configs.py  # CLI for generating benchmark matrix
 │   │   ├── validation.py              # Pydantic validation models
 │   │   └── test_*.py                  # Unit tests
+│   ├── bench_serving/       # Benchmark serving client (upstreamed from vLLM)
+│   │   ├── benchmark_serving.py       # Main benchmark client script
+│   │   ├── backend_request_func.py    # Backend-specific request functions
+│   │   └── benchmark_utils.py         # Utility functions
 │   ├── process_result.py    # Post-processes benchmark results
 │   ├── process_changelog.py # Processes perf-changelog.yaml
 │   └── summarize.py         # Generates markdown summaries
@@ -196,9 +200,10 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
 
 - `utils/matrix_logic/validation.py` - Defines all configuration schemas
 - `utils/matrix_logic/generate_sweep_configs.py` - Config generation logic
+- `utils/bench_serving/benchmark_serving.py` - Benchmark client for measuring serving performance
 - `.github/configs/nvidia-master.yaml` - NVIDIA benchmark definitions
 - `.github/workflows/run-sweep.yml` - Main CI/CD workflow
-- `benchmarks/benchmark_lib.sh` - Shared benchmark utilities
+- `benchmarks/benchmark_lib.sh` - Shared benchmark utilities (wraps bench_serving)
 
 ## Testing
 

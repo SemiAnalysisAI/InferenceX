@@ -11,6 +11,11 @@ salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
+    echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+    srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
+    srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+fi
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \

@@ -144,16 +144,6 @@ else
     PARTITION="compute"
     SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    if [[ "$MODEL" == "amd/DeepSeek-R1-0528-MXFP4-Preview" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
-        if [[ "$OSL" == "8192" ]]; then
-            export NUM_PROMPTS=$(( CONC * 20 ))
-        else
-            export NUM_PROMPTS=$(( CONC * 50 ))
-        fi
-    else
-        export NUM_PROMPTS=$(( CONC * 10 ))
-    fi
-
     export ENROOT_RUNTIME_PATH=/tmp
 
     set -x
@@ -164,6 +154,11 @@ else
         srun --jobid=$JOB_ID bash -c "sudo rm $SQUASH_FILE"
     fi
     srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+    if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
+        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+        srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+    fi
     srun --jobid=$JOB_ID bash -c "sudo chmod -R a+rwX /hf-hub-cache/"
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \

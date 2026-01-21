@@ -11,6 +11,11 @@ SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
 
 set -x
 srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
+    echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+    srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+fi
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$SAGEMAKER_SHM_PATH:/dev/shm/sagemaker_sessions \

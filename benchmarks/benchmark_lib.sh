@@ -105,6 +105,7 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     set +x
     local model=""
@@ -117,7 +118,9 @@ run_benchmark_serving() {
     local max_concurrency=""
     local result_filename=""
     local result_dir=""
+    local workspace_dir=""
     local use_chat_template=false
+    local server_pid=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -162,9 +165,17 @@ run_benchmark_serving() {
                 result_dir="$2"
                 shift 2
                 ;;
+            --bench-serving-dir)
+                workspace_dir="$2"
+                shift 2
+                ;;
             --use-chat-template)
                 use_chat_template=true
                 shift
+                ;;
+            --server-pid)
+                server_pid="$2"
+                shift 2
                 ;;
             *)
                 echo "Unknown parameter: $1"
@@ -214,25 +225,14 @@ run_benchmark_serving() {
         echo "Error: --result-dir is required"
         return 1
     fi
-    
-    # Check if git is installed, install if missing
-    if ! command -v git &> /dev/null; then
-        echo "git not found, installing..."
-        if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y git
-        else
-            echo "Error: Could not install git. Package manager not found."
-            return 1
-        fi
-    fi
 
-    # Clone benchmark serving repo
-    local BENCH_SERVING_DIR=$(mktemp -d /tmp/bmk-XXXXXX)
-    git clone https://github.com/kimbochen/bench_serving.git "$BENCH_SERVING_DIR"
+    if [[ -z "$workspace_dir" ]]; then
+        workspace_dir=$(pwd)
+    fi
 
     # Build benchmark command
     local benchmark_cmd=(
-        python3 "$BENCH_SERVING_DIR/benchmark_serving.py"
+        python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
@@ -245,6 +245,7 @@ run_benchmark_serving() {
         --request-rate inf
         --ignore-eos
         --save-result
+        --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
@@ -255,8 +256,34 @@ run_benchmark_serving() {
         benchmark_cmd+=(--use-chat-template)
     fi
 
-    # Run benchmark
+    # Run benchmark with optional server monitoring
     set -x
-    "${benchmark_cmd[@]}"
+    if [[ -n "$server_pid" ]]; then
+        # Run benchmark in background and monitor server health
+        "${benchmark_cmd[@]}" &
+        local benchmark_pid=$!
+
+        # Monitor loop: check both benchmark and server status
+        while kill -0 "$benchmark_pid" 2>/dev/null; do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+                echo "ERROR: Server process $server_pid died during benchmark"
+                kill "$benchmark_pid" 2>/dev/null
+                wait "$benchmark_pid" 2>/dev/null
+                set +x
+                return 1
+            fi
+            sleep 2
+        done
+
+        # Benchmark finished, get its exit code
+        wait "$benchmark_pid"
+        local benchmark_exit_code=$?
+    else
+        # No server monitoring, run benchmark directly
+        "${benchmark_cmd[@]}"
+        local benchmark_exit_code=$?
+    fi
     set +x
+
+    return $benchmark_exit_code
 }
