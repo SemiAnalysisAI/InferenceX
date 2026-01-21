@@ -14,9 +14,12 @@ cd "$TRTLLM_REPO_DIR"
 git checkout jthomson04/trtllm-support
 
 echo "Installing srtctl..."
-python3 -m venv --clear .venv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+uv venv
 source .venv/bin/activate
-pip install -e .
+uv pip install -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
