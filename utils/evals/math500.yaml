@@ -1,0 +1,36 @@
+# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/hendrycks_math/hendrycks_math_algebra.yaml
+# Changed regex and prompt
+tag:
+  - math_word_problems
+task: hendrycks_math_algebra
+dataset_path: HuggingFaceH4/MATH-500
+process_docs: !function utils.process_docs
+dataset_name: algebra
+output_type: generate_until
+training_split: train
+test_split: test
+doc_to_text: "You are solving competition math problems.\n\nFormat rules:\n- Answer in a new line that starts with `Answer: `.\n- After `Answer: `, write ONLY the answer as inline LaTeX.\n- Use ONLY ASCII LaTeX commands (e.g. \\pi, \\frac{1}{2}, -). NO Unicode symbols.\n- Do NOT wrap the answer in $, $$, \\( \\), \\[ \\], or any other delimiters.\n- Do NOT use \\displaystyle or any display-style commands. Answer only this problem, the rest are examples. Problem: {{problem}}\n"
+process_results: !function utils.process_results
+doc_to_target: "{{answer}}"
+generation_kwargs:
+  until:
+    - "Problem:"
+  do_sample: false
+  temperature: 0
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    regexes_to_ignore:
+      - "\\\\left"
+      - "\\\\right"
+      - "\\s+"
+filter_list:
+  - name: "strict-match"
+    filter:
+      - function: "regex"
+        group_select: -1
+        regex_pattern: "Answer:\\s*([^\\n]+)"
+      - function: "take_first"
+metadata:
+  version: 1.0

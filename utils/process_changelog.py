@@ -113,6 +113,7 @@ def main():
                     *configs_to_run,
                     "--config-files",
                     *MASTER_CONFIGS,
+                    "--run-evals"
                 ],
                 capture_output=True,
                 text=True,
