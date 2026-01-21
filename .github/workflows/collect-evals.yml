@@ -1,0 +1,46 @@
+name: Template - Collect Evals
+
+on:
+  workflow_call:
+    inputs:
+      result-prefix:
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  collect-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Download eval artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: eval_results/
+          pattern: ${{ inputs.result-prefix && format('eval_{0}_*', inputs.result-prefix) || 'eval_*' }}
+
+      - name: Summarize evals
+        run: |
+          pip install tabulate
+          echo "## Eval Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          python3 utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload aggregated evals
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: eval_results_${{ inputs.result-prefix || 'all' }}
+          path: agg_eval_${{ inputs.result-prefix || 'all' }}.json
+
+      - name: Cleanup downloaded eval artifacts
+        if: ${{ always() }}
+        run: |
+          rm -rf eval_results/ || true

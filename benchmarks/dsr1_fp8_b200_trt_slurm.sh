@@ -58,6 +58,8 @@ fi
 set -x
 
 MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
+MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
+MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 # Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
@@ -86,3 +88,10 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+# After throughput, run evaluation only if RUN_EVAL is true
+if [ "${RUN_EVAL}" = "true" ]; then
+    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    append_lm_eval_summary
+fi
+set +x
