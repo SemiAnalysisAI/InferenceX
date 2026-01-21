@@ -167,6 +167,30 @@ jobs:
 
             Focus on: code quality, benchmark config changes, and performance impact. Do not be lazy.
 
+            ## Updating perf-changelog.yaml
+
+            When making changes to benchmark scripts or master config files that affect image tags, environment variables, or configuration parameters, you MUST add an entry to `perf-changelog.yaml`.
+
+            **When to update perf-changelog.yaml:**
+            - Updating image tags in `.github/configs/*-master.yaml` or `benchmarks/*.sh` scripts
+            - Adding or modifying environment variables in benchmark configurations
+            - Changing configuration parameters that affect performance
+
+            **Entry format:**
+            ```yaml
+            - config-keys:
+                - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
+              description:
+                - "Update vLLM image from v0.11.2 to v0.13.0"
+                - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
+              pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+            ```
+
+            **Guidelines:**
+            - Use wildcards (`*`) in config-keys to match multiple related configurations
+            - Each description item should be a concise change summary
+            - The pr-link should reference the PR number (use XXX as placeholder until PR is created)
+
             ## Web Access:
             You have internet access via MCP servers:
             - `mcp__fetch__fetch` - Fetch content from any URL
