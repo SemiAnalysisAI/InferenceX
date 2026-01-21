@@ -175,7 +175,7 @@ gptoss-fp4-mi325x-vllm:
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.14.0
+  image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi355x
