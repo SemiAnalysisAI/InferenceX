@@ -14,7 +14,10 @@ cd "$TRTLLM_REPO_DIR"
 git checkout jthomson04/trtllm-support
 
 echo "Installing srtctl..."
-python3 -m venv --clear .venv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+uv venv
 source .venv/bin/activate
 pip install -e .
 
@@ -26,7 +29,9 @@ fi
 echo "Configs available at: $TRTLLM_REPO_DIR/"
 
 export SLURM_PARTITION="main"
-export SLURM_ACCOUNT="root"
+export SLURM_ACCOUNT="slurm-shared"
+
+SQUASH_FILE="/lustre/fsw/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
     export MODEL_PATH="/models/dsr1-fp8"
@@ -60,6 +65,10 @@ srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm-trtllm"
 # Model path aliases
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
+
+# Container aliases
+containers:
+  latest: "${SQUASH_FILE}"
 EOF
 
 echo "Generated srtslurm.yaml:"
