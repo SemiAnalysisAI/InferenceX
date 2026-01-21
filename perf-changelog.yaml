@@ -185,3 +185,9 @@
   description:
     - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
+
+- config-keys:
+    - "*mi355x*"
+  description:
+    - Burn in new MI355X
+  pr-link: None
