@@ -120,11 +120,19 @@ jobs:
       - name: Resource cleanup
         run: |
           echo "[Slurm] Cleaning up resources ..."
-          scancel -u $USER
-          while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-            squeue -u $USER
-            sleep 5
-          done
+          # scancel -u $USER
+          # while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+          #   squeue -u $USER
+          #   sleep 5
+          # done
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}"
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
+          fi
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:

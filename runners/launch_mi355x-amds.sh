@@ -150,6 +150,8 @@ else
     salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
+    srun --jobid=$JOB_ID bash -c "docker stop $(docker ps -a -q)"
+
     if [[ "$FRAMEWORK" == "atom" ]]; then
         srun --jobid=$JOB_ID bash -c "rm $SQUASH_FILE"
     fi
@@ -160,6 +162,7 @@ else
         srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
         srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
     fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
