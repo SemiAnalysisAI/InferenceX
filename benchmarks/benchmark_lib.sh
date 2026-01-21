@@ -34,11 +34,12 @@ mark_wait_for_server_end() {
 }
 
 # Calculate duration in minutes from two timestamps
+# Uses Python for calculation since bc may not be available in all containers
 calculate_duration_minutes() {
     local start_time=$1
     local end_time=$2
     if [[ -n "$start_time" && -n "$end_time" ]]; then
-        echo "scale=4; ($end_time - $start_time) / 60" | bc
+        python3 -c "print(round(($end_time - $start_time) / 60, 4))"
     else
         echo "null"
     fi
