@@ -104,7 +104,12 @@ jobs:
             )
             ```
 
-            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Examples:
+            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`.
+
+            usage: `generate_sweep_configs.py` `[-h]`
+                                 `{full-sweep,runner-model-sweep,test-config}`
+            
+            Examples:
 
             **Filter by model prefix and Nvidia nodes:**
             ```
