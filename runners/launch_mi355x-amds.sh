@@ -138,7 +138,7 @@ PY
 else
 
     export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
-    export PORT_OFFSET=${USER: -1}
+    export PORT_OFFSET=${RUNNER_NAME: -1}
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
 
     PARTITION="compute"
