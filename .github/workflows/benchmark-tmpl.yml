@@ -176,3 +176,11 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload server timing artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: server_timing_${{ env.RESULT_FILENAME }}
+          path: server_timing_${{ env.RESULT_FILENAME }}.json
+          if-no-files-found: ignore

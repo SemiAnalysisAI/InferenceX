@@ -22,6 +22,9 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 export TORCH_CUDA_ARCH_LIST="9.0"
 
+# Start timing for server launch
+start_launch_server_timing
+
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
@@ -45,6 +48,9 @@ fi
 
 SERVER_PID=$!
 
+# End timing for server launch (process started)
+end_launch_server_timing
+
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
@@ -59,3 +65,6 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+# Write server timing measurements to JSON file for artifact upload
+write_server_timing_json "/workspace/server_timing_${RESULT_FILENAME}.json"

@@ -2,6 +2,87 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Global variables for timing measurement
+LAUNCH_SERVER_START_TIME=""
+LAUNCH_SERVER_END_TIME=""
+WAIT_FOR_SERVER_START_TIME=""
+WAIT_FOR_SERVER_END_TIME=""
+
+# Record the start time for server launch
+# Should be called right before starting the server process
+# Usage: start_launch_server_timing
+start_launch_server_timing() {
+    LAUNCH_SERVER_START_TIME=$(date +%s.%N)
+}
+
+# Record the end time for server launch (when server process is started but not yet ready)
+# Should be called right after the server process is spawned
+# Usage: end_launch_server_timing
+end_launch_server_timing() {
+    LAUNCH_SERVER_END_TIME=$(date +%s.%N)
+}
+
+# Record the start time for wait_for_server_ready
+# This is called automatically at the start of wait_for_server_ready
+start_wait_for_server_timing() {
+    WAIT_FOR_SERVER_START_TIME=$(date +%s.%N)
+}
+
+# Record the end time for wait_for_server_ready
+# This is called automatically at the end of wait_for_server_ready
+end_wait_for_server_timing() {
+    WAIT_FOR_SERVER_END_TIME=$(date +%s.%N)
+}
+
+# Calculate time difference in minutes
+# Usage: calc_time_diff_minutes START_TIME END_TIME
+# Returns: Time difference in minutes as a decimal
+calc_time_diff_minutes() {
+    local start_time=$1
+    local end_time=$2
+
+    if [[ -z "$start_time" || -z "$end_time" ]]; then
+        echo "null"
+        return
+    fi
+
+    local diff_seconds
+    diff_seconds=$(echo "$end_time - $start_time" | bc)
+    local diff_minutes
+    diff_minutes=$(echo "scale=4; $diff_seconds / 60" | bc)
+    echo "$diff_minutes"
+}
+
+# Write server timing measurements to a JSON file
+# Usage: write_server_timing_json OUTPUT_FILE
+# Creates a JSON file with launch_server_minutes and wait_for_server_minutes
+write_server_timing_json() {
+    local output_file=$1
+
+    if [[ -z "$output_file" ]]; then
+        echo "Error: output file path is required"
+        return 1
+    fi
+
+    local launch_minutes
+    local wait_minutes
+
+    launch_minutes=$(calc_time_diff_minutes "$LAUNCH_SERVER_START_TIME" "$LAUNCH_SERVER_END_TIME")
+    wait_minutes=$(calc_time_diff_minutes "$WAIT_FOR_SERVER_START_TIME" "$WAIT_FOR_SERVER_END_TIME")
+
+    cat > "$output_file" << EOF
+{
+    "launch_server_minutes": $launch_minutes,
+    "wait_for_server_ready_minutes": $wait_minutes,
+    "launch_server_start_epoch": ${LAUNCH_SERVER_START_TIME:-null},
+    "launch_server_end_epoch": ${LAUNCH_SERVER_END_TIME:-null},
+    "wait_for_server_start_epoch": ${WAIT_FOR_SERVER_START_TIME:-null},
+    "wait_for_server_end_epoch": ${WAIT_FOR_SERVER_END_TIME:-null}
+}
+EOF
+    echo "Server timing written to: $output_file"
+}
+
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set
@@ -24,6 +105,7 @@ check_env_vars() {
 }
 
 # Wait for server to be ready by polling the health endpoint
+# Automatically captures timing for wait_for_server_ready
 # All parameters are required
 # Parameters:
 #   --port: Server port
@@ -32,6 +114,10 @@ check_env_vars() {
 #   --sleep-interval: Sleep interval between health checks (optional, default: 5)
 wait_for_server_ready() {
     set +x
+
+    # Start timing for wait_for_server_ready
+    start_wait_for_server_timing
+
     local port=""
     local server_log=""
     local server_pid=""
@@ -89,6 +175,10 @@ wait_for_server_ready() {
         sleep "$sleep_interval"
     done
     kill $TAIL_PID
+
+    # End timing for wait_for_server_ready
+    end_wait_for_server_timing
+    echo "Server ready. Wait time: $(calc_time_diff_minutes "$WAIT_FOR_SERVER_START_TIME" "$WAIT_FOR_SERVER_END_TIME") minutes"
 }
 
 # Run benchmark serving with standardized parameters
