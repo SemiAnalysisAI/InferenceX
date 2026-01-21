@@ -137,19 +137,13 @@ def sample_random_requests(
     input_len: int,
     output_len: int,
     num_prompts: int,
-    range_ratio: float,
     tokenizer: PreTrainedTokenizerBase,
 ) -> List[Tuple[str, int, int, None]]:
     prefix_token_ids = np.random.randint(0, tokenizer.vocab_size, size=prefix_len).tolist()
 
-    def sample_uniform(seq_len):
-        lower = int(seq_len * (1.0 - range_ratio))
-        upper = int(seq_len * (1.0 + range_ratio))
-        seq_lens = np.random.randint(lower, upper + 1, size=num_prompts).tolist()
-        return seq_lens
-
-    input_lens = sample_uniform(input_len)
-    output_lens = sample_uniform(output_len)
+    # Use fixed lengths (no range variation)
+    input_lens = [input_len] * num_prompts
+    output_lens = [output_len] * num_prompts
     offsets = np.random.randint(0, tokenizer.vocab_size, size=num_prompts)
 
     input_requests = []
@@ -522,7 +516,7 @@ def main(args: argparse.Namespace):
     np.random.seed(args.seed)
 
     model_id = args.model
-    tokenizer_id = args.model
+    tokenizer_id = args.tokenizer if args.tokenizer else args.model
 
     api_url = f"{args.base_url}/v1/completions"
     base_url = args.base_url
@@ -537,7 +531,6 @@ def main(args: argparse.Namespace):
         input_len=args.random_input_len,
         output_len=args.random_output_len,
         num_prompts=args.num_prompts,
-        range_ratio=args.random_range_ratio,
         tokenizer=tokenizer,
     )
 
@@ -624,6 +617,12 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help="Name of the model.",
+    )
+    parser.add_argument(
+        "--tokenizer",
+        type=str,
+        default=None,
+        help="Name or path of the tokenizer. Defaults to --model if not specified.",
     )
     parser.add_argument(
         "--num-prompts",
@@ -716,20 +715,10 @@ if __name__ == "__main__":
         help="Number of output tokens per request, used only for random sampling.",
     )
     parser.add_argument(
-        "--random-range-ratio",
-        type=float,
-        default=1.0,
-        help="Range of sampled ratio of input/output length, "
-        "used only for random sampling.",
-    )
-    parser.add_argument(
         "--random-prefix-len",
         type=int,
         default=0,
-        help="Number of fixed prefix tokens before random "
-        " context. The length range of context in a random "
-        " request is [random-prefix-len, "
-        " random-prefix-len + random-prefix-len * random-range-ratio).",
+        help="Number of fixed prefix tokens before random context.",
     )
     parser.add_argument("--num-warmups", type=int, default=0)
 

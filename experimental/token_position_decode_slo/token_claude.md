@@ -4,95 +4,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-LLM inference benchmarking tools for MiniMax M2.1 model on vLLM, designed for Slurm clusters with pyxis container support.
+Inference performance benchmarking suite for the Kimi K2 Thinking model on vLLM. Measures throughput and latency metrics under various Service Level Objectives (SLOs).
 
-## Repository Structure
+## Architecture
 
 ```
-inferperf_minimax-m2.1/
-├── benchmark_serving_random.py       # Benchmark client (random prompt generation)
-├── plot_results.py                   # Visualization script
-├── serve_minimax_m2.1_sbatch.sh      # Slurm job: persistent vLLM server
-├── bmk_minimax_m2.1_sbatch.sh        # Slurm job: benchmark client
-├── results/                          # Benchmark result JSON files
-└── model_weights/                    # Downloaded model weights (not committed)
+serve_kimi_k2_sbatch.sh (SLURM job)
+    ↓
+vLLM Server (port 8000, OpenAI-compatible API)
+    ↑
+benchmark_serving_random.py (async client)
+    ↓
+JSON results → plot_sla_frontier.py → PNG visualization
 ```
+
+**Server-client model**: The server runs persistently on 8 GPUs via SLURM. Client jobs read the server URL from `/logs/server_info.txt` and send concurrent async requests.
+
+## Key Components
+
+- **`benchmark_serving_random.py`**: Async benchmarking client using aiohttp. Generates random prompts with controlled token lengths, sends requests to vLLM's `/v1/completions` endpoint, and measures latency/throughput metrics.
+- **`serve_kimi_k2_sbatch.sh`**: SLURM script to start the vLLM inference server with tensor-parallel-8 configuration.
+- **`bmk_kimi_k2_sbatch.sh`**: SLURM script that runs benchmark sweeps across input lengths (1024-14336) and concurrency levels (4-64).
+- **`plot_sla_frontier.py`**: Visualization tool that loads benchmark results and generates SLA frontier plots.
+
+## Key Metrics
+
+- **TTFT**: Time to First Token (prefill latency)
+- **TPOT**: Time Per Output Token (decode latency)
+- **E2EL**: End-to-End Latency
+- **Goodput**: Requests meeting SLA constraints
 
 ## Running Benchmarks
 
-### Two-Job Workflow (Server + Client)
+```bash
+# Start server (allocates 8 GPUs, runs persistently)
+sbatch serve_kimi_k2_sbatch.sh
 
-1. **Start the server:**
-   ```bash
-   sbatch serve_minimax_m2.1_sbatch.sh
-   ```
+# Wait for server to start, then run client sweep
+sbatch bmk_kimi_k2_sbatch.sh
 
-2. **Submit the benchmark client:**
-   ```bash
-   sbatch bmk_minimax_m2.1_sbatch.sh
-   ```
+# Generate visualization from results
+python plot_sla_frontier.py --results-dir results/
+```
 
-The server writes its URL to `/workspace/server_info.txt`. The client reads this file to connect.
-
-### Benchmark Client Sweep Configuration
-
-The client script runs a sweep of ISL × Concurrency combinations:
-- **Input lengths**: 1024, 6144, 10240, 12288, 14336
-- **Output length**: 128 (fixed)
-- **Concurrency**: 4, 8, 16, 32, 64
-- **Total runs**: 25 (5 ISL × 5 concurrency)
-
-### Using benchmark_serving_random.py directly
+### Single Benchmark Run
 
 ```bash
 python benchmark_serving_random.py \
-    --model MiniMaxAI/MiniMax-M2.1 \
-    --base-url http://localhost:8000 \
-    --random-input-len 2048 \
+    --model moonshotai/Kimi-K2-Thinking \
+    --base-url "http://hostname:8000" \
+    --random-input-len 4096 \
     --random-output-len 128 \
-    --random-range-ratio 0.2 \
-    --num-prompts 160 \
+    --num-prompts 100 \
     --max-concurrency 16 \
-    --num-warmups 32 \
     --request-rate inf \
     --ignore-eos \
     --result-filepath results/output.json
 ```
 
-## Key Metrics
+## Result File Format
 
-- **TTFT**: Time to first token (prefill latency)
-- **TPOT**: Time per output token, excluding first (decode latency)
-- **Interactivity**: 1000/TPOT_ms (tok/s/user) - user-perceived generation speed
-- **Throughput**: Input/output tokens processed per second
+JSON files in `results/` follow naming pattern: `kimi_k2_vllm_tp{TP}_isl{INPUT}_osl{OUTPUT}_conc{CONC}.json`
 
-## Visualizing Results
+Key fields: `input_throughput`, `output_throughput`, `p99_ttft`, `p99_tpot`, `median_ttft`, `median_tpot`, `completed`, `total_input`, `total_output`
 
-```bash
-source .venv/bin/activate
-python plot_results.py --results-dir results --output result_plot.png
-```
+## Environment
 
-### Plot Features
-- **Two graphs**: Prefill and Decode (side by side)
-- **X-axis**: Token Position (ISL values from data)
-- **Y-axis**: Throughput (tok/s)
-- **Lines**: One per concurrency level (legend: "conc X")
-
-### Result File Naming Convention
-
-Files must match: `*_tp{TP}_isl{ISL}_osl{OSL}_conc{CONC}.json`
-
-Example: `minimax_m2.1_vllm_tp4_isl2048_osl128_conc16.json`
-
-### Required JSON Fields for Plotting
-
-- `input_throughput`: Input tokens/second (for Prefill graph)
-- `output_throughput`: Output tokens/second (for Decode graph)
-
-## Slurm Configuration
-
-Both scripts use pyxis for containerized execution:
-- Container: `vllm/vllm-openai:nightly-8711b216766bb5d3cbe15161061c3a7d9fffe59c`
-- Server: 4 GPUs, 128GB memory, tensor parallelism 4
-- Client: 0 GPUs, 16GB memory (CPU-only benchmark driver)
+- **Container**: `vllm/vllm-openai:nightly`
+- **Model**: `moonshotai/Kimi-K2-Thinking` (MoE, 1T params, 32B active)
+- **Dependencies**: transformers, aiohttp, numpy, matplotlib, tqdm (pre-configured in `.venv`)

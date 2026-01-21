@@ -14,8 +14,8 @@ import matplotlib.colors as mcolors
 
 
 # SLA thresholds (in seconds)
-TTFT_THRESHOLDS = [0.5, 1.0, 2.0, 5.0, 10.0]  # 500ms to 10s
-TPOT_THRESHOLDS = [0.05, 0.075, 0.1, 0.2]  # 50ms to 200ms
+TTFT_THRESHOLDS = [1.0, 2.0, 3.0, 5.0, 10.0]  # 1s to 10s
+TPOT_THRESHOLDS = [0.02, 0.035, 0.05, 0.075]  # 20ms to 75ms
 
 
 def load_results(results_dir: Path) -> List[Dict]:
@@ -117,7 +117,8 @@ def plot_sla_frontier(results: List[Dict], output_path: Path):
             isls = sorted(frontier.keys())
             throughputs = [frontier.get(isl, 0) for isl in isl_levels]
             lower = prev_throughputs if prev_throughputs else [0] * len(isl_levels)
-            label = f'TPOT < {int(threshold * 1000)}ms'
+            interactivity = int(1 / threshold)
+            label = f'TPOT < {int(threshold * 1000):3d}ms (> {interactivity:2d} tok/s/user)'
             ax2.fill_between(isl_levels, lower, throughputs, color=frontier_colors[i], alpha=0.5,
                              edgecolor=frontier_colors[i], linewidth=1.5, label=label, zorder=1)
             prev_throughputs = throughputs
@@ -130,7 +131,7 @@ def plot_sla_frontier(results: List[Dict], output_path: Path):
     ax2.legend(loc='upper right', fontsize=9)
     ax2.grid(True, alpha=0.3)
 
-    plt.suptitle("MiniMax M2.1 vLLM Benchmark (P99 SLA)", fontsize=13)
+    plt.suptitle("Kimi K2 Thinking vLLM Benchmark (P99 SLA)", fontsize=13)
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Saved plot to {output_path}")
