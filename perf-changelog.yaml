@@ -195,3 +195,14 @@
     - "Remove deprecated --max-seq-len-to-capture flag"
     - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD MI355X GPT-OSS 120B vLLM to use upstream ROCm image vllm/vllm-openai-rocm:v0.14.0"
+    - "Remove deprecated --async-scheduling flag (now enabled by default in vLLM v0.14.0)"
+    - "Remove deprecated --max-seq-len-to-capture flag"
+    - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
+    - "Add MEC firmware check and HSA_NO_SCRATCH_RECLAIM fix for RCCL memory reclaim"
+    - "Add VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 for MI3* quick allreduce optimization"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
