@@ -4,6 +4,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+from datetime import timezone
 import sys
 
 # Add parent directory to path to allow imports
@@ -147,6 +148,8 @@ class InferenceMAXMCPServer:
 
     async def read_resource(self, uri: str) -> str:
         """Read a specific resource by URI."""
+        # The MCP SDK may pass `uri` as a pydantic AnyUrl in v2 (not a str), so normalize to str
+        uri = str(uri)
         logger.info(f"Reading resource: {uri}")
 
         # Parse URI: vllm:///path/to/file.py
@@ -222,6 +225,40 @@ class InferenceMAXMCPServer:
                     "properties": {}
                 }
             ),
+            Tool(
+                name="list_tags",
+                description=(
+                    "List git tags for the cloned vLLM or SGLang repo. "
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "framework": {
+                            "type": "string",
+                            "enum": ["vllm", "sglang"],
+                            "description": "Repository: vllm or sglang"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "default": 20,
+                            "description": "Maximum number of tags to return (default 20)"
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Optional substring filter for tag names"
+                        },
+                        "sort": {
+                            "type": "string",
+                            "enum": ["time", "name", "semver"],
+                            "default": "time",
+                            "description": "Sort order: by commit time, name, or semantic version"
+                        }
+                    },
+                    "required": ["framework"]
+                }
+            ),
         ]
 
     async def call_tool(self, name: str, arguments: dict) -> List[TextContent]:
@@ -277,6 +314,79 @@ class InferenceMAXMCPServer:
                 type="text",
                 text="\n".join(result_lines)
             )]
+
+        elif name == "list_tags":
+            framework = arguments.get("framework")
+            if framework not in self.repos:
+                return [TextContent(type="text", text=f"Error: Framework '{framework}' not available")]
+
+            repo = self.repos[framework]
+            limit = int(arguments.get("limit", 100))
+            query = arguments.get("query")
+            sort = arguments.get("sort", "time")
+
+            # Gather tag data (name, commit, time)
+            tags = []
+            try:
+                for t in repo.tags:
+                    try:
+                        commit = t.commit
+                        # Normalize timezone to UTC ISO8601 for display
+                        dt = commit.committed_datetime
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        else:
+                            dt = dt.astimezone(timezone.utc)
+                        tags.append({
+                            "name": t.name,
+                            "sha": commit.hexsha[:12],
+                            "time": dt,
+                        })
+                    except Exception:
+                        # Fallback if commit lookup fails
+                        tags.append({"name": t.name, "sha": "", "time": None})
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error reading tags for {framework}: {e}")]
+
+            # Optional filter
+            if query:
+                q = str(query).lower()
+                tags = [t for t in tags if q in t["name"].lower()]
+
+            # Sorting strategies
+            def semver_key(name: str):
+                v = name.lstrip('v')
+                v = v.replace('rc', '.').replace('.post', '.')
+                parts = [p for p in v.split('.') if p]
+                key = []
+                for p in parts:
+                    try:
+                        key.append(int(p))
+                    except ValueError:
+                        key.append(0)
+                # Pad to fixed length to avoid tuple length effects
+                while len(key) < 5:
+                    key.append(0)
+                return tuple(key)
+
+            if sort == "time":
+                tags.sort(key=lambda t: (t["time"] or 0), reverse=True)
+            elif sort == "name":
+                tags.sort(key=lambda t: t["name"], reverse=False)
+            else:  # semver
+                tags.sort(key=lambda t: semver_key(t["name"]), reverse=True)
+
+            # Limit
+            tags = tags[:limit]
+
+            # Render response
+            lines = [f"Tags for {framework} (sorted by {sort}, limit {limit}):", ""]
+            for t in tags:
+                time_str = t["time"].isoformat() if t["time"] else ""
+                sha = t["sha"]
+                lines.append(f"  {t['name']:<20} {sha:<12} {time_str}")
+
+            return [TextContent(type="text", text="\n".join(lines))]
 
         else:
             return [TextContent(
