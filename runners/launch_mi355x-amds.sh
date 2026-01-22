@@ -54,7 +54,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
 
-    JOB_ID=$(bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}_slurm.sh")
+    JOB_ID=$(bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}sh")
 
     # Wait for job to complete
     LOG_FILE="$SGL_SLURM_JOBS_PATH/slurm_job-${JOB_ID}.out"
@@ -169,7 +169,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}_slurm.sh
+        bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}.sh
 
     scancel $JOB_ID
 
