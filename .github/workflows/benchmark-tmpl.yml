@@ -50,6 +50,14 @@ on:
       disagg:
         required: true
         type: string
+      run-eval:
+        type: boolean
+        required: true
+        default: false
+      random-range-ratio:
+        required: false
+        type: string
+        default: '0.8'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -74,6 +82,7 @@ env:
   CONC: ${{ inputs.conc }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  RUN_EVAL: ${{ inputs.run-eval }}
 
 permissions:
   contents: read
@@ -82,10 +91,11 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
-    name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }} spec=${{ inputs.spec-decoding }}'
+    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} ${{ inputs.run-eval && 'eval ' || '' }}tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }} spec=${{ inputs.spec-decoding }}"
     steps:
-      - name: Resource cleanup
-        run: |
+      - name: Resource cleanup (pre-run)
+        run: &resource-cleanup |
+          # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
             docker ps -aq | xargs -r docker rm -f
@@ -95,13 +105,24 @@ jobs:
               sleep 5
             done
           fi
+
+          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up resources ..."
-            scancel -u $USER
-            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-              squeue -u $USER
-              sleep 5
-            done
+            if [[ "${{ runner.name }}" == mi355x-amds* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
           fi
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -113,7 +134,11 @@ jobs:
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
+          RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP_SIZE }}_dpa_${{ env.DP_ATTENTION }}_conc${{ env.CONC }}_specdecode_${{ env.SPEC_DECODING }}_${{ runner.name }}
+          # Suppress per-job eval markdown from being appended to the step summary.
+          # We'll publish a single combined eval table in the collection job instead.
+          GITHUB_STEP_SUMMARY: ''
         run: |
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           FOUND_RESULT_FILE=
@@ -137,8 +162,31 @@ jobs:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           python3 utils/process_result.py
+
       - name: Upload result
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+        
+      - name: Upload eval results (if any)
+        if: ${{ env.RUN_EVAL == 'true' }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          path: |
+            meta_env.json
+            results*.json
+            sample*.jsonl
+          if-no-files-found: ignore
+
+      - name: Cleanup eval outputs (post-upload)
+        if: ${{ env.RUN_EVAL == 'true' }}
+        run: |
+          rm -f meta_env.json || true
+          # Remove any eval results JSONs that were moved into workspace
+          rm -f results*.json || true
+          
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: *resource-cleanup
