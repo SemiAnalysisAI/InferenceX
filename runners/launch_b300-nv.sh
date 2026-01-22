@@ -28,7 +28,7 @@ fi
 
 echo "Configs available at: $TRTLLM_REPO_DIR/"
 
-export SLURM_PARTITION="batch_All"
+export SLURM_PARTITION="batch_2"
 export SLURM_ACCOUNT="nv-gha-runner"
 
 SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
