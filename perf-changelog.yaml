@@ -196,7 +196,7 @@
     - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
   
- - config-keys:
+- config-keys:
     - "*mi355x*"
   description:
     - Burn in new MI355X
