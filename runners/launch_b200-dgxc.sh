@@ -25,16 +25,6 @@ set -x
 # Disabling it can reduce perf but will improve CI stability. i.e. we won't see vLLM/Sglang crashes.
 # Ref: https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-register
 
-if [[ "$MODEL" == "nvidia/DeepSeek-R1-0528-FP4" || "$MODEL" == "deepseek-ai/DeepSeek-R1-0528" ]]; then
-  if [[ "$OSL" == "8192" ]]; then
-    export NUM_PROMPTS=$(( CONC * 20 ))
-  else
-    export NUM_PROMPTS=$(( CONC * 50 ))
-  fi
-else
-  export NUM_PROMPTS=$(( CONC * 10 ))
-fi
-
 docker run --rm --init --network host --name $server_name \
 --runtime nvidia --gpus all --ipc host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
@@ -42,7 +32,7 @@ docker run --rm --init --network host --name $server_name \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e ISL -e OSL -e PORT=$PORT -e EP_SIZE -e DP_ATTENTION \
 -e NCCL_GRAPH_REGISTER=0 \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
--e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e NUM_PROMPTS \
+-e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e RUN_EVAL -e RUNNER_TYPE \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
 benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"

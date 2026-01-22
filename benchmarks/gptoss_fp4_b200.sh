@@ -10,8 +10,7 @@ check_env_vars \
     OSL \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    NUM_PROMPTS
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -53,9 +52,12 @@ SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=${PORT:-8888}
 
 set -x
-vllm serve $MODEL --host 0.0.0.0 --port $PORT --config config.yaml \
---gpu-memory-utilization 0.9 --tensor-parallel-size $TP --max-num-seqs 512 \
-> $SERVER_LOG 2>&1 &
+vllm serve $MODEL --host 0.0.0.0 --port $PORT \
+--config config.yaml \
+--gpu-memory-utilization 0.9 \
+--tensor-parallel-size $TP \
+--max-num-seqs 512 \
+--disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -78,3 +80,10 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+# After throughput, run evaluation only if RUN_EVAL is true
+if [ "${RUN_EVAL}" = "true" ]; then
+    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    append_lm_eval_summary
+fi
+set +x

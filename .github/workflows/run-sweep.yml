@@ -142,6 +142,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-1k8k:
         needs: setup
@@ -183,6 +184,21 @@ jobs:
         secrets: inherit
         with:
             result-prefix: "bmk"
+
+    collect-evals:
+        needs:
+            [
+                sweep-single-node-1k1k,
+                sweep-single-node-1k8k,
+                sweep-single-node-8k1k,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-1k8k,
+                sweep-multi-node-8k1k,
+                setup,
+            ]
+        if: ${{ always() && needs.setup.result != 'skipped' }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
 
     upload-changelog-metadata:
         needs: [setup, collect-results]

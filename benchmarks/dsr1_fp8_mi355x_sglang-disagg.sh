@@ -32,7 +32,7 @@ set -x
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
 
 # Switch to origin repo url for supporting wide ep configs
-git clone --branch sa-260107 https://github.com/billishyahao/sglang_disagg.git
+git clone --branch cam/sa-260114 https://github.com/cquil11/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
@@ -62,11 +62,18 @@ fi
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
 # by a list of numbers delimited by 'x'. This is because of how the underlying launch script
 # expects the concurrencies.
-bash ./submit_disagg.sh $PREFILL_NODES \
+JOB_ID=$(bash ./submit_disagg.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
     $ISL $OSL "${CONC_LIST// /x}" inf \
     ${PREFILL_ENABLE_EP} ${PREFILL_ENABLE_DP} \
     ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP} \
-    ${RANDOM_RANGE_RATIO}
+    ${RANDOM_RANGE_RATIO})
+
+if [[ $? -ne 0 ]]; then
+    echo "Failed to submit job" >&2
+    exit 1
+fi
+
+echo "$JOB_ID"

@@ -21,6 +21,11 @@ if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
     srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
+        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    fi
     CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
 fi
 

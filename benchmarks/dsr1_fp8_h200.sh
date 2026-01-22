@@ -25,7 +25,7 @@ export TORCH_CUDA_ARCH_LIST="9.0"
 
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
-    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 512 --cuda-graph-max-bs 512 \
@@ -34,7 +34,7 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --decode-log-interval 1 \
     > $SERVER_LOG 2>&1 &
 else
-    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --tokenizer-path $MODEL \
+    PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
     --tensor-parallel-size=$TP --data-parallel-size=1 \
     --disable-radix-cache --max-running-requests 256 --cuda-graph-max-bs 256 \
@@ -60,3 +60,10 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+# After throughput, run evaluation only if RUN_EVAL is true
+if [ "${RUN_EVAL}" = "true" ]; then
+    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    append_lm_eval_summary
+fi
+set +x
