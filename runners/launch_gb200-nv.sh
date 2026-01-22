@@ -40,7 +40,7 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
-bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}_slurm.sh"
+bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
 
 # Wait for all jobs to complete
 echo "Waiting for all jobs to complete..."

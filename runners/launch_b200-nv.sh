@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 export HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
-export PORT_OFFSET=0  # Doesn't matter when --exclusive
+export PORT=8888  # Doesn't matter when --exclusive
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
@@ -28,6 +28,6 @@ srun --jobid=$JOB_ID \
 --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${MODEL_CODE}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}_slurm.sh
+bash benchmarks/${MODEL_CODE}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
 scancel $JOB_ID

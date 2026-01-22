@@ -22,7 +22,7 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL,PORT=8888 \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_h100_slurm.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_h100.sh
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID

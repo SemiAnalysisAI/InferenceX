@@ -11,11 +11,11 @@ InferenceMAX is an open-source, automated benchmarking system that continuously 
 ```
 ├── benchmarks/              # Shell scripts for running benchmarks
 │   ├── benchmark_lib.sh     # Shared benchmarking/eval utilities
-│   └── dsr1_*.sh            # Model-specific benchmark scripts
+│   ├── dsr1_*.sh            # Deepseek R1-specific benchmark scripts
+│   └── gptoss_*.sh          # gptoss-specific benchmark scripts
 ├── runners/                 # Launch scripts for different hardware
-│   ├── launch_b200-*.sh     # NVIDIA B200 launcher scripts
-│   ├── launch_h100/h200-*.sh
-│   └── launch_mi*.sh        # AMD MI launcher scripts
+│   ├── launch_b200/h100/h200-*.sh     # NVIDIA launcher scripts
+│   └── launch_mi*.sh                  # AMD launcher scripts
 ├── utils/                   # Python utilities
 │   ├── matrix_logic/        # Config generation and validation
 │   │   ├── generate_sweep_configs.py  # CLI for generating benchmark matrix
@@ -205,22 +205,18 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
 
 ## Evals (Accuracy Validation)
 
-Evals run **optional accuracy checks** after throughput benchmarks to ensure model outputs aren't degraded by inference optimizations.
-
-### Why Evals?
-
-Throughput optimizations can quietly trade off accuracy (e.g., aggressive truncation, decoding tweaks, endpoint misconfiguration). Without evals, a misconfigured server can produce great throughput numbers but garbage answers.
+Evals run optional accuracy checks after throughput benchmarks to ensure model outputs aren't degraded by inference optimizations.
 
 ### When Evals Run
 
-Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run for **two representative points per configuration group**:
+Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run for two representative points per configuration group:
 
 - **Lowest TP with highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding)
 - **Highest TP with highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding)
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
-**Note**: Evals only run on `1k8k` sequence length (ISL=1024, OSL=8192).
+**Note**: Evals only run on `1k8k` sequence length.
 
 ### Eval Framework: lm-eval
 
