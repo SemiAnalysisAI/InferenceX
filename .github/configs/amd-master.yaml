@@ -2,7 +2,7 @@ dsr1-fp4-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.7-rocm700-mi35x
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp4
   framework: sglang
   multinode: false
@@ -25,7 +25,7 @@ dsr1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp4
   framework: atom
   multinode: false
@@ -94,7 +94,7 @@ dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.5.post3-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp8
   framework: sglang
   multinode: false
@@ -178,7 +178,7 @@ gptoss-fp4-mi355x-vllm:
   image: rocm/7.0:rocm7.0_ubuntu_22.04_vllm_0.10.1_instinct_20250927_rc1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp4
   framework: vllm
   multinode: false
@@ -206,7 +206,7 @@ gptoss-fp4-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
   model: openai/gpt-oss-120b
   model-prefix: gptoss
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp4
   framework: atom
   multinode: false
@@ -231,7 +231,7 @@ dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: mi355x-exp
+  runner: mi355x
   precision: fp8
   # WIP framwork (no customers yet)
   framework: atom
