@@ -22,12 +22,7 @@ fi
 hf download "$MODEL"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  check_env_vars PORT_OFFSET
-  PORT=$(( 8888 + $PORT_OFFSET ))
-else
-  PORT=${PORT:-8888}
-fi
+PORT=${PORT:-8888}
 
 # GPTOSS TRTLLM Deployment Guide:
 # https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/deployment-guide/quick-start-recipe-for-gpt-oss-on-trtllm.md

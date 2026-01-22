@@ -21,12 +21,7 @@ fi
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  check_env_vars PORT_OFFSET
-  PORT=$(( 8888 + $PORT_OFFSET ))
-else
-  PORT=${PORT:-8888}
-fi
+PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 

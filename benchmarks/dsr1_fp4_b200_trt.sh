@@ -58,12 +58,7 @@ fi
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  check_env_vars PORT_OFFSET
-  PORT=$(( 8888 + $PORT_OFFSET ))
-else
-  PORT=${PORT:-8888}
-fi
+PORT=${PORT:-8888}
 EXTRA_CONFIG_FILE="dsr1-fp4.yml"
 
 cat > $EXTRA_CONFIG_FILE << EOF

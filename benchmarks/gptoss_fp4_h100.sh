@@ -28,12 +28,7 @@ EOF
 export PYTHONNOUSERSITE=1
 export VLLM_MXFP4_USE_MARLIN=1
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  check_env_vars PORT_OFFSET
-  PORT=$(( 8888 + $PORT_OFFSET ))
-else
-  PORT=${PORT:-8888}
-fi
+PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \

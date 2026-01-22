@@ -40,12 +40,7 @@ EOF
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 export TORCH_CUDA_ARCH_LIST="9.0"
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  check_env_vars PORT_OFFSET
-  PORT=$(( 8888 + $PORT_OFFSET ))
-else
-  PORT=${PORT:-8888}
-fi
+PORT=${PORT:-8888}
 
 export VLLM_MXFP4_USE_MARLIN=1
 
