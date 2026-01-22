@@ -84,8 +84,9 @@ jobs:
     timeout-minutes: 180
     name: '${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }} spec=${{ inputs.spec-decoding }}'
     steps:
-      - name: Resource cleanup
-        run: |
+      - name: Resource cleanup (pre-run)
+        run: &resource-cleanup |
+          # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
             docker ps -aq | xargs -r docker rm -f
@@ -95,13 +96,24 @@ jobs:
               sleep 5
             done
           fi
+
+          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}"
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
-              sleep 5
-            done
+            if [[ "${{ runner.name }}" == mi355x-amds* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
           fi
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -142,3 +154,7 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: *resource-cleanup

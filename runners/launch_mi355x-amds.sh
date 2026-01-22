@@ -144,8 +144,6 @@ else
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    export ENROOT_RUNTIME_PATH=/tmp
-
     set -x
     salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
