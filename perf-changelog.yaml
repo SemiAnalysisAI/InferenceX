@@ -195,3 +195,14 @@
     - "Remove deprecated --max-seq-len-to-capture flag"
     - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+  description:
+    - "Update Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.0"
+    - "Update Dynamo SGLang image from v0.5.5.post2 to dev-cu13"
+    - "Update TRT and SGLang configurations"
+    - "Refactor configurations to use CONFIG_FILE-based recipes instead of inline parameter settings"
+    - "Add new 1k8k sequence length configurations for SGLang"
+    - "Introduce srt-slurm workflow for launching Dynamo jobs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/510
