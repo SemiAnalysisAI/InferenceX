@@ -1,0 +1,42 @@
+name: SSH Maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      commands:
+        description: "Commands to run remotely over SSH (multi-line)"
+        required: true
+        type: string
+      host:
+        description: "Optional: override SSH host"
+        required: false
+        type: string
+      port:
+        description: "Optional: override SSH port"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ssh-maintenance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ssh:
+    name: Run Remote Commands
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run commands on remote host
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.host != '' && inputs.host || secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ inputs.port != '' && inputs.port || secrets.SSH_PORT || '22' }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            ${{ inputs.commands }}
+
