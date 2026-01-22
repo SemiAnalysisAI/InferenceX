@@ -195,3 +195,9 @@
     - "Remove deprecated --max-seq-len-to-capture flag"
     - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+
+- config-keys:
+    - dsr1-fp4-b300-dynamo-trt
+  description:
+    - "Add DSR1 FP4 B300 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/511
