@@ -103,26 +103,26 @@ jobs:
 
             **Subcommand reference:**
             - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
-            - `test-config`: Use this subcommand ONLY with `--config-files` and `--config-keys`. It does NOT accept any other arguments like `--min-conc`, `--max-conc`, or `--seq-len`.
+            - `test-config`: Use this subcommand ONLY with `--config-files` and `--config-keys`. It does NOT accept any other arguments.
 
             Examples:
 
-            **Filter by model prefix and Nvidia nodes (using full-sweep):**
+            **Filter by model prefix and Nvidia nodes:**
             ```
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1"
             ```
 
-            **Filter by framework and AMD nodes (using full-sweep):**
+            **Filter by framework and AMD nodes:**
             ```
             generate-cli-command: "full-sweep --config-files .github/configs/amd-master.yaml --single-node --framework sglang"
             ```
 
-            **Filter by precision and runner type (using full-sweep):**
+            **Filter by precision and runner type:**
             ```
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
-            **Specify concurrency and sequence length (using full-sweep):**
+            **Specify concurrency and sequence length:**
             ```
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
             ```
