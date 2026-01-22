@@ -277,6 +277,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.MAX_MODEL_LEN.value: isl + osl + 200,
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
 
                         validate_matrix_entry(entry, is_multinode)
@@ -370,6 +371,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                                 Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                             }
 
                             if ep is not None:
