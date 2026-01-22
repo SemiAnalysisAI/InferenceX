@@ -4,18 +4,15 @@
 
 set -x
 
-# TODO: once we confirm that the trtllm branch works we can merge it to main 
-# And start using mainline srtslurm for sglang and trtllm
-echo "Cloning srt-slurm-trtllm repository..."
-TRTLLM_REPO_DIR="srt-slurm-trtllm"
-if [ -d "$TRTLLM_REPO_DIR" ]; then
-    echo "Removing existing $TRTLLM_REPO_DIR..."
-    rm -rf "$TRTLLM_REPO_DIR"
+echo "Cloning srt-slurm repository..."
+SRT_REPO_DIR="srt-slurm"
+if [ -d "$SRT_REPO_DIR" ]; then
+    echo "Removing existing $SRT_REPO_DIR..."
+    rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/jthomson04/srt-slurm-trtllm.git "$TRTLLM_REPO_DIR"
-cd "$TRTLLM_REPO_DIR"
-git checkout jthomson04/trtllm-support
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -30,7 +27,7 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-echo "Configs available at: $TRTLLM_REPO_DIR/"
+echo "Configs available at: $SRT_REPO_DIR/"
 
 # Set up environment variables for SLURM
 export SLURM_PARTITION="batch"
@@ -58,7 +55,7 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
-SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm-trtllm"
+SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB200
@@ -92,7 +89,11 @@ echo "Make setup complete"
 ls configs/
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+else
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+fi
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
