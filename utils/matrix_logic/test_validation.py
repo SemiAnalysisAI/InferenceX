@@ -43,6 +43,7 @@ def valid_single_node_matrix_entry():
         "max-model-len": 2248,
         "exp-name": "dsr1_1k1k",
         "disagg": False,
+        "run-eval": False,
     }
 
 
@@ -85,6 +86,7 @@ def valid_multinode_matrix_entry():
         "max-model-len": 2248,
         "exp-name": "dsr1_1k1k",
         "disagg": True,
+        "run-eval": False,
     }
 
 
