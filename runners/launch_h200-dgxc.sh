@@ -34,8 +34,8 @@ export SLURM_ACCOUNT="slurm-shared"
 SQUASH_FILE="/lustre/fsw/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    export MODEL_PATH="/models/dsr1-fp8"
-    export SERVED_MODEL_NAME="dsr1-fp8"
+    export MODEL_PATH="/models/DeepSeek-R1-0528"
+    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
 else
     echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
     exit 1
