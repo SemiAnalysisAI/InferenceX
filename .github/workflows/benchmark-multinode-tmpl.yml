@@ -117,14 +117,25 @@ jobs:
     name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} specdecod-${{ inputs.spec-decoding }}"
 
     steps:
-      - name: Resource cleanup
-        run: |
-          echo "[Slurm] Cleaning up resources ..."
-          scancel -u $USER
-          while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-            squeue -u $USER
-            sleep 5
-          done
+      - name: Slurm cleanup (pre-run)
+        run: &slurm-cleanup |
+          if command -v squeue >/dev/null 2>&1; then
+            if [[ "${{ runner.name }}" == mi355x-amds* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
+          fi
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -175,3 +186,7 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Slurm cleanup (post-run)
+        if: always()
+        run: *slurm-cleanup

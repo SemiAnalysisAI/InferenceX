@@ -28,7 +28,7 @@ check_env_vars \
 # git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
 
 # Switch to origin repo url for supporting wide ep configs
-git clone --branch sa-260114 https://github.com/billishyahao/sglang_disagg.git
+git clone --branch cam/sa-260114 https://github.com/cquil11/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 

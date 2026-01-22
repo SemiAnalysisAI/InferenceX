@@ -137,29 +137,30 @@ PY
 
 else
 
-    export HF_HUB_CACHE_MOUNT="/hf-hub-cache"
-    export PORT_OFFSET=${USER: -1}
+    export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
+    export PORT_OFFSET=${RUNNER_NAME: -1}
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
 
     PARTITION="compute"
-    SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-    export ENROOT_RUNTIME_PATH=/tmp
+    SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
-    JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
+
+    srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
 
     if [[ "$FRAMEWORK" == "atom" ]]; then
-        srun --jobid=$JOB_ID bash -c "sudo rm $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "rm $SQUASH_FILE"
     fi
-    srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
+
+    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
         echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
     fi
-    srun --jobid=$JOB_ID bash -c "sudo chmod -R a+rwX /hf-hub-cache/"
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
