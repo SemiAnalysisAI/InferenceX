@@ -12,7 +12,6 @@ check_env_vars \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    PORT_OFFSET \
     DP_ATTENTION \
     EP_SIZE
 
@@ -27,7 +26,6 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 hf download $MODEL
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=$(( 8888 + $PORT_OFFSET ))
 
 # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
 MOE_BACKEND="TRTLLM"
