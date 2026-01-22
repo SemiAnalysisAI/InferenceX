@@ -88,7 +88,7 @@ class SingleNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
-    run_eval: bool = Field(alias=Fields.RUN_EVAL.value, default=False)
+    run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
 
 
 class WorkerConfig(BaseModel):
@@ -125,7 +125,7 @@ class MultiNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
-    run_eval: bool = Field(alias=Fields.RUN_EVAL.value, default=False)
+    run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
