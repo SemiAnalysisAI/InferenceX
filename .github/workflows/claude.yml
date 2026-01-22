@@ -8,10 +8,6 @@ on:
   pull_request_review_comment:
     types: [created]
 
-concurrency:
-  group: claude-code-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   claude:
     if: |
@@ -201,6 +197,23 @@ jobs:
             - Use wildcards (`*`) in config-keys to match multiple related configurations
             - Each description item should be a concise change summary
             - The pr-link should reference the PR number (use XXX as placeholder until PR is created)
+
+            ## Spawning Additional Workers:
+            You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
+  
+            **Rules for spawning workers:**
+            1. Only spawn workers for truly parallel, independent tasks
+            2. Never spawn more than 2 workers at once
+            3. Include `[depth:N]` in your spawn comment (increment from parent)
+            4. Do NOT spawn if you see `[depth:3]` or higher in the thread
+            5. Each spawned worker should have a clearly scoped, specific task
+            
+            Example spawn comment: `@claude [depth:1] Please analyze the AMD benchmark results while I focus on NVIDIA results.`
+            
+            **Never spawn workers for:**
+            - Sequential tasks that depend on each other
+            - Simple tasks you can do yourself
+            - When you're unsure if it's needed
 
             ## Web Access:
             You have internet access via MCP servers:
