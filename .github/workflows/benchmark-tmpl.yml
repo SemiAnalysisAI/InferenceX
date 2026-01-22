@@ -187,6 +187,6 @@ jobs:
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           
-            - name: Resource cleanup (post-run)
+      - name: Resource cleanup (post-run)
         if: always()
         run: *resource-cleanup
