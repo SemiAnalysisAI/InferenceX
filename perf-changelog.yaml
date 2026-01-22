@@ -187,7 +187,18 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
 
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update AMD MI300X and MI325X GPT-OSS 120B vLLM to use upstream ROCm image vllm/vllm-openai-rocm:v0.14.0"
+    - "Remove deprecated --async-scheduling flag (now enabled by default in vLLM v0.14.0)"
+    - "Remove deprecated --max-seq-len-to-capture flag"
+    - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+  
+ - config-keys:
     - "*mi355x*"
   description:
     - Burn in new MI355X
   pr-link: None
+

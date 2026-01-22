@@ -8,10 +8,6 @@ on:
   pull_request_review_comment:
     types: [created]
 
-concurrency:
-  group: claude-code-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   claude:
     if: |
@@ -22,21 +18,13 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
       actions: read
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
 
       - name: Setup MCP Server
         run: |
@@ -47,13 +35,13 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
@@ -108,7 +96,11 @@ jobs:
 
             usage: `generate_sweep_configs.py` `[-h]`
                                  `{full-sweep,runner-model-sweep,test-config}`
-            
+
+            **Subcommand reference:**
+            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
+            - `test-config`: Use this subcommand ONLY with `--config-files` and `--config-keys`. It does NOT accept any other arguments.
+
             Examples:
 
             **Filter by model prefix and Nvidia nodes:**
@@ -126,17 +118,22 @@ jobs:
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
-            **Test specific config keys:**
+            **Specify concurrency and sequence length:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
+            ```
+
+            **Test specific config keys (using test-config - NO additional args):**
             ```
             generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
-            - You must use `--min-conc` and `--max-conc` together to specify a single concurrency value for targeted sweeps
-            - You must use `--seq-len` to specify a single sequence length for targeted sweeps
-            - Define specific config keys with `--config-keys` instead of running full sweeps
-            - Filter by specific models, frameworks, or precision when possible
-            - Never do a full sweep without filters unless explicitly instructed.
+            - Use `full-sweep` with filter flags to narrow down the benchmark scope - this is NOT the same as running an unfiltered sweep
+            - When using `full-sweep`, you can use `--min-conc` and `--max-conc` together to specify a single concurrency value
+            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k)
+            - Use `test-config` ONLY when you have specific config keys to test - it accepts ONLY `--config-files` and `--config-keys`, no other flags
+            - Always filter by specific models, frameworks, precision, or config keys when possible
 
             ## Monitor workflow execution
             ```
@@ -156,16 +153,18 @@ jobs:
             - After reviewing code changes that might affect performance
             - For all runs, ensure they have links in the comment.
 
-            After triggering, monitor the workflow run using the returned run_id. Wait until it completes before analyzing results.
-            - Do NOT claim completion until most recent job finishes and results analyzed.
-            - You can do a long `sleep` command to wait for the job to finish.
-            - However, you can analyze an ongoing run, for example if it errors, and start a new run in parallel without finishing the old run. Cancel such old runs.
-            - If jobs cannot be run, say exactly what you could not run and why.
+            After triggering, monitor the workflow run using the returned run_id. Wait for completion using exponential backoff:
+            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min, etc.)
+            - After each sleep, check the run status using `mcp__github__get_workflow_run`
+            - If the run fails or errors, cancel it with `mcp__github__cancel_workflow_run`, then start a new run
+            - Only wait for the final successful run to complete before analyzing benchmark results
+            - Do NOT claim completion until the most recent job finishes and results are analyzed
+            - If jobs cannot be run, say exactly what you could not run and why
 
             ## vLLM and SGLang Source Code Access
 
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
-            - Use `mcp__inferencemax_repos__*` tools to access repository source code
+            - Use `mcp__inferencemax-repos__*` tools to access repository source code
             - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
             - The server automatically detects and checks out the version matching InferenceMAX configs
             - Use the `list_versions` tool to see detected versions
@@ -175,10 +174,53 @@ jobs:
 
             Focus on: code quality, benchmark config changes, and performance impact. Do not be lazy.
 
+            ## Updating perf-changelog.yaml
+
+            When making changes to benchmark scripts or master config files that affect image tags, environment variables, or configuration parameters, you MUST add an entry to `perf-changelog.yaml`.
+
+            **When to update perf-changelog.yaml:**
+            - Updating image tags in `.github/configs/*-master.yaml` or `benchmarks/*.sh` scripts
+            - Adding or modifying environment variables in benchmark configurations
+            - Changing configuration parameters that affect performance
+
+            **Entry format:**
+            ```yaml
+            - config-keys:
+                - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
+              description:
+                - "Update vLLM image from v0.11.2 to v0.13.0"
+                - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
+              pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+            ```
+
+            **Guidelines:**
+            - Use wildcards (`*`) in config-keys to match multiple related configurations
+            - Each description item should be a concise change summary
+            - The pr-link should reference the PR number (use XXX as placeholder until PR is created)
+
+            ## Spawning Additional Workers:
+            You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
+  
+            **Rules for spawning workers:**
+            1. Only spawn workers for truly parallel, independent tasks
+            2. Never spawn more than 2 workers at once
+            3. Include `[depth:N]` in your spawn comment (increment from parent)
+            4. Do NOT spawn if you see `[depth:3]` or higher in the thread
+            5. Each spawned worker should have a clearly scoped, specific task
+            
+            Example spawn comment: `@claude [depth:1] Please analyze the AMD benchmark results while I focus on NVIDIA results.`
+            
+            **Never spawn workers for:**
+            - Sequential tasks that depend on each other
+            - Simple tasks you can do yourself
+            - When you're unsure if it's needed
+
             ## Web Access:
             You have internet access via MCP servers:
             - `mcp__fetch__fetch` - Fetch content from any URL
+            - Or you can use `mcp__inferencemax-repos__*` to look at sglang/vllm code
 
             ### Useful Documentation URLs:
-            - **sglang**: https://docs.sglang.ai/
-            - **vLLM**: https://docs.vllm.ai/en/latest/
+            - sglang: https://docs.sglang.ai/
+            - vllm: https://docs.vllm.ai/en/latest/
+            - vllm optimized flags configs: https://github.com/vllm-project/recipes

@@ -43,7 +43,7 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
-mpirun -n 1 --oversubscribe --allow-run-as-root \
+PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
 --max_num_tokens 20000 \
@@ -74,3 +74,10 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
+
+# After throughput, run evaluation only if RUN_EVAL is true
+if [ "${RUN_EVAL}" = "true" ]; then
+    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    append_lm_eval_summary
+fi
+set +x
