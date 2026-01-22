@@ -93,7 +93,7 @@ jobs:
             **[SEVERITY]**: Brief description of the actual problem
             **Why it matters**: What will break or go wrong
             **Fix**: Concrete suggestion (not vague advice)
-            **Fix** When possible, the fix should use the GitHub Multi line Code Suggestion suggestion Here is an example on how to use it
+            **Fix** When possible, the fix should use the GitHub Multi line Code Suggestion. Here is an example on how to use it
 
             start with 3 backtick symbols followed by the keyword suggestion and then for lines to suggest to delete use the minus symbol and for lines to suggest add, use the plus symbol
             
