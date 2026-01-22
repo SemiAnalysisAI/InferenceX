@@ -3,15 +3,14 @@
 set -x
 
 echo "Cloning srt-slurm-trtllm repository..."
-TRTLLM_REPO_DIR="srt-slurm-trtllm"
-if [ -d "$TRTLLM_REPO_DIR" ]; then
-    echo "Removing existing $TRTLLM_REPO_DIR..."
-    rm -rf "$TRTLLM_REPO_DIR"
+SRT_REPO_DIR="srt-slurm"
+if [ -d "$SRT_REPO_DIR" ]; then
+    echo "Removing existing $SRT_REPO_DIR..."
+    rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/jthomson04/srt-slurm-trtllm.git "$TRTLLM_REPO_DIR"
-cd "$TRTLLM_REPO_DIR"
-git checkout jthomson04/trtllm-support
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -26,7 +25,7 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-echo "Configs available at: $TRTLLM_REPO_DIR/"
+echo "Configs available at: $SRT_REPO_DIR/"
 
 export SLURM_PARTITION="batch_2"
 export SLURM_ACCOUNT="restricted"
@@ -59,7 +58,7 @@ gpus_per_node: 8
 network_interface: ""
 
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm-trtllm"
+srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 
 # Model path aliases
 model_paths:
@@ -83,7 +82,7 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b300,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output (e.g., "✅ Job 1168 submitted!")
