@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 
-# Source benchmark utilities early
 source "$(dirname "$0")/benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
-    PORT \
     TP \
     CONC \
     ISL \
@@ -29,6 +27,12 @@ sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_l
 export SGL_ENABLE_JIT_DEEPGEMM=false
 export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  check_env_vars PORT_OFFSET
+  PORT=$(( 8888 + $PORT_OFFSET ))
+else
+  PORT=${PORT:-8888}
+fi
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $TP -eq 8 ]]; then

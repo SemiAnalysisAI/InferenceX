@@ -39,7 +39,12 @@ export VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=${PORT:-8888}
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  check_env_vars PORT_OFFSET
+  PORT=$(( 8888 + $PORT_OFFSET ))
+else
+  PORT=${PORT:-8888}
+fi
 
 set -x
 vllm serve $MODEL --port $PORT \

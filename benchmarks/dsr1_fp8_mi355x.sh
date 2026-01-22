@@ -25,7 +25,12 @@ export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-PORT=${PORT:-8888}
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  check_env_vars PORT_OFFSET
+  PORT=$(( 8888 + $PORT_OFFSET ))
+else
+  PORT=${PORT:-8888}
+fi
 
 python3 -m sglang.launch_server \
     --attention-backend aiter \
