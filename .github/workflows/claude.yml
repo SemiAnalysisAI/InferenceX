@@ -157,7 +157,7 @@ jobs:
             ## vLLM and SGLang Source Code Access
 
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
-            - Use `mcp__inferencemax_repos__*` tools to access repository source code
+            - Use `mcp__inferencemax-repos__*` tools to access repository source code
             - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
             - The server automatically detects and checks out the version matching InferenceMAX configs
             - Use the `list_versions` tool to see detected versions
@@ -194,7 +194,9 @@ jobs:
             ## Web Access:
             You have internet access via MCP servers:
             - `mcp__fetch__fetch` - Fetch content from any URL
+            - Or you can use `mcp__inferencemax-repos__*` to look at sglang/vllm code
 
             ### Useful Documentation URLs:
-            - **sglang**: https://docs.sglang.ai/
-            - **vLLM**: https://docs.vllm.ai/en/latest/
+            - sglang: https://docs.sglang.ai/
+            - vllm: https://docs.vllm.ai/en/latest/
+            - vllm optimized flags configs: https://github.com/vllm-project/recipes
