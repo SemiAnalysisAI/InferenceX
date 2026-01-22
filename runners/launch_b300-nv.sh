@@ -11,6 +11,7 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
+git checkout jthomson04/trtllm
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -52,6 +53,7 @@ cat > srtslurm.yaml <<EOF
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
+default_qos: batch_2_qos
 
 # Resource defaults
 gpus_per_node: 8
