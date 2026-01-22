@@ -25,6 +25,11 @@ export VLLM_USE_AITER_UNIFIED_ATTENTION=1
 export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_USE_AITER_FUSED_MOE_A16W4=1
 
+# Set HIP_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
+if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
+    export HIP_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES
+fi
+
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 
 set -x
@@ -32,12 +37,10 @@ vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
---max-seq-len-to-capture $MAX_MODEL_LEN \
 --config config.yaml \
 --block-size=64 \
 --no-enable-prefix-caching \
---disable-log-requests \
---async-scheduling > $SERVER_LOG 2>&1 &
+--disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
