@@ -22,21 +22,13 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
       actions: read
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
 
       - name: Setup MCP Server
         run: |
@@ -47,13 +39,13 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
           trigger_phrase: "@claude"
           track_progress: true
           allowed_bots: ''
@@ -133,7 +125,7 @@ jobs:
 
             **IMPORTANT: Keep runs precise and efficient:**
             - You must use `--min-conc` and `--max-conc` together to specify a single concurrency value for targeted sweeps
-            - You must use `--seq-len` to specify a single sequence length for targeted sweeps
+            - You must use `--seq-len` to specify a single sequence length for targeted sweeps, choices are 1k1k, 1k8k, 8k1k
             - Define specific config keys with `--config-keys` instead of running full sweeps
             - Filter by specific models, frameworks, or precision when possible
             - Never do a full sweep without filters unless explicitly instructed.
@@ -174,6 +166,30 @@ jobs:
             This gives you deep context about vLLM and SGLang internals when debugging issues or explaining behavior.
 
             Focus on: code quality, benchmark config changes, and performance impact. Do not be lazy.
+
+            ## Updating perf-changelog.yaml
+
+            When making changes to benchmark scripts or master config files that affect image tags, environment variables, or configuration parameters, you MUST add an entry to `perf-changelog.yaml`.
+
+            **When to update perf-changelog.yaml:**
+            - Updating image tags in `.github/configs/*-master.yaml` or `benchmarks/*.sh` scripts
+            - Adding or modifying environment variables in benchmark configurations
+            - Changing configuration parameters that affect performance
+
+            **Entry format:**
+            ```yaml
+            - config-keys:
+                - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
+              description:
+                - "Update vLLM image from v0.11.2 to v0.13.0"
+                - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
+              pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+            ```
+
+            **Guidelines:**
+            - Use wildcards (`*`) in config-keys to match multiple related configurations
+            - Each description item should be a concise change summary
+            - The pr-link should reference the PR number (use XXX as placeholder until PR is created)
 
             ## Web Access:
             You have internet access via MCP servers:
