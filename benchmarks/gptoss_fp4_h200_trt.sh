@@ -21,7 +21,6 @@ hf download "$MODEL"
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=${PORT:-8888}
 
-
 set +x
 
 export TRTLLM_ENABLE_PDL=1 
@@ -59,7 +58,6 @@ trtllm-serve $MODEL \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
-
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"

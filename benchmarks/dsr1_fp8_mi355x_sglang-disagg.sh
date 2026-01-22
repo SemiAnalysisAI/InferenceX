@@ -42,7 +42,6 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME="DeepSeek-R1"
 export CONTAINER_IMAGE=$IMAGE
 
-
 export PREFILL_ENABLE_EP=true
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 export PREFILL_ENABLE_DP=true
@@ -56,7 +55,6 @@ export DECODE_ENABLE_DP=true
 else
 export DECODE_ENABLE_DP=false
 fi
-
 
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented

@@ -14,7 +14,6 @@ check_env_vars \
     RESULT_FILENAME \
     EP_SIZE
 
-
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi

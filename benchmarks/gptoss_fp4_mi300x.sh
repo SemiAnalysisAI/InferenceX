@@ -53,7 +53,6 @@ vllm serve $MODEL --port $PORT \
 
 SERVER_PID=$!
 
-
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 

@@ -24,7 +24,6 @@ nvidia-smi
 # happens 1% of the time. ref: https://github.com/flashinfer-ai/flashinfer/pull/1779
 sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
 
-
 # Calculate max-model-len based on ISL and OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
@@ -60,7 +59,6 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
-
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
