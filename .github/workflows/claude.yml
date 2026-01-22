@@ -100,7 +100,11 @@ jobs:
 
             usage: `generate_sweep_configs.py` `[-h]`
                                  `{full-sweep,runner-model-sweep,test-config}`
-            
+
+            **Subcommand reference:**
+            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
+            - `test-config`: Use this subcommand ONLY with `--config-files` and `--config-keys`. It does NOT accept any other arguments.
+
             Examples:
 
             **Filter by model prefix and Nvidia nodes:**
@@ -118,17 +122,22 @@ jobs:
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --precision fp8 --runner-type h200"
             ```
 
-            **Test specific config keys:**
+            **Specify concurrency and sequence length:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
+            ```
+
+            **Test specific config keys (using test-config - NO additional args):**
             ```
             generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
-            - You must use `--min-conc` and `--max-conc` together to specify a single concurrency value for targeted sweeps
-            - You must use `--seq-len` to specify a single sequence length for targeted sweeps, choices are 1k1k, 1k8k, 8k1k
-            - Define specific config keys with `--config-keys` instead of running full sweeps
-            - Filter by specific models, frameworks, or precision when possible
-            - Never do a full sweep without filters unless explicitly instructed.
+            - Use `full-sweep` with filter flags to narrow down the benchmark scope - this is NOT the same as running an unfiltered sweep
+            - When using `full-sweep`, you can use `--min-conc` and `--max-conc` together to specify a single concurrency value
+            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k)
+            - Use `test-config` ONLY when you have specific config keys to test - it accepts ONLY `--config-files` and `--config-keys`, no other flags
+            - Always filter by specific models, frameworks, precision, or config keys when possible
 
             ## Monitor workflow execution
             ```
@@ -148,11 +157,13 @@ jobs:
             - After reviewing code changes that might affect performance
             - For all runs, ensure they have links in the comment.
 
-            After triggering, monitor the workflow run using the returned run_id. Wait until it completes before analyzing results.
-            - Do NOT claim completion until most recent job finishes and results analyzed.
-            - You can do a long `sleep` command to wait for the job to finish.
-            - However, you can analyze an ongoing run, for example if it errors, and start a new run in parallel without finishing the old run. Cancel such old runs.
-            - If jobs cannot be run, say exactly what you could not run and why.
+            After triggering, monitor the workflow run using the returned run_id. Wait for completion using exponential backoff:
+            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min, etc.)
+            - After each sleep, check the run status using `mcp__github__get_workflow_run`
+            - If the run fails or errors, cancel it with `mcp__github__cancel_workflow_run`, then start a new run
+            - Only wait for the final successful run to complete before analyzing benchmark results
+            - Do NOT claim completion until the most recent job finishes and results are analyzed
+            - If jobs cannot be run, say exactly what you could not run and why
 
             ## vLLM and SGLang Source Code Access
 
