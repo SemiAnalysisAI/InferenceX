@@ -229,4 +229,4 @@
     - "Add --kv-cache-dtype fp8_e4m3 for explicit FP8 KV cache"
     - "Reduce chunked-prefill-size from 196608 to 131072"
     - "Reduce max-prefill-tokens from 196608 to 131072"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/548
