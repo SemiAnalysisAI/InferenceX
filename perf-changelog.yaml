@@ -195,3 +195,29 @@
     - "Remove deprecated --max-seq-len-to-capture flag"
     - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update H200 DeepSeek R1 FP8 SGLang image from v0.5.6 to v0.5.7"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/538
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update MI300X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.7"
+    - "Add SGLANG_AITER_MLA_PERSIST=1 for persistent MLA kernel optimization"
+    - "Set --kv-cache-dtype fp8_e4m3 for fp8 KV cache"
+    - "Set --attention-backend aiter for AMD aiter attention backend"
+    - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.7"
+    - "Add SGLANG_AITER_MLA_PERSIST=1 for persistent MLA kernel with fp8 KV cache"
+    - "Add --kv-cache-dtype fp8_e4m3 for explicit FP8 KV cache"
+    - "Add --attention-backend aiter for AMD aiter attention backend"
+    - "Reduce chunked-prefill-size from 196608 to 131072"
+    - "Reduce max-prefill-tokens from 196608 to 131072"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545

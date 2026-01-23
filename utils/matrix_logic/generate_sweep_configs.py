@@ -582,6 +582,13 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
+
                     entry = {
                         Fields.IMAGE.value: image,
                         Fields.MODEL.value: model,
@@ -623,6 +630,13 @@ def generate_test_config_sweep(args, all_config_data):
                             conc *= 2
                             if conc > conc_end:
                                 conc = conc_end
+
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
 
                     for conc in conc_values:
                         entry = {
@@ -819,6 +833,13 @@ def main():
         nargs='+',
         required=True,
         help='One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)'
+    )
+    test_config_keys_parser.add_argument(
+        '--conc',
+        nargs='+',
+        type=int,
+        required=False,
+        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',
