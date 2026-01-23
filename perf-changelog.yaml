@@ -211,4 +211,4 @@
     - "Add --attention-backend aiter for AMD aiter attention backend"
     - "Reduce chunked-prefill-size from 196608 to 131072"
     - "Reduce max-prefill-tokens from 196608 to 131072"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545
