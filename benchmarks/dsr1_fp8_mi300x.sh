@@ -31,6 +31,7 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
 fi
 
 export SGLANG_USE_AITER=1
+export SGLANG_AITER_MLA_PERSIST=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=${PORT:-8888}
@@ -41,9 +42,11 @@ python3 -m sglang.launch_server \
 --tensor-parallel-size=$TP \
 --mem-fraction-static=0.8 \
 --cuda-graph-max-bs=128 \
---chunked-prefill-size=196608 \
+--chunked-prefill-size=131072 \
 --num-continuous-decode-steps=4 \
---max-prefill-tokens=196608 \
+--max-prefill-tokens=131072 \
+--kv-cache-dtype fp8_e4m3 \
+--attention-backend aiter \
 --disable-radix-cache > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
