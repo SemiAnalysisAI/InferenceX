@@ -211,3 +211,13 @@
     - "Set --attention-backend aiter for AMD aiter attention backend"
     - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.7"
+    - "Add SGLANG_AITER_MLA_PERSIST=1 for persistent MLA kernel with fp8 KV cache"
+    - "Add --kv-cache-dtype fp8_e4m3 for explicit FP8 KV cache"
+    - "Add --attention-backend aiter for AMD aiter attention backend"
+    - "Reduce chunked-prefill-size from 196608 to 131072"
+    - "Reduce max-prefill-tokens from 196608 to 131072"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545
