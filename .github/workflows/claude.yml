@@ -222,3 +222,7 @@ jobs:
             - sglang: https://docs.sglang.ai/
             - vllm: https://docs.vllm.ai/en/latest/
             - vllm optimized flags configs: https://github.com/vllm-project/recipes
+
+            ### Additional Knowledge
+            - MI355 is gfx950 not gfx1201
+
