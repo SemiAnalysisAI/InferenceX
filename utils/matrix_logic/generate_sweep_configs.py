@@ -467,7 +467,12 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                 conc_value = args.conc
             else:
                 conc_list = lowest_conc_entry.get(Fields.CONC_LIST.value, [])
-                conc_value = min(conc_list) if conc_list else 1
+                if conc_list:
+                    conc_value = min(conc_list)
+                elif Fields.CONC_START.value in lowest_conc_entry:
+                    conc_value = lowest_conc_entry[Fields.CONC_START.value]
+                else:
+                    conc_value = 1
 
             spec_decoding = lowest_conc_entry.get(
                 Fields.SPEC_DECODING.value, "none")
