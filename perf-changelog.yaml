@@ -221,3 +221,9 @@
     - "Reduce chunked-prefill-size from 196608 to 131072"
     - "Reduce max-prefill-tokens from 196608 to 131072"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "update TRT image from 1.2.0rc2 to 1.2.0rc2.post1"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/554
