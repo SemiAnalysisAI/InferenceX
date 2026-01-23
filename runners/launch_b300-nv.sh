@@ -95,12 +95,18 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
+tailing_logs=false
+
 # Wait for this specific job to complete
 echo "Waiting for job $JOB_ID to complete..."
 while [ -n "$(squeue -j $JOB_ID --noheader 2>/dev/null)" ]; do
     echo "Job $JOB_ID still running..."
+    if [ -f "outputs/$JOB_ID/logs/sweep_${JOB_ID}.log" ] && [ "$tailing_logs" = false ]; then
+        tail -f outputs/$JOB_ID/logs/sweep_${JOB_ID}.log &
+        tailing_logs=true
+    fi
     squeue -j $JOB_ID
-    sleep 30
+    sleep 5
 done
 echo "Job $JOB_ID completed!"
 
