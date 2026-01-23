@@ -151,7 +151,7 @@ jobs:
             - For all runs, ensure they have links in the comment.
 
             After triggering, monitor the workflow run using the returned run_id. Wait for completion using exponential backoff:
-            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min, etc.)
+            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min) up to an max of 8 minutes per sleep before checking the status.
             - After each sleep, check the run status using `mcp__github__get_workflow_run`
             - If the run fails or errors, cancel it with `mcp__github__cancel_workflow_run`, then start a new run
             - Only wait for the final successful run to complete before analyzing benchmark results
