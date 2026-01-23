@@ -200,4 +200,4 @@
     - dsr1-fp8-h200-sglang
   description:
     - "Update H200 DeepSeek R1 FP8 SGLang image from v0.5.6 to v0.5.7"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/538
