@@ -210,4 +210,4 @@
     - "Set --kv-cache-dtype fp8_e4m3 for fp8 KV cache"
     - "Set --attention-backend aiter for AMD aiter attention backend"
     - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
