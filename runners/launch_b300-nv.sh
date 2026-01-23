@@ -29,7 +29,7 @@ fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
 
-export SLURM_PARTITION="batch_2"
+export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 
 SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
