@@ -1,3 +1,4 @@
+from ast import For
 import json
 import argparse
 import sys
@@ -30,6 +31,77 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
+def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Eval selection policy (single-node only):
+    - Only consider 1k8k (isl=1024, osl=8192).
+    - For each unique (model, runner, framework, precision, isl, osl, spec-decoding):
+        - Mark highest TP with highest conc
+        - Mark lowest TP with highest conc
+        
+    Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
+    independently.
+    """
+    from collections import defaultdict
+
+    # Only run evals on 1k8k
+    target_isl, target_osl = seq_len_stoi["1k8k"]
+    # Group entries by (model, runner, framework, precision, isl, osl)
+    # Only include entries that have a top-level TP (i.e., single-node schema).
+    # This avoids relying on structural hints like prefill/decode which may be
+    # reused by future single-node disaggregated modes.
+    groups = defaultdict(list)
+    for i, entry in enumerate(matrix_values):
+        # Skip entries without a top-level TP field
+        if Fields.TP.value not in entry:
+            continue
+
+        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+            continue
+
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.ISL.value],
+            entry[Fields.OSL.value],
+            entry[Fields.SPEC_DECODING.value]
+        )
+        groups[key].append((i, entry))
+
+    # For each group, find highest TP/highest conc and lowest TP/highest conc
+    eval_indices = set()
+    for key, entries in groups.items():
+        if not entries:
+            continue
+
+        # Find min and max TP values
+        min_tp = min(e[Fields.TP.value] for _, e in entries)
+        max_tp = max(e[Fields.TP.value] for _, e in entries)
+
+        # Find highest conc for highest TP
+        highest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == max_tp]
+        if highest_tp_entries:
+            max_conc_highest_tp = max(e[Fields.CONC.value] for _, e in highest_tp_entries)
+            for i, e in highest_tp_entries:
+                if e[Fields.CONC.value] == max_conc_highest_tp:
+                    eval_indices.add(i)
+
+        # Find highest conc for lowest TP (only if different from max_tp)
+        if min_tp != max_tp:
+            lowest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == min_tp]
+            if lowest_tp_entries:
+                max_conc_lowest_tp = max(e[Fields.CONC.value] for _, e in lowest_tp_entries)
+                for i, e in lowest_tp_entries:
+                    if e[Fields.CONC.value] == max_conc_lowest_tp:
+                        eval_indices.add(i)
+
+    # Mark the selected entries
+    for i, entry in enumerate(matrix_values):
+        entry[Fields.RUN_EVAL.value] = i in eval_indices
+
+    return matrix_values
 
 
 def generate_full_sweep(args, all_config_data, runner_data):
@@ -91,6 +163,16 @@ def generate_full_sweep(args, all_config_data, runner_data):
         runner = val[Fields.RUNNER.value]
         model_code = val[Fields.MODEL_PREFIX.value]
 
+        # Compute filtered runner nodes for this config if filter is specified
+        runner_nodes_to_use = None
+        if args.runner_node_filter:
+            runner_nodes = runner_data.get(runner, [])
+            runner_nodes_to_use = [
+                node for node in runner_nodes if args.runner_node_filter in node]
+            if not runner_nodes_to_use:
+                # No matching nodes for this config's runner type, skip this config
+                continue
+
         for seq_config in seq_len_configs:
             isl = seq_config[Fields.ISL.value]
             osl = seq_config[Fields.OSL.value]
@@ -133,6 +215,14 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply min-conc filter if specified
+                    if args.min_conc is not None:
+                        if args.min_conc <= 0:
+                            continue  # Skip if min_conc is not positive
+                        conc_values = [c for c in conc_values if c >= args.min_conc]
+                        if not conc_values:
+                            continue  # Skip if no values meet the min_conc requirement
+
                     # Apply max-conc filter if specified
                     # If max_conc is less than all values, use max_conc directly (if valid)
                     if args.max_conc is not None:
@@ -164,10 +254,34 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         Fields.MAX_MODEL_LEN.value: isl + osl + 200,
                         Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                         Fields.DISAGG.value: disagg,
+                        Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                     }
 
-                    validate_matrix_entry(entry, is_multinode)
-                    matrix_values.append(entry)
+                    # Determine which runner(s) to use
+                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
+                    for runner_value in runners_for_entry:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner_value,
+                            Fields.ISL.value: isl,
+                            Fields.OSL.value: osl,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.PREFILL.value: prefill,
+                            Fields.DECODE.value: decode,
+                            Fields.CONC.value: conc_values,  # Pass the entire list for multinode
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                            Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
+                        }
+
+                        validate_matrix_entry(entry, is_multinode)
+                        matrix_values.append(entry)
                 elif args.single_node:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
@@ -192,6 +306,15 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             continue  # Skip if max_ep is not positive
                         if ep is not None and ep > args.max_ep:
                             ep = args.max_ep
+
+                    # Apply min-conc filter if specified
+                    # If conc_end < min_conc, skip this config entirely
+                    if args.min_conc is not None:
+                        if args.min_conc <= 0:
+                            continue  # Skip if min_conc is not positive
+                        if conc_end < args.min_conc:
+                            continue  # Skip if entire range is below min_conc
+                        conc_start = max(conc_start, args.min_conc)
 
                     # Apply max-conc filter if specified
                     # If conc_start > max_conc, use max_conc as both start and end (if valid)
@@ -224,15 +347,40 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.SPEC_DECODING.value: spec_decoding,
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
 
-                        if ep is not None:
-                            entry[Fields.EP.value] = ep
-                        if dp_attn is not None:
-                            entry[Fields.DP_ATTN.value] = dp_attn
+                        # Determine which runner(s) to use
+                        runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                        validate_matrix_entry(entry, is_multinode)
-                        matrix_values.append(entry)
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                                Fields.EP.value: 1,  # Default
+                                Fields.DP_ATTN.value: False,  # Default
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
+                            }
+
+                            if ep is not None:
+                                entry[Fields.EP.value] = ep
+                            if dp_attn is not None:
+                                entry[Fields.DP_ATTN.value] = dp_attn
+
+                            validate_matrix_entry(entry, is_multinode)
+                            matrix_values.append(entry)
 
                         if conc == conc_end:
                             break
@@ -355,6 +503,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
+                    Fields.RUN_EVAL.value: False,
                 }
                 matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
         else:
@@ -391,6 +540,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
+                    Fields.RUN_EVAL.value: False,
                 }
                 matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
@@ -454,6 +604,13 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
+
                     entry = {
                         Fields.IMAGE.value: image,
                         Fields.MODEL.value: model,
@@ -470,6 +627,7 @@ def generate_test_config_sweep(args, all_config_data):
                         Fields.MAX_MODEL_LEN.value: isl + osl + 200,
                         Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                         Fields.DISAGG.value: disagg,
+                        Fields.RUN_EVAL.value: False,
                     }
                     matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:
@@ -495,6 +653,13 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
+
                     for conc in conc_values:
                         entry = {
                             Fields.IMAGE.value: image,
@@ -513,6 +678,7 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.SPEC_DECODING.value: spec_decoding,
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,
                         }
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
@@ -530,8 +696,24 @@ def main():
     )
     parent_parser.add_argument(
         '--runner-config',
-        required=True,
-        help='Configuration file holding runner information (YAML format)'
+        default='.github/configs/runners.yaml',
+        help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+    )
+    eval_group = parent_parser.add_mutually_exclusive_group()
+    eval_group.add_argument(
+        '--run-evals',
+        action='store_true',
+        help='When specified, run evals on a subset of configs (in addition to all configs).'
+    )
+    eval_group.add_argument(
+        '--evals-only',
+        action='store_true',
+        help='When specified, run ONLY the eval subset (excludes non-eval configs).'
+    )
+    parent_parser.add_argument(
+        '--runner-node-filter',
+        required=False,
+        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
     )
 
     # Create main parser
@@ -589,6 +771,12 @@ def main():
         type=int,
         default=2,
         help='Step size for concurrency values (default: 2)'
+    )
+    full_sweep_parser.add_argument(
+        '--min-conc',
+        type=int,
+        required=False,
+        help='Minimum concurrency value to include (filters out lower concurrency values)'
     )
     full_sweep_parser.add_argument(
         '--max-conc',
@@ -698,6 +886,13 @@ def main():
         help='One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)'
     )
     test_config_keys_parser.add_argument(
+        '--conc',
+        nargs='+',
+        type=int,
+        required=False,
+        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+    )
+    test_config_keys_parser.add_argument(
         '-h', '--help',
         action='help',
         help='Show this help message and exit'
@@ -719,6 +914,13 @@ def main():
         matrix_values = generate_test_config_sweep(args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
+        
+    # Handle eval options (mutually exclusive)
+    if args.run_evals or args.evals_only:
+        matrix_values = mark_eval_entries(matrix_values)
+        # IF --evals-only is specified, filter to only eval entries
+        if args.evals_only:
+            matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
 
     print(json.dumps(matrix_values))
     return matrix_values

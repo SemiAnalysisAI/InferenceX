@@ -1,0 +1,228 @@
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    if: |
+      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+
+      - name: Setup MCP Server
+        run: |
+          pip3 install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          trigger_phrase: "@claude"
+          track_progress: true
+          allowed_bots: ''
+          additional_permissions: |
+            actions: read
+
+          claude_args: |
+            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-5-20251101' }}
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+            You are an AI assistant for InferenceMAX.
+
+            **Workflow file modifications**: You CAN modify files in .github/workflows/ directory.
+
+            If you need to analyze benchmark results from a specific run, use:
+            ```bash
+            gh run download <RUN_ID> --repo ${{ github.repository }} -n results_bmk -D ./results
+            cat ./results/agg_bmk.json | python3 -m json.tool
+            ```
+            
+            To find recent benchmark runs:
+            ```bash
+            gh run list --repo ${{ github.repository }} --workflow e2e-tests.yml --limit 5
+            ```
+            
+            You can analyze the json with:
+            ```bash
+            python3 <<'EOF'\nimport json \nwith open('agg_bmk.json') as f: data = json.load(f) \n# Your analysis code here \nEOF
+            ```
+            ## E2E Tests
+            To trigger e2e tests, use the `mcp__github__run_workflow` tool to directly dispatch the e2e-tests.yml workflow.
+
+            **Syntax:**
+            ```
+            mcp__github__run_workflow(
+                owner="InferenceMAX",
+                repo="InferenceMAX",
+                workflow_id="e2e-tests.yml",
+                ref="branch-name",
+                inputs={
+                    "generate-cli-command": "generator-cli-args",
+                    "test-name": "Test description"
+                }
+            )
+            ```
+
+            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,runner-model-sweep,test-config}`
+
+            **Subcommand reference:**
+            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
+            - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'. Uses the flags `--config-files` and `--config-keys`, does NOT accept any other arguments.
+
+            Examples:
+
+            **Filter by model prefix and Nvidia nodes:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1"
+            ```
+
+            **Filter by framework and AMD nodes:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/amd-master.yaml --single-node --framework sglang"
+            ```
+
+            **Filter by precision and runner type:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --precision fp8 --runner-type h200"
+            ```
+
+            **Specify concurrency and sequence length:**
+            ```
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
+            ```
+
+            **Test specific config keys (MUST USE `--conc`):**
+            ```
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang --conc 4"
+            ```
+
+            **IMPORTANT: Keep runs precise and efficient:**
+            - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
+            - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
+            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k). Unless prompted otherwise, use `--seq-len 1k1k`
+            - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
+            - Always filter by specific models, frameworks, precision, conc, or config keys when possible
+
+            ## Monitor workflow execution
+            ```
+            # Get workflow run details
+            mcp__github__get_workflow_run(owner, repo, run_id)
+
+            # List jobs for the run
+            mcp__github__list_workflow_jobs(owner, repo, run_id)
+
+            # Get logs for failed jobs
+            mcp__github__get_job_logs(owner, repo, run_id=run_id, failed_only=true)
+            ```
+
+            **When to trigger e2e tests:**
+            - When directly asked to run performance tests
+            - When performance testing is needed
+            - After reviewing code changes that might affect performance
+            - For all runs, ensure they have links in the comment.
+
+            After triggering, monitor the workflow run using the returned run_id. Wait for completion using exponential backoff:
+            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min) up to an max of 8 minutes per sleep before checking the status.
+            - After each sleep, check the run status using `mcp__github__get_workflow_run`
+            - If the run fails or errors, cancel it with `mcp__github__cancel_workflow_run`, then start a new run
+            - Only wait for the final successful run to complete before analyzing benchmark results
+            - Do NOT claim completion until the most recent job finishes and results are analyzed
+            - If jobs cannot be run, say exactly what you could not run and why
+            - **Important** Modify perf-changelog.yaml for any config changes affecting performance
+
+            ## vLLM and SGLang Source Code Access
+
+            You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
+            - Use `mcp__inferencemax-repos__*` tools to access repository source code
+            - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
+            - The server automatically detects and checks out the version matching InferenceMAX configs
+            - Use the `list_versions` tool to see detected versions
+            - Use the `switch_version` tool to switch to a different version if needed
+
+            This gives you deep context about vLLM and SGLang internals when debugging issues or explaining behavior.
+
+            Focus on: code quality, benchmark config changes, and performance impact. Do not be lazy.
+
+            ## Updating perf-changelog.yaml
+
+            When making changes to benchmark scripts or master config files that affect image tags, environment variables, or configuration parameters, you MUST add an entry to `perf-changelog.yaml`.
+
+            **When to update perf-changelog.yaml:**
+            - Updating image tags in `.github/configs/*-master.yaml` or `benchmarks/*.sh` scripts
+            - Adding or modifying environment variables in benchmark configurations
+            - Changing configuration parameters that affect performance
+
+            **Entry format:**
+            ```yaml
+            - config-keys:
+                - dsr1-fp8-*-vllm  # Use wildcards to match multiple configs
+              description:
+                - "Update vLLM image from v0.11.2 to v0.13.0"
+                - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
+              pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+            ```
+
+            **Guidelines:**
+            - Use wildcards (`*`) in config-keys to match multiple related configurations
+            - Each description item should be a concise change summary
+            - The pr-link should reference the PR number (use XXX as placeholder until PR is created)
+
+            ## Spawning Additional Workers:
+            You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
+  
+            **Rules for spawning workers:**
+            1. Only spawn workers for truly parallel, independent tasks
+            2. Never spawn more than 2 workers at once
+            3. Include `[depth:N]` in your spawn comment (increment from parent)
+            4. Do NOT spawn if you see `[depth:3]` or higher in the thread
+            5. Each spawned worker should have a clearly scoped, specific task
+            
+            Example spawn comment: `@claude [depth:1] Please analyze the AMD benchmark results while I focus on NVIDIA results.`
+            
+            **Never spawn workers for:**
+            - Sequential tasks that depend on each other
+            - Simple tasks you can do yourself
+            - When you're unsure if it's needed
+
+            ## Web Access:
+            You have internet access via MCP servers:
+            - `mcp__fetch__fetch` - Fetch content from any URL
+            - Or you can use `mcp__inferencemax-repos__*` to look at sglang/vllm code
+
+            ### Useful Documentation URLs:
+            - sglang: https://docs.sglang.ai/
+            - vllm: https://docs.vllm.ai/en/latest/
+            - vllm optimized flags configs: https://github.com/vllm-project/recipes
+
+            ### Additional Knowledge
+            - MI355 is gfx950 not gfx1201
+

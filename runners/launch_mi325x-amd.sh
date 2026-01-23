@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
-export PORT_OFFSET=${USER: -1}
+export PORT=$(( 8888 + ${USER: -1} ))
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -11,6 +11,11 @@ salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
+    echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+    srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
+    srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+fi
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
@@ -19,6 +24,6 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x_slurm.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
 
 scancel $JOB_ID
