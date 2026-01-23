@@ -521,7 +521,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             if args.conc is not None:
                 conc_value = args.conc
             else:
-                conc_value = highest_tp_bmk[Fields.CONC_START.value]
+                conc_value = highest_tp_bmk.get(Fields.CONC_START.value) or min(highest_tp_bmk.get(Fields.CONC_LIST.value, [1]))
 
             ep = highest_tp_bmk.get(Fields.EP.value)
             dp_attn = highest_tp_bmk.get(Fields.DP_ATTN.value)
