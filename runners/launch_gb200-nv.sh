@@ -116,6 +116,8 @@ echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
 
+cat "outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
+
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
