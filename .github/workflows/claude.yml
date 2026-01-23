@@ -120,17 +120,17 @@ jobs:
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
             ```
 
-            **Test specific config keys (using test-config - NO additional args):**
+            **Test specific config keys (MUST USE `--conc`):**
             ```
-            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang"
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang --conc 4"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
             - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k). Unless prompted otherwise, use `--seq-len 1k1k`
-            - Use `test-config` ONLY when given specific config keys to test - it accepts ONLY `--config-files` and `--config-keys`, no other flags
-            - Always filter by specific models, frameworks, precision, or config keys when possible
+            - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
+            - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
             ## Monitor workflow execution
             ```
