@@ -35,9 +35,9 @@ python3 -m sglang.launch_server \
 --chunked-prefill-size=131072 \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=131072 \
---disable-radix-cache \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
+--disable-radix-cache \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
