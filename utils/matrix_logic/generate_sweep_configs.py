@@ -831,11 +831,6 @@ def main():
         help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
-        '--runner-node-filter',
-        required=False,
-        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string)'
-    )
-    test_config_parser.add_argument(
         '--model-prefix',
         nargs='+',
         required=False,

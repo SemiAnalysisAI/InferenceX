@@ -44,7 +44,7 @@ mi325x:
 - 'mi325x-amd_1'
 - 'mi325x-amd_2'
 - 'mi325x-amd_3'
-mi355x-exp:
+mi355x:
 - 'mi355x-amds_0'
 - 'mi355x-amds_1'
 - 'mi355x-amds_2'
