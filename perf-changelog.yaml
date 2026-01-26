@@ -211,6 +211,7 @@
     - "Set --attention-backend aiter for AMD aiter attention backend"
     - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
+
 - config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
@@ -221,3 +222,11 @@
     - "Reduce chunked-prefill-size from 196608 to 131072"
     - "Reduce max-prefill-tokens from 196608 to 131072"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545
+
+- config-keys:
+    - gptoss*
+    - dsr1*
+  description:
+    - Add evals to GPT-OSS and DeepSeek R1 benchmark 1k8k sweeps
+  pr-link:
+    - https://github.com/InferenceMAX/InferenceMAX/pull/258
