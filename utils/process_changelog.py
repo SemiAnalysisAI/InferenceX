@@ -103,6 +103,9 @@ def main():
             continue
         all_configs_to_run.update(configs_to_run)
 
+        # Use --evals-only if specified in changelog entry, otherwise --run-evals
+        eval_flag = "--evals-only" if entry.evals_only else "--run-evals"
+
         try:
             result = subprocess.run(
                 [
@@ -113,7 +116,7 @@ def main():
                     *configs_to_run,
                     "--config-files",
                     *MASTER_CONFIGS,
-                    "--run-evals"
+                    eval_flag
                 ],
                 capture_output=True,
                 text=True,
