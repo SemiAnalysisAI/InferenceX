@@ -23,7 +23,6 @@ hf download "$MODEL"
 export SGLANG_USE_AITER=1
 export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export SGLANG_AITER_MLA_PERSIST=1
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
 PORT=${PORT:-8888}
@@ -40,7 +39,6 @@ python3 -m sglang.launch_server \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
     --enable-torch-compile \
-    --kv-cache-dtype fp8_e4m3 \
     --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
