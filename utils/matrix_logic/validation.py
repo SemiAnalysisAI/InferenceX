@@ -337,6 +337,7 @@ class ChangelogEntry(BaseModel):
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
+    evals_only: bool = Field(alias="evals-only", default=False)
 
 
 class ChangelogMetadata(BaseModel):
