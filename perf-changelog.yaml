@@ -253,3 +253,4 @@
   description:
     - Add evals to GPT-OSS and DeepSeek R1 benchmark 1k8k sweeps
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/258
+  evals-only: true
