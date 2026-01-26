@@ -211,7 +211,6 @@
     - "Set --attention-backend aiter for AMD aiter attention backend"
     - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
-
 - config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
