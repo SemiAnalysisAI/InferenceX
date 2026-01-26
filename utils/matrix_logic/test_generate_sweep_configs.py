@@ -470,6 +470,7 @@ class TestGenerateFullSweepSingleNode:
         assert all("amd" in entry["runner"] for entry in result)
 
 
+
 # =============================================================================
 # Test generate_full_sweep for multi-node
 # =============================================================================
@@ -586,6 +587,10 @@ class TestGenerateRunnerModelSweepConfig:
         args.runner_type = "mi300x"
         args.runner_config = "runners.yaml"
         args.runner_node_filter = None
+        args.model_prefix = None
+        args.precision = None
+        args.framework = None
+        args.conc = None
         args.single_node = True
         args.multi_node = False
         return args
@@ -678,6 +683,100 @@ class TestGenerateRunnerModelSweepConfig:
         )
         # Config has conc-start=4
         assert all(entry["conc"] == 4 for entry in result)
+
+    def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """Model prefix filter should limit configs."""
+        runner_sweep_args.model_prefix = ["dsr1"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # Config key starts with "dsr1", so should match
+        assert len(result) == 3  # 3 mi300x nodes
+
+        # Non-matching prefix should return empty
+        runner_sweep_args.model_prefix = ["nonexistent"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert len(result) == 0
+
+    def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """Precision filter should limit configs."""
+        runner_sweep_args.precision = ["fp8"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # Config has precision=fp8, so should match
+        assert len(result) == 3
+
+        # Non-matching precision should return empty
+        runner_sweep_args.precision = ["fp4"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert len(result) == 0
+
+    def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """Framework filter should limit configs."""
+        runner_sweep_args.framework = ["sglang"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # Config has framework=sglang, so should match
+        assert len(result) == 3
+
+        # Non-matching framework should return empty
+        runner_sweep_args.framework = ["vllm"]
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert len(result) == 0
+
+    def test_combined_filters(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """Multiple filters should all apply."""
+        runner_sweep_args.model_prefix = ["dsr1"]
+        runner_sweep_args.precision = ["fp8"]
+        runner_sweep_args.framework = ["sglang"]
+        runner_sweep_args.runner_node_filter = "amd"
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        # All filters match, but only 2 amd nodes
+        assert len(result) == 2
+        assert all("amd" in entry["runner"] for entry in result)
+
+    def test_conc_override(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
+        """--conc should override concurrency for all runs."""
+        # Without override, uses lowest conc from config (conc-start=4)
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert all(entry["conc"] == 4 for entry in result)
+
+        # With override, uses specified value
+        runner_sweep_args.conc = 16
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args,
+            sample_single_node_config,
+            sample_runner_config
+        )
+        assert all(entry["conc"] == 16 for entry in result)
 
 
 # =============================================================================
