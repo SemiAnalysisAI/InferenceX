@@ -20,10 +20,6 @@ nvidia-smi
 
 hf download "$MODEL"
 
-# To improve CI stability, we patch this helper function to prevent a race condition that
-# happens 1% of the time. ref: https://github.com/flashinfer-ai/flashinfer/pull/1779
-sed -i '102,108d' /usr/local/lib/python3.12/dist-packages/flashinfer/jit/cubin_loader.py
-
 export SGL_ENABLE_JIT_DEEPGEMM=false
 export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
