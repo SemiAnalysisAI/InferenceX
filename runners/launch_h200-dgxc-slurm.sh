@@ -29,7 +29,7 @@ fi
 echo "Configs available at: $TRTLLM_REPO_DIR/"
 
 export SLURM_PARTITION="main"
-export SLURM_ACCOUNT="slurm-shared"
+export SLURM_ACCOUNT="sa-shared"
 
 SQUASH_FILE="/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
@@ -80,7 +80,7 @@ echo "Submitting job with srtctl..."
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
-# Extract JOB_ID from srtctl output (e.g., "✅ Job 1168 submitted!")
+# Extract JOB_ID from srtctl output
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
