@@ -33,7 +33,7 @@ export SLURM_ACCOUNT="benchmark"
 SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp4"
+    export MODEL_PATH="/scratch/models/deepseek-r1-0528-nvfp4-v2"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
 else
     echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
