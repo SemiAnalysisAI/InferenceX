@@ -228,7 +228,7 @@
   description:
     - "Fix AITER env vars for vLLM v0.14.0 on AMD MI300X and MI325X"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/535
-  
+
 - config-keys:
     # NVIDIA single-node
     - dsr1-fp4-b200-sglang
