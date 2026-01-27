@@ -33,7 +33,7 @@ fi
 
 echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 EXTRA_CONFIG_FILE="dsr1-fp8-mtp.yml"
 
@@ -107,3 +107,4 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --use-chat-template
+

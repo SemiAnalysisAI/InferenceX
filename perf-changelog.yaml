@@ -230,38 +230,6 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/535
 
 - config-keys:
-    # NVIDIA single-node
-    - dsr1-fp4-b200-sglang
-    - dsr1-fp4-b200-trt
-    - dsr1-fp4-b200-trt-mtp
-    - dsr1-fp8-b200-sglang
-    - dsr1-fp8-b200-trt
-    - dsr1-fp8-b200-trt-mtp
-    - dsr1-fp8-h200-sglang
-    - dsr1-fp8-h200-trt
-    - dsr1-fp8-h200-trt-mtp
-    - gptoss-fp4-b200-trt
-    - gptoss-fp4-b200-vllm
-    - gptoss-fp4-h100-vllm
-    - gptoss-fp4-h200-trt
-    - gptoss-fp4-h200-vllm
-    # AMD single-node
-    - dsr1-fp4-mi355x-sglang
-    - dsr1-fp4-mi355x-atom
-    - dsr1-fp8-mi300x-sglang
-    - dsr1-fp8-mi325x-sglang
-    - dsr1-fp8-mi355x-sglang
-    - dsr1-fp8-mi355x-atom
-    - gptoss-fp4-mi300x-vllm
-    - gptoss-fp4-mi325x-vllm
-    - gptoss-fp4-mi355x-vllm
-    - gptoss-fp4-mi355x-atom
-  description:
-    - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/558
-  evals-only: true
-
-- config-keys:
     - dsr1-fp8-mi355x-sglang
   description:
     - "Update MI355X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.8"

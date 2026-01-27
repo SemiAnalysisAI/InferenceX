@@ -38,7 +38,7 @@ max-num-batched-tokens: 8192
 max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=/workspace/server.log
 export TORCH_CUDA_ARCH_LIST="9.0"
 PORT=${PORT:-8888}
 

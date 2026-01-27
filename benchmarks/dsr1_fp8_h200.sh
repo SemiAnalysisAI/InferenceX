@@ -18,7 +18,7 @@ fi
 pip3 install --user sentencepiece
 
 hf download "$MODEL"
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 export TORCH_CUDA_ARCH_LIST="9.0"

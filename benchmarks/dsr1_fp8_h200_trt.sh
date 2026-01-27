@@ -27,7 +27,7 @@ MOE_BACKEND="CUTLASS"
 
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 EXTRA_CONFIG_FILE="dsr1-fp8.yml"
 
