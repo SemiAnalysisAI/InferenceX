@@ -107,3 +107,5 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --use-chat-template
+
+preserve_server_log "$SERVER_LOG"

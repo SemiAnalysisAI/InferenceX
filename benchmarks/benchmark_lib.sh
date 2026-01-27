@@ -2,6 +2,16 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Copy server log to workspace for artifact collection
+# Usage: preserve_server_log "$SERVER_LOG"
+# The log will be copied to /workspace/server.log
+preserve_server_log() {
+    local server_log="$1"
+    if [[ -n "$server_log" && -f "$server_log" ]]; then
+        cp "$server_log" /workspace/server.log 2>/dev/null || true
+    fi
+}
+
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set

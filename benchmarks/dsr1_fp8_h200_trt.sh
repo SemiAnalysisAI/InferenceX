@@ -94,4 +94,5 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+preserve_server_log "$SERVER_LOG"
 set +x
