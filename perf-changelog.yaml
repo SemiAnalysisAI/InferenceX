@@ -265,3 +265,10 @@
   description:
     - "Add DSR1 FP4 B300 Dynamo TRT configurations"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/511
+
+- config-keys:
+    - gptoss-fp4-h200-trt
+  description:
+    - test
+  pr-link: test
+  evals-only: true
