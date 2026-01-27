@@ -262,21 +262,8 @@
   evals-only: true
 
 - config-keys:
-  - dsr1-fp4-b300-dynamo-trt
-  description:
-    - "Add DSR1 FP4 B300 Dynamo TRT configurations"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/511
-
-- config-keys:
     - dsr1-fp8-mi355x-sglang
   description:
     - "Update MI355X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.8"
     - "Key fix: Disables mla persistent kernel when not using fp8 kv_cache (https://github.com/sgl-project/sglang/pull/17327)"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/572
-
-- config-keys:
-    - gptoss-fp4-h200-trt
-  description:
-    - test
-  pr-link: test
-  evals-only: true
