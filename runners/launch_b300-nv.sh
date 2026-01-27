@@ -11,7 +11,7 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout b4abe4643a7009f3539b36bdc508408874a4c930
+git checkout sa-submission-q1-2026
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -30,8 +30,6 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
-
-SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
     export MODEL_PATH="/scratch/models/deepseek-r1-0528-nvfp4-v2"
@@ -67,7 +65,7 @@ model_paths:
 
 # Container aliases
 containers:
-  latest: "${SQUASH_FILE}"
+  dynamo-trtllm: "${IMAGE}"
 
 use_exclusive_sbatch_directive: true
 
@@ -105,7 +103,7 @@ while [ -n "$(squeue -j $JOB_ID --noheader 2>/dev/null)" ]; do
 done
 echo "Job $JOB_ID completed!"
 
-cat "outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
+
 
 echo "Collecting results..."
 
@@ -119,6 +117,14 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 echo "Found logs directory: $LOGS_DIR"
+
+cat $LOGS_DIR/sweep_$JOB_ID.log
+
+for file in $LOGS_DIR/*; do
+    if [ -f "$file" ]; then
+        tail -n 500 $file
+    fi
+done
 
 # Find all result subdirectories (e.g., sa-bench_isl_8192_osl_1024)
 RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
