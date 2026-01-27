@@ -463,7 +463,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -477,7 +477,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -491,7 +491,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -505,7 +505,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -519,7 +519,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
       decode:
         num-worker: 5
         tp: 4
@@ -535,7 +535,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 8
@@ -548,7 +548,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -561,7 +561,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
         tp: 4
@@ -574,7 +574,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -587,7 +587,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -600,7 +600,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -613,7 +613,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -632,7 +632,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -646,7 +646,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -660,7 +660,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -674,7 +674,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -688,7 +688,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -703,7 +703,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -716,7 +716,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
         tp: 8
@@ -729,7 +729,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -742,7 +742,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 32
@@ -755,7 +755,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -768,7 +768,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 16
@@ -1061,7 +1061,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipies/gb200-fp4/1k8k/low-latency.yaml"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k8k/low-latency.yaml"
       decode:
         num-worker: 2
         tp: 4
@@ -1077,7 +1077,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/gb200-fp4/1k8k/mid-curve.yaml"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k8k/mid-curve.yaml"
       decode:
         num-worker: 1
         tp: 48
@@ -1093,7 +1093,7 @@ dsr1-fp4-gb200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipies/gb200-fp4/1k8k/max-tpt.yaml"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k8k/max-tpt.yaml"
       decode:
         num-worker: 1
         tp: 32
