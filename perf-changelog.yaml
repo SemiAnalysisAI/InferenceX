@@ -260,3 +260,10 @@
     - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/558
   evals-only: true
+
+- config-keys:
+    - gptoss-fp4-h200-trt
+  description:
+    - test
+  pr-link: test
+  evals-only: true
