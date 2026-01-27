@@ -43,8 +43,7 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-register_server_log_trap "$SERVER_LOG"
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 set -x

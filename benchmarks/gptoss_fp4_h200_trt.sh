@@ -18,8 +18,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 hf download "$MODEL"
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-register_server_log_trap "$SERVER_LOG"
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 set +x

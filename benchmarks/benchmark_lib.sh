@@ -2,25 +2,6 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
-# Register server log for automatic preservation on script exit (including cancellation)
-# Usage: Call this right after creating SERVER_LOG
-#   SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-#   register_server_log_trap "$SERVER_LOG"
-# The log will automatically be copied to /workspace/server.log on any exit
-register_server_log_trap() {
-    local server_log="$1"
-    # shellcheck disable=SC2064
-    trap "cp '$server_log' /workspace/server.log 2>/dev/null || true" EXIT
-}
-
-# Legacy function for backwards compatibility
-preserve_server_log() {
-    local server_log="$1"
-    if [[ -n "$server_log" && -f "$server_log" ]]; then
-        cp "$server_log" /workspace/server.log 2>/dev/null || true
-    fi
-}
-
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set

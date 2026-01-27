@@ -24,8 +24,7 @@ export SGLANG_USE_AITER=1
 export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-register_server_log_trap "$SERVER_LOG"
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 python3 -m sglang.launch_server \

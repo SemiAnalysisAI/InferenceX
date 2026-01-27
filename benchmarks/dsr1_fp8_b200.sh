@@ -22,8 +22,7 @@ hf download "$MODEL"
 
 export SGL_ENABLE_JIT_DEEPGEMM=false
 export SGLANG_ENABLE_FLASHINFER_GEMM=true
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-register_server_log_trap "$SERVER_LOG"
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.

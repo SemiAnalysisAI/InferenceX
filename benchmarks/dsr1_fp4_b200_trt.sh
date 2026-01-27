@@ -57,8 +57,7 @@ fi
 
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
 
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
-register_server_log_trap "$SERVER_LOG"
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 EXTRA_CONFIG_FILE="dsr1-fp4.yml"
 
