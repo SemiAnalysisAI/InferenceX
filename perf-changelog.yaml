@@ -273,3 +273,9 @@
     - "Update MI355X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.8"
     - "Key fix: Disables mla persistent kernel when not using fp8 kv_cache (https://github.com/sgl-project/sglang/pull/17327)"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/572
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "test"
+  pr-link: test
