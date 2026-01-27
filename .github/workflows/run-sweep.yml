@@ -22,6 +22,21 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    check-newline:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Check perf-changelog.yaml ends with newline
+              run: |
+                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
+                      echo "::error::perf-changelog.yaml must end with a newline character"
+                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
+                      exit 1
+                  fi
+
     setup:
         runs-on: ubuntu-latest
         if: >-
@@ -34,15 +49,6 @@ jobs:
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   fetch-depth: 0
-
-            - name: Check perf-changelog.yaml ends with newline
-              run: |
-                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
-                      echo "::error::perf-changelog.yaml must end with a newline character"
-                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
-                      exit 1
-                  fi
-                  echo "✓ perf-changelog.yaml ends with newline"
 
             - id: setup
               run: |
