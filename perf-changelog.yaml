@@ -228,3 +228,13 @@
   description:
     - "Fix AITER env vars for vLLM v0.14.0 on AMD MI300X and MI325X"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/535
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add DSR1 FP8 H200 Dynamo TRT-LLM disaggregated multinode configuration"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.0"
+    - "Runner: h200-dgxc with multinode and disagg enabled"
+    - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
+    - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
