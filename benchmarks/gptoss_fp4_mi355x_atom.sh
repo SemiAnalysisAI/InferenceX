@@ -10,7 +10,6 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    NUM_PROMPTS \
     EP_SIZE \
     DP_ATTENTION
 
