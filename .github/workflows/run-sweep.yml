@@ -35,6 +35,15 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Check perf-changelog.yaml ends with newline
+              run: |
+                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
+                      echo "::error::perf-changelog.yaml must end with a newline character"
+                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
+                      exit 1
+                  fi
+                  echo "✓ perf-changelog.yaml ends with newline"
+
             - id: setup
               run: |
                   pip install pydantic
