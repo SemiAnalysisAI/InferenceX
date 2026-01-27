@@ -26,6 +26,7 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 hf download $MODEL
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+register_server_log_trap "$SERVER_LOG"
 
 # ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
 MOE_BACKEND="TRTLLM"
@@ -109,5 +110,4 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $(( $CONC ))
     append_lm_eval_summary
 fi
-preserve_server_log "$SERVER_LOG"
 set +x

@@ -20,6 +20,7 @@ fi
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+register_server_log_trap "$SERVER_LOG"
 PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
@@ -69,5 +70,4 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
-preserve_server_log "$SERVER_LOG"
 set +x

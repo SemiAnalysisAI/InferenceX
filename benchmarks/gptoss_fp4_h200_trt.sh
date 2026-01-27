@@ -19,9 +19,9 @@ fi
 
 hf download "$MODEL"
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+register_server_log_trap "$SERVER_LOG"
 PORT=${PORT:-8888}
 
-preserve_server_log "$SERVER_LOG"
 set +x
 
 export TRTLLM_ENABLE_PDL=1 
@@ -80,5 +80,4 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
-preserve_server_log "$SERVER_LOG"
 set +x

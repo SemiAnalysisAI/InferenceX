@@ -25,6 +25,7 @@ export RCCL_MSCCL_ENABLE=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+register_server_log_trap "$SERVER_LOG"
 PORT=${PORT:-8888}
 
 python3 -m sglang.launch_server \
@@ -63,5 +64,4 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
-preserve_server_log "$SERVER_LOG"
 set +x

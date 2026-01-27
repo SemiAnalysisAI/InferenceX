@@ -21,6 +21,7 @@ hf download "$MODEL"
 nvidia-smi
 
 SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+register_server_log_trap "$SERVER_LOG"
 PORT=${PORT:-8888}
 
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
@@ -65,5 +66,4 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
-preserve_server_log "$SERVER_LOG"
 set +x
