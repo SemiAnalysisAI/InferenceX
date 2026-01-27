@@ -441,7 +441,7 @@ gptoss-fp4-h200-vllm:
     - { tp: 8, conc-start: 4, conc-end: 32 }
 
 dsr1-fp4-gb200-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.0
+  image: /mnt/lustre01/artifacts/containers/dynamo-0.8.1.post2.test.sqsh
   # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
   model: /mnt/numa1/groups/sa-shared/models/deepseek-r1-0528-nvfp4-v2/
   model-prefix: dsr1
