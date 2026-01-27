@@ -309,7 +309,7 @@
     - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
     - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
-  
+
 - config-keys:
     - dsr1-fp4-gb200-dynamo-trt
   description:
@@ -325,3 +325,15 @@
     - "Disable torch.compile for MI355X DeepSeek-R1 FP8 SGLang"
     - "set cuda-graph-max-bs to CONC"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/613
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add DSR1 FP8 H200 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-runtime"
+    - "Runner: h200-multinode-slurm with multinode and disagg enabled"
+    - "Recipes sourced from srtslurm repo (recipes/h200/)"
+    - "1k1k configs: aggregated, low-latency (1P9D), high-throughput TEP (1P6D), DEP (1P6D)"
+    - "8k1k configs: aggregated, TEP configs (1P7D, 1P6D, 1P3D, 2P3D), DEP (1P1D)"
+    - "Concurrency levels range from 1 to 2048 depending on configuration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/582
