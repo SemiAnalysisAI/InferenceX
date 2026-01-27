@@ -53,7 +53,8 @@ def calculate_gpu_success_rates():
     success_runs = {sku: 0 for sku in GPU_SKUS}
     total_runs = {sku: 0 for sku in GPU_SKUS}
 
-    for job in run.jobs():
+    # Use _filter="all" to include jobs from all attempts (retries), not just the latest
+    for job in run.jobs(_filter="all"):
         job_name = job.name
         conclusion = job.conclusion  # success, failure, cancelled, or skipped
         gpu = extract_gpu_from_name(job_name)
