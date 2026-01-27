@@ -260,3 +260,8 @@
     - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/558
   evals-only: true
+- config-keys:
+  - dsr1-fp4-b300-dynamo-trt
+  description:
+    - "Add DSR1 FP4 B300 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/511

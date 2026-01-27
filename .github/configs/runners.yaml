@@ -60,3 +60,5 @@ mi355x-disagg:
 - 'mi355x-amds_2'
 gb200:
 - gb200-nv_0
+b300:
+- 'b300-nv_0'
