@@ -27,7 +27,7 @@ EOF
 
 export PYTHONNOUSERSITE=1
 export VLLM_MXFP4_USE_MARLIN=1
-SERVER_LOG=$(mktemp /tmp/server-XXXXXX.log)
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 set -x
