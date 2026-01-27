@@ -4,7 +4,7 @@ on:
   issue_comment:
     types: [created]
   issues:
-    types: [opened, assigned]
+    types: [opened]
   pull_request_review_comment:
     types: [created]
 
@@ -21,7 +21,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
@@ -58,7 +58,7 @@ jobs:
 
             You are an AI assistant for InferenceMAX.
 
-            **Workflow file modifications**: You CAN modify files in .github/workflows/ directory. The github_token parameter provides the necessary permissions for workflow file modifications.
+            **Workflow file modifications**: You CAN modify files in .github/workflows/ directory.
 
             If you need to analyze benchmark results from a specific run, use:
             ```bash
@@ -75,7 +75,7 @@ jobs:
             ```bash
             python3 <<'EOF'\nimport json \nwith open('agg_bmk.json') as f: data = json.load(f) \n# Your analysis code here \nEOF
             ```
-
+            ## E2E Tests
             To trigger e2e tests, use the `mcp__github__run_workflow` tool to directly dispatch the e2e-tests.yml workflow.
 
             **Syntax:**
@@ -92,14 +92,11 @@ jobs:
             )
             ```
 
-            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`.
-
-            usage: `generate_sweep_configs.py` `[-h]`
-                                 `{full-sweep,runner-model-sweep,test-config}`
+            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,runner-model-sweep,test-config}`
 
             **Subcommand reference:**
             - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
-            - `test-config`: Use this subcommand ONLY with `--config-files` and `--config-keys`. It does NOT accept any other arguments.
+            - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'. Uses the flags `--config-files` and `--config-keys`, does NOT accept any other arguments.
 
             Examples:
 
@@ -123,17 +120,17 @@ jobs:
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
             ```
 
-            **Test specific config keys (using test-config - NO additional args):**
+            **Test specific config keys (MUST USE `--conc`):**
             ```
-            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang"
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang --conc 4"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
-            - Use `full-sweep` with filter flags to narrow down the benchmark scope - this is NOT the same as running an unfiltered sweep
-            - When using `full-sweep`, you can use `--min-conc` and `--max-conc` together to specify a single concurrency value
-            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k)
-            - Use `test-config` ONLY when you have specific config keys to test - it accepts ONLY `--config-files` and `--config-keys`, no other flags
-            - Always filter by specific models, frameworks, precision, or config keys when possible
+            - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
+            - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
+            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k). Unless prompted otherwise, use `--seq-len 1k1k`
+            - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
+            - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
             ## Monitor workflow execution
             ```
@@ -154,12 +151,13 @@ jobs:
             - For all runs, ensure they have links in the comment.
 
             After triggering, monitor the workflow run using the returned run_id. Wait for completion using exponential backoff:
-            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min, etc.)
+            - Start with `sleep 120` (2 minutes), then double the sleep time each iteration (4 min, 8 min) up to an max of 8 minutes per sleep before checking the status.
             - After each sleep, check the run status using `mcp__github__get_workflow_run`
             - If the run fails or errors, cancel it with `mcp__github__cancel_workflow_run`, then start a new run
             - Only wait for the final successful run to complete before analyzing benchmark results
             - Do NOT claim completion until the most recent job finishes and results are analyzed
             - If jobs cannot be run, say exactly what you could not run and why
+            - **Important** Modify perf-changelog.yaml for any config changes affecting performance
 
             ## vLLM and SGLang Source Code Access
 
@@ -224,3 +222,7 @@ jobs:
             - sglang: https://docs.sglang.ai/
             - vllm: https://docs.vllm.ai/en/latest/
             - vllm optimized flags configs: https://github.com/vllm-project/recipes
+
+            ### Additional Knowledge
+            - MI355 is gfx950 not gfx1201
+

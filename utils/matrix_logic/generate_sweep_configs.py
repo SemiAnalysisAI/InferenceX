@@ -163,6 +163,16 @@ def generate_full_sweep(args, all_config_data, runner_data):
         runner = val[Fields.RUNNER.value]
         model_code = val[Fields.MODEL_PREFIX.value]
 
+        # Compute filtered runner nodes for this config if filter is specified
+        runner_nodes_to_use = None
+        if args.runner_node_filter:
+            runner_nodes = runner_data.get(runner, [])
+            runner_nodes_to_use = [
+                node for node in runner_nodes if args.runner_node_filter in node]
+            if not runner_nodes_to_use:
+                # No matching nodes for this config's runner type, skip this config
+                continue
+
         for seq_config in seq_len_configs:
             isl = seq_config[Fields.ISL.value]
             osl = seq_config[Fields.OSL.value]
@@ -247,8 +257,31 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                     }
 
-                    validate_matrix_entry(entry, is_multinode)
-                    matrix_values.append(entry)
+                    # Determine which runner(s) to use
+                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
+                    for runner_value in runners_for_entry:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner_value,
+                            Fields.ISL.value: isl,
+                            Fields.OSL.value: osl,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.PREFILL.value: prefill,
+                            Fields.DECODE.value: decode,
+                            Fields.CONC.value: conc_values,  # Pass the entire list for multinode
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                            Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
+                        }
+
+                        validate_matrix_entry(entry, is_multinode)
+                        matrix_values.append(entry)
                 elif args.single_node:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
@@ -317,13 +350,37 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
 
-                        if ep is not None:
-                            entry[Fields.EP.value] = ep
-                        if dp_attn is not None:
-                            entry[Fields.DP_ATTN.value] = dp_attn
+                        # Determine which runner(s) to use
+                        runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                        validate_matrix_entry(entry, is_multinode)
-                        matrix_values.append(entry)
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                                Fields.EP.value: 1,  # Default
+                                Fields.DP_ATTN.value: False,  # Default
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
+                            }
+
+                            if ep is not None:
+                                entry[Fields.EP.value] = ep
+                            if dp_attn is not None:
+                                entry[Fields.DP_ATTN.value] = dp_attn
+
+                            validate_matrix_entry(entry, is_multinode)
+                            matrix_values.append(entry)
 
                         if conc == conc_end:
                             break
@@ -360,6 +417,19 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
         if val[Fields.RUNNER.value] != args.runner_type:
             continue
 
+        # Filter by model prefix if specified
+        if args.model_prefix:
+            if not any(key.startswith(prefix) for prefix in args.model_prefix):
+                continue
+
+        # Filter by precision if specified
+        if args.precision and val[Fields.PRECISION.value] not in args.precision:
+            continue
+
+        # Filter by framework if specified
+        if args.framework and val[Fields.FRAMEWORK.value] not in args.framework:
+            continue
+
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
         # Skip configs that don't match the requested node type
@@ -392,8 +462,17 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             lowest_conc_entry = min(
                 target_config[Fields.SEARCH_SPACE.value], key=get_lowest_conc)
 
-            conc_list = lowest_conc_entry.get(Fields.CONC_LIST.value, [])
-            lowest_conc = min(conc_list) if conc_list else 1
+            # Use args.conc if provided, otherwise use lowest from config
+            if args.conc is not None:
+                conc_value = args.conc
+            else:
+                conc_list = lowest_conc_entry.get(Fields.CONC_LIST.value, [])
+                if conc_list:
+                    conc_value = min(conc_list)
+                elif Fields.CONC_START.value in lowest_conc_entry:
+                    conc_value = lowest_conc_entry[Fields.CONC_START.value]
+                else:
+                    conc_value = 1
 
             spec_decoding = lowest_conc_entry.get(
                 Fields.SPEC_DECODING.value, "none")
@@ -425,7 +504,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                         Fields.DP_ATTN.value: decode_config[Fields.DP_ATTN.value],
                         Fields.ADDITIONAL_SETTINGS.value: decode_config.get(Fields.ADDITIONAL_SETTINGS.value, []),
                     },
-                    Fields.CONC.value: [lowest_conc],
+                    Fields.CONC.value: [conc_value],
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
@@ -437,7 +516,12 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             highest_tp_bmk = max(
                 target_config[Fields.SEARCH_SPACE.value], key=lambda x: x[Fields.TP.value])
             highest_tp = highest_tp_bmk[Fields.TP.value]
-            lowest_conc = highest_tp_bmk[Fields.CONC_START.value]
+
+            # Use args.conc if provided, otherwise use lowest from config
+            if args.conc is not None:
+                conc_value = args.conc
+            else:
+                conc_value = highest_tp_bmk.get(Fields.CONC_START.value) or min(highest_tp_bmk.get(Fields.CONC_LIST.value, [1]))
 
             ep = highest_tp_bmk.get(Fields.EP.value)
             dp_attn = highest_tp_bmk.get(Fields.DP_ATTN.value)
@@ -457,7 +541,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.EP.value: ep if ep is not None else 1,
                     Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                     Fields.SPEC_DECODING.value: spec_decoding,
-                    Fields.CONC.value: lowest_conc,
+                    Fields.CONC.value: conc_value,
                     Fields.MAX_MODEL_LEN.value: 2048,
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
@@ -525,6 +609,13 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
+
                     entry = {
                         Fields.IMAGE.value: image,
                         Fields.MODEL.value: model,
@@ -566,6 +657,13 @@ def generate_test_config_sweep(args, all_config_data):
                             conc *= 2
                             if conc > conc_end:
                                 conc = conc_end
+
+                    # Apply --conc filter if provided (only for test-config)
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            # No intersection with requested conc values; skip
+                            continue
 
                     for conc in conc_values:
                         entry = {
@@ -616,6 +714,11 @@ def main():
         '--evals-only',
         action='store_true',
         help='When specified, run ONLY the eval subset (excludes non-eval configs).'
+    )
+    parent_parser.add_argument(
+        '--runner-node-filter',
+        required=False,
+        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
     )
 
     # Create main parser
@@ -728,9 +831,28 @@ def main():
         help='Runner type (e.g., b200-trt, h100)'
     )
     test_config_parser.add_argument(
-        '--runner-node-filter',
+        '--model-prefix',
+        nargs='+',
         required=False,
-        help='Filter runner nodes by substring match (e.g., "mi300x-amd" to only include nodes containing that string)'
+        help='Model prefix(es) to filter configurations (optional, can specify multiple)'
+    )
+    test_config_parser.add_argument(
+        '--precision',
+        nargs='+',
+        required=False,
+        help='Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)'
+    )
+    test_config_parser.add_argument(
+        '--framework',
+        nargs='+',
+        required=False,
+        help='Framework(s) to filter by (e.g., vllm, trt, sglang) (optional, can specify multiple)'
+    )
+    test_config_parser.add_argument(
+        '--conc',
+        type=int,
+        required=False,
+        help='Override concurrency value for all runs (default: uses lowest concurrency from config)'
     )
     test_node_group = test_config_parser.add_mutually_exclusive_group(
         required=True)
@@ -762,6 +884,13 @@ def main():
         nargs='+',
         required=True,
         help='One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)'
+    )
+    test_config_keys_parser.add_argument(
+        '--conc',
+        nargs='+',
+        type=int,
+        required=False,
+        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',

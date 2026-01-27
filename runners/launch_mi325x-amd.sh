@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
-export PORT_OFFSET=${USER: -1}
+export PORT=$(( 8888 + ${USER: -1} ))
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -24,6 +24,6 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x_slurm.sh
+bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
 
 scancel $JOB_ID
