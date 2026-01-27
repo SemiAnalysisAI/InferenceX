@@ -669,7 +669,7 @@ dsr1-fp8-h200-trt-mtp:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.0
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200-multinode-slurm
