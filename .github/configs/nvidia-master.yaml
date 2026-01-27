@@ -443,7 +443,7 @@ gptoss-fp4-h200-vllm:
 dsr1-fp4-gb200-dynamo-trt:
   image: /mnt/lustre01/artifacts/containers/dynamo-0.8.1.post2.test.sqsh
   # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
-  model: /mnt/numa1/groups/sa-shared/models/deepseek-r1-0528-nvfp4-v2/
+  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2/
   model-prefix: dsr1
   runner: gb200
   precision: fp4
