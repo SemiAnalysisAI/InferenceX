@@ -1,5 +1,5 @@
 name: "Run Sweep"
-run-name: Run Sweep - ${{ github.event.pull_request.title || github.ref_name }}
+run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
 
 concurrency:
     group: sweep-${{ github.event.pull_request.number || github.sha }}
