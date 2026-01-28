@@ -279,3 +279,5 @@
   description:
     - "Update tensorrt-llm container to release:1.2.0rc6.post2"
     - "update configurations for improved performance"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/594
+
