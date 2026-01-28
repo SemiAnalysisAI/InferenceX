@@ -33,11 +33,7 @@ DELAY_BATCHING="false"
 KV_CACHE_FREE_MEM_FRACTION=0.8
 
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -ge 256 ]]; then
-        CUDA_GRAPH_MAX_BATCH_SIZE=$(( $CONC / 8 ))
-        MOE_BACKEND="DEEPGEMM"
-        KV_CACHE_FREE_MEM_FRACTION=0.7
-    elif [[ $CONC -ge 64 ]]; then
+    if [[ $CONC -ge 64 ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
         DELAY_BATCHING="true"
     fi

@@ -160,7 +160,6 @@ dsr1-fp8-b200-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256}
     - { tp: 8, ep: 1, conc-start: 64, conc-end: 128 }
     - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 } 
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
