@@ -1,5 +1,5 @@
 dsr1-fp4-b200-dynamo-trt:
-  image: /scratch/fsw/containers/dynamo-0.8.1.post1.sqsh
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-r1-fp4
   model-prefix: dsr1
   runner: b200-multinode-slurm
