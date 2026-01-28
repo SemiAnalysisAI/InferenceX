@@ -55,6 +55,14 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
+NGINX_IMAGE="nginx:1.27.4"
+
+SQUASH_FILE="/mnt/lustre01/artifacts/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/mnt/lustre01/artifacts/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 echo "Creating srtslurm.yaml configuration..."
@@ -77,8 +85,9 @@ srtctl_root: "${SRTCTL_ROOT}"
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
-  dynamo-trtllm: ${IMAGE}
-  nginx-sqsh: "/mnt/lustre01/artifacts/containers/nginx+1.27.4.sqsh"
+  dynamo-trtllm: ${SQUASH_FILE}
+  dynamo-sglang: ${SQUASH_FILE}
+  nginx-sqsh: ${NGINX_SQUASH_FILE}
 EOF
 
 echo "Generated srtslurm.yaml:"
