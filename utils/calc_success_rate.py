@@ -3,10 +3,28 @@ import os
 import re
 import sys
 from enum import Enum
+from pathlib import Path
 
+import yaml
 from github import Auth, Github
 
-GPU_SKUS = ["h100", "h200", "gb200", "mi300x", "mi325x", "mi355x", "b200"]
+
+def load_gpu_skus():
+    """Load GPU SKUs from runners.yaml, extracting the part before the first hyphen from each key."""
+    runners_path = Path(__file__).parent.parent / ".github" / "configs" / "runners.yaml"
+    with open(runners_path) as f:
+        runners = yaml.safe_load(f)
+
+    skus = set()
+    for key in runners.keys():
+        # Extract part before first hyphen, or whole key if no hyphen
+        sku = key.split("-")[0]
+        skus.add(sku)
+
+    return list(skus)
+
+
+GPU_SKUS = load_gpu_skus()
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 RUN_ID = os.environ.get("GITHUB_RUN_ID")
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
@@ -53,7 +71,8 @@ def calculate_gpu_success_rates():
     success_runs = {sku: 0 for sku in GPU_SKUS}
     total_runs = {sku: 0 for sku in GPU_SKUS}
 
-    for job in run.jobs():
+    # Use _filter="all" to include jobs from all attempts (retries), not just the latest
+    for job in run.jobs(_filter="all"):
         job_name = job.name
         conclusion = job.conclusion  # success, failure, cancelled, or skipped
         gpu = extract_gpu_from_name(job_name)
