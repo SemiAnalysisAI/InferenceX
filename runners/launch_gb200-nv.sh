@@ -169,6 +169,7 @@ else
         for result_file in $RESULT_FILES; do
             if [ -f "$result_file" ]; then
                 # Extract metadata from filename
+                # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
                 filename=$(basename "$result_file")
                 concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
                 gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
