@@ -42,6 +42,10 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
+SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
@@ -65,7 +69,7 @@ model_paths:
 
 # Container aliases
 containers:
-  dynamo-trtllm: "${IMAGE}"
+  dynamo-trtllm: "${SQUASH_FILE}"
 
 use_exclusive_sbatch_directive: true
 
