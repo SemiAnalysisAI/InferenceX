@@ -57,8 +57,8 @@ export OSL="$OSL"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/mnt/lustre01/artifacts/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/mnt/lustre01/artifacts/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
@@ -129,7 +129,7 @@ echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
 
-cat "outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
+
 
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
@@ -141,6 +141,14 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 echo "Found logs directory: $LOGS_DIR"
+
+cat $LOGS_DIR/sweep_$JOB_ID.log
+
+for file in $LOGS_DIR/*; do
+    if [ -f "$file" ]; then
+        tail -n 500 $file
+    fi
+done
 
 # Find all result subdirectories
 RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
