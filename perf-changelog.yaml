@@ -277,7 +277,12 @@
 - config-keys:
     - dsr1-fp8-b200-trt
   description:
-    - "Update tensorrt-llm container to release:1.2.0rc6.post2"
-    - "update configurations for improved performance"
+    - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
+    - "Change default MOE backend from DEEPGEMM to TRTLLM"
+    - "Add dynamic piecewise CUDA graphs for 1k1k (CONC≥64) and 8k1k (CONC≥64) workloads"
+    - "Add delay batching (batch_wait_timeout_iters/batch_wait_max_tokens_ratio) for 1k1k high-concurrency"
+    - "Add dynamic KV cache memory fraction tuning (0.7-0.8) based on ISL/OSL/TP configuration"
+    - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
+    - "Add TLLM_OVERRIDE_LAYER_NUM=61 to avoid OOM errors"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/594
 
