@@ -130,7 +130,7 @@ jobs:
 
             **Valid image formats (publicly accessible):**
             - Docker Hub: `organization/image:tag` (e.g., `lmsysorg/sglang:v0.5.7-rocm700-mi35x`)
-            - NGC: `nvcr.io/nvidia/...` (e.g., `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1`)
+            - NGC: `nvcr.io/nvidia/...` or `nvcr.io#nvidia/...` (e.g., `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1` or `nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2`)
             - Other public registries: `ghcr.io/...`, `quay.io/...`, `rocm/...`
 
             **Invalid image formats (NOT publicly accessible):**
