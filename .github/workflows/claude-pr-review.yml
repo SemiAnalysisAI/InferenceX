@@ -125,6 +125,24 @@ jobs:
 
             Remember: Silence is golden. No comment is better than a low-value comment.
 
+            ## Container Image Accessibility Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL `image:` values are publicly accessible:
+
+            **Valid image formats (publicly accessible):**
+            - Docker Hub: `organization/image:tag` (e.g., `lmsysorg/sglang:v0.5.7-rocm700-mi35x`)
+            - NGC: `nvcr.io/nvidia/...` (e.g., `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1`)
+            - Other public registries: `ghcr.io/...`, `quay.io/...`, `rocm/...`
+
+            **Invalid image formats (NOT publicly accessible):**
+            - Local file paths: `/scratch/...`, `/home/...`, `/data/...`, or any path starting with `/`
+            - `.sqsh` files (squashfs containers stored locally)
+            - Internal/private registry paths that are not publicly resolvable
+
+            If any `image:` field contains a local path or non-public image:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Image must be publicly accessible on NGC, Docker Hub, or another public registry. Local paths like `/scratch/...` or `.sqsh` files are not reproducible. Please push the container to a public registry (e.g., `nvcr.io/nvidia/...` for NGC) and update the config with the public image reference."
+            - Link to the specific line with the invalid image path
+
             ## vLLM and SGLang Source Code Access:
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
             - Use `mcp__inferencemax-repos__*` tools to access repository source code
