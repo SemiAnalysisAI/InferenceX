@@ -13,6 +13,9 @@ check_env_vars \
     DP_ATTENTION \
     EP_SIZE
 
+# TensorRT bug. Remove when fixed
+sed -i '417d' /usr/local/lib/python3.12/dist-packages/tensorrt_llm/executor/result.py
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
