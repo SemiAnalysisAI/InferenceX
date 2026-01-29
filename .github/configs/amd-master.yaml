@@ -629,7 +629,8 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg:
-  image: rocm/pytorch-private:sglang-0.5.7-rocm700-mi35x-mori-fp4-0122
+  # image: rocm/pytorch-private:sglang-0.5.7-rocm700-mi35x-mori-fp4-0122
+  image: rocm/sgl-dev:sglang-0.5.6.post1-rocm700-mi35x-mori-0113
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg
