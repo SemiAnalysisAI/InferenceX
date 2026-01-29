@@ -277,5 +277,5 @@
 - config-keys:
   - dsr1-fp4-mi355x-sglang
   description:
-    - "Update SGL image to 0.5.8"
+    - "Update SGLang image from v0.5.7 to v0.5.8 for DeepSeek-R1 FP4 on MI355x"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/595
