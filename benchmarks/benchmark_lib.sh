@@ -409,7 +409,7 @@ run_lm_eval() {
 
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "utils/evals/${task}.yaml" \
+      --tasks "utils/evals/${task}.yaml gpqa_diamond_cot_n_shot utils/evals/math500.yaml" \
       --num_fewshot "${num_fewshot}" \
       --output_path "${results_dir}" --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
