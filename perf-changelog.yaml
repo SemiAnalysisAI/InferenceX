@@ -283,3 +283,9 @@
   description:
     - "Add DSR1 FP4 B300 Dynamo TRT configurations"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/585
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.7 to v0.5.8 for DeepSeek-R1 FP4 on MI355x"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/595
