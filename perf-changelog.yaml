@@ -237,16 +237,6 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/572
 
 - config-keys:
-    - dsr1-fp8-h200-dynamo-trt
-  description:
-    - "Add DSR1 FP8 H200 Dynamo TRT-LLM disaggregated multinode configuration"
-    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
-    - "Runner: h200-dgxc with multinode and disagg enabled"
-    - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
-    - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
-
-- config-keys:
     # NVIDIA single-node
     - dsr1-fp4-b200-sglang
     - dsr1-fp4-b200-trt
@@ -309,3 +299,13 @@
     - "Update TRTLLM version to 1.2.0rc6.post2"
     - "Transform to use srt-slurm recipes"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/588
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add DSR1 FP8 H200 Dynamo TRT-LLM disaggregated multinode configuration"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
+    - "Runner: h200-dgxc with multinode and disagg enabled"
+    - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
+    - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
