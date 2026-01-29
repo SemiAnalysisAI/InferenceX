@@ -3,7 +3,7 @@
 InferenceMAX™ runs our suite of benchmarks every night, continually re-benchmarking the world’s most popular open-source inference frameworks and models to track real performance in real time. As these software stacks improve, InferenceMAX™ captures that progress in near real-time, providing a live indicator of inference performance progress. A live dashboard is available for free publicly at https://inferencemax.ai/. 
 
 > [!IMPORTANT]
-> Only [InferenceMAX/InferenceMAX](https://github.com/InferenceMAX/InferenceMAX) repo contains the Official InferenceMAX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial
+> Only [InferenceMAX/InferenceMAX](https://github.com/InferenceMAX/InferenceMAX) repo contains the Official InferenceMAX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial.
 > Forks may not remove this disclaimer
 
 [Full Article Write Up for InferenceMAXv1](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
