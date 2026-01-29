@@ -4,37 +4,6 @@
 
 set -x
 
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
-
-git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR"
-git checkout sa-submission-q1-2026
-
-echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
-uv venv
-source .venv/bin/activate
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
-
-echo "Configs available at: $SRT_REPO_DIR/"
-
-# Set up environment variables for SLURM
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
-export SLURM_JOB_NAME="benchmark-dynamo.job"
-
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
@@ -60,8 +29,10 @@ else
     export MODEL_PATH=$MODEL
 fi
 
-export ISL="$ISL"
-export OSL="$OSL"
+# Set up environment variables for SLURM
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
+export SLURM_JOB_NAME="benchmark-dynamo.job"
 
 NGINX_IMAGE="nginx:1.27.4"
 
@@ -70,6 +41,81 @@ NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | 
 
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+
+
+
+export ISL="$ISL"
+export OSL="$OSL"
+
+if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    export IMAGE=$SQUASH_FILE
+    export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
+    bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
+    # Wait for all jobs to complete
+    echo "Waiting for all jobs to complete..."
+    while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+        echo "Jobs still running..."
+        squeue --steps -u $USER
+        sleep 30
+    done
+
+        # Find the latest log directory that contains the data
+    cat > collect_latest_results.py <<'PY'
+import os, sys
+sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+for path in sorted([f"{sgl_job_dir}/logs/{name}/vllm_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/vllm_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+    print(path)
+PY
+
+    LOGS_DIR=$(python3 collect_latest_results.py "$SGL_SLURM_JOBS_PATH" $ISL $OSL 1)
+    if [ -z "$LOGS_DIR" ]; then
+        echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
+        exit 1
+    fi
+
+    echo "Found logs directory: $LOGS_DIR"
+    ls -la $LOGS_DIR
+
+    # Result JSON are contained within the result directory
+    for result_file in $(find $LOGS_DIR -type f); do
+        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
+        file_name=$(basename $result_file)
+        if [ -f $result_file ]; then
+            # Copy the result file to workspace with a unique name
+            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
+            echo "Found result file ${result_file}. Copying them to ${WORKSPACE_RESULT_FILE}"
+            cp $result_file $WORKSPACE_RESULT_FILE
+        fi
+    done
+
+    exit 0
+fi
+
+echo "Cloning srt-slurm repository..."
+SRT_REPO_DIR="srt-slurm"
+if [ -d "$SRT_REPO_DIR" ]; then
+    echo "Removing existing $SRT_REPO_DIR..."
+    rm -rf "$SRT_REPO_DIR"
+fi
+
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
+git checkout sa-submission-q1-2026
+
+echo "Installing srtctl..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+
+if ! command -v srtctl &> /dev/null; then
+    echo "Error: Failed to install srtctl"
+    exit 1
+fi
+
+echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
@@ -136,8 +182,6 @@ done
 echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
-
-
 
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
