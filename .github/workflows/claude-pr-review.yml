@@ -162,7 +162,7 @@ jobs:
             - Makes benchmarks reproducible by anyone with access to the public image
             - Prevents reliance on pre-existing local container images that others cannot access
 
-            **Validation rules:**
+            **Validation Steps:**
             1. Look for `enroot import` commands that convert `docker://` images to local `.sqsh` files
             2. The image source should be a public registry (NGC, Docker Hub, etc.), not a local path
             3. If the script uses containers but does NOT have an `enroot import docker://` pattern:
