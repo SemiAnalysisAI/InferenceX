@@ -125,6 +125,53 @@ jobs:
 
             Remember: Silence is golden. No comment is better than a low-value comment.
 
+            ## Container Image Accessibility Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL `image:` values are publicly accessible:
+
+            **Valid image formats (publicly accessible):**
+            - Docker Hub: `organization/image:tag` (e.g., `lmsysorg/sglang:v0.5.7-rocm700-mi35x`)
+            - NGC: `nvcr.io/nvidia/...` or `nvcr.io#nvidia/...` (e.g., `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1` or `nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2`)
+            - Other public registries: `ghcr.io/...`, `quay.io/...`, `rocm/...`
+
+            **Invalid image formats (NOT publicly accessible):** 
+            - generally these images are not best practices to have in:
+            - Local file paths: `/scratch/...`, `/home/...`, `/data/...`, or any path starting with `/`
+            - `.sqsh` files (squashfs containers stored locally)
+            - Internal/private registry paths that are not publicly resolvable
+
+            If any `image:` field contains a local path or non-public image:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Image must be publicly accessible on NGC, Docker Hub, or another public registry. Local paths like `/scratch/...` or `.sqsh` files are generally not accepted. Please push the container to a public registry (e.g., `nvcr.io/nvidia/...` for NGC) and update the config with the public image reference."
+            - Link to the specific line with the invalid image path
+
+            ## Enroot Import Validation for Launch Scripts:
+            When reviewing changes to `runners/launch_*.sh` files, verify that the script properly transforms public Docker images to enroot local images for reproducibility.
+
+            **Expected pattern:**
+            The script should include an enroot import command like:
+            ```bash
+            srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+            ```
+            or similar variations such as:
+            ```bash
+            srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+            ```
+
+            **Why this matters:**
+            - Ensures the exact same public NGC/Docker Hub image is used
+            - Makes benchmarks reproducible by anyone with access to the public image
+            - Prevents reliance on pre-existing local container images that others cannot access
+
+            **Validation Steps:**
+            1. Look for `enroot import` commands that convert `docker://` images to local `.sqsh` files
+            2. The image source should be a public registry (NGC, Docker Hub, etc.), not a local path
+            3. If the script uses containers but does NOT have an `enroot import docker://` pattern:
+               - This is a 🟡 **WARNING** issue
+               - Comment: "This launch script uses container images but does not appear to transform a public Docker image to an enroot local image using `enroot import -o $SQUASH_FILE docker://$IMAGE`. For reproducibility, please either:
+                 1. Add the enroot import pattern to pull from a public registry, OR
+                 2. Explain why this script has a different workflow (e.g., uses a different container runtime, pre-built images are acceptable for this use case, etc.)"
+               - Ask the developer to provide a reasonable explanation if the pattern is intentionally omitted
+
             ## vLLM and SGLang Source Code Access:
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
             - Use `mcp__inferencemax-repos__*` tools to access repository source code
