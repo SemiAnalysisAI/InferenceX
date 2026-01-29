@@ -313,7 +313,7 @@
 - config-keys:
     - dsr1-fp4-gb200-dynamo-trt
   description:
-    - "Update Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.0"
+    - "Update Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.1.post2"
     - "Update TRT configurations"
     - "Refactor configurations to use CONFIG_FILE-based recipes instead of inline parameter settings"
     - "Introduce srt-slurm workflow for launching Dynamo jobs"
