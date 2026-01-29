@@ -264,3 +264,31 @@ jobs:
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
+
+    trigger-vercel-deploy:
+        needs:
+            [
+                sweep-single-node-1k1k,
+                sweep-single-node-1k8k,
+                sweep-single-node-8k1k,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-1k8k,
+                sweep-multi-node-8k1k,
+                collect-results,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main' &&
+            needs.collect-results.result == 'success' &&
+            (needs.sweep-single-node-1k1k.result == 'success' || needs.sweep-single-node-1k1k.result == 'skipped') &&
+            (needs.sweep-single-node-1k8k.result == 'success' || needs.sweep-single-node-1k8k.result == 'skipped') &&
+            (needs.sweep-single-node-8k1k.result == 'success' || needs.sweep-single-node-8k1k.result == 'skipped') &&
+            (needs.sweep-multi-node-1k1k.result == 'success' || needs.sweep-multi-node-1k1k.result == 'skipped') &&
+            (needs.sweep-multi-node-1k8k.result == 'success' || needs.sweep-multi-node-1k8k.result == 'skipped') &&
+            (needs.sweep-multi-node-8k1k.result == 'success' || needs.sweep-multi-node-8k1k.result == 'skipped')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger Vercel Deployment
+              run: |
+                  curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
