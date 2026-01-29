@@ -35,21 +35,29 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 export SLURM_JOB_NAME="benchmark-dynamo.job"
 
-# MODEL_PATH is set in `nvidia-master.yaml` or any other yaml files
-export MODEL_PATH=$MODEL
-
+# MODEL_PATH: Override with pre-downloaded paths on GB200 runner
+# The yaml files specify HuggingFace model IDs for portability, but we use
+# local paths to avoid repeated downloading on the shared GB200 cluster.
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
+    if [[ $MODEL_PREFIX == "dsr1" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+    else
+        export MODEL_PATH=$MODEL
+    fi
 elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     if [[ $MODEL_PREFIX == "gptoss" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
         export SERVED_MODEL_NAME="gpt-oss-120b"
     elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
     else
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
         exit 1
     fi
+else
+    export MODEL_PATH=$MODEL
 fi
 
 export ISL="$ISL"
