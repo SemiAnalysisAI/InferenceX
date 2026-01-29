@@ -279,7 +279,37 @@
   description:
     - "Update SGLang image from v0.5.7 to v0.5.8 for DeepSeek-R1 FP4 on MI355x"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/595
+  
+- config-keys:
+    - dsr1-fp8-b200-trt
+  description:
+    - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
+    - "Change default MOE backend from DEEPGEMM to TRTLLM"
+    - "Add dynamic piecewise CUDA graphs for 1k1k (CONC≥64) and 8k1k (CONC≥64) workloads"
+    - "Add delay batching (batch_wait_timeout_iters/batch_wait_max_tokens_ratio) for 1k1k high-concurrency"
+    - "Add dynamic KV cache memory fraction tuning (0.7-0.8) based on ISL/OSL/TP configuration"
+    - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
+    - "Add TLLM_OVERRIDE_LAYER_NUM=61 to avoid OOM errors"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/594
+  
+- config-keys:
+  - dsr1-fp4-b200-dynamo-trt
+  description:
+    - "Update DSR1 FP4 B200 Dynamo TRT configurations"
+    - "Update TRTLLM version to 1.2.0rc6.post2"
+    - "Transform to use srt-slurm recipes"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/588
 
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add DSR1 FP8 H200 Dynamo TRT-LLM disaggregated multinode configuration"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
+    - "Runner: h200-dgxc with multinode and disagg enabled"
+    - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
+    - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
+  
 - config-keys:
     - dsr1-fp4-gb200-dynamo-trt
   description:
