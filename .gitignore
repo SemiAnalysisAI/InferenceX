@@ -1,2 +1,5 @@
 **/__pycache__/**
 **/.coverage
+# Large data files
+experimental/multiturn/vllm_benchmark/sharegpt_20230401_clean_lang_split.json
+experimental/qwen_traceA_blksz_16.jsonl
