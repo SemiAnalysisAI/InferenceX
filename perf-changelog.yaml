@@ -275,6 +275,12 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/585
 
 - config-keys:
+  - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.7 to v0.5.8 for DeepSeek-R1 FP4 on MI355x"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/595
+  
+- config-keys:
     - dsr1-fp8-b200-trt
   description:
     - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
@@ -285,4 +291,3 @@
     - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
     - "Add TLLM_OVERRIDE_LAYER_NUM=61 to avoid OOM errors"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/594
-
