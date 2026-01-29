@@ -562,7 +562,7 @@ dsr1-fp8-b200-sglang:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
 dsr1-fp8-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200-trt
@@ -570,23 +570,23 @@ dsr1-fp8-b200-trt:
   framework: trt
   multinode: false
   seq-len-configs:
-  # For all sequence lengths, EP=TP
   - isl: 1024
     osl: 1024
     search-space:
-    # If CONC > 32, then DP_ATTN=true
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
+    - { tp: 8, ep: 1, conc-start: 64, conc-end: 128 }
+    - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 } 
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
   - isl: 1024
     osl: 8192
     search-space:
-    # If CONC > 64, then DP_ATTN=true
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256}
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }    
   - isl: 8192
     osl: 1024
     search-space:
-    # If CONC > 64, then DP_ATTN=true
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 1, conc-start: 64, conc-end: 256 }
+    - { tp: 4, ep: 1, conc-start: 8, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
 dsr1-fp8-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
