@@ -630,7 +630,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
 dsr1-fp4-mi355x-sglang-disagg:
   # image: rocm/pytorch-private:sglang-0.5.7-rocm700-mi35x-mori-fp4-0122
-  image: rocm/sgl-dev:v0.5.8-rocm700-mi35x-20260130
+  image: cquil11/v0.5.8-rocm700-mi35x:latest
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg
