@@ -39,7 +39,7 @@ cd "$SGL_SLURM_JOBS_PATH" || exit 1
 # Set up SGL launch script-specific environment variables
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
-export MODEL_NAME="DeepSeek-R1-MXFP4-Preview"
+export MODEL_NAME="DeepSeek-R1-0528-MXFP4-Preview"
 export CONTAINER_IMAGE=$IMAGE
 
 export PREFILL_ENABLE_EP=true
