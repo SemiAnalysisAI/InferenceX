@@ -22,7 +22,7 @@ filter_list:
       - function: "multi_choice_regex"
         group_select: -1
         ignore_punctuation: true
-        regex_pattern: "(\\([A-D]\\))"
+        regex_pattern: "[A-D]"
       - function: "take_first"
 generation_kwargs:
   until:

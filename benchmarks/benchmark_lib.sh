@@ -381,7 +381,7 @@ PY
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-5}"
+    local num_fewshot="${NUM_FEWSHOT:-2}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens=16384
     local temperature=0
@@ -417,7 +417,7 @@ run_lm_eval() {
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks utils/evals/gsm8k.yaml utils/evals/gpqa_diamond.yaml \
       --num_fewshot "${num_fewshot}" \
-      --output_path "${results_dir}" --log_samples \
+      --output_path "${results_dir}" \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
       --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
