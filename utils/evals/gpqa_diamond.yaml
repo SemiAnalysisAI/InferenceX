@@ -1,7 +1,7 @@
 # YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
 # Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 dataset_path: Idavidrein/gpqa
-dataset_name: gpqa_extended
+dataset_name: gpqa_diamond
 tag: gpqa
 task: gpqa_diamond_cot_n_shot
 output_type: generate_until
@@ -9,6 +9,7 @@ training_split: train
 # Because huggingface dataset only has train split
 validation_split: train
 test_split: null
+process_docs: !function utils.process_docs
 description: "Here are some example questions from experts. Answer the final question yourself. You must follow the format of the previous questions exactly: 'The answer is (X).', where X is your answer.\n"
 doc_to_text: "Question: {{Question}}\nChoices:\n(A) {{choice1}}\n(B) {{choice2}}\n(C) {{choice3}}\n(D) {{choice4}}"
 doc_to_target: answer

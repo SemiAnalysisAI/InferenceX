@@ -381,9 +381,9 @@ PY
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-2}"
+    local num_fewshot="${NUM_FEWSHOT:-0}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens=16384
+    local gen_max_tokens=18432
     local temperature=0
     local top_p=1
     local concurrent_requests=32
@@ -415,11 +415,11 @@ run_lm_eval() {
     ls -lt
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks utils/evals/gsm8k.yaml utils/evals/gpqa_diamond.yaml \
+      --tasks utils/evals/gpqa_diamond.yaml \
       --num_fewshot "${num_fewshot}" \
       --output_path "${results_dir}" \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
+      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -427,7 +427,7 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
-    local task="${EVAL_TASK:-gsm8k}"
+    local task="${EVAL_TASK:-gpqa_diamond}"
     local out_dir="${results_dir}"
     mkdir -p "$out_dir" || true
 
