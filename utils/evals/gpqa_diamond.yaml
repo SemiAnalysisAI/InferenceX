@@ -1,5 +1,7 @@
+# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
+# Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 dataset_path: Idavidrein/gpqa
-dataset_name: gpqa_diamond
+dataset_name: gpqa_extended
 tag: gpqa
 task: gpqa_diamond_cot_n_shot
 output_type: generate_until
