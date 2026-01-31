@@ -309,3 +309,12 @@
     - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
     - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
+  
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+  description:
+    - "Update Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.1.post2"
+    - "Update TRT configurations"
+    - "Refactor configurations to use CONFIG_FILE-based recipes instead of inline parameter settings"
+    - "Introduce srt-slurm workflow for launching Dynamo jobs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/510
