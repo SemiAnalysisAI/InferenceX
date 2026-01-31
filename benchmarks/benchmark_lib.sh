@@ -23,6 +23,18 @@ check_env_vars() {
     fi
 }
 
+# Setup torch profiler environment when ENABLE_PROFILE=true
+# IMPORTANT: This runs when the library is sourced (before server starts)
+# so that the server can detect VLLM_TORCH_PROFILER_DIR and enable profiler endpoints
+if [ "${ENABLE_PROFILE}" = "true" ]; then
+    # Only set default directory if VLLM_TORCH_PROFILER_DIR is not already set
+    if [ -z "${VLLM_TORCH_PROFILER_DIR}" ]; then
+        export VLLM_TORCH_PROFILER_DIR="/workspace/profiling"
+    fi
+    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+    echo "Torch profiler enabled. Output directory: $VLLM_TORCH_PROFILER_DIR"
+fi
+
 # Wait for server to be ready by polling the health endpoint
 # All parameters are required
 # Parameters:
@@ -106,6 +118,7 @@ wait_for_server_ready() {
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
 #   --server-pid: Optional server process ID to monitor during benchmark
+#   --enable-profile: Optional flag to enable torch profiler
 run_benchmark_serving() {
     set +x
     local model=""
@@ -121,6 +134,7 @@ run_benchmark_serving() {
     local workspace_dir=""
     local use_chat_template=false
     local server_pid=""
+    local enable_profile=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -175,6 +189,10 @@ run_benchmark_serving() {
             --server-pid)
                 server_pid="$2"
                 shift 2
+                ;;
+            --enable-profile)
+                enable_profile=true
+                shift
                 ;;
             *)
                 echo "Unknown parameter: $1"
@@ -253,6 +271,11 @@ run_benchmark_serving() {
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Add --profile if torch profiler is enabled (via --enable-profile flag or ENABLE_PROFILE env var)
+    if [[ "$enable_profile" == true ]] || [[ "${ENABLE_PROFILE}" == "true" ]]; then
+        benchmark_cmd+=(--profile)
     fi
 
     # Run benchmark with optional server monitoring

@@ -32,6 +32,7 @@ docker run --rm --init --network host --name $server_name \
 -e NCCL_GRAPH_REGISTER=0 \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e RUN_EVAL -e RUNNER_TYPE \
+-e ENABLE_PROFILE -e VLLM_TORCH_PROFILER_DIR \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
 benchmarks/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}.sh"
