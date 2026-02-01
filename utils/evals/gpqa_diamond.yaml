@@ -2,41 +2,36 @@
 # Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 dataset_path: Idavidrein/gpqa
 dataset_name: gpqa_diamond
-tag: gpqa
-task: gpqa_diamond_cot_n_shot
+task: gpqa_diamond_cot_n_shot 
 output_type: generate_until
 training_split: train
-# Because huggingface dataset only has train split
 validation_split: train
 test_split: null
+
 process_docs: !function utils.process_docs
-description: "Here are some example questions from experts. Answer the final question yourself. You must follow the format of the previous questions exactly: 'The answer is (X).', where X is your answer.\n"
-doc_to_text: "Question: {{Question}}\nChoices:\n(A) {{choice1}}\n(B) {{choice2}}\n(C) {{choice3}}\n(D) {{choice4}}"
+
+doc_to_text: |
+  {{Question}}
+
+  (A) {{A}}
+  (B) {{B}}
+  (C) {{C}}
+  (D) {{D}}
+
+  Express your final answer as the corresponding option 'A', 'B', 'C', or 'D'.
 doc_to_target: answer
+
 filter_list:
-  - name: "strict-match"
+  - name: extract_abcd
     filter:
-      - function: "regex"
+      - function: regex
+        # last standalone A-D, optionally in parentheses
+        regex_pattern: "(?i)\\b\\(?([A-D])\\)?\\b"
         group_select: -1
-        regex_pattern: "(?<=answer is )(.*)(?=.)"
-      - function: "take_first"
-  - name: "flexible-extract"
-    filter:
-      - function: "multi_choice_regex"
-        group_select: -1
-        ignore_punctuation: true
-        regex_pattern: "[A-D]"
-      - function: "take_first"
-generation_kwargs:
-  until:
-    - "</s>"
-  do_sample: false
-  temperature: 0.0
+      - function: take_first
+
 metric_list:
   - metric: exact_match
     aggregation: mean
     higher_is_better: true
     ignore_case: true
-    ignore_punctuation: true
-metadata:
-  version: 2.0
