@@ -381,9 +381,9 @@ PY
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-0}"
+    local num_fewshot="${NUM_FEWSHOT:-2}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens=18432
+    local gen_max_tokens=16384
     local temperature=0
     local top_p=1
     local concurrent_requests=32
@@ -412,7 +412,6 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
-    ls -lt
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks utils/evals/gpqa_diamond.yaml \
@@ -427,7 +426,6 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
-    local task="${EVAL_TASK:-gpqa_diamond}"
     local out_dir="${results_dir}"
     mkdir -p "$out_dir" || true
 

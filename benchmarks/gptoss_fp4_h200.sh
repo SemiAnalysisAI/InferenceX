@@ -24,7 +24,7 @@ pip install datasets pandas
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
 elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
-    CALCULATED_MAX_MODEL_LEN=$(( (ISL + OSL) * 2 ))
+    CALCULATED_MAX_MODEL_LEN=$(( (ISL + OSL) + 200))
 else
     CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}  
 fi
@@ -63,7 +63,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC )) \
+    --num-prompts $(( $CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
