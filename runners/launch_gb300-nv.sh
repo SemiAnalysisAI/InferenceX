@@ -33,7 +33,14 @@ export SLURM_ACCOUNT="benchmark"
 
 export MODEL_PATH=$MODEL
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" ]]; then
+        export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
+    else
+        echo "Unsupported model prefix: $MODEL_PREFIX for dynamo-sglang."
+        exit 1
+    fi
+elif [[ $MODEL_PREFIX == "dsr1" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
 else
@@ -46,8 +53,13 @@ export ENROOT_ROOTFS_WRITABLE=1
 export ISL="$ISL"
 export OSL="$OSL"
 
+NGINX_IMAGE="nginx:1.27.4"
+
 SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
 
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
@@ -67,6 +79,8 @@ model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
+  dynamo-sglang: ${SQUASH_FILE}
+  nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF
 
