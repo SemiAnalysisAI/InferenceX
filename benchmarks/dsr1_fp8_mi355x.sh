@@ -38,8 +38,7 @@ python3 -m sglang.launch_server \
     --mem-fraction-static 0.8 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
-    --enable-torch-compile \
-    --cuda-graph-max-bs 128 > $SERVER_LOG 2>&1 &
+    --cuda-graph-max-bs $CONC > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
