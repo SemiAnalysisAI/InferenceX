@@ -325,3 +325,9 @@
     - "Disable torch.compile for MI355X DeepSeek-R1 FP8 SGLang"
     - "set cuda-graph-max-bs to CONC"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/613
+
+-config-keys:
+  - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Update GB200 Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.1.post2"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
