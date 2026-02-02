@@ -1724,9 +1724,8 @@ gptoss-fp4-h200-vllm:
     - { tp: 8, conc-start: 4, conc-end: 32 }
 
 dsr1-fp4-gb200-dynamo-trt:
-  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
-  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
-  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
   runner: gb200
   precision: fp4
@@ -1737,75 +1736,233 @@ dsr1-fp4-gb200-dynamo-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    # MTP configurations
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    # NOTE: Prefill tp and ep are always 4 because each GB200 node has 4 GPUs and
-    # ctx_tp_size is hardcoded to 4 in launch_gb200-nv.sh. Decode tp/ep matches gen_tp_size.
-    # For 1k/1k: prefill batch-size=4, max-num-tokens=4608
+    # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
-      conc-list: [ 1, 2, 4, 8, 16, 36 ]
+      conc-list: [ 180 ]
       prefill:
         num-worker: 1
         tp: 4
         ep: 4
-        dp-attn: false
+        dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 4, 8, 12, 24, 48 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
         tp: 8
         ep: 8
         dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=3"
-
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
     - spec-decoding: "mtp"
-      conc-list: [ 512, 1075 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-
-    - spec-decoding: "mtp"
-      conc-list: [ 2150 ]
+      conc-list: [ 4301 ]
       prefill:
         num-worker: 2
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
         tp: 16
         ep: 16
         dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 2253 ]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
         additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=1"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 16130 ]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
+      decode:
+        num-worker: 5
+        tp: 4
+        ep: 4
+        dp-attn: true
 
+
+    # Non-MTP configurations (default spec_decoding="none")
+    - conc-list: [ 4301 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [ 666 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 6144 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+    - conc-list: [ 12, 24, 48, 96, 192 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [ 5 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [ 4301 ]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [ 2253 ]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+  - isl: 1024
+    osl: 8192
+    search-space:
+    # MTP configurations (spec_decoding="mtp")
+    - spec-decoding: "mtp"
+      conc-list: [ 4, 8, 12, 24, 48 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen7_tep8_batch4_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen7_tep8_batch4_eplb0_mtp3.yaml"
+      decode:
+        num-worker: 7
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [ 7 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml"
+      decode:
+        num-worker: 7
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [ 128 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 512 ]
       prefill:
@@ -1814,363 +1971,328 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
         tp: 32
         ep: 32
         dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.6"
-        - "DECODE_MTP_SIZE=3"
-
     - spec-decoding: "mtp"
-      conc-list: [ 2252 ]
+      conc-list: [ 3072 ]
       prefill:
         num-worker: 1
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen3_dep16_batch64_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen3_dep16_batch64_eplb0_mtp3.yaml"
       decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
+        num-worker: 3
+        tp: 16
+        ep: 16
         dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=1"
-
-    # Non-MTP configurations (default spec_decoding="none")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 141 ]
+    - spec-decoding: "mtp"
+      conc-list: [ 6144 ]
       prefill:
         num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen3_dep16_batch128_eplb0_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen3_dep16_batch128_eplb0_mtp1.yaml"
+      decode:
+        num-worker: 3
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 8192 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch256_eplb288_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/mtp/ctx1_gen1_dep32_batch256_eplb288_mtp1.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+    # Non-MTP configurations (default spec_decoding="none")
+    - conc-list: [ 5 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 7
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [ 60 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen15_tep4_batch4_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen15_tep4_batch4_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 15
         tp: 4
         ep: 4
         dp-attn: false
+    - conc-list: [ 135 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen15_tep4_batch8_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen15_tep4_batch8_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 15
+        tp: 4
+        ep: 4
+        dp-attn: false
+    - conc-list: [ 563 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 2048 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch64_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch64_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 4096 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch128_eplb288_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch128_eplb288_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 8192 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch256_eplb288_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k8k/stp/ctx1_gen1_dep32_batch256_eplb288_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # MTP configurations (spec_decoding="mtp")
+    - spec-decoding: "mtp"
+      conc-list: [ 4, 8, 12, 24, 48 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
         tp: 8
         ep: 8
         dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=0"
-
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - conc-list: [ 1075 ]
+    - spec-decoding: "mtp"
+      conc-list: [ 180 ]
       prefill:
-        num-worker: 1
+        num-worker: 3
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
         tp: 32
         ep: 32
         dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 1229 ]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
         additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=0"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 666 ]
+      prefill:
+        num-worker: 8
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [ 4301 ]
+      prefill:
+        num-worker: 11
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
 
-    - conc-list: [ 1075 ]
+    # Non-MTP configurations (default spec_decoding="none")
+    - conc-list: [ 12, 44, 76 ]
       prefill:
         num-worker: 1
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
       decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [ 5 ]
+      prefill:
         num-worker: 1
-        tp: 16
-        ep: 16
+        tp: 4
+        ep: 4
         dp-attn: true
         additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-
-    - conc-list: [ 2048, 4300 ]
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [ 333 ]
       prefill:
         num-worker: 2
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-
-    - conc-list: [ 4300 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=4608"
-        - "PREFILL_MAX_BATCH_SIZE=4"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=512"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=0"
-
-  - isl: 8192
-    osl: 1024
-    search-space:
-    # MTP configurations (spec_decoding="mtp")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    # For 8k/1k: prefill batch-size=1, max-num-tokens=8448
-    - spec-decoding: "mtp"
-      conc-list: [ 1, 2, 4, 8, 18 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 3
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=3"
-
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - spec-decoding: "mtp"
-      conc-list: [ 128, 269 ]
-      prefill:
-        num-worker: 5
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 32
         ep: 32
         dp-attn: true
+    - conc-list: [ 1229 ]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
         additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=8"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-
-    - spec-decoding: "mtp"
-      conc-list: [ 538 ]
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 2253 ]
       prefill:
         num-worker: 8
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=3"
-
-    - spec-decoding: "mtp"
-      conc-list: [ 1075 ]
-      prefill:
-        num-worker: 8
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 16
         ep: 16
         dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=2"
-
-    - spec-decoding: "mtp"
-      conc-list: [ 2150 ]
+    - conc-list: [ 4096 ]
       prefill:
-        num-worker: 6
+        num-worker: 10
         tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=512"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=1"
-
-    # Non-MTP configurations (default spec_decoding="none")
-    # tep - Run Tensor-Expert Parallel mode (attention_dp=false)
-    - conc-list: [ 1, 2, 4, 8, 16, 34 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 3
-        tp: 8
-        ep: 8
-        dp-attn: false
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=32"
-        - "DECODE_MAX_BATCH_SIZE=32"
-        - "DECODE_GPU_MEM_FRACTION=0.9"
-        - "DECODE_MTP_SIZE=0"
-
-    # dep - Run Data-Expert Parallel mode (attention_dp=true)
-    - conc-list: [ 256, 538 ]
-      prefill:
-        num-worker: 4
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 32
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=16"
-        - "DECODE_MAX_BATCH_SIZE=16"
-        - "DECODE_GPU_MEM_FRACTION=0.7"
-        - "DECODE_MTP_SIZE=0"
-
-    - conc-list: [ 1075 ]
-      prefill:
-        num-worker: 6
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
         tp: 16
         ep: 16
         dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=64"
-        - "DECODE_MAX_BATCH_SIZE=64"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-
-    - conc-list: [ 2150 ]
-      prefill:
-        num-worker: 8
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=128"
-        - "DECODE_MAX_BATCH_SIZE=128"
-        - "DECODE_GPU_MEM_FRACTION=0.75"
-        - "DECODE_MTP_SIZE=0"
-
-    - conc-list: [ 2150 ]
-      prefill:
-        num-worker: 5
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_MAX_NUM_TOKENS=8448"
-        - "PREFILL_MAX_BATCH_SIZE=1"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_MAX_NUM_TOKENS=256"
-        - "DECODE_MAX_BATCH_SIZE=256"
-        - "DECODE_GPU_MEM_FRACTION=0.8"
-        - "DECODE_MTP_SIZE=0"
 
 dsr1-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.5.post2
-  # model: deepseek-ai/DeepSeek-R1-0528
-  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
-  model: /mnt/lustre01/models/deepseek-r1-0528
+  model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb200
   precision: fp8
@@ -2291,11 +2413,8 @@ dsr1-fp8-gb200-dynamo-sglang:
         - "DECODE_NODES=8"
 
 dsr1-fp4-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.5.post2
-  # TODO: what is the right name?
-  # model: deepseek-ai/DeepSeek-R1-0528-fp4-v2
-  # Models are pre-downloaded to this path on GB200 runner to avoid repeated downloading
-  model: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2
+  image: "lmsysorg/sglang:v0.5.5.post2"
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
   runner: gb200
   precision: fp4
