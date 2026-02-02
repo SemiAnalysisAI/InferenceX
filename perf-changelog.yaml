@@ -326,8 +326,8 @@
     - "set cuda-graph-max-bs to CONC"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/613
 
--config-keys:
-  - dsr1-fp4-gb300-dynamo-trt
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-trt
   description:
     - "Introduce new DSR1 FP4 GB300 Dynamo TRT configurations"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
