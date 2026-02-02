@@ -22,37 +22,20 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 hf download "$MODEL"
 
-# ========= Determine DP_ATTENTION, EP_SIZE and MOE_BACKEND based on ISL, OSL, CONC =========
+# ========= Determine other parameters based on ISL, OSL, CONC =========
+CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MOE_BACKEND="TRTLLM"
+PIECEWISE_CUDA_GRAPHS="false"
 
-if [[ "$TP" == "4" ]]; then
-    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 256 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
-    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-        if [[ $CONC -ge 256 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
-    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -gt 32 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+    if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+        PIECEWISE_CUDA_GRAPHS="true"
     fi
-elif [[ "$TP" == "8" ]]; then
-    if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -ge 256 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
-    elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-        if [[ $CONC -ge 256 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
-    elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-        if [[ $CONC -gt 32 ]]; then
-            MOE_BACKEND="CUTLASS"
-        fi
-    fi
+fi
+
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    MOE_BACKEND="CUTLASS"
+    CUDA_GRAPH_MAX_BATCH_SIZE=$(( $CONC / 4 ))
 fi
 
 echo "MOE_BACKEND set to '$MOE_BACKEND'"
@@ -64,7 +47,7 @@ EXTRA_CONFIG_FILE="dsr1-fp4.yml"
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 512
+    max_batch_size: $CUDA_GRAPH_MAX_BATCH_SIZE
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
@@ -90,6 +73,19 @@ set -x
 MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
+
+if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
+    # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
+    capture_tokens=(1 2 4 8 16 32 64 128)
+    capture_tokens+=( $(seq 256 256 $MAX_NUM_TOKENS))
+    CAPTURE_TOKENS_LIST=$(printf "%s, " "${capture_tokens[@]}")
+
+    cat << EOF >> $EXTRA_CONFIG_FILE
+torch_compile_config:
+    capture_num_tokens: [${CAPTURE_TOKENS_LIST%, }]
+    enable_piecewise_cuda_graph: true 
+EOF
+fi
 
 # Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
