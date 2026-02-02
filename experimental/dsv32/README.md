@@ -144,3 +144,15 @@ Thus:
 
 ```bash
 python3 bench.py --batch-size 32 --min-len 2048 --max-len 131072 --step 2048 --topk 2048
+```
+
+
+---
+
+<img width="1462" height="1004" alt="image" src="https://github.com/user-attachments/assets/95ab200b-328e-4298-ab50-27243b5fd1a3" />
+
+ 
+
+<img width="2084" height="727" alt="image" src="https://github.com/user-attachments/assets/120dc407-ea49-4af6-b5cb-24a831a34224" />
+
+
