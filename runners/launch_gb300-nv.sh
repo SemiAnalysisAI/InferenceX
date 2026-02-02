@@ -79,8 +79,8 @@ model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
-  dynamo-sglang: ${SQUASH_FILE}
-  nginx-sqsh: ${NGINX_SQUASH_FILE}
+  lmsysorg/sglang:v0.5.8-cu130-runtime: ${SQUASH_FILE}
+  nginx: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF
 
