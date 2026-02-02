@@ -1,0 +1,291 @@
+name: Docker Tag Monitor
+
+on:
+  schedule:
+    # Run daily at 6:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run - report but do not create issues'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  check-docker-tags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      updates_found: ${{ steps.check-tags.outputs.updates_found }}
+      update_summary: ${{ steps.check-tags.outputs.update_summary }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml requests
+
+      - name: Check Docker Hub tags
+        id: check-tags
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import re
+          import json
+          import yaml
+          import requests
+          from datetime import datetime, timedelta
+
+          # Docker Hub repositories to monitor
+          REPOS_TO_MONITOR = {
+              "sglang-cuda": {
+                  "repo": "lmsysorg/sglang",
+                  "tag_patterns": [
+                      r"^v\d+\.\d+\.\d+(-\w+)?-cu\d+-amd64$",  # e.g., v0.5.7-cu129-amd64
+                  ],
+                  "platform": "nvidia"
+              },
+              "sglang-rocm": {
+                  "repo": "lmsysorg/sglang",
+                  "tag_patterns": [
+                      r"^v\d+\.\d+\.\d+(-\w+)?-rocm\d+-mi\d+x?$",  # e.g., v0.5.8-rocm700-mi35x
+                  ],
+                  "platform": "amd"
+              },
+              "vllm-cuda": {
+                  "repo": "vllm/vllm-openai",
+                  "tag_patterns": [
+                      r"^v\d+\.\d+\.\d+$",  # e.g., v0.13.0
+                  ],
+                  "platform": "nvidia"
+              },
+              "vllm-rocm": {
+                  "repo": "vllm/vllm-openai-rocm",
+                  "tag_patterns": [
+                      r"^v\d+\.\d+\.\d+$",  # e.g., v0.14.0
+                  ],
+                  "platform": "amd"
+              }
+          }
+
+          def get_dockerhub_tags(repo, page_size=100):
+              """Fetch tags from Docker Hub API."""
+              url = f"https://hub.docker.com/v2/repositories/{repo}/tags"
+              params = {"page_size": page_size, "ordering": "last_updated"}
+
+              try:
+                  response = requests.get(url, params=params, timeout=30)
+                  response.raise_for_status()
+                  return response.json().get("results", [])
+              except requests.RequestException as e:
+                  print(f"Error fetching tags for {repo}: {e}")
+                  return []
+
+          def filter_release_tags(tags, patterns):
+              """Filter tags matching release patterns."""
+              release_tags = []
+              for tag in tags:
+                  tag_name = tag.get("name", "")
+                  for pattern in patterns:
+                      if re.match(pattern, tag_name):
+                          release_tags.append({
+                              "name": tag_name,
+                              "last_updated": tag.get("last_updated", ""),
+                              "digest": tag.get("digest", "")
+                          })
+                          break
+              return release_tags
+
+          def parse_version(tag_name):
+              """Extract version tuple from tag name for comparison."""
+              match = re.search(r'v(\d+)\.(\d+)\.(\d+)', tag_name)
+              if match:
+                  return tuple(map(int, match.groups()))
+              return (0, 0, 0)
+
+          def get_current_versions_from_configs():
+              """Extract current image versions from config files."""
+              current_versions = {}
+              config_files = [
+                  ".github/configs/nvidia-master.yaml",
+                  ".github/configs/amd-master.yaml"
+              ]
+
+              for config_file in config_files:
+                  try:
+                      with open(config_file, 'r') as f:
+                          config = yaml.safe_load(f)
+
+                      for key, value in config.items():
+                          if isinstance(value, dict) and "image" in value:
+                              image = value["image"]
+                              # Parse image:tag format
+                              if "lmsysorg/sglang:" in image:
+                                  tag = image.split(":")[-1]
+                                  if "cu" in tag:
+                                      current_versions.setdefault("sglang-cuda", set()).add(tag)
+                                  elif "rocm" in tag:
+                                      current_versions.setdefault("sglang-rocm", set()).add(tag)
+                              elif "vllm/vllm-openai-rocm:" in image:
+                                  tag = image.split(":")[-1]
+                                  current_versions.setdefault("vllm-rocm", set()).add(tag)
+                              elif "vllm/vllm-openai:" in image:
+                                  tag = image.split(":")[-1]
+                                  current_versions.setdefault("vllm-cuda", set()).add(tag)
+                  except Exception as e:
+                      print(f"Error reading {config_file}: {e}")
+
+              return current_versions
+
+          def main():
+              updates = []
+              current_versions = get_current_versions_from_configs()
+
+              print("Current versions in configs:")
+              for key, versions in current_versions.items():
+                  print(f"  {key}: {versions}")
+              print()
+
+              for name, config in REPOS_TO_MONITOR.items():
+                  print(f"Checking {name} ({config['repo']})...")
+
+                  tags = get_dockerhub_tags(config["repo"])
+                  if not tags:
+                      print(f"  No tags found or API error")
+                      continue
+
+                  release_tags = filter_release_tags(tags, config["tag_patterns"])
+                  print(f"  Found {len(release_tags)} release tags")
+
+                  if not release_tags:
+                      continue
+
+                  # Sort by version (newest first)
+                  release_tags.sort(key=lambda x: parse_version(x["name"]), reverse=True)
+
+                  # Get latest tag
+                  latest_tag = release_tags[0]
+                  latest_version = parse_version(latest_tag["name"])
+
+                  print(f"  Latest: {latest_tag['name']} (updated: {latest_tag['last_updated'][:10] if latest_tag['last_updated'] else 'unknown'})")
+
+                  # Check if we have this version
+                  current = current_versions.get(name, set())
+                  has_latest = any(parse_version(v) >= latest_version for v in current)
+
+                  if not has_latest:
+                      updates.append({
+                          "name": name,
+                          "repo": config["repo"],
+                          "platform": config["platform"],
+                          "latest_tag": latest_tag["name"],
+                          "latest_updated": latest_tag["last_updated"][:10] if latest_tag["last_updated"] else "unknown",
+                          "current_versions": list(current),
+                          "all_recent_tags": [t["name"] for t in release_tags[:5]]
+                      })
+                      print(f"  ** UPDATE AVAILABLE: {latest_tag['name']} **")
+                  else:
+                      print(f"  Up to date")
+                  print()
+
+              # Output results
+              updates_found = "true" if updates else "false"
+
+              if updates:
+                  summary = json.dumps(updates)
+              else:
+                  summary = "[]"
+
+              # Write to GitHub output
+              with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a") as f:
+                  f.write(f"updates_found={updates_found}\n")
+                  # Escape newlines for multiline output
+                  f.write(f"update_summary={summary}\n")
+
+              print(f"\n{'='*50}")
+              print(f"Updates found: {updates_found}")
+              if updates:
+                  print(f"Updates: {json.dumps(updates, indent=2)}")
+
+          if __name__ == "__main__":
+              main()
+          EOF
+
+  create-update-issue:
+    needs: check-docker-tags
+    if: needs.check-docker-tags.outputs.updates_found == 'true' && inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create update issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const updates = JSON.parse('${{ needs.check-docker-tags.outputs.update_summary }}');
+
+            // Build issue body
+            let body = `## Docker Image Updates Available\n\n`;
+            body += `New release tags have been detected on Docker Hub. Please review and update the configurations.\n\n`;
+
+            // Group by platform
+            const nvidiaUpdates = updates.filter(u => u.platform === 'nvidia');
+            const amdUpdates = updates.filter(u => u.platform === 'amd');
+
+            if (nvidiaUpdates.length > 0) {
+              body += `### NVIDIA / CUDA Updates\n\n`;
+              body += `| Image | Latest Tag | Current Tags | Last Updated |\n`;
+              body += `|-------|------------|--------------|---------------|\n`;
+              for (const update of nvidiaUpdates) {
+                const currentTags = update.current_versions.length > 0 ? update.current_versions.join(', ') : 'None';
+                body += `| ${update.repo} | \`${update.latest_tag}\` | ${currentTags} | ${update.latest_updated} |\n`;
+              }
+              body += `\n`;
+            }
+
+            if (amdUpdates.length > 0) {
+              body += `### AMD / ROCm Updates\n\n`;
+              body += `| Image | Latest Tag | Current Tags | Last Updated |\n`;
+              body += `|-------|------------|--------------|---------------|\n`;
+              for (const update of amdUpdates) {
+                const currentTags = update.current_versions.length > 0 ? update.current_versions.join(', ') : 'None';
+                body += `| ${update.repo} | \`${update.latest_tag}\` | ${currentTags} | ${update.latest_updated} |\n`;
+              }
+              body += `\n`;
+            }
+
+            body += `### Recent Tags Available\n\n`;
+            for (const update of updates) {
+              body += `**${update.name}** ([Docker Hub](https://hub.docker.com/r/${update.repo}/tags)):\n`;
+              body += `- ${update.all_recent_tags.map(t => `\`${t}\``).join(', ')}\n\n`;
+            }
+
+            body += `---\n\n`;
+            body += `@claude Please update the configurations in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\` `;
+            body += `with the new image tags listed above. For each update:\n\n`;
+            body += `1. Update the image tags in the appropriate config files\n`;
+            body += `2. Add an entry to \`perf-changelog.yaml\`\n`;
+            body += `3. Run validation benchmarks using \`test-config\` for affected configurations\n\n`;
+            body += `Focus on single-node configurations first.\n`;
+
+            // Create the issue
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Auto] Docker Image Updates Available - ${new Date().toISOString().split('T')[0]}`,
+              body: body,
+              labels: ['docker-update', 'claude-task']
+            });
+
+            console.log(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
