@@ -21,6 +21,9 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    elif [[ $MODEL_PREFIX == "dsr1-fp8" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528/"
+        export SERVED_MODEL_NAME="deepseek-r1-fp8"
     else
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
         exit 1
@@ -41,8 +44,6 @@ NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | 
 
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
-
-
 
 export ISL="$ISL"
 export OSL="$OSL"
