@@ -2769,7 +2769,6 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
   # 8k1k STP configs
-    search-space:
     - conc-list: [1229]
       prefill:
         num-worker: 5
