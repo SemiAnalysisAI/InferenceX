@@ -71,6 +71,7 @@ model_paths:
 containers:
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
+  nginx: "/data/containers/nginx+1.27.4.sqsh"
 EOF
 
 echo "Generated srtslurm.yaml:"
