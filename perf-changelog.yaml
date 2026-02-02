@@ -309,3 +309,9 @@
     - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
     - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "Experimental"
+  pr-link: experimental
