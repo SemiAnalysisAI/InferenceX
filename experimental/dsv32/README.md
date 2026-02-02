@@ -1,13 +1,13 @@
 ## Experimental: DeepSeek Sparse Attention
 
-This note summarizes an approximate **decode-time** compute + memory model for **DeepSeek Sparse Attention (DSA)**.
+Approximate **decode-time** compute + memory model for **DeepSeek Sparse Attention (DSA)**.
 
 ---
 
 ### Symbols
 
-- $H$: number of query heads (a.k.a. $h$)
-- $D$: head dim for the *indexer* dot product (a.k.a. $d$)
+- $H$: number of query heads
+- $D$: head dim for the *indexer* dot product
 - $L$: full context length (a.k.a. $n$ or $n_\text{ctx}$)
 - $k$: sparse selection size (Top-k)
 - $d_{qk}$: per-head QK dimension
