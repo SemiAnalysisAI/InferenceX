@@ -293,9 +293,15 @@ run_benchmark_serving() {
 # ------------------------------
 
 _install_lm_eval_deps() {
-    python3 -m pip install -q --no-cache-dir "lm-eval[api]" || true
-    python3 -m pip install -q --no-cache-dir --no-deps \
-        "git+https://github.com/EleutherAI/lm-evaluation-harness.git@b315ef3b05176acc9732bb7fdec116abe1ecc476" || true
+    python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
+    local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
+    if command -v git >/dev/null 2>&1; then
+        python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            "git+https://github.com/EleutherAI/lm-evaluation-harness.git@${lm_eval_ref}" || true
+    else
+        python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
+    fi
 }
 
 # Patch lm-eval filters to be robust to empty strings via sitecustomize
@@ -406,14 +412,13 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
-
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "utils/evals/${task}.yaml" \
       --num_fewshot "${num_fewshot}" \
-      --output_path "${results_dir}" --log_samples \
+      --output_path "${results_dir}" \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
+      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -421,7 +426,6 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
-    local task="${EVAL_TASK:-gsm8k}"
     local out_dir="${results_dir}"
     mkdir -p "$out_dir" || true
 

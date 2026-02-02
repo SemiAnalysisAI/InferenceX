@@ -27,8 +27,8 @@ InferenceMAX is an open-source, automated benchmarking system that continuously 
 │   │   └── benchmark_utils.py         # Utility functions
 │   ├── evals/               # Eval task definitions for lm-eval
 │   │   ├── EVALS.md         # Evals documentation
-│   │   ├── gsm8k.yaml       # Grade school math eval task
-│   │   └── math500.yaml     # Math eval task
+│   │   ├── gsm8k.yaml
+│   │   └── gpqa_diamond.yaml
 │   ├── collect_eval_results.py  # Aggregates eval results
 │   ├── process_result.py    # Post-processes benchmark results
 │   ├── process_changelog.py # Processes perf-changelog.yaml
@@ -221,10 +221,6 @@ This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate
 ### Eval Framework: lm-eval
 
 The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`).
-
-**Available eval tasks** (in `utils/evals/`):
-- `gsm8k.yaml` - Grade school math questions
-- `math500.yaml` - Math questions (algebra, probability, trigonometry, geometry)
 
 ### Running Evals via CLI
 
