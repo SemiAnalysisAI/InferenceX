@@ -9,7 +9,7 @@ This note summarizes an approximate **decode-time** compute + memory model for *
 - $H$: number of query heads (a.k.a. $h$)
 - $D$: head dim for the *indexer* dot product (a.k.a. $d$)
 - $L$: full context length (a.k.a. $n$ or $n_\text{ctx}$)
-- $k$: sparse selection size (Top-$k$)
+- $k$: sparse selection size (Top-k)
 - $d_{qk}$: per-head QK dimension
 - $d_v$: per-head V dimension
 
@@ -41,7 +41,7 @@ From the [vllm blog](https://blog.vllm.ai/2025/09/29/deepseek-v3-2.html), the re
 #### Result
 
 Indexer FLOPs:
-- $$\text{FLOPs}_\text{indexer} \;=\; 2LHD \;+\; L(2H-1)$$
+- $$\text{FLOPs}_\text{indexer} = 2LHD + L(2H-1)$$
 
 ---
 
@@ -55,29 +55,29 @@ For **one head**:
 - **PV FLOPs** for 1 token: $2 \cdot 1 \cdot N \cdot d_v$
 
 So per head:
-- $$\text{FLOPs}_\text{1 head} \;=\; 2N(d_{qk} + d_v)$$
+- $\text{FLOPs}\_{\text{1 head}} = 2N(d_{qk} + d_v) $
 
 Multiply by number of query heads $H$:
-- $$\text{FLOPs}_\text{MLA}(N) \;=\; 2H N (d_{qk} + d_v)$$
+- $\text{FLOPs}\_\text{MLA}(N) = 2H N (d_{qk} + d_v)$
 
 In the baseline (dense) case, $N = L$:
-- $$\text{FLOPs}_\text{MLA,dense} \;=\; 2H L (d_{qk} + d_v)$$
+- $\text{FLOPs}\_\text{MLA,dense} = 2H L (d_{qk} + d_v)$
 
 ---
 
 ### 3) DSA Decode FLOPs (sparse)
 
-For **Sparse DSA MLA**, the attention context is restricted to Top-$k$:
+For **Sparse DSA MLA**, the attention context is restricted to Top-k:
 - $N = k$
 
 So:
-- $$\text{FLOPs}_\text{MLA,sparse} \;=\; 2H k (d_{qk} + d_v)$$
+- $\text{FLOPs}\_\text{MLA,sparse} = 2H k (d_{qk} + d_v)$
 
 Total DSA decode FLOPs:
-- $$\text{FLOPs}_\text{DSA decode} \;=\; \text{FLOPs}_\text{indexer} \;+\; \text{FLOPs}_\text{MLA}(k)$$
+- $\text{FLOPs}\_\text{DSA decode} = \text{FLOPs}\_\text{indexer} + \text{FLOPs}_\text{MLA}(k)$
 
 Baseline dense MLA decode FLOPs:
-- $$\text{FLOPs}_\text{baseline decode} \;=\; \text{FLOPs}_\text{MLA}(L)$$
+- $\text{FLOPs}\_\text{baseline decode} = \text{FLOPs}_\text{MLA}(L)$
 
 ---
 
@@ -85,31 +85,31 @@ Baseline dense MLA decode FLOPs:
 
 ### KV cache sizes
 
-Two KV formats are referenced:
+Two KV formats:
 
-1. **Indexer KV (from vLLM code)**
+1. **Indexer KV (from [vLLM code](https://github.com/vllm-project/vllm/blob/6fa6e7ef0c9b485e8a684211e96691731aad6faa/vllm/utils/deep_gemm.py#L305))**
    - `kv_cache_fp8` is `uint8` with shape `[num_blocks, block_size, 1, D+4]`
    - Interpreted as **$(D+4)$ bytes per token** for indexer KV reads
 
-2. **FlashMLA KV (from vLLM docs)**
+2. **FlashMLA KV (from [vLLM docs](https://docs.vllm.ai/en/stable/api/vllm/v1/attention/backends/mla/flashmla_sparse/))**
    - Each token’s KV cache: **656 bytes**
    - Breakdown: 512 bytes fp8 “NoPE” + 16 bytes (4 float32 scales) + 128 bytes (64 bf16 RoPE)
 
 So:
-- Indexer KV bytes per token: $$b_\text{idxKV} = D + 4$$
-- FlashMLA KV bytes per token: $$b_\text{MLAKV} = 656$$
+- Indexer KV bytes per token: $b_\text{idxKV} = D + 4$
+- FlashMLA KV bytes per token: $b_\text{MLAKV} = 656$
 
 ---
 
 ### 1) Indexer bytes per token
 
-Assumptions / operations:
+Operations:
 
 1. Read $Q$ once: $(H, D)$ in fp8  
 2. Read head weights once: $(H)$ in fp32  
 3. Read KV for full context: $L(D+4)$  
-4. Compute logits + run Top-$k$: write + read logits of length $L$  
-5. Write Top-$k$ indices as int32: $4k$
+4. Compute logits + run Top-k: write + read logits of length $L$  
+5. Write Top-k indices as int32: $4k$
 
 Let:
 
@@ -118,11 +118,11 @@ Let:
 - $b_\ell$: bytes per logit element (e.g., fp16 = 2, fp32 = 4)
 
 Then:
-- $$\text{Bytes}_\text{indexer} \;=\; b_Q \;+\; b_W \;+\; L(D+4) \;+\; 2(L \cdot b_\ell) \;+\; 4k$$
+- $\text{Bytes}\_\text{indexer} = b_Q + b_W + L(D+4) + 2(L \cdot b_\ell) + 4k$
 
 Where concretely:
-- $$b_Q = H \cdot D \cdot 1 \quad (\text{fp8} \Rightarrow 1\text{ byte/elem})$$
-- $$b_W = H \cdot 4 \quad (\text{fp32} \Rightarrow 4\text{ bytes/elem})$$
+- $b_Q = H \cdot D \cdot 1 \quad (\text{fp8} \Rightarrow 1\text{ byte/elem})$
+- $b_W = H \cdot 4 \quad (\text{fp32} \Rightarrow 4\text{ bytes/elem})$
 
 ---
 
@@ -130,16 +130,13 @@ Where concretely:
 
 Operations:
 
-1. Read query $Q$: $H \cdot d_{qk}$ (and your note has a $\times 2$ factor)
+1. Read query $Q$: $H \cdot d_{qk}$
 2. Read indices: $4k$
 3. Read KV cache for selected tokens: $k \cdot 656$
-4. Write output: $H \cdot d_v$ (bytes depend on output dtype)
+4. Write output: $H \cdot d_v$
 
-Using your stated form:
-
-- $$\text{Bytes}_\text{MLA,sparse} \;=\; (2H d_{qk}) \;+\; 4k \;+\; 656k \;+\; (H d_v)$$
-
-*(If you want this in strict bytes, you may want to multiply $H d_{qk}$ and $H d_v$ by the element size of their dtype.)*
+Thus:
+- $\text{Bytes}\_\text{MLA,sparse} = (2H d_{qk}) + 4k + 656k + (H d_v)$
 
 ---
 
