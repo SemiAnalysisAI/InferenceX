@@ -877,12 +877,33 @@ def get_client_config(
     return client_args, req_args
 
 
+def calculate_total_requests(
+    input_conv: ConversationsMap,
+    max_turns: int | None,
+    skip_first_turn: bool,
+) -> int:
+    """Calculate the total number of requests (user messages) to be sent."""
+    total = 0
+    for messages in input_conv.values():
+        # Count user messages in this conversation
+        start_idx = 2 if skip_first_turn else 0  # Skip first user+assistant if warmup
+        end_idx = len(messages)
+        if max_turns is not None:
+            end_idx = min(end_idx, max_turns)
+
+        for i in range(start_idx, end_idx):
+            if messages[i]["role"] == "user":
+                total += 1
+    return total
+
+
 async def main_mp(
     client_args: ClientArgs,
     req_args: RequestArgs,
     bench_args: BenchmarkArgs,
     tokenizer: AutoTokenizer,
     input_conv: ConversationsMap,
+    total_requests: int | None = None,
 ) -> tuple[ConversationsMap, list[RequestStats]]:
     # An event that will trigger graceful termination of all the clients
     stop_event = mp.Event()
@@ -936,7 +957,12 @@ async def main_mp(
     debug_stats = DebugStats(logger, min(15 * bench_args.num_clients, 500))
 
     # Progress bar for completed requests
-    pbar = tqdm(desc="Requests completed", unit="req", dynamic_ncols=True)
+    pbar = tqdm(
+        total=total_requests,
+        desc="Requests completed",
+        unit="req",
+        dynamic_ncols=True,
+    )
 
     while num_clients_finished < bench_args.num_clients:
         # Collect updated conversation
@@ -1593,8 +1619,12 @@ async def main() -> None:
 
         logger.info("%sWarmup start%s", Color.PURPLE, Color.RESET)
         warmup_start_ns = time.perf_counter_ns()
+        warmup_total_requests = calculate_total_requests(
+            conversations, max_turns=1, skip_first_turn=False
+        )
         conversations, _ = await main_mp(
-            warmup_client_args, req_args, warmup_bench_args, tokenizer, conversations
+            warmup_client_args, req_args, warmup_bench_args, tokenizer, conversations,
+            total_requests=warmup_total_requests
         )
         warmup_runtime_sec = nanosec_to_sec(time.perf_counter_ns() - warmup_start_ns)
         logger.info(
@@ -1611,10 +1641,28 @@ async def main() -> None:
         metrics_collector.start()
         logger.info(f"{Color.BLUE}Started metrics collection{Color.RESET}")
 
+    # Calculate total expected requests
+    total_requests = calculate_total_requests(
+        conversations,
+        max_turns=args.max_turns,
+        skip_first_turn=args.warmup_step,
+    )
+    # Cap by max_num_requests if set
+    if args.max_num_requests is not None:
+        total_requests = min(total_requests, args.max_num_requests)
+    # Note: with early_stop (default), this is an upper bound estimate
+    # since the benchmark stops when the first client finishes
+    is_estimate = not args.no_early_stop
+    estimate_note = " (estimate, early_stop enabled)" if is_estimate else ""
+    logger.info(
+        f"{Color.CYAN}Total expected requests: {total_requests}{estimate_note}{Color.RESET}"
+    )
+
     # Run the benchmark
     benchmark_start_ns = time.perf_counter_ns()
     client_convs, client_metrics = await main_mp(
-        client_args, req_args, bench_args, tokenizer, conversations
+        client_args, req_args, bench_args, tokenizer, conversations,
+        total_requests=total_requests
     )
     benchmark_runtime_sec = nanosec_to_sec(time.perf_counter_ns() - benchmark_start_ns)
 
