@@ -3,13 +3,13 @@ name: Docker Tag Monitor
 on:
   schedule:
     # Run weekly on Mondays at 6:00 UTC
-    - cron: '0 6 * * 1'
+    - cron: '0 8 * * 6'
   workflow_dispatch:
     inputs:
       dry_run:
         description: 'Dry run - check releases but do not create issues'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
