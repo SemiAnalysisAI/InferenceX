@@ -3106,8 +3106,8 @@ dsr1-fp4-gb300-dynamo-trt:
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
-        tp: 8
-        ep: 8
+        tp: 4
+        ep: 4
         dp-attn: false
     - conc-list: [666]
       prefill:
