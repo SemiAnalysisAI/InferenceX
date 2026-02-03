@@ -105,6 +105,16 @@ echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
 
+# Display sweep log for debugging
+SWEEP_LOG="outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
+if [ -f "$SWEEP_LOG" ]; then
+    echo "=== Sweep Log ($SWEEP_LOG) ==="
+    cat "$SWEEP_LOG"
+    echo "=== End Sweep Log ==="
+else
+    echo "Warning: Sweep log not found at $SWEEP_LOG"
+fi
+
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
