@@ -344,3 +344,13 @@
     - "Add gb300-nv runner and launch script for srt-slurm integration"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
 
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB200 Dynamo TRT-LLM disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "1k1k: 14 scenarios (7 MTP, 7 STP) with varying DP attention/TEP modes"
+    - "1k8k: 10 scenarios (5 MTP, 5 STP) for long output generation"
+    - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
+    - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
