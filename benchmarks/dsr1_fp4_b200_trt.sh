@@ -35,7 +35,7 @@ fi
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
     MOE_BACKEND="CUTLASS"
-    CUDA_GRAPH_MAX_BATCH_SIZE=$(( $CONC / 4 ))
+    CUDA_GRAPH_MAX_BATCH_SIZE=$(( CONC < 4 ? CONC : CONC / 4 ))
 fi
 
 echo "MOE_BACKEND set to '$MOE_BACKEND'"

@@ -833,6 +833,9 @@ dsr1-fp4-b200-trt:
   - isl: 1024
     osl: 1024
     search-space:
+    # low concurrency cases use TP only
+    # concurrency 64 uses TP & EP
+    # high concurrency cases use TP & EP & DP-ATTN
     - { tp: 4, conc-start: 4, conc-end: 16 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
@@ -841,6 +844,9 @@ dsr1-fp4-b200-trt:
   - isl: 1024
     osl: 8192
     search-space:
+    # low concurrency cases use TP only
+    # concurrency 64 uses TP & EP
+    # high concurrency cases use TP & EP & DP-ATTN
     - { tp: 4, conc-start: 4, conc-end: 16 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
@@ -849,6 +855,9 @@ dsr1-fp4-b200-trt:
   - isl: 8192
     osl: 1024
     search-space:
+    # low concurrency cases use TP only
+    # concurrency 32 uses TP & EP
+    # high concurrency cases use TP & EP & DP-ATTN
     - { tp: 4, conc-start: 4, conc-end: 32 }
     - { tp: 4, ep: 4, conc-start: 32, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
