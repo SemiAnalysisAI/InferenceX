@@ -325,3 +325,12 @@
     - "Disable torch.compile for MI355X DeepSeek-R1 FP8 SGLang"
     - "set cuda-graph-max-bs to CONC"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/613
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek-R1 FP4 GB300 Dynamo TRT disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "Includes MTP and STP configs for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Add gb300-nv runner and launch script for srt-slurm integration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
