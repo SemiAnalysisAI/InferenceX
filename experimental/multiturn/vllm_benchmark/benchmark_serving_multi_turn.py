@@ -964,9 +964,11 @@ async def main_mp(
         dynamic_ncols=True,
     )
 
+    loop = asyncio.get_event_loop()
+
     while num_clients_finished < bench_args.num_clients:
-        # Collect updated conversation
-        conv_id, messages = conv_queue.get()
+        # Collect updated conversation (run in executor to not block event loop)
+        conv_id, messages = await loop.run_in_executor(None, conv_queue.get)
 
         # Collect results (measurements)
         while not result_queue.empty():
