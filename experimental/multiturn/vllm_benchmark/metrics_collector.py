@@ -393,7 +393,7 @@ class MetricsCollector:
         ax.set_title("Generation Throughput")
         ax.grid(True, alpha=0.3)
 
-        # 5. GPU Transfer TX over Time (scatter + rolling avg)
+        # 5. GPU Transfer TX over Time (line plot to show spikes)
         ax = axes[2, 0]
         gpu_times = None
         if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
@@ -402,37 +402,19 @@ class MetricsCollector:
             gpu_times = [(s.timestamp - gpu_start) for s in gpu_snaps]
             tx_pci = [s.tx_pci for s in gpu_snaps]  # Already in MB/s
 
-            ax.scatter(gpu_times, tx_pci, alpha=0.3, s=5, c='blue', label='TX')
-            # Rolling average
-            gpu_window = min(50, len(tx_pci) // 10) if len(tx_pci) > 10 else 1
-            if gpu_window > 1:
-                rolling_tx = [
-                    sum(tx_pci[max(0, i - gpu_window):i + 1]) / len(tx_pci[max(0, i - gpu_window):i + 1])
-                    for i in range(len(tx_pci))
-                ]
-                ax.plot(gpu_times, rolling_tx, 'r-', linewidth=1.5, label=f'Rolling avg (n={gpu_window})')
-            ax.legend()
+            ax.plot(gpu_times, tx_pci, 'b-', linewidth=1, alpha=0.8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("TX Bandwidth (MB/s)")
         ax.set_title("GPU PCIe TX Over Time (GPU → Host)")
         ax.grid(True, alpha=0.3)
 
-        # 6. GPU Transfer RX over Time (scatter + rolling avg)
+        # 6. GPU Transfer RX over Time (line plot to show spikes)
         ax = axes[2, 1]
         if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
             gpu_snaps = self.gpu_transfer_collector.snapshots
             rx_pci = [s.rx_pci for s in gpu_snaps]  # Already in MB/s
 
-            ax.scatter(gpu_times, rx_pci, alpha=0.3, s=5, c='blue', label='RX')
-            # Rolling average
-            gpu_window = min(50, len(rx_pci) // 10) if len(rx_pci) > 10 else 1
-            if gpu_window > 1:
-                rolling_rx = [
-                    sum(rx_pci[max(0, i - gpu_window):i + 1]) / len(rx_pci[max(0, i - gpu_window):i + 1])
-                    for i in range(len(rx_pci))
-                ]
-                ax.plot(gpu_times, rolling_rx, 'r-', linewidth=1.5, label=f'Rolling avg (n={gpu_window})')
-            ax.legend()
+            ax.plot(gpu_times, rx_pci, 'b-', linewidth=1, alpha=0.8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("RX Bandwidth (MB/s)")
         ax.set_title("GPU PCIe RX Over Time (Host → GPU)")
