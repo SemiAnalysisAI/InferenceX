@@ -18,6 +18,7 @@ from typing import NamedTuple
 import aiohttp  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+from tqdm import tqdm  # type: ignore
 from bench_dataset import (
     ConversationsMap,
     ConvId,
@@ -934,6 +935,9 @@ async def main_mp(
 
     debug_stats = DebugStats(logger, min(15 * bench_args.num_clients, 500))
 
+    # Progress bar for completed requests
+    pbar = tqdm(desc="Requests completed", unit="req", dynamic_ncols=True)
+
     while num_clients_finished < bench_args.num_clients:
         # Collect updated conversation
         conv_id, messages = conv_queue.get()
@@ -943,6 +947,7 @@ async def main_mp(
             new_data = result_queue.get()
             client_metrics.append(new_data)
             debug_stats.update(new_data)
+            pbar.update(1)
 
         if conv_id is TERM_SIGNAL:
             num_clients_finished += 1
@@ -1004,6 +1009,9 @@ async def main_mp(
     # (result_queue should be emptied).
     while not result_queue.empty():
         client_metrics.append(result_queue.get())
+        pbar.update(1)
+
+    pbar.close()
 
     logger.info(f"Collected {len(client_metrics)} samples from all the clients")
 

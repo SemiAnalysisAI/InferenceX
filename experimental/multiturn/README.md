@@ -34,10 +34,15 @@ Then, sample from the dataset:
 python3 sample_wildchat.py --num-convs 100 --min-turns 4 --max-turns 8 --min-tokens 800 --max-tokens 2000 --output sample.json
 ```
 
+First, start the server (with something like this):
+```
+
+```
+
 Then, run the benchmark:
 ```
-python3 benchmark_serving_multi_turn.py -i sample.json -m $MODEL --responses-file responses.json -u http://localhots:$PORT -p 
-32 --max-retries 3 --print-content 
+python3 benchmark_serving_multi_turn.py -i sample_5k.json -m $MODEL --responses-file responses.json -u http://localhost:$PORT -p 
+512 --max-retries 3 --metrics-output benchmark_run1 
 ```
 
 ## Possible Datasets
