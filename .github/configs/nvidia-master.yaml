@@ -938,6 +938,37 @@ dsr1-fp8-b200-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
+dsr1-fp8-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.6-cu129-amd64
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: b200-multinode-slurm
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 32, 64]
+      additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp.yaml"
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 32, 64]
+      additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k8k/mtp.yaml"
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 32, 64]
+      additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp.yaml"
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
   model: deepseek-ai/DeepSeek-R1-0528

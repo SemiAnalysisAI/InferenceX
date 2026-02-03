@@ -13,6 +13,15 @@ git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout sa-submission-q1-2026
 
+# Copy local recipes from InferenceMAX into srt-slurm (if they exist)
+LOCAL_RECIPES_DIR="$GITHUB_WORKSPACE/recipes"
+if [ -d "$LOCAL_RECIPES_DIR" ]; then
+    echo "Copying local recipes from $LOCAL_RECIPES_DIR..."
+    cp -r "$LOCAL_RECIPES_DIR/"* recipes/
+    echo "Local recipes injected:"
+    find recipes/ -name "*.yaml" -newer .git | head -20
+fi
+
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
