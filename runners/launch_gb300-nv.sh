@@ -36,8 +36,11 @@ export MODEL_PATH=$MODEL
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
+elif [[ $MODEL_PREFIX == "dsr1-fp8" ]]; then
+    export SERVED_MODEL_NAME="deepseek-r1-fp8"
+    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp8
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
+    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1, dsr1-fp8"
     exit 1
 fi
 
