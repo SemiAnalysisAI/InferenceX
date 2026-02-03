@@ -5,11 +5,111 @@ Polls /metrics endpoint and generates visualizations.
 
 import asyncio
 import re
+import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 
 import aiohttp
 import matplotlib.pyplot as plt
+
+
+@dataclass
+class GpuTransferSnapshot:
+    timestamp: float
+    gpu_id: int = 0
+    tx_pci: float = 0.0  # PCIe TX (MB/s)
+    rx_pci: float = 0.0  # PCIe RX (MB/s)
+
+
+class GpuTransferCollector:
+    """Collects GPU transfer stats using nvidia-smi dmon."""
+
+    def __init__(self, gpu_id: int = 0, poll_interval: int = 1):
+        self.gpu_id = gpu_id
+        self.poll_interval = poll_interval
+        self.snapshots: list[GpuTransferSnapshot] = []
+        self._process: subprocess.Popen | None = None
+        self._thread: threading.Thread | None = None
+        self._running = False
+
+    def _parse_line(self, line: str) -> GpuTransferSnapshot | None:
+        """Parse a line of nvidia-smi dmon CSV output.
+
+        Format: gpu, rxpci, txpci (values in MB/s)
+        Example: 0, 406, 32013
+        """
+        line = line.strip()
+        if not line or line.startswith('#'):  # Skip header/comments
+            return None
+
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) < 3:
+            return None
+
+        try:
+            return GpuTransferSnapshot(
+                timestamp=time.time(),
+                gpu_id=int(parts[0]),
+                rx_pci=float(parts[1]) if parts[1] != '-' else 0.0,
+                tx_pci=float(parts[2]) if parts[2] != '-' else 0.0,
+            )
+        except (ValueError, IndexError):
+            return None
+
+    def _reader_thread(self) -> None:
+        """Background thread to read nvidia-smi output."""
+        if self._process is None:
+            return
+
+        for line in iter(self._process.stdout.readline, ''):
+            if not self._running:
+                break
+            snapshot = self._parse_line(line)
+            if snapshot and snapshot.gpu_id == self.gpu_id:
+                self.snapshots.append(snapshot)
+
+    def start(self) -> None:
+        """Start collecting GPU transfer stats."""
+        if self._running:
+            return
+
+        self._running = True
+        self.snapshots = []
+
+        try:
+            self._process = subprocess.Popen(
+                [
+                    'nvidia-smi', 'dmon',
+                    '-i', str(self.gpu_id),
+                    '-s', 't',
+                    '-d', str(self.poll_interval),
+                    '--format', 'csv',
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self._thread = threading.Thread(target=self._reader_thread, daemon=True)
+            self._thread.start()
+        except FileNotFoundError:
+            print("nvidia-smi not found, GPU transfer monitoring disabled")
+            self._running = False
+
+    def stop(self) -> None:
+        """Stop collecting GPU transfer stats."""
+        self._running = False
+        if self._process:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+            self._process = None
+
+        if self._thread:
+            self._thread.join(timeout=2)
+            self._thread = None
 
 
 @dataclass
@@ -36,6 +136,8 @@ class MetricsCollector:
     snapshots: list[MetricsSnapshot] = field(default_factory=list)
     _running: bool = False
     _task: asyncio.Task | None = None
+    gpu_transfer_collector: GpuTransferCollector | None = None
+    gpu_id: int = 0
 
     def _parse_metrics(self, text: str) -> MetricsSnapshot:
         """Parse Prometheus metrics text format."""
@@ -133,6 +235,13 @@ class MetricsCollector:
         self.snapshots = []
         self._task = asyncio.create_task(self._poll_loop())
 
+        # Start GPU transfer monitoring
+        self.gpu_transfer_collector = GpuTransferCollector(
+            gpu_id=self.gpu_id,
+            poll_interval=max(1, int(self.poll_interval)),
+        )
+        self.gpu_transfer_collector.start()
+
     async def stop(self) -> None:
         """Stop metrics collection."""
         self._running = False
@@ -142,6 +251,10 @@ class MetricsCollector:
                 await self._task
             except asyncio.CancelledError:
                 pass
+
+        # Stop GPU transfer monitoring
+        if self.gpu_transfer_collector:
+            self.gpu_transfer_collector.stop()
 
     def generate_plots(
         self,
@@ -194,53 +307,73 @@ class MetricsCollector:
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        # 3. Cache Hit Rate vs Time (computed from deltas)
+        # 3. Cache Hit Rate vs Time (computed from deltas between polling intervals)
         ax = axes[1, 0]
-        hit_rates = []
-        cpu_hit_rates = []
-        has_cpu_cache = any(s.cpu_prefix_cache_queries > 0 for s in self.snapshots)
+        gpu_hit_rates = []
+        ext_hit_rates = []
+        combined_hit_rates = []
+        has_ext_cache = any(s.cpu_prefix_cache_queries > 0 for s in self.snapshots)
         for i in range(1, len(self.snapshots)):
-            # GPU cache hit rate
-            delta_hits = self.snapshots[i].prefix_cache_hits - self.snapshots[i-1].prefix_cache_hits
-            delta_queries = self.snapshots[i].prefix_cache_queries - self.snapshots[i-1].prefix_cache_queries
-            if delta_queries > 0:
-                hit_rates.append(100.0 * delta_hits / delta_queries)
+            # GPU (HBM) cache hit rate for this interval
+            gpu_delta_hits = self.snapshots[i].prefix_cache_hits - self.snapshots[i-1].prefix_cache_hits
+            gpu_delta_queries = self.snapshots[i].prefix_cache_queries - self.snapshots[i-1].prefix_cache_queries
+            if gpu_delta_queries > 0:
+                gpu_hit_rates.append(100.0 * gpu_delta_hits / gpu_delta_queries)
             else:
-                hit_rates.append(hit_rates[-1] if hit_rates else 0)
-            # External cache hit rate
-            if has_cpu_cache:
-                cpu_delta_hits = self.snapshots[i].cpu_prefix_cache_hits - self.snapshots[i-1].cpu_prefix_cache_hits
-                cpu_delta_queries = self.snapshots[i].cpu_prefix_cache_queries - self.snapshots[i-1].cpu_prefix_cache_queries
-                if cpu_delta_queries > 0:
-                    cpu_hit_rates.append(100.0 * cpu_delta_hits / cpu_delta_queries)
-                else:
-                    cpu_hit_rates.append(cpu_hit_rates[-1] if cpu_hit_rates else 0)
+                gpu_hit_rates.append(gpu_hit_rates[-1] if gpu_hit_rates else 0)
 
-        # Scatter plot for GPU cache hit rate
-        ax.scatter(times[1:], hit_rates, alpha=0.3, s=5, c='purple', label='HBM')
-        # Rolling average for GPU
-        window = min(50, len(hit_rates) // 10) if len(hit_rates) > 10 else 1
+            # External cache hit rate for this interval
+            if has_ext_cache:
+                ext_delta_hits = self.snapshots[i].cpu_prefix_cache_hits - self.snapshots[i-1].cpu_prefix_cache_hits
+                ext_delta_queries = self.snapshots[i].cpu_prefix_cache_queries - self.snapshots[i-1].cpu_prefix_cache_queries
+                if ext_delta_queries > 0:
+                    ext_hit_rates.append(100.0 * ext_delta_hits / ext_delta_queries)
+                else:
+                    ext_hit_rates.append(ext_hit_rates[-1] if ext_hit_rates else 0)
+
+                # Combined hit rate: (gpu_hits + ext_hits) / (gpu_queries + ext_queries)
+                total_hits = gpu_delta_hits + ext_delta_hits
+                total_queries = gpu_delta_queries + ext_delta_queries
+                if total_queries > 0:
+                    combined_hit_rates.append(100.0 * total_hits / total_queries)
+                else:
+                    combined_hit_rates.append(combined_hit_rates[-1] if combined_hit_rates else 0)
+
+        # Rolling window size
+        window = min(50, len(gpu_hit_rates) // 10) if len(gpu_hit_rates) > 10 else 1
+
+        # Scatter plot for GPU (HBM) cache hit rate
+        ax.scatter(times[1:], gpu_hit_rates, alpha=0.3, s=5, c='purple', label='GPU (HBM)')
         if window > 1:
             rolling_gpu = [
-                sum(hit_rates[max(0, i - window):i + 1]) / len(hit_rates[max(0, i - window):i + 1])
-                for i in range(len(hit_rates))
+                sum(gpu_hit_rates[max(0, i - window):i + 1]) / len(gpu_hit_rates[max(0, i - window):i + 1])
+                for i in range(len(gpu_hit_rates))
             ]
-            ax.plot(times[1:], rolling_gpu, 'purple', linewidth=1.5, label=f'HBM avg (n={window})')
+            ax.plot(times[1:], rolling_gpu, 'purple', linewidth=1.5, label=f'GPU avg (n={window})')
 
-        # Scatter plot and rolling average for external cache
-        if has_cpu_cache and cpu_hit_rates:
-            ax.scatter(times[1:], cpu_hit_rates, alpha=0.3, s=5, c='orange', label='External')
+        # External cache scatter + rolling (if available)
+        if has_ext_cache and ext_hit_rates:
+            ax.scatter(times[1:], ext_hit_rates, alpha=0.3, s=5, c='orange', label='External')
             if window > 1:
                 rolling_ext = [
-                    sum(cpu_hit_rates[max(0, i - window):i + 1]) / len(cpu_hit_rates[max(0, i - window):i + 1])
-                    for i in range(len(cpu_hit_rates))
+                    sum(ext_hit_rates[max(0, i - window):i + 1]) / len(ext_hit_rates[max(0, i - window):i + 1])
+                    for i in range(len(ext_hit_rates))
                 ]
                 ax.plot(times[1:], rolling_ext, 'orange', linewidth=1.5, label=f'External avg (n={window})')
 
-        ax.legend()
+            # Combined/total hit rate (only if external exists)
+            ax.scatter(times[1:], combined_hit_rates, alpha=0.2, s=3, c='green', label='Combined')
+            if window > 1:
+                rolling_combined = [
+                    sum(combined_hit_rates[max(0, i - window):i + 1]) / len(combined_hit_rates[max(0, i - window):i + 1])
+                    for i in range(len(combined_hit_rates))
+                ]
+                ax.plot(times[1:], rolling_combined, 'green', linewidth=2, label=f'Combined avg (n={window})')
+
+        ax.legend(loc='best', fontsize=8)
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Cache Hit Rate (%)")
-        ax.set_title("Prefix Cache Hit Rate")
+        ax.set_ylabel("Hit Rate (%)")
+        ax.set_title("Prefix Cache Hit Rate Per Interval (tokens hit / tokens queried)")
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
 
@@ -260,30 +393,49 @@ class MetricsCollector:
         ax.set_title("Generation Throughput")
         ax.grid(True, alpha=0.3)
 
-        # 5. Cumulative Cache Hit Rate vs Requests
+        # 5. GPU Transfer TX over Time (scatter + rolling avg)
         ax = axes[2, 0]
-        requests = [s.request_success for s in self.snapshots]
-        cumulative_hit_rate = []
-        for s in self.snapshots:
-            if s.prefix_cache_queries > 0:
-                cumulative_hit_rate.append(100.0 * s.prefix_cache_hits / s.prefix_cache_queries)
-            else:
-                cumulative_hit_rate.append(0)
-        ax.plot(requests, cumulative_hit_rate, 'teal', linewidth=1.5)
-        ax.set_xlabel("Completed Requests")
-        ax.set_ylabel("Cumulative Hit Rate (%)")
-        ax.set_title("Cache Hit Rate vs Completed Requests")
-        ax.set_ylim(0, 105)
+        gpu_times = None
+        if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
+            gpu_snaps = self.gpu_transfer_collector.snapshots
+            gpu_start = gpu_snaps[0].timestamp
+            gpu_times = [(s.timestamp - gpu_start) for s in gpu_snaps]
+            tx_pci = [s.tx_pci for s in gpu_snaps]  # Already in MB/s
+
+            ax.scatter(gpu_times, tx_pci, alpha=0.3, s=5, c='blue', label='TX')
+            # Rolling average
+            gpu_window = min(50, len(tx_pci) // 10) if len(tx_pci) > 10 else 1
+            if gpu_window > 1:
+                rolling_tx = [
+                    sum(tx_pci[max(0, i - gpu_window):i + 1]) / len(tx_pci[max(0, i - gpu_window):i + 1])
+                    for i in range(len(tx_pci))
+                ]
+                ax.plot(gpu_times, rolling_tx, 'r-', linewidth=1.5, label=f'Rolling avg (n={gpu_window})')
+            ax.legend()
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("TX Bandwidth (MB/s)")
+        ax.set_title("GPU PCIe TX Over Time (GPU → Host)")
         ax.grid(True, alpha=0.3)
 
-        # 6. Throughput vs KV Cache Utilization (scatter)
+        # 6. GPU Transfer RX over Time (scatter + rolling avg)
         ax = axes[2, 1]
-        # Use throughput from slot 4
-        kv_for_scatter = [s.kv_cache_usage * 100 for s in self.snapshots[1:]]
-        ax.scatter(kv_for_scatter, throughputs, alpha=0.5, s=10, c='coral')
-        ax.set_xlabel("KV Cache Usage (%)")
-        ax.set_ylabel("Throughput (tokens/sec)")
-        ax.set_title("Throughput vs KV Cache Utilization")
+        if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
+            gpu_snaps = self.gpu_transfer_collector.snapshots
+            rx_pci = [s.rx_pci for s in gpu_snaps]  # Already in MB/s
+
+            ax.scatter(gpu_times, rx_pci, alpha=0.3, s=5, c='blue', label='RX')
+            # Rolling average
+            gpu_window = min(50, len(rx_pci) // 10) if len(rx_pci) > 10 else 1
+            if gpu_window > 1:
+                rolling_rx = [
+                    sum(rx_pci[max(0, i - gpu_window):i + 1]) / len(rx_pci[max(0, i - gpu_window):i + 1])
+                    for i in range(len(rx_pci))
+                ]
+                ax.plot(gpu_times, rolling_rx, 'r-', linewidth=1.5, label=f'Rolling avg (n={gpu_window})')
+            ax.legend()
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("RX Bandwidth (MB/s)")
+        ax.set_title("GPU PCIe RX Over Time (Host → GPU)")
         ax.grid(True, alpha=0.3)
 
         # 7 & 8. Client metrics plots (TTFT and Latency vs Time)
@@ -348,20 +500,8 @@ class MetricsCollector:
             ax.set_title("Decode Speed (1/TPOT) vs Time")
             ax.grid(True, alpha=0.3)
 
-            # 10. TPOT vs Time (raw)
-            ax = axes[4, 1]
-            ax.scatter(request_times, tpots, alpha=0.3, s=5, c='orange')
-            if window > 1:
-                rolling_tpot = [
-                    sum(tpots[max(0, i - window):i + 1]) / len(tpots[max(0, i - window):i + 1])
-                    for i in range(len(tpots))
-                ]
-                ax.plot(request_times, rolling_tpot, 'r-', linewidth=1.5, label=f'Rolling avg (n={window})')
-                ax.legend()
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("TPOT (ms)")
-            ax.set_title("Time Per Output Token vs Time")
-            ax.grid(True, alpha=0.3)
+            # Hide unused subplot
+            axes[4, 1].axis('off')
 
         plt.tight_layout()
         plt.savefig(f"{output_prefix}_plots.png", dpi=150)
