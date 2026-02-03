@@ -114,7 +114,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} specdecod-${{ inputs.spec-decoding }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} specdecod-${{ inputs.spec-decoding }} conc ${{ join(fromJson(inputs.conc-list), 'x') }}"
 
     steps:
       - name: Slurm cleanup (pre-run)
