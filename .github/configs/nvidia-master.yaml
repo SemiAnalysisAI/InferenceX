@@ -950,15 +950,15 @@ dsr1-fp8-b200-sglang-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2

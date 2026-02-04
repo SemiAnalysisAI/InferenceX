@@ -40,8 +40,8 @@ fi
 
 # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
 # this will help us save memory from being unnecessary used.
-MAX_RUNNING_REQUESTS=64
-CUDA_GRAPH_MAX_BATCH_SIZE=64
+MAX_RUNNING_REQUESTS=256
+CUDA_GRAPH_MAX_BATCH_SIZE=256
 
 MEM_FRAC_STATIC=0.82
 CHUNKED_PREFILL_SIZE=32768
