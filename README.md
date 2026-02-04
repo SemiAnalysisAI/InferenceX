@@ -8,11 +8,9 @@ InferenceMAX™ runs our suite of benchmarks every night, continually re-benchma
 
 [Full Article Write Up for InferenceMAXv1](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/06966bbc-ebc8-4b3f-9201-d7f2628180cc">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/e78a2789-f65e-4315-af59-a4de6de73488">
-  <img alt="InferenceMAX benchmark results visualization" src="https://github.com/user-attachments/assets/e78a2789-f65e-4315-af59-a4de6de73488">
-</picture>
+
+<img width="1627" height="1022" alt="CleanShot 2026-02-04 at 15 26 09" src="https://github.com/user-attachments/assets/65110e16-7590-424f-884d-12876d9e8f3e" />
+
 
 ## Why?
 
