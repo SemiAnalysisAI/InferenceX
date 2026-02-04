@@ -57,6 +57,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
+    --use-chat-template \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
