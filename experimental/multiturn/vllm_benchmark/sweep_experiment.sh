@@ -52,7 +52,7 @@ wait_for_server() {
 stop_server() {
     echo "Stopping vllm server..."
     pkill -f "vllm serve" || true
-    sleep 10
+    sleep 60
 }
 
 # Function to run a single experiment
