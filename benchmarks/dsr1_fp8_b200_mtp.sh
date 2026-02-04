@@ -40,8 +40,8 @@ fi
 
 # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
 # this will help us save memory from being unnecessary used.
-MAX_RUNNING_REQUESTS=256
-CUDA_GRAPH_MAX_BATCH_SIZE=256
+MAX_RUNNING_REQUESTS=512
+CUDA_GRAPH_MAX_BATCH_SIZE=512
 
 MEM_FRAC_STATIC=0.82
 CHUNKED_PREFILL_SIZE=32768
@@ -98,7 +98,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
