@@ -47,7 +47,7 @@ dsr1-fp4-mi355x-atom:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 
 dsr1-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.7-rocm700-mi30x
+  image: rocm/sgl-dev:v0.5.8-rocm700-mi30x-20260125
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x
