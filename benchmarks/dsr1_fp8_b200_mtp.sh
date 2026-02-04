@@ -54,8 +54,6 @@ SPECULATIVE_NUM_STEPS=2
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1
 
-ps aux
-
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --model-path=$MODEL \
