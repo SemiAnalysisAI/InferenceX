@@ -64,31 +64,44 @@ stop_server() {
 
     # Graceful kill first
     pkill -f "vllm serve" || true
-    sleep 5
+    sleep 3
 
     # Kill any remaining vllm/multiprocessing workers
     pkill -9 -f "vllm" || true
     pkill -9 -f "multiproc_executor" || true
     pkill -9 -f "from vllm" || true
-    sleep 5
+    sleep 3
 
-    # Kill any python processes using GPU (aggressive but effective)
-    # This finds python processes with GPU memory and kills them
+    # Kill any python processes using GPU
     nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | while read pid; do
         if [ -n "$pid" ]; then
             echo "Killing GPU process: $pid"
-            kill -9 "$pid" 2>/dev/null || true
+            kill -9 "$pid" 2>/dev/null || sudo kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    sleep 3
+
+    # Super aggressive: sudo kill anything vllm/python related
+    sudo pkill -9 -f "vllm" 2>/dev/null || true
+    sudo pkill -9 -f "multiproc_executor" 2>/dev/null || true
+    sleep 3
+
+    # Clean up shared memory (NCCL/torch uses this)
+    rm -rf /dev/shm/*nccl* /dev/shm/*torch* /dev/shm/*python* 2>/dev/null || true
+    rm -rf /tmp/pymp-* /tmp/torch_* 2>/dev/null || true
+
+    # Final check - kill any remaining GPU processes
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | while read pid; do
+        if [ -n "$pid" ]; then
+            echo "Force killing remaining GPU process: $pid"
+            sudo kill -9 "$pid" 2>/dev/null || true
         fi
     done
 
-    # Wait for GPU memory to be released
+    # Wait for cleanup
     sleep 10
 
-    # Reset GPU state if needed
-    nvidia-smi --gpu-reset 2>/dev/null || true
-
-    echo "Server stopped, waiting for cleanup..."
-    sleep 30
+    echo "Server stopped"
 }
 
 # Function to check if experiment already completed successfully
