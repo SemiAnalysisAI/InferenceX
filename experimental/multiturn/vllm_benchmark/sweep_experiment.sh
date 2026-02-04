@@ -12,7 +12,7 @@ MODEL="nvidia/Llama-3.3-70B-Instruct-FP4"
 INPUT_FILE="sample_5k.json"
 PORT=8888
 TOTAL_CPU_DRAM_GB=300
-NUM_REQUESTS=5000
+NUM_REQUESTS=3600
 REQUEST_TIMEOUT=3600
 MAX_RETRIES=3
 
@@ -103,11 +103,12 @@ is_completed() {
     return 1
 }
 
-# Function to run a single experiment
+# Function to run a single experiment (with retries)
 run_experiment() {
     local tp=$1
     local bs=$2
     local offload=$3
+    local max_retries=3
 
     # Calculate CPU offload size per GPU
     local offload_size=$((TOTAL_CPU_DRAM_GB / tp))
@@ -127,18 +128,20 @@ run_experiment() {
 
     mkdir -p "$exp_dir"
 
-    echo ""
-    echo "========================================"
-    echo "Running experiment: $exp_name"
-    echo "  TP=$tp, BS=$bs, Offload=$offload"
-    if [ "$offload" = "on" ]; then
-        echo "  CPU offload size per GPU: ${offload_size}GB"
-    fi
-    echo "  Started at $(date)"
-    echo "========================================"
+    # Retry loop
+    for attempt in $(seq 1 $max_retries); do
+        echo ""
+        echo "========================================"
+        echo "Running experiment: $exp_name (attempt $attempt/$max_retries)"
+        echo "  TP=$tp, BS=$bs, Offload=$offload"
+        if [ "$offload" = "on" ]; then
+            echo "  CPU offload size per GPU: ${offload_size}GB"
+        fi
+        echo "  Started at $(date)"
+        echo "========================================"
 
-    # Create config file
-    cat > "$exp_dir/config.yaml" << EOF
+        # Create config file
+        cat > "$exp_dir/config.yaml" << EOF
 kv-cache-dtype: fp8
 compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}'
 async-scheduling: true
@@ -146,69 +149,81 @@ max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 EOF
 
-    # Build vllm command
-    local vllm_cmd="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
-    vllm_cmd+=" --config $exp_dir/config.yaml"
-    vllm_cmd+=" --max-num-seqs $bs"
-    vllm_cmd+=" --gpu-memory-utilization 0.9"
-    vllm_cmd+=" --tensor-parallel-size $tp"
-    vllm_cmd+=" --attention-config.use_trtllm_attention=0"
+        # Build vllm command
+        local vllm_cmd="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
+        vllm_cmd+=" --config $exp_dir/config.yaml"
+        vllm_cmd+=" --max-num-seqs $bs"
+        vllm_cmd+=" --gpu-memory-utilization 0.9"
+        vllm_cmd+=" --tensor-parallel-size $tp"
+        vllm_cmd+=" --attention-config.use_trtllm_attention=0"
 
-    if [ "$offload" = "on" ]; then
-        vllm_cmd+=" --kv_offloading_backend native"
-        vllm_cmd+=" --kv_offloading_size $offload_size"
-        vllm_cmd+=" --disable-hybrid-kv-cache-manager"
-    fi
+        if [ "$offload" = "on" ]; then
+            vllm_cmd+=" --kv_offloading_backend native"
+            vllm_cmd+=" --kv_offloading_size $offload_size"
+            vllm_cmd+=" --disable-hybrid-kv-cache-manager"
+        fi
 
-    # Save the command for reference
-    echo "$vllm_cmd" > "$exp_dir/vllm_command.txt"
+        # Save the command for reference
+        echo "$vllm_cmd" > "$exp_dir/vllm_command.txt"
 
-    # Start server in background
-    echo "Starting vllm server..."
-    export TORCH_CUDA_ARCH_LIST="10.0"
-    export PYTHONNOUSERSITE=1
-    export VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB='{"2":32,"4":32,"8":8}'
+        # Start server in background
+        echo "Starting vllm server..."
+        export TORCH_CUDA_ARCH_LIST="10.0"
+        export PYTHONNOUSERSITE=1
+        export VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB='{"2":32,"4":32,"8":8}'
 
-    $vllm_cmd > "$exp_dir/server.log" 2>&1 &
-    local server_pid=$!
-    echo "Server PID: $server_pid"
+        $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1 &
+        local server_pid=$!
+        echo "Server PID: $server_pid"
 
-    # Wait for server
-    if ! wait_for_server; then
-        echo "ERROR: Server failed to start for $exp_name"
-        stop_server
-        echo "FAILED" > "$exp_dir/status.txt"
-        return 0  # Don't exit script, continue to next experiment
-    fi
+        # Wait for server
+        if ! wait_for_server; then
+            echo "ERROR: Server failed to start for $exp_name (attempt $attempt/$max_retries)"
+            stop_server
+            if [ $attempt -eq $max_retries ]; then
+                echo "FAILED" > "$exp_dir/status.txt"
+                echo "All $max_retries attempts failed for $exp_name"
+                return 0
+            fi
+            echo "Retrying in 30 seconds..."
+            sleep 30
+            continue
+        fi
 
-    # Run benchmark
-    echo "Running benchmark..."
-    local benchmark_cmd="python3 benchmark_serving_multi_turn.py"
-    benchmark_cmd+=" -i $INPUT_FILE"
-    benchmark_cmd+=" -m $MODEL"
-    benchmark_cmd+=" -u http://localhost:$PORT"
-    benchmark_cmd+=" -p $bs"
-    benchmark_cmd+=" -n $NUM_REQUESTS"
-    benchmark_cmd+=" --max-retries $MAX_RETRIES"
-    benchmark_cmd+=" --request-timeout $REQUEST_TIMEOUT"
-    benchmark_cmd+=" --metrics-output $exp_dir/metrics"
-    benchmark_cmd+=" --metrics-csv"
-    benchmark_cmd+=" --responses-file $exp_dir/responses.json"
+        # Run benchmark
+        echo "Running benchmark..."
+        local benchmark_cmd="python3 benchmark_serving_multi_turn.py"
+        benchmark_cmd+=" -i $INPUT_FILE"
+        benchmark_cmd+=" -m $MODEL"
+        benchmark_cmd+=" -u http://localhost:$PORT"
+        benchmark_cmd+=" -p $bs"
+        benchmark_cmd+=" -n $NUM_REQUESTS"
+        benchmark_cmd+=" --max-retries $MAX_RETRIES"
+        benchmark_cmd+=" --request-timeout $REQUEST_TIMEOUT"
+        benchmark_cmd+=" --metrics-output $exp_dir/metrics"
+        benchmark_cmd+=" --metrics-csv"
+        benchmark_cmd+=" --responses-file $exp_dir/responses.json"
 
-    echo "$benchmark_cmd" > "$exp_dir/benchmark_command.txt"
+        echo "$benchmark_cmd" > "$exp_dir/benchmark_command.txt"
 
-    if $benchmark_cmd > "$exp_dir/benchmark.log" 2>&1; then
-        echo "SUCCESS" > "$exp_dir/status.txt"
-        echo "Benchmark completed successfully"
-    else
-        echo "FAILED" > "$exp_dir/status.txt"
-        echo "ERROR: Benchmark failed for $exp_name"
-    fi
-
-    # Stop server
-    stop_server
-
-    echo "Experiment $exp_name finished at $(date)"
+        if $benchmark_cmd > "$exp_dir/benchmark_attempt${attempt}.log" 2>&1; then
+            echo "SUCCESS" > "$exp_dir/status.txt"
+            echo "Benchmark completed successfully"
+            stop_server
+            echo "Experiment $exp_name finished at $(date)"
+            return 0
+        else
+            echo "ERROR: Benchmark failed for $exp_name (attempt $attempt/$max_retries)"
+            stop_server
+            if [ $attempt -eq $max_retries ]; then
+                echo "FAILED" > "$exp_dir/status.txt"
+                echo "All $max_retries attempts failed for $exp_name"
+                return 0
+            fi
+            echo "Retrying in 30 seconds..."
+            sleep 30
+        fi
+    done
 }
 
 # Main sweep loop
