@@ -343,6 +343,13 @@
     - "Includes MTP and STP configs for 1k1k, 1k8k, and 8k1k sequence lengths"
     - "Add gb300-nv runner and launch script for srt-slurm integration"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
+  
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "enable PD/D for both MTP and non-MTP MI355X DeepSeek-R1 FP4 SGLang"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/622
+  
 
 - config-keys:
     - dsr1-fp8-gb200-dynamo-trt
