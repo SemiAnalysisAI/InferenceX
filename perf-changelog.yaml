@@ -354,3 +354,13 @@
     - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
     - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
+
+- config-keys:
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Add MTP (Multi-Token Prediction) support for DeepSeek R1 FP8 B200 SGLang using EAGLE speculative decoding"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-amd64"
+    - "Add benchmark script dsr1_fp8_b200_mtp.sh with EAGLE speculative decoding (num-steps=2, draft-tokens=3, topk=1)"
+    - "Update launch_b200-dgxc.sh to support SPEC_SUFFIX for MTP script selection"
+    - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
