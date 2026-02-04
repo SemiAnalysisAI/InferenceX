@@ -57,13 +57,31 @@ SPECULATIVE_EAGLE_TOPK=1
 ps aux
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
---mem-fraction-static $MEM_FRAC_STATIC --kv-cache-dtype fp8_e4m3 --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
---attention-backend trtllm_mla --stream-interval 30 --ep-size $EP_SIZE --moe-runner-backend flashinfer_trtllm --quantization fp8 \
---speculative-algorithm EAGLE --speculative-num-steps $SPECULATIVE_NUM_STEPS --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
+    --model-path=$MODEL \
+    --host=0.0.0.0 \
+    --port=$PORT \
+    --tensor-parallel-size=$TP \
+    --data-parallel-size=1 \
+    --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE \
+    --max-running-requests $MAX_RUNNING_REQUESTS \
+    --mem-fraction-static $MEM_FRAC_STATIC \
+    --kv-cache-dtype fp8_e4m3 \
+    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
+    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --enable-flashinfer-allreduce-fusion \
+    --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+    --disable-radix-cache \
+    --attention-backend trtllm_mla \
+    --stream-interval 30 \
+    --ep-size $EP_SIZE \
+    --moe-runner-backend flashinfer_trtllm \
+    --quantization fp8 \
+    --speculative-algorithm EAGLE \
+    --speculative-num-steps $SPECULATIVE_NUM_STEPS \
+    --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
+    --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
