@@ -368,5 +368,5 @@
     - "Add MTP (Multi-Token Prediction) support for DeepSeek R1 FP8 MI355X SGLang using EAGLE with MTP weight"
     - "Add benchmark script dsr1_fp8_mi355x_mtp.sh with EAGLE speculative decoding"
     - "Update launch_mi355x-amds.sh to support SPEC_SUFFIX for MTP script selection"
-    - "concurrency 4-128 for 1k1k, 1k8k, and 8k1k sequence lengths"
-  pr-link: TODO
+    - "CONC 4-128 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/628
