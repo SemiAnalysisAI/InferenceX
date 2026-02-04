@@ -61,8 +61,34 @@ wait_for_server() {
 # Function to stop server
 stop_server() {
     echo "Stopping vllm server..."
+
+    # Graceful kill first
     pkill -f "vllm serve" || true
-    sleep 60
+    sleep 5
+
+    # Kill any remaining vllm/multiprocessing workers
+    pkill -9 -f "vllm" || true
+    pkill -9 -f "multiproc_executor" || true
+    pkill -9 -f "from vllm" || true
+    sleep 5
+
+    # Kill any python processes using GPU (aggressive but effective)
+    # This finds python processes with GPU memory and kills them
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | while read pid; do
+        if [ -n "$pid" ]; then
+            echo "Killing GPU process: $pid"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+
+    # Wait for GPU memory to be released
+    sleep 10
+
+    # Reset GPU state if needed
+    nvidia-smi --gpu-reset 2>/dev/null || true
+
+    echo "Server stopped, waiting for cleanup..."
+    sleep 30
 }
 
 # Function to check if experiment already completed successfully
@@ -199,9 +225,6 @@ for tp in "${TP_VALUES[@]}"; do
             echo "========================================"
 
             run_experiment "$tp" "$bs" "$offload"
-
-            # Brief pause between experiments
-            sleep 5
         done
     done
 done
