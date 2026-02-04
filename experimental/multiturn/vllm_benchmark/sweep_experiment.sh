@@ -32,7 +32,7 @@ OFFLOAD_VALUES=(on off)
 
 # Function to wait for server to be ready
 wait_for_server() {
-    local max_wait=600s
+    local max_wait=600
     local waited=0
     echo "Waiting for server to be ready..."
     while ! curl -s "http://localhost:$PORT/health" > /dev/null 2>&1; do
