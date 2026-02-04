@@ -62,6 +62,14 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      aiter-ref:
+        description: "Aiter git ref (branch/sha/PR) to rebuild from source"
+        required: false
+        type: string
+      sglang-ref:
+        description: "SGLang git ref (branch/sha/PR) to rebuild from source"
+        required: false
+        type: string
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -130,6 +138,88 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+
+      - name: Print ref
+        run: |
+          echo "Checked out ref: ${{ inputs.ref || github.ref }}"
+          echo "Aiter ref (if rebuilding): ${{ inputs.aiter-ref || 'none' }}"
+          echo "SGLang ref (if rebuilding): ${{ inputs.sglang-ref || 'none' }}"
+
+      - name: Reinstall aiter from source (if specified)
+        if: ${{ inputs.aiter-ref != '' }}
+        run: |
+          echo "Rebuilding aiter from ref: ${{ inputs.aiter-ref }}"
+          
+          # Clone or update aiter repository
+          if [ -d "/tmp/aiter" ]; then
+            rm -rf /tmp/aiter
+          fi
+          
+          git clone https://github.com/ROCm/aiter.git /tmp/aiter
+          cd /tmp/aiter
+          
+          # Checkout specified ref (branch, commit, or PR)
+          if [[ "${{ inputs.aiter-ref }}" =~ ^[0-9]+$ ]]; then
+            # If it's a number, treat as PR
+            echo "Fetching PR #${{ inputs.aiter-ref }}"
+            git fetch origin pull/${{ inputs.aiter-ref }}/head:pr-${{ inputs.aiter-ref }}
+            git checkout pr-${{ inputs.aiter-ref }}
+          else
+            # Otherwise treat as branch or commit
+            git fetch origin ${{ inputs.aiter-ref }} || true
+            git checkout ${{ inputs.aiter-ref }}
+          fi
+          
+          git submodule update --init --recursive
+          
+          # Uninstall existing aiter
+          pip uninstall -y aiter || true
+          
+          # Build and install from source
+          pip install -e .
+          
+          echo "Aiter reinstalled from source successfully"
+
+      - name: Reinstall sglang/sgl-kernel from source (if specified)
+        if: ${{ inputs.sglang-ref != '' }}
+        run: |
+          echo "Rebuilding sglang/sgl-kernel from ref: ${{ inputs.sglang-ref }}"
+          
+          # Clone or update sglang repository
+          if [ -d "/tmp/sglang" ]; then
+            rm -rf /tmp/sglang
+          fi
+          
+          git clone https://github.com/sgl-project/sglang.git /tmp/sglang
+          cd /tmp/sglang
+          
+          # Checkout specified ref (branch, commit, or PR)
+          if [[ "${{ inputs.sglang-ref }}" =~ ^[0-9]+$ ]]; then
+            # If it's a number, treat as PR
+            echo "Fetching PR #${{ inputs.sglang-ref }}"
+            git fetch origin pull/${{ inputs.sglang-ref }}/head:pr-${{ inputs.sglang-ref }}
+            git checkout pr-${{ inputs.sglang-ref }}
+          else
+            # Otherwise treat as branch or commit
+            git fetch origin ${{ inputs.sglang-ref }} || true
+            git checkout ${{ inputs.sglang-ref }}
+          fi
+          
+          git submodule update --init --recursive
+          
+          # Uninstall existing packages
+          pip uninstall -y sglang sgl-kernel || true
+          
+          # Build and install sgl-kernel from source
+          cd sgl-kernel
+          python setup_rocm.py install 
+          cd ..
+          
+          # Build and install sglang from source
+          rm -rf python/pyproject.toml && mv python/pyproject_other.toml python/pyproject.toml
+          pip install -e "python[all-hip]"
+          
+          echo "SGLang and sgl-kernel reinstalled from source successfully"
 
       - name: Launch job script
         env:
