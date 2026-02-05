@@ -361,3 +361,12 @@
     - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
     - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
+
+- config-keys:
+    - dsr1-fp8-b200-trt-mtp
+  description:
+    - Update to the latest TRTLLM 1.2 release container version
+    - Fine-tune the choice of parallelism in nvidia-master file, mainly going to TP for most points
+    - Enable piecewise CUDA graphs under most conditions
+    - fine-tune max batch sizes and other optimizations
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/632
