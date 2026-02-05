@@ -33,14 +33,16 @@ export SLURM_ACCOUNT="benchmark"
 
 export MODEL_PATH=$MODEL
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
-elif [[ $MODEL_PREFIX == "dsr1-fp8" ]]; then
+    export SRT_SLURM_MODEL_PREFIX="dsr1"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
+    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1, dsr1-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
     exit 1
 fi
 
@@ -67,7 +69,7 @@ network_interface: ""
 srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm"
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
 use_segment_sbatch_directive: false
