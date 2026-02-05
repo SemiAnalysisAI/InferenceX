@@ -1574,7 +1574,7 @@ dsr1-fp8-h200-dynamo-trt:
 dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
+  model-prefix: DeepSeek-R1-0528
   runner: h100-multinode-slurm
   precision: fp8
   framework: dynamo-trt
