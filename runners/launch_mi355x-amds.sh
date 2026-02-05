@@ -43,7 +43,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ $NODENAME == GPU* ]]; then
         export MODEL_PATH="/nfsdata"
     elif [[ $NODENAME == mia1* ]]; then
-        export MODEL_PATH="/it-share/data"
+        # export MODEL_PATH="/it-share/data"
+        export MODEL_PATH="/nfsdata"
     else
         echo "[Error] No available nodes for launching slurm jobs"
         exit 1
