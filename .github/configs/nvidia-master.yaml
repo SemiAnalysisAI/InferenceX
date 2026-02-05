@@ -2922,10 +2922,10 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 32
         dp-attn: true
 
-    # "Ultra throughput" (2 prefill workers at DEP8 and 1 decode worker at DEP8)
+    # "Ultra throughput" (1 prefill workers at DEP8 and 1 decode worker at DEP8)
     - conc-list: [4096]
       prefill:
-        num-worker: 2
+        num-worker: 1
         tp: 8
         ep: 8
         dp-attn: true
