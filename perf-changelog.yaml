@@ -361,3 +361,13 @@
     - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
     - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+  description:
+    - "Update  GB200 and GB300 configs for DSR1 FP8 SGLANG STP mode"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130"
+    - "Update prefill/decode worker counts, TP/EP parallelism, and dp-attn settings for 1k1k and 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+

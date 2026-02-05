@@ -11,6 +11,8 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+    elif [[ $MODEL_PREFIX == "dsr1-fp8" ]]; then
+        export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -47,50 +49,6 @@ srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX
 
 export ISL="$ISL"
 export OSL="$OSL"
-
-if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-    export IMAGE=$SQUASH_FILE
-    export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
-    bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
-    # Wait for all jobs to complete
-    echo "Waiting for all jobs to complete..."
-    while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-        echo "Jobs still running..."
-        squeue --steps -u $USER
-        sleep 30
-    done
-
-        # Find the latest log directory that contains the data
-    cat > collect_latest_results.py <<'PY'
-import os, sys
-sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-for path in sorted([f"{sgl_job_dir}/logs/{name}/vllm_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/vllm_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
-    print(path)
-PY
-
-    LOGS_DIR=$(python3 collect_latest_results.py "$SGL_SLURM_JOBS_PATH" $ISL $OSL 1)
-    if [ -z "$LOGS_DIR" ]; then
-        echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
-        exit 1
-    fi
-
-    echo "Found logs directory: $LOGS_DIR"
-    ls -la $LOGS_DIR
-
-    # Result JSON are contained within the result directory
-    for result_file in $(find $LOGS_DIR -type f); do
-        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
-        file_name=$(basename $result_file)
-        if [ -f $result_file ]; then
-            # Copy the result file to workspace with a unique name
-            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
-            echo "Found result file ${result_file}. Copying them to ${WORKSPACE_RESULT_FILE}"
-            cp $result_file $WORKSPACE_RESULT_FILE
-        fi
-    done
-
-    exit 0
-fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
