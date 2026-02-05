@@ -370,5 +370,5 @@
     - "Support PR numbers, branch names, and commit SHAs"
     - "Install sglang/sgl-kernel with ROCm support (ROCM_HOME, PYTORCH_ROCM_ARCH)"
     - "Target architectures: gfx90a (MI250X), gfx942 (MI300)"
-  pr-link: TBD
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/645
 
