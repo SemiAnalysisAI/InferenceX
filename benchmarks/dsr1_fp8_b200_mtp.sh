@@ -20,8 +20,8 @@ nvidia-smi
 
 hf download "$MODEL"
 
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
+export SGLANG_ENABLE_JIT_DEEPGEMM=false
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -44,8 +44,8 @@ MAX_RUNNING_REQUESTS=512
 CUDA_GRAPH_MAX_BATCH_SIZE=512
 
 MEM_FRAC_STATIC=0.82
-CHUNKED_PREFILL_SIZE=32768
-MAX_PREFILL_TOKENS=32768
+CHUNKED_PREFILL_SIZE=16384
+MAX_PREFILL_TOKENS=16384
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
@@ -53,6 +53,8 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 SPECULATIVE_NUM_STEPS=2
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1
+
+SGLANG_ENABLE_SPEC_V2=1
 
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
@@ -70,6 +72,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --enable-flashinfer-allreduce-fusion \
     --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
     --disable-radix-cache \
+    --fp8-gemm-backend=flashinfer_trtllm \
     --attention-backend trtllm_mla \
     --stream-interval 30 \
     --ep-size $EP_SIZE \
