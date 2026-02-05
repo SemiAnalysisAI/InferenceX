@@ -34,12 +34,8 @@ export SLURM_ACCOUNT="customer"
 # Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
 CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
 
-# Use patched container for dynamo-trt (MNNVL fix), otherwise derive from IMAGE
-if [[ "$IMAGE" == *"ai-dynamo/tensorrtllm-runtime"* ]]; then
-    SQUASH_FILE="/mnt/nfs/lustre/containers/dynamo-trtllm-mnnvl-fix.sqsh"
-else
-    SQUASH_FILE="/mnt/nfs/slurm-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-fi
+# Map container image to local squash file
+SQUASH_FILE="/mnt/nfs/slurm-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
 
 if [[ $MODEL_PREFIX == "DeepSeek-R1-0528" ]]; then
     export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
