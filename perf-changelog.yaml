@@ -370,3 +370,7 @@
     - Enable piecewise CUDA graphs under most conditions
     - fine-tune max batch sizes and other optimizations
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/632
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
