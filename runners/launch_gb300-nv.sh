@@ -9,9 +9,8 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+git clone -b yunzhoul/debug-02/test-gb300 https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout yunzhoul/debug-02/test-gb300
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
