@@ -66,7 +66,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.PRECISION.value],
             entry[Fields.ISL.value],
             entry[Fields.OSL.value],
-            entry[Fields.SPEC_DECODING.value]
+            entry[Fields.SPEC_DECODING.value],
+            entry[Fields.DP_ATTN.value]
         )
         groups[key].append((i, entry))
 
