@@ -11,6 +11,8 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+    elif [[ $MODEL_PREFIX == "dsr1-fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -50,7 +52,7 @@ srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX
 export ISL="$ISL"
 export OSL="$OSL"
 
-if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     export IMAGE=$SQUASH_FILE
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
     bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
@@ -103,7 +105,7 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q1-2026
+git checkout yunzhoul/debug-00/prepare-gb200-gb300-fp4-recipes-for-sa
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -159,6 +161,7 @@ echo "Make setup complete"
 ls configs/
 
 echo "Submitting job with srtctl..."
+
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
