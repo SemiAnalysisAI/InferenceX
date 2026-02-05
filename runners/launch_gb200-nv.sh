@@ -103,7 +103,7 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q1-2026
+git checkout yunzhoul/debug-00/prepare-gb200-gb300-fp4-recipes-for-sa
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -159,12 +159,6 @@ echo "Make setup complete"
 ls configs/
 
 echo "Submitting job with srtctl..."
-
-# Transform recipe to use container/model aliases (temporary until upstream is updated)
-# CONFIG_FILE remains as relative path - srtctl resolves it from current directory (srt-slurm)
-if [[ -n "$CONFIG_FILE" ]]; then
-    python3 ${GITHUB_WORKSPACE}/benchmarks/transform_recipe.py "${SRTCTL_ROOT}/${CONFIG_FILE}" "${SRTCTL_ROOT}/${CONFIG_FILE}"
-fi
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
