@@ -969,7 +969,7 @@ dsr1-fp8-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-nb_0
+  runner: b200-nv_0
   precision: fp8
   framework: trt
   multinode: false
