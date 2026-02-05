@@ -796,6 +796,44 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
 
+dsr1-fp4-b300-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+  - isl: 1024
+    osl: 8192
+    search-space:
+  - isl: 8192
+    osl: 1024
+    search-space:
+
+dsr1-fp4-b300-trt-mtp:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+  - isl: 1024
+    osl: 8192
+    search-space:
+  - isl: 8192
+    osl: 1024
+    search-space:
+
 dsr1-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.6-cu129-amd64
   model: nvidia/DeepSeek-R1-0528-FP4-V2
