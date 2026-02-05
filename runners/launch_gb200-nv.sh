@@ -11,7 +11,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
-        export SRT_SLURM_MODEL_PREFIX="dsfp4"
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
@@ -22,12 +22,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     if [[ $MODEL_PREFIX == "gptoss" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
         export SERVED_MODEL_NAME="gpt-oss-120b"
-    elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
         export SERVED_MODEL_NAME="deepseek-r1-fp8"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     else
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
         exit 1
