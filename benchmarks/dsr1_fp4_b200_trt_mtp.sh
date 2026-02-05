@@ -25,11 +25,11 @@ hf download "$MODEL"
 # ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
 MOE_BACKEND="TRTLLM"
 PIECEWISE_CUDA_GRAPHS="false"
-CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
+MAX_BATCH_SIZE=$CONC
 MTP=3
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    CUDA_GRAPH_MAX_BATCH_SIZE=$(( CONC < 4 ? CONC : CONC / 4 ))
+    MAX_BATCH_SIZE=$(( CONC < 4 ? CONC : CONC / 4 ))
     MOE_BACKEND="CUTLASS"
     MTP=1
 fi
@@ -43,7 +43,7 @@ EXTRA_CONFIG_FILE="dsr1-fp4-mtp.yml"
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: $CUDA_GRAPH_MAX_BATCH_SIZE
+    max_batch_size: $MAX_BATCH_SIZE
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
@@ -67,15 +67,17 @@ attention_dp_config:
 EOF
 fi
 
+MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
+
 # set of configs using piecewise_cuda_graphs
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-    if [[ $CONC -eq 32 || $CONC -eq 64 ]]; then
+    if [[ $CONC == 32 || $CONC == 64 ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
-    elif [[ $CONC -eq 128 && $DP_ATTENTION == "false" ]]; then
+    elif [[ $CONC == 128 && $DP_ATTENTION == "false" ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
     fi
 elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC -eq 64 ]]; then
+    if [[ $CONC == 64 ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
     fi
 fi
@@ -96,7 +98,7 @@ torch_compile_config:
 EOF
 fi  # end of set of configs using piecewise_cuda_graphs
 
-MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
+
 
 set -x
 # Launch TRT-LLM server
