@@ -11,6 +11,8 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+    elif [[ $MODEL_PREFIX == "dsr1-fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
     else
         export MODEL_PATH=$MODEL
     fi

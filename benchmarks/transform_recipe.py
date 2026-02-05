@@ -21,9 +21,9 @@ CONTAINER_ALIASES = {
 }
 
 # Model path aliases -> MODEL_PREFIX mappings
-# srtslurm.yaml uses "${MODEL_PREFIX}": "${MODEL_PATH}" so we translate to dsr1
+# srtslurm.yaml uses "${MODEL_PREFIX}": "${MODEL_PATH}" so we translate to dsr1-fp4
 MODEL_PATH_ALIASES = {
-    "dsfp4": "dsr1",
+    "dsfp4": "dsr1-fp4",
 }
 
 # Frontend container aliases

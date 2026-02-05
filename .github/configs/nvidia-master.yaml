@@ -2986,7 +2986,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.5.post2"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
-  model-prefix: dsr1
+  model-prefix: dsr1-fp4
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
