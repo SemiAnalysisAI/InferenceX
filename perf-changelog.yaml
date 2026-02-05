@@ -367,3 +367,9 @@
   description:
     - "Fix model_prefix argument in yaml configs"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
+
+- config-keys:
+    - dsr1-fp8-b300-dynamo-trt
+  description:
+    - "New B300 FP8 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638
