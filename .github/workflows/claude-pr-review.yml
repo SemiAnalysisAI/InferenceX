@@ -259,3 +259,31 @@ jobs:
             If an MTP benchmark script is missing `--use-chat-template`:
             - This is a 🔴 **BLOCKING** issue
             - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
+
+            ## Model Prefix Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
+
+            **Valid model prefixes:**
+            - `dsr1` - DeepSeek R1 models
+            - `gptoss` - GPT-OSS models
+
+            **Invalid model prefixes (will break frontend):**
+            - `dsr1-fp8` - INVALID: precision should NOT be part of the model prefix
+            - `dsr1-fp4` - INVALID: precision should NOT be part of the model prefix
+            - Any other prefix not in the valid list above
+
+            **Config key format:**
+            Config keys follow the pattern: `{model-prefix}-{precision}-{hardware}-{framework}`
+            Example valid keys:
+            - `dsr1-fp8-gb200-vllm` (model-prefix=dsr1, precision=fp8)
+            - `gptoss-fp4-h200-sglang` (model-prefix=gptoss, precision=fp4)
+
+            **Why this matters:**
+            The frontend expects specific model prefixes (`dsr1` or `gptoss`) to display benchmark results correctly. Using invalid prefixes like `dsr1-fp8` will cause the frontend to fail to display results, breaking the user experience.
+
+            **Validation:**
+            When reviewing config additions or changes, check that the first segment of config keys (before the first `-`) is either `dsr1` or `gptoss`.
+
+            If a config key uses an invalid model prefix:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Invalid model prefix detected. The frontend only supports `dsr1` and `gptoss` as model prefixes. Using other prefixes like `dsr1-fp8` will break the frontend and prevent benchmark results from being displayed. Please use the format `{valid-prefix}-{precision}-{hardware}-{framework}` where valid-prefix is either `dsr1` or `gptoss`."
