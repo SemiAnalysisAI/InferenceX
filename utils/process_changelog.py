@@ -24,14 +24,17 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     added_lines = []
     for line in result.stdout.split("\n"):
         if line.startswith("-") and not line.startswith("---"):
-            # Don't allow deletions in the changelog
-            # By convention, it should act as a running log of performance changes,
-            # so we only want to see additions
-            raise ValueError(
-                f"Deletions are not allowed in {filepath}. "
-                f"Only additions to the changelog are permitted. "
-                f"Found deleted line: {line[1:]}"
-            )
+            deleted_content = line[1:]
+            # Allow whitespace-only or empty line deletions
+            if deleted_content.strip():
+                # Don't allow deletions in the changelog
+                # By convention, it should act as a running log of performance changes,
+                # so we only want to see additions
+                raise ValueError(
+                    f"Deletions are not allowed in {filepath}. "
+                    f"Only additions to the changelog are permitted. "
+                    f"Found deleted line: {deleted_content}"
+                )
         elif line.startswith("+") and not line.startswith("+++"):
             added_lines.append(line[1:])
 

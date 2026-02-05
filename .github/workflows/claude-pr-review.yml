@@ -204,3 +204,86 @@ jobs:
                - **Base Lines:** [base count]
                - **Change:** [+/-][difference] lines
             5. Use 📈 for additions, 📉 for removals, ➡️ for no change
+
+            ## Benchmark Script Code Style Guidelines:
+            When reviewing changes to `benchmarks/*.sh` files, verify the following code style requirements:
+
+            ### 1. Server Launch Command Formatting:
+            All `sglang.launch_server` and `vllm serve` commands MUST have their arguments formatted on separate lines for readability.
+
+            **Invalid format (all arguments on one line):**
+            ```bash
+            python -m sglang.launch_server --model $MODEL_PATH --tp 8 --ep 1 --port $PORT --quantization fp8 --kv-cache-dtype fp8_e4m3
+            ```
+
+            **Valid format (arguments on separate lines):**
+            ```bash
+            python -m sglang.launch_server \
+                --model $MODEL_PATH \
+                --tp 8 \
+                --ep 1 \
+                --port $PORT \
+                --quantization fp8 \
+                --kv-cache-dtype fp8_e4m3
+            ```
+
+            The same applies to `vllm serve` commands:
+            ```bash
+            vllm serve $MODEL_PATH \
+                --tensor-parallel-size 8 \
+                --port $PORT \
+                --quantization fp8
+            ```
+
+            If a benchmark script has server launch commands on a single line:
+            - This is a 🟡 **WARNING** issue
+            - Comment: "Server launch commands (`sglang.launch_server` or `vllm serve`) should have each argument on a separate line for better readability and easier code review. Please reformat using line continuations (`\`)."
+
+            ### 2. MTP (Multi-Token Prediction) Benchmark Requirements:
+            When reviewing MTP benchmark scripts (files containing `mtp` in the name or using EAGLE speculative decoding):
+
+            **Required: `--use-chat-template` flag**
+            MTP benchmarks MUST include the `--use-chat-template` flag in the benchmark client configuration.
+
+            **Why it matters:**
+            - Chat templates ensure proper tokenization for speculative decoding
+            - Without this flag, MTP performance may be incorrect or suboptimal
+            - Ensures consistent behavior across different model configurations
+
+            **Validation:**
+            Check that any benchmark script with MTP/EAGLE speculative decoding includes `--use-chat-template`:
+            ```bash
+            benchmark_client ... --use-chat-template
+            ```
+
+            If an MTP benchmark script is missing `--use-chat-template`:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
+
+            ## Model Prefix Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
+
+            **Valid model prefixes:**
+            - `dsr1` - DeepSeek R1 models
+            - `gptoss` - GPT-OSS models
+
+            **Invalid model prefixes (will break frontend):**
+            - `dsr1-fp8` - INVALID: precision should NOT be part of the model prefix
+            - `dsr1-fp4` - INVALID: precision should NOT be part of the model prefix
+            - Any other prefix not in the valid list above
+
+            **Config key format:**
+            Config keys follow the pattern: `{model-prefix}-{precision}-{hardware}-{framework}`
+            Example valid keys:
+            - `dsr1-fp8-gb200-vllm` (model-prefix=dsr1, precision=fp8)
+            - `gptoss-fp4-h200-sglang` (model-prefix=gptoss, precision=fp4)
+
+            **Why this matters:**
+            The frontend expects specific model prefixes (`dsr1` or `gptoss`) to display benchmark results correctly. Using invalid prefixes like `dsr1-fp8` will cause the frontend to fail to display results, breaking the user experience.
+
+            **Validation:**
+            When reviewing config additions or changes, check that the first segment of config keys (before the first `-`) is either `dsr1` or `gptoss`.
+
+            If a config key uses an invalid model prefix:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Invalid model prefix detected. The frontend only supports `dsr1` and `gptoss` as model prefixes. Using other prefixes like `dsr1-fp8` will break the frontend and prevent benchmark results from being displayed. Please use the format `{valid-prefix}-{precision}-{hardware}-{framework}` where valid-prefix is either `dsr1` or `gptoss`."
