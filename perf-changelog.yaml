@@ -362,6 +362,12 @@
     - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
 
+- config-keys:  
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
+
 - config-keys:
     - dsr1-fp8-b200-trt-mtp
   description:
@@ -371,8 +377,3 @@
     - fine-tune max batch sizes and other optimizations
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/632
 
-- config-keys:  
-    - dsr1-fp8-gb200-dynamo-trt
-  description:
-    - "Fix model_prefix argument in yaml configs"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
