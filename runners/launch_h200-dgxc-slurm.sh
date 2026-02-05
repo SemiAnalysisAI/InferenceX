@@ -71,6 +71,7 @@ model_paths:
 containers:
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
+  nginx: "/data/containers/nginx+1.27.4.sqsh"
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -80,7 +81,11 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --setup-script fix-timeouts-x86.sh --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+else
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+fi
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
@@ -103,6 +108,16 @@ done
 echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
+
+# Display sweep log for debugging
+SWEEP_LOG="outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
+if [ -f "$SWEEP_LOG" ]; then
+    echo "=== Sweep Log ($SWEEP_LOG) ==="
+    cat "$SWEEP_LOG"
+    echo "=== End Sweep Log ==="
+else
+    echo "Warning: Sweep log not found at $SWEEP_LOG"
+fi
 
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
