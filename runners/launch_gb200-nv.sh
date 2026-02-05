@@ -18,9 +18,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     if [[ $MODEL_PREFIX == "gptoss" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
         export SERVED_MODEL_NAME="gpt-oss-120b"
-    elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
+        export SERVED_MODEL_NAME="deepseek-r1-fp8"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     else
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
         exit 1
@@ -41,8 +46,6 @@ NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | 
 
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
-
-
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -137,7 +140,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}

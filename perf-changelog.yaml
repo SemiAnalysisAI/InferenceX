@@ -337,3 +337,59 @@
     - "8k1k configs: aggregated, TEP configs (1P7D, 1P6D, 1P3D, 2P3D), DEP (1P1D)"
     - "Concurrency levels range from 1 to 2048 depending on configuration"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/582
+
+- config-keys:
+    - dsr1-fp4-b200-trt
+  description:
+    - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
+    - "Change default MOE backend from DEEPGEMM to TRTLLM"
+    - "Add dynamic piecewise CUDA graphs for 1k1k (TEP8 and CONC64)"
+    - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/620
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek-R1 FP4 GB300 Dynamo TRT disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "Includes MTP and STP configs for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Add gb300-nv runner and launch script for srt-slurm integration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "enable PD/D for both MTP and non-MTP MI355X DeepSeek-R1 FP4 SGLang"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/622
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB200 Dynamo TRT-LLM disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "1k1k: 14 scenarios (7 MTP, 7 STP) with varying DP attention/TEP modes"
+    - "1k8k: 10 scenarios (5 MTP, 5 STP) for long output generation"
+    - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
+    - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
+
+- config-keys:
+    - dsr1-fp8-b200-trt-mtp
+  description:
+    - Update to the latest TRTLLM 1.2 release container version
+    - Fine-tune the choice of parallelism in nvidia-master file, mainly going to TP for most points
+    - Enable piecewise CUDA graphs under most conditions
+    - fine-tune max batch sizes and other optimizations
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/632
+
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 8k1k and 1k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/627
