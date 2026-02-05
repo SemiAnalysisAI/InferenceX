@@ -35,10 +35,8 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     PIECEWISE_CUDA_GRAPHS="false"
     MAX_BATCH_SIZE=$(( CONC < 8 ? CONC : CONC / 8 ))
     KV_CACHE_FREE_MEM_FRACTION=0.7
-    if [[ $CONC -eq 128 ]]; then
-        # use the new MOE backend from latest trtllm to get All2All comms
-        export ENABLE_CONFIGURABLE_MOE=1
-    fi
+    # use the new MOE backend from latest trtllm to get better comms
+    export ENABLE_CONFIGURABLE_MOE=1
     MTP=1
 fi
 
