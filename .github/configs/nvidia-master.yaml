@@ -966,7 +966,7 @@ dsr1-fp8-b200-trt:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
 dsr1-fp8-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200-trt
@@ -974,25 +974,26 @@ dsr1-fp8-b200-trt-mtp:
   framework: trt
   multinode: false
   seq-len-configs:
-  # For all sequence lengths, EP=TP, MOE_BACKEND=DEEPGEMM, MTP=3 (or MTP=1 when DP_ATTN=true)
+  # For all sequence lengths, MTP=3 (or MTP=1 when DP_ATTN=true)
   - isl: 1024
     osl: 1024
     search-space:
-    # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    # mostly TP8
+    # If CONC == 256, then TP8, EP8, DP_ATTN=true
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    # If CONC >= 128, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    # mostly TP8
+    # If CONC >= 128, then TP8, EP8, DP_ATTN=true
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    # TP8 for all points
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.7-cu129-amd64
