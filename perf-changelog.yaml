@@ -369,5 +369,5 @@
     - "Update  GB200 and GB300 configs for DSR1 FP8 SGLANG STP mode"
     - "Image: lmsysorg/sglang:v0.5.8-cu130"
     - "Update prefill/decode worker counts, TP/EP parallelism, and dp-attn settings for 1k1k and 8k1k"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/635
 
