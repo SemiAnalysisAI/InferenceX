@@ -1558,7 +1558,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
 
-ggptoss-fp4-b200-trt:
+gptoss-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2.post2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
