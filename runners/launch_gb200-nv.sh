@@ -12,7 +12,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsfp4"
-    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     else
@@ -25,7 +25,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    elif [[ $MODEL_PREFIX == "dsr1-fp8" ]]; then
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
         export SERVED_MODEL_NAME="deepseek-r1-fp8"
     else
