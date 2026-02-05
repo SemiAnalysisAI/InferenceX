@@ -363,6 +363,12 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
 
 - config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
+
+- config-keys:
     - dsr1-fp8-gb300-dynamo-trt
   description:
     - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 8k1k and 1k1k"
