@@ -362,7 +362,7 @@
     - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
 
-- config-keys:  
+- config-keys:
     - dsr1-fp8-gb200-dynamo-trt
   description:
     - "Fix model_prefix argument in yaml configs"
