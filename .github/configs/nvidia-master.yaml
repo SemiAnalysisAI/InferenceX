@@ -2965,8 +2965,8 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/max-tpt.yaml
-        - "CONFIG_FILE=recipes/gb200-fp8/8k1k/max-tpt.yaml"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/max_tpt.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/8k1k/max_tpt.yaml"
       decode:
         num-worker: 1
         tp: 24
