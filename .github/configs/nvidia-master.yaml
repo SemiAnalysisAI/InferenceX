@@ -2984,7 +2984,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         - "DECODE_NODES=8"
 
 dsr1-fp4-gb200-dynamo-sglang:
-  image: "lmsysorg/sglang:v0.5.5.post2"
+  image: "lmsysorg/sglang:v0.5.8-cu130"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1-fp4
   runner: gb200
@@ -2993,143 +2993,109 @@ dsr1-fp4-gb200-dynamo-sglang:
   multinode: true
   disagg: true
   seq-len-configs:
+  # 1k1k configurations
   - isl: 1024
     osl: 1024
     search-space:
-    # Low latency (1 prefill worker at DEP4 and 2 decode workers at DEP4)
+    # Low latency (1 prefill node, 2 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 4, 8, 32, 64 ]
+      conc-list: [ 4, 8, 32 ]
       prefill:
         num-worker: 1
-        tp: 1
-        ep: 4
-        dp-attn: true
+        tp: 4
+        ep: 1
+        dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=1"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=1k1k-low-latency"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k1k/low-latency.yaml"
       decode:
         num-worker: 2
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=2"
+        tp: 4
+        ep: 1
+        dp-attn: false
 
-    # Mid curve (1 prefill worker at DEP4 and 1 decode workers at DEP48)
+    # Mid curve (4 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 512, 1024, 2048, 4096, 8192 ]
+      conc-list: [ 512, 2048, 4096, 8192, 15000 ]
       prefill:
         num-worker: 4
-        tp: 1
+        tp: 4
         ep: 4
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=4"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=1k1k-middle-curve"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k1k/mid-curve.yaml"
       decode:
         num-worker: 1
-        tp: 1
-        ep: 48
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=12"
-
-    # Top of curve (1 prefill worker at DEP4 and 1 decode worker at DEP32)
-    - spec-decoding: "none"
-      conc-list: [ 8192, 12000, 15000 ]
-      prefill:
-        num-worker: 4
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=4"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=1k1k-max-tpt"
-      decode:
-        num-worker: 1
-        tp: 1
+        tp: 32
         ep: 32
         dp-attn: true
+
+    # Max throughput (4 prefill nodes, 12 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 512, 2048, 4096 ]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
         additional-settings:
-        - "DECODE_NODES=8"
+        - "CONFIG_FILE=recipes/gb200-fp4/1k1k/max-tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 48
+        ep: 48
+        dp-attn: true
+
+  # 8k1k configurations
   - isl: 8192
     osl: 1024
     search-space:
+    # Low latency (1 prefill node, 4 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 4, 8, 32, 64 ]
+      conc-list: [ 4, 8 ]
       prefill:
         num-worker: 1
-        tp: 1
-        ep: 4
+        tp: 4
+        ep: 1
         dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=1"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=8k1k-low-latency"
+        - "CONFIG_FILE=recipes/gb200-fp4/8k1k/low-latency.yaml"
       decode:
         num-worker: 4
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=4"
+        tp: 4
+        ep: 1
+        dp-attn: false
+
+    # Mid curve (6 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 512, 1024, 2048, 4096 ]
+      conc-list: [ 512, 2048, 4096 ]
       prefill:
         num-worker: 6
-        tp: 1
-        ep: 4
+        tp: 4
+        ep: 1
         dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=6"
-        - "N_ADDITIONAL_FRONTENDS=9"
-        - "SCRIPT_MODE=8k1k-middle-curve"
+        - "CONFIG_FILE=recipes/gb200-fp4/8k1k/mid-curve.yaml"
       decode:
         num-worker: 1
-        tp: 1
+        tp: 48
         ep: 48
         dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=12"
+
+    # Max throughput (10 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 1024, 2048, ]
+      conc-list: [ 2048 ]
       prefill:
         num-worker: 10
-        tp: 1
-        ep: 4
-        dp-attn: true
+        tp: 4
+        ep: 1
+        dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=10"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=8k1k-max-tpt"
+        - "CONFIG_FILE=recipes/gb200-fp4/8k1k/max-tpt.yaml"
       decode:
         num-worker: 1
-        tp: 1
+        tp: 32
         ep: 32
         dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=8"
-    - spec-decoding: "none"
-      conc-list: [ 8192 ]
-      prefill:
-        num-worker: 10
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=10"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=8k1k-max-tpt"
-      decode:
-        num-worker: 1
-        tp: 1
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=8"
 
 dsr1-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
