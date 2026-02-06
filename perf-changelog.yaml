@@ -426,7 +426,7 @@
     - "Adjust TP8/TP4 search space to reduce overlapping points"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/642
   
-config-keys:
+- config-keys:
     - dsr1-fp8-b300-dynamo-trt
   description:
     - "New B300 FP8 Dynamo TRT configurations"
