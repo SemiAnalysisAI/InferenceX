@@ -400,3 +400,9 @@
     - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
     - "Extend maximum concurrency to 256 across all sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
+
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 1k8k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/654
