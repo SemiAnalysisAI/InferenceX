@@ -103,7 +103,7 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout yunzhoul/debug-00/prepare-gb200-gb300-fp4-recipes-for-sa
+git checkout sa-submission-q1-2026
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
