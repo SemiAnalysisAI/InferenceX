@@ -296,8 +296,11 @@ _install_lm_eval_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
-        python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
-            "git+https://github.com/EleutherAI/lm-evaluation-harness.git@${lm_eval_ref}" || true
+        if ! python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            "git+https://github.com/EleutherAI/lm-evaluation-harness.git@${lm_eval_ref}"; then
+            python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+                "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
+        fi
     else
         python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
             "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
