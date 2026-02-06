@@ -73,9 +73,11 @@ srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "dsr1-fp4": "${MODEL_PATH}"
 # Container aliases
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
 EOF
@@ -87,7 +89,7 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,dsr1,${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
