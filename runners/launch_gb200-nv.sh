@@ -53,7 +53,13 @@ export OSL="$OSL"
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export IMAGE=$SQUASH_FILE
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
-    bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
+    if [[ "$FRAMEWORK" == "dynamo-sglang" ]] || [[ "$FRAMEWORK" == "dynamo-trt" ]]; then
+        BENCHMARK_SUBDIR="multi_node"
+    else
+        BENCHMARK_SUBDIR="single_node"
+    fi
+    bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
     # Wait for all jobs to complete
     echo "Waiting for all jobs to complete..."
     while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
