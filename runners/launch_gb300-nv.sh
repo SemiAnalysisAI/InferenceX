@@ -3,14 +3,14 @@
 set -x
 
 echo "Cloning srt-slurm repository..."
-TRTLLM_REPO_DIR="srt-slurm"
-if [ -d "$TRTLLM_REPO_DIR" ]; then
-    echo "Removing existing $TRTLLM_REPO_DIR..."
-    rm -rf "$TRTLLM_REPO_DIR"
+SRT_REPO_DIR="srt-slurm"
+if [ -d "$SRT_REPO_DIR" ]; then
+    echo "Removing existing $SRT_REPO_DIR..."
+    rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/ishandhanani/srt-slurm.git "$TRTLLM_REPO_DIR"
-cd "$TRTLLM_REPO_DIR"
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
 git checkout sa-submission-q1-2026
 
 echo "Installing srtctl..."
@@ -26,66 +26,63 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-echo "Configs available at: $TRTLLM_REPO_DIR/"
+echo "Configs available at: $SRT_REPO_DIR/"
 
-export SLURM_PARTITION="main"
-export SLURM_ACCOUNT="sa-shared"
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
 
-SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-# Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+export MODEL_PATH=$MODEL
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    export MODEL_PATH="/models/DeepSeek-R1-0528"
-    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+    export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
+    export SRT_SLURM_MODEL_PREFIX="dsr1"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    export SERVED_MODEL_NAME="deepseek-r1-fp8"
+    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
+    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
     exit 1
 fi
+
+export ENROOT_ROOTFS_WRITABLE=1
 
 export ISL="$ISL"
 export OSL="$OSL"
 
+SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H200
-
+# SRT SLURM Configuration for GB300
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
-
 # Resource defaults
-gpus_per_node: 8
+gpus_per_node: 4
 network_interface: ""
-
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/${TRTLLM_REPO_DIR}"
-
+srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm"
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
-
-# Container aliases
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-  nginx: "/data/containers/nginx+1.27.4.sqsh"
+  dynamo-trtllm: ${SQUASH_FILE}
+use_segment_sbatch_directive: false
 EOF
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
 echo "Running make setup..."
-make setup ARCH=x86_64
+make setup ARCH=aarch64
 
 echo "Submitting job with srtctl..."
-if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --setup-script fix-timeouts-x86.sh --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
-else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
-fi
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
@@ -109,16 +106,6 @@ echo "Job $JOB_ID completed!"
 
 echo "Collecting results..."
 
-# Display sweep log for debugging
-SWEEP_LOG="outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
-if [ -f "$SWEEP_LOG" ]; then
-    echo "=== Sweep Log ($SWEEP_LOG) ==="
-    cat "$SWEEP_LOG"
-    echo "=== End Sweep Log ==="
-else
-    echo "Warning: Sweep log not found at $SWEEP_LOG"
-fi
-
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
@@ -129,6 +116,14 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 echo "Found logs directory: $LOGS_DIR"
+
+cat $LOGS_DIR/sweep_${JOB_ID}.log
+
+for file in $LOGS_DIR/*; do
+    if [ -f "$file" ]; then
+        tail -n 500 $file
+    fi
+done
 
 # Find all result subdirectories
 RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
@@ -149,6 +144,7 @@ else
         for result_file in $RESULT_FILES; do
             if [ -f "$result_file" ]; then
                 # Extract metadata from filename
+                # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
                 filename=$(basename "$result_file")
                 concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
                 gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
@@ -173,4 +169,3 @@ echo "Cleaning up..."
 deactivate 2>/dev/null || true
 rm -rf .venv
 echo "Cleanup complete"
-

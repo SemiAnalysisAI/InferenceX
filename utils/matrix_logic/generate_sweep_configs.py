@@ -66,7 +66,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.PRECISION.value],
             entry[Fields.ISL.value],
             entry[Fields.OSL.value],
-            entry[Fields.SPEC_DECODING.value]
+            entry[Fields.SPEC_DECODING.value],
+            entry[Fields.DP_ATTN.value]
         )
         groups[key].append((i, entry))
 
@@ -292,12 +293,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Apply max-tp filter if specified
-                    # If tp > max_tp, use max_tp instead of skipping (if valid)
                     if args.max_tp is not None:
                         if args.max_tp <= 0:
                             continue  # Skip if max_tp is not positive
                         if tp > args.max_tp:
-                            tp = args.max_tp
+                            continue
 
                     # Apply max-ep filter if specified
                     # If ep > max_ep, use max_ep instead of skipping (if valid)

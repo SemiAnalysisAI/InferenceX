@@ -351,31 +351,55 @@ class TestGenerateFullSweepSingleNode:
             )
             assert len(result) == 0, f"Expected 0 results for max_conc={invalid_value}"
 
-    def test_max_tp_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_tp filter should use max_tp when config tp exceeds it."""
+    def test_max_tp_filter(self, sample_runner_config, full_sweep_args_single_node):
+        """max_tp filter should SKIP configs whose tp exceeds max_tp (no clamping)."""
+        config = {
+            "test-max-tp": {
+                "image": "test-image",
+                "model": "test-model",
+                "model-prefix": "test",
+                "precision": "fp8",
+                "framework": "sglang",
+                "runner": "mi300x",
+                "multinode": False,
+                "seq-len-configs": [
+                    {
+                        "isl": 1024,
+                        "osl": 1024,
+                        "search-space": [
+                            {"tp": 4, "conc-start": 4, "conc-end": 64},  # should remain
+                            {"tp": 8, "conc-start": 4, "conc-end": 64},  # should be skipped
+                        ],
+                    }
+                ],
+            }
+        }
+
         full_sweep_args_single_node.max_tp = 4
         full_sweep_args_single_node.seq_lens = ["1k1k"]
+
         result = generate_full_sweep(
             full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
+            config,
+            sample_runner_config,
         )
-        # tp=8 in config, but max_tp=4, so should use tp=4
-        assert len(result) > 0
+
+        # conc values: 4, 8, 16, 32, 64 = 5 entries from the tp=4 bmk only
+        assert len(result) == 5
         assert all(entry["tp"] == 4 for entry in result)
 
-    def test_max_tp_creates_config_when_below_min(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_tp below config's tp should create config with max_tp value."""
-        # Config has tp=8, so max_tp=2 should create entries with tp=2
+    def test_max_tp_below_all_available_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
+        """If all available tp values are > max_tp, generator should return empty (skip)."""
         full_sweep_args_single_node.max_tp = 2
         full_sweep_args_single_node.seq_lens = ["1k1k"]
+
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_single_node_config,
-            sample_runner_config
+            sample_runner_config,
         )
-        assert len(result) > 0
-        assert all(entry["tp"] == 2 for entry in result)
+
+        assert len(result) == 0
 
     def test_max_tp_zero_or_negative_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """max_tp of 0 or negative should skip configs."""
@@ -1110,7 +1134,7 @@ class TestEdgeCases:
         assert result[0]["conc"] == [1]
 
     def test_combined_max_filters(self, sample_runner_config, full_sweep_args_single_node):
-        """Multiple max filters should all apply and create configs with max values."""
+        """Multiple max filters should all apply (tp skip, ep clamp, conc clamp)."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1125,7 +1149,8 @@ class TestEdgeCases:
                         "isl": 1024,
                         "osl": 1024,
                         "search-space": [
-                            {"tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200}
+                            {"tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200},  # should be skipped
+                            {"tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},  # should remain
                         ]
                     }
                 ]
@@ -1134,17 +1159,17 @@ class TestEdgeCases:
         full_sweep_args_single_node.max_tp = 2
         full_sweep_args_single_node.max_ep = 1
         full_sweep_args_single_node.max_conc = 1
+
         result = generate_full_sweep(
             full_sweep_args_single_node,
             config,
             sample_runner_config
         )
-        # All values exceed max, so should use max values
+
         assert len(result) == 1
         assert result[0]["tp"] == 2
         assert result[0]["ep"] == 1
         assert result[0]["conc"] == 1
-
 
 # =============================================================================
 # Test argument parsing and defaults
