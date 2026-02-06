@@ -417,4 +417,14 @@
     - "Update launch_b200-dgxc.sh to support SPEC_SUFFIX for MTP script selection"
     - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
-  
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-sglang
+  description:
+    - "Add GB300 FP4 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-runtime"
+    - "Recipes sourced from srt-slurm repo (recipes/gb300-fp4/)"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/636
+
