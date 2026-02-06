@@ -33,15 +33,48 @@ else
 fi
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
-ps aux
+MAX_RUNNING_REQUESTS=512
+CUDA_GRAPH_MAX_BATCH_SIZE=512
+
+MEM_FRAC_STATIC=.85
+CHUNKED_PREFILL_SIZE=16384
+MAX_PREFILL_TOKENS=16384
+
+# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
+SPECULATIVE_NUM_STEPS=2
+SPECULATIVE_DRAFT_TOKENS=3
+SPECULATIVE_EAGLE_TOPK=1
+
+SGLANG_ENABLE_SPEC_V2=1
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
---chunked-prefill-size 16384 \
---ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
+    --model-path $MODEL \
+    --host 0.0.0.0 \
+    --port $PORT \
+    --trust-remote-code \
+    --tensor-parallel-size=$TP \
+    --data-parallel-size=1 \
+    --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE \
+    --max-running-requests $MAX_RUNNING_REQUESTS \
+    --mem-fraction-static $MEM_FRAC_STATIC \
+    --kv-cache-dtype fp8_e4m3 \
+    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
+    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --ep-size $EP_SIZE \
+    --quantization modelopt_fp4 \
+    --enable-flashinfer-allreduce-fusion \
+    --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+    --enable-symm-mem \
+    --disable-radix-cache \
+    --attention-backend trtllm_mla \
+    --moe-runner-backend flashinfer_trtllm \
+    --stream-interval 30 \
+    --speculative-algorithm EAGLE \
+    --speculative-num-steps $SPECULATIVE_NUM_STEPS \
+    --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
+    --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

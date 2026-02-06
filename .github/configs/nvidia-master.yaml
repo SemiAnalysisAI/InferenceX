@@ -797,7 +797,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
 
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.6-cu129-amd64
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -820,6 +820,28 @@ dsr1-fp4-b200-sglang:
     search-space:
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+
+dsr1-fp4-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
@@ -907,7 +929,7 @@ dsr1-fp4-b200-trt-mtp:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.6-cu129-amd64
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200

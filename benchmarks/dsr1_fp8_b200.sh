@@ -20,8 +20,7 @@ nvidia-smi
 
 hf download "$MODEL"
 
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
+export SGLANG_ENABLE_JIT_DEEPGEMM=false
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -35,8 +34,8 @@ if [[ $TP -eq 8 ]]; then
 
   # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
   # this will help us save memory from being unnecessary used. 
-  MAX_RUNNING_REQUESTS=128
-  CUDA_GRAPH_MAX_BATCH_SIZE=128
+  MAX_RUNNING_REQUESTS=512
+  CUDA_GRAPH_MAX_BATCH_SIZE=512
 
   MEM_FRAC_STATIC=0.82
   CHUNKED_PREFILL_SIZE=32768
@@ -66,12 +65,28 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 ps aux
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
---mem-fraction-static $MEM_FRAC_STATIC --kv-cache-dtype fp8_e4m3 --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL --disable-radix-cache \
---attention-backend trtllm_mla --stream-interval 30 --ep-size $EP_SIZE --moe-runner-backend flashinfer_trtllm --quantization fp8 > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
+    --model-path=$MODEL \
+    --host=0.0.0.0 \
+    --port=$PORT \
+    --tensor-parallel-size=$TP \
+    --data-parallel-size=1 \
+    --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE \
+    --max-running-requests $MAX_RUNNING_REQUESTS \
+    --mem-fraction-static $MEM_FRAC_STATIC \
+    --kv-cache-dtype fp8_e4m3 \
+    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
+    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --enable-flashinfer-allreduce-fusion \
+    --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+    --disable-radix-cache \
+    --fp8-gemm-backend=flashinfer_trtllm \
+    --attention-backend trtllm_mla \
+    --stream-interval 30 \
+    --ep-size $EP_SIZE \
+    --moe-runner-backend flashinfer_trtllm \
+    --quantization fp8 \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
