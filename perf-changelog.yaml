@@ -400,3 +400,9 @@
     - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
     - "Extend maximum concurrency to 256 across all sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-trt
+  description:
+    - "Introduce new DSR1 FP8 B200 Dynamo TRT configurations for 8k1k and 1k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647

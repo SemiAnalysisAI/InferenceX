@@ -34,8 +34,10 @@ export SLURM_ACCOUNT="root"
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
     if [[ $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
+        export MODEL_PATH="/raid/models/dsr1-0528-fp8"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     else
         echo "Unsupported precision: $PRECISION. Supported precisions are: fp4, fp8"
         exit 1
@@ -72,7 +74,7 @@ network_interface: ""
 srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 # Container aliases
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
