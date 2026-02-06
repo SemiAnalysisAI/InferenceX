@@ -418,4 +418,3 @@
     - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
   
-  
