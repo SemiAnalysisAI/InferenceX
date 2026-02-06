@@ -35,7 +35,7 @@ export SLURM_ACCOUNT="customer"
 CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
 
 # Map container image to local squash file
-SQUASH_FILE="/mnt/nfs/slurm-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
 
 if [[ $MODEL_PREFIX == "DeepSeek-R1-0528" ]]; then
     export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
