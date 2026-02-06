@@ -400,3 +400,13 @@
     - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
     - "Extend maximum concurrency to 256 across all sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
+
+ - config-keys:
+      - dsr1-fp4-gb200-dynamo-sglang
+    description:
+      - "Update SGLang image from v0.5.5.post2 to v0.5.8-cu130"
+      - "Change model-prefix from dsr1 to dsr1-fp4 for FP4 model path separation"
+      - "Refactor to use CONFIG_FILE-based srt-slurm recipes instead of inline parameters"
+      - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+      - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+    pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633
