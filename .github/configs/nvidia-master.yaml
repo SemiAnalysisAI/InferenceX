@@ -410,6 +410,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 8
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32]
@@ -424,6 +425,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 8
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
@@ -438,6 +440,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 8
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [256]
@@ -452,6 +455,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 8
         tp: 8
+        ep: 1
         dp-attn: false
     # MTP configurations - High throughput (DP attention)
     - spec-decoding: "mtp"
@@ -528,6 +532,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 3
         tp: 8
+        ep: 1
         dp-attn: false
     - conc-list: [32]
       prefill:
@@ -541,6 +546,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 3
         tp: 8
+        ep: 1
         dp-attn: false
     - conc-list: [128]
       prefill:
@@ -554,6 +560,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 3
         tp: 8
+        ep: 1
         dp-attn: false
     # Non-MTP (STP) configurations - High throughput (DP attention)
     - conc-list: [1920]
@@ -616,6 +623,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 6
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
@@ -630,6 +638,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 2
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [48]
@@ -644,6 +653,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 6
         tp: 8
+        ep: 1
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
@@ -658,6 +668,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 4
         tp: 8
+        ep: 1
         dp-attn: false
     # MTP configurations - High throughput (DP attention)
     - spec-decoding: "mtp"
@@ -719,6 +730,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 1
         tp: 8
+        ep: 1
         dp-attn: false
     - conc-list: [32]
       prefill:
@@ -732,6 +744,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 4
         tp: 8
+        ep: 1
         dp-attn: false
     - conc-list: [128]
       prefill:
@@ -745,6 +758,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 4
         tp: 8
+        ep: 1
         dp-attn: false
     - conc-list: [96]
       prefill:
@@ -758,6 +772,7 @@ dsr1-fp8-b200-dynamo-trt:
       decode:
         num-worker: 6
         tp: 8
+        ep: 1
         dp-attn: false
     # Non-MTP (STP) configurations - High throughput (DP attention)
     - conc-list: [128]
