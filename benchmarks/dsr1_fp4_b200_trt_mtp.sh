@@ -23,12 +23,15 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 hf download "$MODEL"
 
 # ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
+MOE_BACKEND="TRTLLM"
+PIECEWISE_CUDA_GRAPHS="false"
+MAX_BATCH_SIZE=$CONC
+MTP=3
+
 if [[ "$DP_ATTENTION" == "true" ]]; then
+    MAX_BATCH_SIZE=$(( CONC < 4 ? CONC : CONC / 4 ))
     MOE_BACKEND="CUTLASS"
     MTP=1
-else
-    MOE_BACKEND="TRTLLM"
-    MTP=3
 fi
 
 echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
@@ -40,7 +43,7 @@ EXTRA_CONFIG_FILE="dsr1-fp4-mtp.yml"
 cat > $EXTRA_CONFIG_FILE << EOF
 cuda_graph_config:
     enable_padding: true
-    max_batch_size: 512
+    max_batch_size: $MAX_BATCH_SIZE
 enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
@@ -64,13 +67,38 @@ attention_dp_config:
 EOF
 fi
 
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    MAX_BATCH_SIZE=$((CONC/TP))
-else
-    MAX_BATCH_SIZE=$CONC
+MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
+
+# set of configs using piecewise_cuda_graphs
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+    if [[ $CONC == 32 || $CONC == 64 ]]; then
+        PIECEWISE_CUDA_GRAPHS="true"
+    elif [[ $CONC == 128 && $DP_ATTENTION == "false" ]]; then
+        PIECEWISE_CUDA_GRAPHS="true"
+    fi
+elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
+    if [[ $CONC == 64 ]]; then
+        PIECEWISE_CUDA_GRAPHS="true"
+    fi
 fi
 
-MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
+if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
+    # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
+    capture_tokens=(1 2 4 8 16 32 64 128)
+    capture_tokens+=( $(seq 256 256 $MAX_NUM_TOKENS))
+    if [ $((MAX_NUM_TOKENS%256)) -ne 0 ]; then
+        capture_tokens+=($MAX_NUM_TOKENS)
+    fi
+    CAPTURE_TOKENS_LIST=$(printf "%s, " "${capture_tokens[@]}")
+
+    cat << EOF >> $EXTRA_CONFIG_FILE
+torch_compile_config:
+    capture_num_tokens: [${CAPTURE_TOKENS_LIST%, }]
+    enable_piecewise_cuda_graph: true 
+EOF
+fi  # end of set of configs using piecewise_cuda_graphs
+
+
 
 set -x
 # Launch TRT-LLM server

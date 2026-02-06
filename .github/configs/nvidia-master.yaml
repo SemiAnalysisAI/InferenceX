@@ -865,7 +865,7 @@ dsr1-fp4-b200-trt:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
 dsr1-fp4-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200-trt
@@ -876,44 +876,35 @@ dsr1-fp4-b200-trt-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    # If TP=4:
-    #   If CONC >= 16, then EP=4
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
+    # TP=4 configurations
     - { tp: 4, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-    - { tp: 4, ep: 4, conc-start: 16, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 16, then EP=8
-    #   If CONC >= 64, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-    - { tp: 8, ep: 8, conc-start: 16, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+    # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    # If TP=4:
-    #   If CONC >= 32, then EP=4
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 4, ep: 4, conc-start: 32, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 8, then EP=8
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-    - { tp: 8, ep: 8, conc-start: 8, conc-end: 64, spec-decoding: mtp }
+      # TP=4 configurations
+    - { tp: 4, conc-start: 16, conc-end: 16, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 8, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 64, spec-decoding: mtp }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    # If TP=4:
-    #   If CONC >= 32, then EP=4, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
+      # TP=4 configurations
     - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 32, then EP=8, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 32, conc-end: 32, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.6-cu129-amd64
