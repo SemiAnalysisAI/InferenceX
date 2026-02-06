@@ -9,10 +9,12 @@ set -x
 # local paths to avoid repeated downloading on the shared GB200 cluster.
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
-    if [[ $MODEL_PREFIX == "dsr1" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
-    elif [[ $MODEL_PREFIX == "dsr1-fp4" ]]; then
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
     else
         export MODEL_PATH=$MODEL
     fi
