@@ -11,7 +11,8 @@ fi
 
 git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q1-2026
+# git checkout sa-submission-q1-2026
+git checkout yunzhoul/debug-05/b200-configs
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
