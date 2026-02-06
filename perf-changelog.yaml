@@ -393,7 +393,7 @@
   description:
     - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 8k1k and 1k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/627
-    
+
 - config-keys:
     - gptoss-fp4-b200-trt
   description:
@@ -407,4 +407,14 @@
     - "Add --use-chat-template argument to benchmark_serving script"
     - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
+  
+- config-keys: 
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Add MTP (Multi-Token Prediction) support for DeepSeek R1 FP8 B200 SGLang using EAGLE speculative decoding"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-amd64"
+    - "Add benchmark script dsr1_fp8_b200_mtp.sh with EAGLE speculative decoding (num-steps=2, draft-tokens=3, topk=1)"
+    - "Update launch_b200-dgxc.sh to support SPEC_SUFFIX for MTP script selection"
+    - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
   
