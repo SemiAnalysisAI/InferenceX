@@ -400,3 +400,11 @@
     - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
     - "Extend maximum concurrency to 256 across all sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
+  
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add --use-chat-template argument to benchmark_serving script"
+    - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
+  

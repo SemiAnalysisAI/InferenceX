@@ -28,11 +28,7 @@ fi
 
 set -x
 
-# Always clone and setup sglang_disagg
-# git clone --branch cam/sa-251219 https://github.com/cquil11/sglang_disagg.git
-
-# Switch to origin repo url for supporting wide ep configs
-git clone --branch cam/sa-260114 https://github.com/cquil11/sglang_disagg.git
+git clone --branch sa-260203 https://github.com/billishyahao/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
