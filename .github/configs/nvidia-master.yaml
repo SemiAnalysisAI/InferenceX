@@ -3038,7 +3038,7 @@ dsr1-fp4-gb200-dynamo-sglang:
 
     # Mid curve (4 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 512, 2048, 4096, 8192, 15000 ]
+      conc-list: [ 512, 2048, 4096, 8192 ]
       prefill:
         num-worker: 4
         tp: 4
@@ -3054,7 +3054,7 @@ dsr1-fp4-gb200-dynamo-sglang:
 
     # Max throughput (4 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 512, 2048, 4096 ]
+      conc-list: [ 2048, 4096 ]
       prefill:
         num-worker: 4
         tp: 4
