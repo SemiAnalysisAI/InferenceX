@@ -393,3 +393,10 @@
   description:
     - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 8k1k and 1k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/627
+    
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
+    - "Extend maximum concurrency to 256 across all sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
