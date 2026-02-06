@@ -1283,7 +1283,7 @@ dsr1-fp4-b200-trt:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
 dsr1-fp4-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200-trt
@@ -1294,44 +1294,35 @@ dsr1-fp4-b200-trt-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    # If TP=4:
-    #   If CONC >= 16, then EP=4
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
+    # TP=4 configurations
     - { tp: 4, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-    - { tp: 4, ep: 4, conc-start: 16, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 16, then EP=8
-    #   If CONC >= 64, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-    - { tp: 8, ep: 8, conc-start: 16, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+    # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    # If TP=4:
-    #   If CONC >= 32, then EP=4
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 4, ep: 4, conc-start: 32, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 8, then EP=8
-    #   If CONC >= 128, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-    - { tp: 8, ep: 8, conc-start: 8, conc-end: 64, spec-decoding: mtp }
+      # TP=4 configurations
+    - { tp: 4, conc-start: 16, conc-end: 16, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 8, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 64, spec-decoding: mtp }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    # If TP=4:
-    #   If CONC >= 32, then EP=4, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
+      # TP=4 configurations
     - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-    # If TP=8:
-    #   If CONC >= 32, then EP=8, DP_ATTN=true, MOE_BACKEND=CUTLASS, MTP=1
-    - { tp: 8, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 32, conc-end: 32, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      # TP=8 configurations
+    - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.6-cu129-amd64
@@ -1355,6 +1346,28 @@ dsr1-fp8-b200-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+
+dsr1-fp8-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.8-cu130-amd64
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
@@ -1384,7 +1397,7 @@ dsr1-fp8-b200-trt:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
 dsr1-fp8-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200-trt
@@ -1392,25 +1405,26 @@ dsr1-fp8-b200-trt-mtp:
   framework: trt
   multinode: false
   seq-len-configs:
-  # For all sequence lengths, EP=TP, MOE_BACKEND=DEEPGEMM, MTP=3 (or MTP=1 when DP_ATTN=true)
+  # For all sequence lengths, MTP=3 (or MTP=1 when DP_ATTN=true)
   - isl: 1024
     osl: 1024
     search-space:
-    # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    # mostly TP8
+    # If CONC == 256, then TP8, EP8, DP_ATTN=true
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    # If CONC >= 128, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    # mostly TP8
+    # If CONC >= 128, then TP8, EP8, DP_ATTN=true
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    # If CONC >= 64, then DP_ATTN=true, MTP=1
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    # TP8 for all points
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.7-cu129-amd64
@@ -1976,7 +1990,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
 
 gptoss-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2.post2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200-trt
@@ -1984,32 +1998,32 @@ gptoss-fp4-b200-trt:
   framework: trt
   multinode: false
   seq-len-configs:
-  # DP Attn at higher concurrencies, TP attn at middle to lower. TP=1 turns out to be highest as artifact of concurrency limit=128
+  # Low ==> high TP from Left to Right of pareto
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 128, conc-end: 128 }
-    - { tp: 2, ep: 2, dp-attn: true, conc-start: 64, conc-end: 128 }
+    - { tp: 1, conc-start: 256, conc-end: 256 }
+    - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 256 }
+    - { tp: 2, conc-start:  4, conc-end: 256 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
-    - { tp: 2, conc-start: 8, conc-end: 32 }
-    - { tp: 4, conc-start: 4, conc-end: 16 }
-    - { tp: 8, conc-start: 4, conc-end: 8 }
+    - { tp: 4, conc-start: 4, conc-end: 4 }
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+  # Low ==> high TP from Left to Right of pareto
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 2, ep: 2, dp-attn: true, conc-start: 64, conc-end: 128 }
-    - { tp: 2, conc-start: 4, conc-end: 16 }
-    - { tp: 4, conc-start: 4, conc-end: 128 }
-    - { tp: 8, conc-start: 4, conc-end: 8 }
-  # DP Attn at higher concurrencies, TP attn at middle to lower. TP=1 turns out to be highest as artifact of concurrency limit=128
+    - { tp: 1, conc-start: 256, conc-end: 256}
+    - { tp: 2, conc-start: 128, conc-end: 256}
+    - { tp: 4, conc-start:   4, conc-end: 256}
+    - { tp: 8, conc-start:   4, conc-end:   4}
+  # Low ==> high TP from Left to Right of pareto
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 128, conc-end: 128 }
-    - { tp: 2, ep: 2, dp-attn: true, conc-start: 64, conc-end: 128 }
-    - { tp: 2, conc-start: 4, conc-end: 128 }
-    - { tp: 4, conc-start: 4, conc-end: 32 }
-    - { tp: 8, conc-start: 4, conc-end: 8 }
+    - { tp: 1, conc-start:   4, conc-end: 256}
+    - { tp: 2, conc-start:   4, conc-end: 256}
+    - { tp: 4, conc-start:   4, conc-end:  32}
+    - { tp: 8, conc-start:   4, conc-end:   4}
 
 gptoss-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.13.0
@@ -4155,6 +4169,418 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
 
+dsr1-fp8-gb300-dynamo-trt:
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: gb300
+  precision: fp8
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # MTP configurations (spec_decoding="mtp")
+    - spec-decoding: "mtp"
+      conc-list: [8]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [24]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [180]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [564]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [666]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [2253]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [8192]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # STP configurations (no spec_decoding)
+    - conc-list: [4]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [24]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [84]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [1229]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [2253]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [8602]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [12288]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # MTP configurations (spec_decoding="mtp")
+    - spec-decoding: "mtp"
+      conc-list: [8]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [24]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [333]
+      prefill:
+        num-worker: 6
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [666]
+      prefill:
+        num-worker: 8
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [1229]
+      prefill:
+        num-worker: 10
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [1229]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # STP configurations (no spec_decoding)
+    - conc-list: [4]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [24]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [36]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [512]
+      prefill:
+        num-worker: 6
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [666]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [1229]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [2151]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+
 
 gptoss-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
@@ -4425,4 +4851,161 @@ gptoss-fp4-gb200-dynamo-trt:
         - "DECODE_MAX_NUM_TOKENS=20000"
         - "DECODE_MAX_BATCH_SIZE=512"
         - "DECODE_GPU_MEM_FRACTION=0.9"
-        
+
+
+dsr1-fp8-h200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.8-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h200-multinode-slurm
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Aggregated mode (single node TEP)
+    - conc-list: [1, 4, 16, 32, 64, 128, 256, 512]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/1k1k/bs128-agg-tp.yaml"
+      decode:
+        num-worker: 0
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # Low latency (1 prefill, 9 decode, TEP)
+    - conc-list: [1, 4, 8, 16, 32, 64, 128, 256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/1k1k/low-latency-1p9d.yaml"
+      decode:
+        num-worker: 9
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # High throughput TEP (1 prefill, 6 decode)
+    - conc-list: [512, 1024, 2048]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/1k1k/bs256-1p6d-tp.yaml"
+      decode:
+        num-worker: 6
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # High throughput DEP (1 prefill, 6 decode, dp-attention)
+    - conc-list: [128, 256, 512, 1024, 2048]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/1k1k/bs256-1p6d-dep.yaml"
+      decode:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: true
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Aggregated mode (single node TEP)
+    - conc-list: [1, 4, 16, 32, 64, 128, 256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs128-agg-tp.yaml"
+      decode:
+        num-worker: 0
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # Low latency TEP (1 prefill, 7 decode)
+    - conc-list: [1, 4, 8]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs4-1p7d.yaml"
+      decode:
+        num-worker: 7
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # TEP (1 prefill, 6 decode)
+    - conc-list: [4, 8, 16]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs8-1p6d.yaml"
+      decode:
+        num-worker: 6
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # TEP (1 prefill, 3 decode)
+    - conc-list: [8, 16, 32]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs16-1p3d.yaml"
+      decode:
+        num-worker: 3
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # TEP (2 prefill, 3 decode)
+    - conc-list: [32, 64, 128]
+      prefill:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs64-2p3d.yaml"
+      decode:
+        num-worker: 3
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # High throughput DEP (1 prefill, 1 decode, dp-attention)
+    - conc-list: [64, 128, 256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h200/8k1k/bs128-1p1d-dep.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
