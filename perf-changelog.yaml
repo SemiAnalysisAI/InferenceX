@@ -339,14 +339,6 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/582
 
 - config-keys:
-    - dsr1-fp8-h200-dynamo-sglang
-  description:
-    - "Add MTP (EAGLE speculative decoding) configs alongside STP"
-    - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
-    - "Remove aggregated configs, keep only disaggregated"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/TBD
-
-- config-keys:
     - dsr1-fp4-b200-trt
   description:
     - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
@@ -433,3 +425,11 @@
     - "Enable dynamic piecewise CUDA graphs for several conditions"
     - "Adjust TP8/TP4 search space to reduce overlapping points"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/642
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add MTP (EAGLE speculative decoding) configs alongside STP"
+    - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
+    - "Remove aggregated configs, keep only disaggregated"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/640
