@@ -2862,7 +2862,7 @@ dsr1-fp8-gb200-dynamo-trt:
 
 
 dsr1-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8-cu130
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb200
@@ -2990,7 +2990,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         dp-attn: true
 
 dsr1-fp8-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8-cu130
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb300
