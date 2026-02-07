@@ -10,8 +10,23 @@
 
 set -x
 
-# REQUIRED: IBDEVICES must be set by the runner
-IBDEVICES="${IBDEVICES:?ERROR: IBDEVICES must be set. This should be set in runners/launch_mi355x-amds.sh based on cluster type.}"
+# IBDEVICES configuration
+# Prefer IBDEVICES set by runner (runners/launch_mi355x-amds.sh)
+# Fall back to hostname detection if not set (for direct script execution)
+if [[ -z "$IBDEVICES" ]]; then
+    NODENAME=$(hostname -s)
+    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+        export IBDEVICES=ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7
+    elif [[ $NODENAME == mia1* ]]; then
+        export IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+    else
+        echo "ERROR: Unable to detect cluster from hostname $NODENAME and IBDEVICES not set" >&2
+        exit 1
+    fi
+    echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES from hostname $NODENAME"
+else
+    echo "[INFO] Using IBDEVICES=$IBDEVICES (set by runner or environment)"
+fi
 export IBDEVICES
 
 # Auto-detect default network interface (portable across clusters)
@@ -34,10 +49,11 @@ export SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=16384
 
 export MORI_APP_LOG_LEVEL=INFO
 
-# QoS/DSCP configuration (optional - only if nicctl is available)
-# If MORI_RDMA_TC is already set by the runner, use that value.
-# Otherwise, try to detect it using nicctl (AMD/Pensando-specific tool).
-if [[ -z "$MORI_RDMA_TC" ]] && command -v nicctl &> /dev/null; then
+# QoS/DSCP configuration
+# Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
+if [[ -n "$MORI_RDMA_TC" ]]; then
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
+elif command -v nicctl &> /dev/null; then
     ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
     ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
 $1 == "DSCP" && $2 == ":" && $NF == p {
@@ -50,11 +66,30 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         export MORI_RDMA_TC=$TC
         echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL"
     else
-        echo "[WARN] nicctl available but QoS data unavailable; MORI_RDMA_TC not auto-detected."
+        echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
+        # Fall back to hostname-based detection
+        NODENAME=$(hostname -s)
+        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+            export MORI_RDMA_TC=96
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == mia1* ]]; then
+            export MORI_RDMA_TC=104
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        else
+            echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
+        fi
     fi
-elif [[ -n "$MORI_RDMA_TC" ]]; then
-    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner)"
 else
-    echo "[INFO] nicctl not found and MORI_RDMA_TC not set. Skipping RDMA QoS configuration."
-    echo "       This is normal for clusters without QoS or outside Docker containers."
+    # nicctl not available, try hostname-based detection
+    NODENAME=$(hostname -s)
+    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+        export MORI_RDMA_TC=96
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == mia1* ]]; then
+        export MORI_RDMA_TC=104
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    else
+        echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
+        echo "       This is normal for clusters without QoS or outside Docker containers."
+    fi
 fi

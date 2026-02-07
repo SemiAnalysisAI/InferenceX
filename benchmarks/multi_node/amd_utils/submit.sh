@@ -54,9 +54,8 @@ check_env MODEL_NAME
 check_env CONTAINER_IMAGE
 check_env RUNNER_NAME
 
-# GPUS_PER_NODE must be set explicitly (no default)
-# Different GPU models have different counts: MI355X=8, MI325X=4
-GPUS_PER_NODE="${GPUS_PER_NODE:?ERROR: GPUS_PER_NODE must be set (e.g., 8 for MI355X, 4 for MI325X)}"
+# GPUS_PER_NODE defaults to 8 (MI355X). Set to 4 for MI325X if needed.
+GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
 # COMMAND_LINE ARGS
 PREFILL_NODES=$1

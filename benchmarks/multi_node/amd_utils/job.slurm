@@ -71,10 +71,25 @@ BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
 BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
 BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 
-GPUS_PER_NODE="${GPUS_PER_NODE:?ERROR: GPUS_PER_NODE must be set (e.g., 8 for MI355X, 4 for MI325X)}"
+GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
 MODEL_NAME="${MODEL_NAME:-None}"
-MODEL_DIR="${MODEL_DIR:?ERROR: MODEL_DIR must be set (path to shared model storage, e.g., /mnt/models, /nfsdata)}"
+
+# MODEL_DIR detection: prefer env var, fall back to hostname detection
+if [[ -z "$MODEL_DIR" ]]; then
+    NODENAME=$(hostname -s)
+    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+        MODEL_DIR="/nfsdata"
+        echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $NODENAME"
+    elif [[ $NODENAME == mia1* ]]; then
+        MODEL_DIR="/it-share/data"
+        echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $NODENAME"
+    else
+        MODEL_DIR="/nfsdata"  # Default fallback
+        echo "[INFO] Using default MODEL_DIR=$MODEL_DIR (hostname $NODENAME not recognized)"
+    fi
+fi
+export MODEL_DIR
 
 # ------------------------
 # Model path validation and selection across all nodes
