@@ -453,3 +453,8 @@
     - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
     - "Remove aggregated configs, keep only disaggregated"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/640
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "re-merge again with Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/6XX
