@@ -432,5 +432,5 @@
     - "Add DSR1 FP8 B200 disaggregated SGLang multinode configuration"
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
     - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput profiles"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/658
 
