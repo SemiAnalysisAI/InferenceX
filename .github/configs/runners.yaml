@@ -66,3 +66,5 @@ b300:
 - 'b300-nv_0'
 gb300:
 - 'gb300-nv_0'
+h100-multinode-slurm:
+- 'h100-dgxc-slurm_0'
