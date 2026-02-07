@@ -47,6 +47,8 @@ jobs:
           allowed_bots: ''
           additional_permissions: |
             actions: read
+          settings: |
+            {"fastMode": true}
 
           claude_args: |
             --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-6' }}

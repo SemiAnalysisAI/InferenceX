@@ -49,6 +49,8 @@ jobs:
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
+          settings: |
+            {"fastMode": true}
 
           claude_args: |
             --model 'claude-opus-4-6'
