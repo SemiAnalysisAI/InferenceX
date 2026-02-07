@@ -434,3 +434,8 @@
     - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput profiles"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/658
 
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 1k8k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/654
