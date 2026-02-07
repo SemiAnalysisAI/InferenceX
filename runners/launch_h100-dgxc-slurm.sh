@@ -2,8 +2,8 @@
 
 set -x
 
+echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
-echo "Cloning $SRT_REPO_DIR repository..."
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
     rm -rf "$SRT_REPO_DIR"
@@ -28,39 +28,31 @@ fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
 
-export SLURM_PARTITION="gpu"
-export SLURM_ACCOUNT="root"
+export SLURM_PARTITION="hpc-gpu-1"
+export SLURM_ACCOUNT="customer"
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    if [[ $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
-    elif [[ $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
-    else
-        echo "Unsupported precision: $PRECISION. Supported precisions are: fp4, fp8"
-        exit 1
-    fi
-    export SERVED_MODEL_NAME=$MODEL
+# Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
+CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+
+# Map container image to local squash file
+SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+
+if [[ $MODEL_PREFIX == "DeepSeek-R1-0528" ]]; then
+    export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
+    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: DeepSeek-R1-0528"
     exit 1
 fi
 
 export ISL="$ISL"
 export OSL="$OSL"
 
-NGINX_IMAGE="nginx:1.27.4"
-
-SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
-
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for B200
+# SRT SLURM Configuration for H100
+
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
@@ -73,13 +65,13 @@ srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
-  "dsr1-fp8": "${MODEL_PATH}"
-# Container aliases
 containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-use_exclusive_sbatch_directive: true
+  latest: "${SQUASH_FILE}"
+  "${CONTAINER_KEY}": "${SQUASH_FILE}"
+# SLURM directive compatibility
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -89,7 +81,7 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
@@ -123,7 +115,8 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 echo "Found logs directory: $LOGS_DIR"
-cat $LOGS_DIR/sweep_$JOB_ID.log
+
+cat $LOGS_DIR/sweep_${JOB_ID}.log
 
 for file in $LOGS_DIR/*; do
     if [ -f "$file" ]; then

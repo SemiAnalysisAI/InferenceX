@@ -91,7 +91,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
-    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} ${{ inputs.run-eval && 'eval ' || '' }}tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} conc=${{ inputs.conc }} spec=${{ inputs.spec-decoding }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.run-eval && ' | eval' || '' }}"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
@@ -135,7 +135,8 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}_ep${{ env.EP_SIZE }}_dpa_${{ env.DP_ATTENTION }}_conc${{ env.CONC }}_specdecode_${{ env.SPEC_DECODING }}_${{ runner.name }}
+          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
