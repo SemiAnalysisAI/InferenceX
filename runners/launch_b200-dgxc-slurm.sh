@@ -73,9 +73,11 @@ srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
   "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "dsr1-fp8": "${MODEL_PATH}"
 # Container aliases
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
 EOF
