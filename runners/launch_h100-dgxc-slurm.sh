@@ -28,61 +28,61 @@ fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
 
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
+export SLURM_PARTITION="hpc-gpu-1"
+export SLURM_ACCOUNT="customer"
 
-export MODEL_PATH=$MODEL
+# Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
+CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
 
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+# Map container image to local squash file
+SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
+    export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
+    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: DeepSeek-R1-0528"
     exit 1
 fi
-
-export ENROOT_ROOTFS_WRITABLE=1
 
 export ISL="$ISL"
 export OSL="$OSL"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300
+# SRT SLURM Configuration for H100
+
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
 # Resource defaults
-gpus_per_node: 4
+gpus_per_node: 8
 network_interface: ""
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm"
+srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
-  dynamo-trtllm: ${SQUASH_FILE}
+  latest: "${SQUASH_FILE}"
+  "${CONTAINER_KEY}": "${SQUASH_FILE}"
+# SLURM directive compatibility
+use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
 EOF
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
 echo "Running make setup..."
-make setup ARCH=aarch64
+make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output

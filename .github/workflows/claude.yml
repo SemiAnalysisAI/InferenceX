@@ -47,9 +47,11 @@ jobs:
           allowed_bots: ''
           additional_permissions: |
             actions: read
+          settings: |
+            {"fastMode": true}
 
           claude_args: |
-            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-5-20251101' }}
+            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-6' }}
             --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
             --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
