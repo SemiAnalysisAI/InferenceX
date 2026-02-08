@@ -465,3 +465,12 @@
     - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
     - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-sglang
+  description:
+    - "Update SGLang image from v0.5.5.post2 to v0.5.8-cu130"
+    - "Add FP4 model path separation via SRT_SLURM_MODEL_PREFIX in launch script"
+    - "Refactor to use CONFIG_FILE-based srt-slurm recipes instead of inline parameters"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633  
