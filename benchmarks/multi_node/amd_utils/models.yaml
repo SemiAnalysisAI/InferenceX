@@ -34,7 +34,7 @@
 #         cuda_graph_bs_range: str
 
 DeepSeek-R1:
-  base_flags: "--decode-log-interval 1 --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-num-steps 1 --speculative-eagle-topk 1"
   dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
