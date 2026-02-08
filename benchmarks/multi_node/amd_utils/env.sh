@@ -50,6 +50,11 @@ export SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=16384
 
 export MORI_APP_LOG_LEVEL=INFO
 
+# Router logging control:
+# 0 (default) keeps noisy per-request access logs out of stdout while still logging to file.
+# 1 mirrors router logs to stdout via tee (useful for live debugging).
+export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
+
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
 if [[ -n "$MORI_RDMA_TC" ]]; then
