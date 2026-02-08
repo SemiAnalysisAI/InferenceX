@@ -1977,7 +1977,7 @@ dsr1-fp8-h200-dynamo-trt:
 dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: DeepSeek-R1-0528
+  model-prefix: dsr1
   runner: h100-multinode-slurm
   precision: fp8
   framework: dynamo-trt
@@ -2314,21 +2314,23 @@ dsr1-fp8-h100-dynamo-trt:
         tp: 16
         ep: 16
         dp-attn: true
-    - spec-decoding: "mtp"
-      conc-list: [78]
-      prefill:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-        additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml
-        - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
-      decode:
-        num-worker: 2
-        tp: 16
-        ep: 16
-        dp-attn: false
+    # commenting out cuz it persistently causes problems
+    # https://github.com/InferenceMAX/InferenceMAX/actions/runs/21769314582/job/62813105509
+    # - spec-decoding: "mtp"
+    #   conc-list: [78]
+    #   prefill:
+    #     num-worker: 1
+    #     tp: 16
+    #     ep: 16
+    #     dp-attn: true
+    #     additional-settings:
+    #     # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml
+    #     - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
+    #   decode:
+    #     num-worker: 2
+    #     tp: 16
+    #     ep: 16
+    #     dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [154]
       prefill:
