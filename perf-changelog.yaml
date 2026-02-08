@@ -408,7 +408,7 @@
     - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
 
-- config-keys:
+- config-keys: 
     - dsr1-fp8-b200-sglang-mtp
   description:
     - "Add MTP (Multi-Token Prediction) support for DeepSeek R1 FP8 B200 SGLang using EAGLE speculative decoding"
@@ -475,7 +475,7 @@
     - "Refactor to use CONFIG_FILE-based srt-slurm recipes instead of inline parameters"
     - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
     - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633  
 
 - config-keys:
     - dsr1-fp8-h100-dynamo-sglang-mtp
