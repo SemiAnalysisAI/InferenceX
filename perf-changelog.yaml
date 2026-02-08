@@ -464,4 +464,4 @@
   description:
     - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
     - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/670
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
