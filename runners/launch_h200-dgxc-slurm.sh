@@ -81,11 +81,7 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
-if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --setup-script fix-timeouts-x86.sh --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
-else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
-fi
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
