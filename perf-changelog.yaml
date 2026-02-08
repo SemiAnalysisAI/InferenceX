@@ -453,3 +453,9 @@
     - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
     - "Remove aggregated configs, keep only disaggregated"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/640
+
+- config-keys:
+    - dsr1-fp8-b300-dynamo-trt
+  description:
+    - "New B300 FP8 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638

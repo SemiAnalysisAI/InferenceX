@@ -31,11 +31,16 @@ echo "Configs available at: $SRT_REPO_DIR/"
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/deepseek-r1-0528-nvfp4-v2"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
+    export SRT_SLURM_MODEL_PREFIX="dsr1"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/scratch/models/deepseek-r1-0528"
+    export SERVED_MODEL_NAME="deepseek-r1-fp8"
+    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
     exit 1
 fi
 
@@ -65,7 +70,7 @@ srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 
 # Container aliases
 containers:
