@@ -15,12 +15,14 @@ h200:
 - 'h200-nv_2'
 - 'h200-nv_3'
 b200:
-- 'b200-nvd_0'
-- 'b200-nvd_1'
-- 'b200-nvd_2'
-- 'b200-nvd_3'
+# Docker-only nodes
 - 'b200-dgxc_1'
 - 'b200-dgxc_2'
+# Slurm nodes (also have b200 label, can run docker workloads)
+- 'b200-nv_0'
+- 'b200-nv_1'
+- 'b200-nb_0'
+- 'b200-nb_1'
 mi300x:
 - 'mi300x-amd_0'
 - 'mi300x-amd_1'
@@ -37,14 +39,27 @@ mi325x:
 - 'mi325x-amd_1'
 - 'mi325x-amd_2'
 - 'mi325x-amd_3'
-- 'mi325x-tw_0'
-- 'mi325x-tw_1'
-- 'mi325x-tw_2'
-- 'mi325x-tw_3'
 mi355x:
-- 'mi355x-amd_0'
-- 'mi355x-amd_1'
-- 'mi355x-amd_2'
-- 'mi355x-amd_3'
+- 'mi355x-amds_0'
+- 'mi355x-amds_1'
+- 'mi355x-amds_2'
+- 'mi355x-amds_3'
+- 'mi355x-amds_4'
+- 'mi355x-amds_5'
+- 'mi355x-amds_6'
+- 'mi355x-amds_7'
+- 'mi355x-amds_8'
+mi355x-disagg:
+- 'mi355x-amds_0'
+- 'mi355x-amds_1'
+- 'mi355x-amds_2'
 gb200:
 - gb200-nv_0
+b200-multinode-slurm:
+- 'b200-dgxc-slurm_0'
+b300:
+- 'b300-nv_0'
+gb300:
+- 'gb300-nv_0'
+h100-multinode-slurm:
+- 'h100-dgxc-slurm_0'

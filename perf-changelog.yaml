@@ -110,3 +110,367 @@
   description:
     - "fix: Pruning unnecessary concurrencies "
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/358
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.6.post2"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/369
+    
+- config-keys:
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update NVIDIA DeepSeek sglang Docker image from v0.5.5 to v0.5.6"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/276
+  
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description: 
+    - "Update vLLM image from v0.11.2 to v0.13.0"
+    - "Add VLLM_MXFP4_USE_MARLIN=1 to H100 and H200 benchmark scripts"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/327
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - Use upstream SGLang images on mi300, mi325 and mi355 for dsr1fp8
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/332
+
+- config-keys:
+    - gptoss-fp4-gb200-dynamo-trt
+    - gptoss-fp4-b200-trt
+  description:
+    - Explicitly add EP=TP for DP attention configs for B200 AGG nvidia-master file. Multinode Refactor inadvertently changed default EP=1
+    - Add GPTOSS DISAGG configurations for GB200 1k1k and 8k1k.
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/387
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add PD disaggregation (1P2D) for Mi355X"
+    - "Includes with and without speculative decoding"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/348
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Updating MI355x Deepseek-R1 FP4 SGLang Image to upstream v0.5.7"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/395
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - "Adds TP4 configurations to DSR1-FP8 B200 SGLang deployment experiments"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/411
+  
+- config-keys:
+    - dsr1-fp4-b200-trt-mtp
+    - dsr1-fp8-b200-trt-mtp
+    - dsr1-fp8-h200-trt-mtp
+  description:
+    - Add MTP (Multi-Token Prediction) support for single-node TRT configs
+    - Add spec-decoding field to config entries and update launch scripts to select MTP benchmark scripts
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/392
+  
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+    - dsr1-fp4-mi355x-atom
+    - gptoss-fp4-mi355x-atom
+  description:
+    - Add internal AMD ATOM inference engine for DeepSeek R1 FP8, FP4 and GPTOSS FP4 Mi355X
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/419
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update AMD MI300X and MI325X GPT-OSS 120B vLLM to use upstream ROCm image vllm/vllm-openai-rocm:v0.14.0"
+    - "Remove deprecated --async-scheduling flag (now enabled by default in vLLM v0.14.0)"
+    - "Remove deprecated --max-seq-len-to-capture flag"
+    - "Add HIP_VISIBLE_DEVICES env var for Ray compatibility in vLLM 0.14+"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/496
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update H200 DeepSeek R1 FP8 SGLang image from v0.5.6 to v0.5.7"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/538
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update MI300X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.7"
+    - "Add SGLANG_AITER_MLA_PERSIST=1 for persistent MLA kernel optimization"
+    - "Set --kv-cache-dtype fp8_e4m3 for fp8 KV cache"
+    - "Set --attention-backend aiter for AMD aiter attention backend"
+    - "Update chunked-prefill-size and max-prefill-tokens from 196608 to 131072"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/544
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.7"
+    - "Add SGLANG_AITER_MLA_PERSIST=1 for persistent MLA kernel with fp8 KV cache"
+    - "Add --kv-cache-dtype fp8_e4m3 for explicit FP8 KV cache"
+    - "Add --attention-backend aiter for AMD aiter attention backend"
+    - "Reduce chunked-prefill-size from 196608 to 131072"
+    - "Reduce max-prefill-tokens from 196608 to 131072"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/545
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Fix AITER env vars for vLLM v0.14.0 on AMD MI300X and MI325X"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/535
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update MI355X DeepSeek R1 FP8 SGLang image from v0.5.5.post3 to v0.5.8"
+    - "Key fix: Disables mla persistent kernel when not using fp8 kv_cache (https://github.com/sgl-project/sglang/pull/17327)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/572
+
+- config-keys:
+    # NVIDIA single-node
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b200-trt
+    - dsr1-fp4-b200-trt-mtp
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b200-trt
+    - dsr1-fp8-b200-trt-mtp
+    - dsr1-fp8-h200-sglang
+    - dsr1-fp8-h200-trt
+    - dsr1-fp8-h200-trt-mtp
+    - gptoss-fp4-b200-trt
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-trt
+    - gptoss-fp4-h200-vllm
+    # AMD single-node
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-atom
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+    - gptoss-fp4-mi355x-atom
+  description:
+    - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/558
+  evals-only: true
+  
+- config-keys:
+  - dsr1-fp4-b300-dynamo-trt
+  description:
+    - "Add DSR1 FP4 B300 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/585
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.7 to v0.5.8 for DeepSeek-R1 FP4 on MI355x"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/595
+  
+- config-keys:
+    - dsr1-fp8-b200-trt
+  description:
+    - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
+    - "Change default MOE backend from DEEPGEMM to TRTLLM"
+    - "Add dynamic piecewise CUDA graphs for 1k1k (CONC≥64) and 8k1k (CONC≥64) workloads"
+    - "Add delay batching (batch_wait_timeout_iters/batch_wait_max_tokens_ratio) for 1k1k high-concurrency"
+    - "Add dynamic KV cache memory fraction tuning (0.7-0.8) based on ISL/OSL/TP configuration"
+    - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
+    - "Add TLLM_OVERRIDE_LAYER_NUM=61 to avoid OOM errors"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/594
+  
+- config-keys:
+  - dsr1-fp4-b200-dynamo-trt
+  description:
+    - "Update DSR1 FP4 B200 Dynamo TRT configurations"
+    - "Update TRTLLM version to 1.2.0rc6.post2"
+    - "Transform to use srt-slurm recipes"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/588
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add DSR1 FP8 H200 Dynamo TRT-LLM disaggregated multinode configuration"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
+    - "Runner: h200-dgxc with multinode and disagg enabled"
+    - "Includes MTP and STP configurations for 1k1k and 8k1k sequence lengths"
+    - "Concurrency levels: 4, 8, 16, 32, 64, 128, 256, 512"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/570
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+  description:
+    - "Update Dynamo TRT image from 0.5.1-rc0.pre3 to 0.8.1.post2"
+    - "Update TRT configurations"
+    - "Refactor configurations to use CONFIG_FILE-based recipes instead of inline parameter settings"
+    - "Introduce srt-slurm workflow for launching Dynamo jobs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/510
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Disable torch.compile for MI355X DeepSeek-R1 FP8 SGLang"
+    - "set cuda-graph-max-bs to CONC"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/613
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add DSR1 FP8 H200 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-runtime"
+    - "Runner: h200-multinode-slurm with multinode and disagg enabled"
+    - "Recipes sourced from srtslurm repo (recipes/h200/)"
+    - "1k1k configs: aggregated, low-latency (1P9D), high-throughput TEP (1P6D), DEP (1P6D)"
+    - "8k1k configs: aggregated, TEP configs (1P7D, 1P6D, 1P3D, 2P3D), DEP (1P1D)"
+    - "Concurrency levels range from 1 to 2048 depending on configuration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/582
+
+- config-keys:
+    - dsr1-fp4-b200-trt
+  description:
+    - "Update TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post2"
+    - "Change default MOE backend from DEEPGEMM to TRTLLM"
+    - "Add dynamic piecewise CUDA graphs for 1k1k (TEP8 and CONC64)"
+    - "Update search space: remove EP=TP constraint, add TP=4 configurations, extend concurrency ranges"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/620
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek-R1 FP4 GB300 Dynamo TRT disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "Includes MTP and STP configs for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Add gb300-nv runner and launch script for srt-slurm integration"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/618
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "enable PD/D for both MTP and non-MTP MI355X DeepSeek-R1 FP4 SGLang"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/622
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB200 Dynamo TRT-LLM disaggregated multinode configurations"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2"
+    - "1k1k: 14 scenarios (7 MTP, 7 STP) with varying DP attention/TEP modes"
+    - "1k8k: 10 scenarios (5 MTP, 5 STP) for long output generation"
+    - "8k1k: 14 scenarios (7 MTP, 7 STP) for long context workloads"
+    - "Prefill workers: 1-5P, Decode workers: 1-4D, TP/EP: 8/16/32"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/617
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-trt
+  description:
+    - "Fix model_prefix argument in yaml configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/646
+
+- config-keys:
+    - dsr1-fp8-b200-trt-mtp
+  description:
+    - Update to the latest TRTLLM 1.2 release container version
+    - Fine-tune the choice of parallelism in nvidia-master file, mainly going to TP for most points
+    - Enable piecewise CUDA graphs under most conditions
+    - fine-tune max batch sizes and other optimizations
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/632
+
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 8k1k and 1k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/627
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
+    - "Extend maximum concurrency to 256 across all sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add --use-chat-template argument to benchmark_serving script"
+    - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
+
+- config-keys: 
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Add MTP (Multi-Token Prediction) support for DeepSeek R1 FP8 B200 SGLang using EAGLE speculative decoding"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130-amd64"
+    - "Add benchmark script dsr1_fp8_b200_mtp.sh with EAGLE speculative decoding (num-steps=2, draft-tokens=3, topk=1)"
+    - "Update launch_b200-dgxc.sh to support SPEC_SUFFIX for MTP script selection"
+    - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
+
+- config-keys:
+    - dsr1-fp4-b200-trt-mtp
+  description:
+    - "Upgrade TensorRT-LLM container from release:1.1.0rc2.post2 to release:1.2.0rc6.post3"
+    - "Enable dynamic piecewise CUDA graphs for several conditions"
+    - "Adjust TP8/TP4 search space to reduce overlapping points"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/642
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang
+  description:
+    - "Add DSR1 FP8 B200 disaggregated SGLang multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+    - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput profiles"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/658
+
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 1k8k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/654
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/651
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add MTP (EAGLE speculative decoding) configs alongside STP"
+    - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
+    - "Remove aggregated configs, keep only disaggregated"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/640
+
+- config-keys:
+    - dsr1-fp8-b300-dynamo-trt
+  description:
+    - "New B300 FP8 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
+    - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-sglang
+  description:
+    - "Update SGLang image from v0.5.5.post2 to v0.5.8-cu130"
+    - "Add FP4 model path separation via SRT_SLURM_MODEL_PREFIX in launch script"
+    - "Refactor to use CONFIG_FILE-based srt-slurm recipes instead of inline parameters"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633  

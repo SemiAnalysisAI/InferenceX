@@ -5,7 +5,7 @@ import subprocess
 from collections import defaultdict
 
 import yaml
-from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
 from matrix_logic.generate_sweep_configs import seq_len_to_str
 from matrix_logic.validation import (
     ChangelogEntry,
@@ -24,14 +24,17 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     added_lines = []
     for line in result.stdout.split("\n"):
         if line.startswith("-") and not line.startswith("---"):
-            # Don't allow deletions in the changelog
-            # By convention, it should act as a running log of performance changes,
-            # so we only want to see additions
-            raise ValueError(
-                f"Deletions are not allowed in {filepath}. "
-                f"Only additions to the changelog are permitted. "
-                f"Found deleted line: {line[1:]}"
-            )
+            deleted_content = line[1:]
+            # Allow whitespace-only or empty line deletions
+            if deleted_content.strip():
+                # Don't allow deletions in the changelog
+                # By convention, it should act as a running log of performance changes,
+                # so we only want to see additions
+                raise ValueError(
+                    f"Deletions are not allowed in {filepath}. "
+                    f"Only additions to the changelog are permitted. "
+                    f"Found deleted line: {deleted_content}"
+                )
         elif line.startswith("+") and not line.startswith("+++"):
             added_lines.append(line[1:])
 
@@ -103,6 +106,9 @@ def main():
             continue
         all_configs_to_run.update(configs_to_run)
 
+        # Use --evals-only if specified in changelog entry, otherwise --run-evals
+        eval_flag = "--evals-only" if entry.evals_only else "--run-evals"
+
         try:
             result = subprocess.run(
                 [
@@ -113,8 +119,7 @@ def main():
                     *configs_to_run,
                     "--config-files",
                     *MASTER_CONFIGS,
-                    "--runner-config",
-                    RUNNER_CONFIG,
+                    eval_flag
                 ],
                 capture_output=True,
                 text=True,

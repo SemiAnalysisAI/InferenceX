@@ -1,5 +1,5 @@
 name: "Run Sweep"
-run-name: Run Sweep - ${{ github.event.pull_request.title || github.ref_name }}
+run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
 
 concurrency:
     group: sweep-${{ github.event.pull_request.number || github.sha }}
@@ -22,6 +22,21 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    check-newline:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Check perf-changelog.yaml ends with newline
+              run: |
+                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
+                      echo "::error::perf-changelog.yaml must end with a newline character"
+                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
+                      exit 1
+                  fi
+
     setup:
         runs-on: ubuntu-latest
         if: >-
@@ -31,7 +46,7 @@ jobs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   fetch-depth: 0
 
@@ -142,6 +157,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-1k8k:
         needs: setup
@@ -184,6 +200,21 @@ jobs:
         with:
             result-prefix: "bmk"
 
+    collect-evals:
+        needs:
+            [
+                sweep-single-node-1k1k,
+                sweep-single-node-1k8k,
+                sweep-single-node-8k1k,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-1k8k,
+                sweep-multi-node-8k1k,
+                setup,
+            ]
+        if: ${{ always() && needs.setup.result != 'skipped' }}
+        uses: ./.github/workflows/collect-evals.yml
+        secrets: inherit
+
     upload-changelog-metadata:
         needs: [setup, collect-results]
         if: ${{ always() && needs.setup.result != 'skipped' }}
@@ -212,7 +243,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -233,3 +264,31 @@ jobs:
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
+
+    trigger-vercel-deploy:
+        needs:
+            [
+                sweep-single-node-1k1k,
+                sweep-single-node-1k8k,
+                sweep-single-node-8k1k,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-1k8k,
+                sweep-multi-node-8k1k,
+                collect-results,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main' &&
+            needs.collect-results.result == 'success' &&
+            (needs.sweep-single-node-1k1k.result == 'success' || needs.sweep-single-node-1k1k.result == 'skipped') &&
+            (needs.sweep-single-node-1k8k.result == 'success' || needs.sweep-single-node-1k8k.result == 'skipped') &&
+            (needs.sweep-single-node-8k1k.result == 'success' || needs.sweep-single-node-8k1k.result == 'skipped') &&
+            (needs.sweep-multi-node-1k1k.result == 'success' || needs.sweep-multi-node-1k1k.result == 'skipped') &&
+            (needs.sweep-multi-node-1k8k.result == 'success' || needs.sweep-multi-node-1k8k.result == 'skipped') &&
+            (needs.sweep-multi-node-8k1k.result == 'success' || needs.sweep-multi-node-8k1k.result == 'skipped')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger Vercel Deployment
+              run: |
+                  curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"

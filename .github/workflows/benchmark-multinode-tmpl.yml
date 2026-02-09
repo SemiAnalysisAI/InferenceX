@@ -43,10 +43,6 @@ on:
       max-model-len:
         required: true
         type: string
-      random-range-ratio:
-        required: false
-        type: string
-        default: "0.8"
 
       prefill-num-worker:
         required: true
@@ -87,6 +83,7 @@ on:
         type: string
 
 env:
+  RANDOM_RANGE_RATIO: 0.8
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
@@ -96,7 +93,6 @@ env:
   ISL: ${{ inputs.isl }}
   OSL: ${{ inputs.osl }}
   MAX_MODEL_LEN: ${{ inputs.max-model-len }}
-  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
@@ -118,21 +114,30 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: "${{ inputs.exp-name }} ${{ inputs.runner }} ${{ inputs.framework }} ${{ inputs.precision }} specdecod-${{ inputs.spec-decoding }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | P(tp${{ inputs.prefill-tp }}/ep${{ inputs.prefill-ep }}/dp${{ inputs.prefill-dp-attn }}/nw${{ inputs.prefill-num-worker }}) D(tp${{ inputs.decode-tp }}/ep${{ inputs.decode-ep }}/dp${{ inputs.decode-dp-attn }}/nw${{ inputs.decode-num-worker }}) | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ join(fromJson(inputs.conc-list), 'x') }}"
 
     steps:
-      - name: Resource cleanup
-        run: |
-          echo "[Slurm] Cleaning up resources ..."
-          scancel -u $USER
-          while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-            squeue -u $USER
-            sleep 5
-          done
+      - name: Slurm cleanup (pre-run)
+        run: &slurm-cleanup |
+          if command -v squeue >/dev/null 2>&1; then
+            if [[ "${{ runner.name }}" == mi355x-amds* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
+          fi
 
-          sudo find . -not -user $USER -exec rm -rf {} +
-
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -141,7 +146,8 @@ jobs:
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_ptp${{ env.PREFILL_TP }}pep${{ env.PREFILL_EP}}_dtp${{ env.DECODE_TP}}dep${{ env.DECODE_EP }}_${{ env.FRAMEWORK }}_specdec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
@@ -181,3 +187,7 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Slurm cleanup (post-run)
+        if: always()
+        run: *slurm-cleanup

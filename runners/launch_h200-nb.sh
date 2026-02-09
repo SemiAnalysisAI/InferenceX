@@ -1,10 +1,11 @@
 #!/usr/bin/bash
 
 export HF_HUB_CACHE_MOUNT="/home/hf_hub_cache/"
-export PORT_OFFSET=${USER: -1}
+export PORT=$(( 8888 + ${USER: -1} ))
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="main"
 SQUASH_FILE="/home/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -18,15 +19,22 @@ if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
     srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
+        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    fi
     CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
 fi
 
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-remap-root \
+--container-writable \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}_slurm.sh
+bash benchmarks/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
 scancel $JOB_ID
