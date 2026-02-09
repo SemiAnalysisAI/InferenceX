@@ -400,14 +400,14 @@
     - "Update GPT-OSS FP4 B200 TRT pareto configurations and new container image"
     - "Extend maximum concurrency to 256 across all sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/639
-  
+
 - config-keys:
     - dsr1-fp8-mi355x-sglang-disagg
   description:
     - "Add --use-chat-template argument to benchmark_serving script"
     - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
-  
+
 - config-keys: 
     - dsr1-fp8-b200-sglang-mtp
   description:
@@ -417,7 +417,7 @@
     - "Update launch_b200-dgxc.sh to support SPEC_SUFFIX for MTP script selection"
     - "Configurations: TP=8, EP=1, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/626
-  
+
 - config-keys:
     - dsr1-fp4-b200-trt-mtp
   description:
@@ -425,5 +425,61 @@
     - "Enable dynamic piecewise CUDA graphs for several conditions"
     - "Adjust TP8/TP4 search space to reduce overlapping points"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/642
-  
-  
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang
+  description:
+    - "Add DSR1 FP8 B200 disaggregated SGLang multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+    - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput profiles"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/658
+
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 GB300 Dynamo TRT-LLM disaggregated multinode configurations for 1k8k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/654
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/651
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add MTP (EAGLE speculative decoding) configs alongside STP"
+    - "Update container to lmsysorg/sglang:v0.5.8.post1-cu130"
+    - "Remove aggregated configs, keep only disaggregated"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/640
+
+- config-keys:
+    - dsr1-fp8-b300-dynamo-trt
+  description:
+    - "New B300 FP8 Dynamo TRT configurations"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+  description:
+    - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
+    - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-sglang
+  description:
+    - "Update SGLang image from v0.5.5.post2 to v0.5.8-cu130"
+    - "Add FP4 model path separation via SRT_SLURM_MODEL_PREFIX in launch script"
+    - "Refactor to use CONFIG_FILE-based srt-slurm recipes instead of inline parameters"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/633  
+
+- config-keys:
+    - dsr1-fp8-gb200-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+  description:
+    - "Update  GB200 and GB300 configs for DSR1 FP8 SGLANG STP mode"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130"
+    - "Update prefill/decode worker counts, TP/EP parallelism, and dp-attn settings for 1k1k and 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/635
