@@ -5952,7 +5952,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     osl: 1024
     search-space:
     # MTP low-latency: 1P1D
-    - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    - conc-list: [4, 64]
       prefill:
         num-worker: 1
         tp: 8
@@ -5966,7 +5966,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
     # MTP low-latency: 1P3D
-    - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    - conc-list: [4, 8, 16, 32]
       prefill:
         num-worker: 1
         tp: 8
@@ -5979,22 +5979,8 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         tp: 8
         ep: 8
         dp-attn: false
-    # MTP max-tpt: 1P1D
-    - conc-list: [512, 1024, 2048, 4096]
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p1d.yaml"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
     # MTP max-tpt: 1P5D
-    - conc-list: [512, 1024, 2048, 4096]
+    - conc-list: [512, 4096]
       prefill:
         num-worker: 1
         tp: 8
@@ -6008,7 +5994,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
     # MTP max-tpt: 2P5D
-    - conc-list: [512, 1024, 2048, 4096]
+    - conc-list: [1024, 2048, 4096]
       prefill:
         num-worker: 2
         tp: 8
@@ -6025,7 +6011,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     osl: 1024
     search-space:
     # MTP low-latency: 1P1D
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512]
+    - conc-list: [16, 32, 64]
       prefill:
         num-worker: 1
         tp: 8
@@ -6039,7 +6025,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
     # MTP low-latency: 1P4D
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512]
+    - conc-list: [8, 256]
       prefill:
         num-worker: 1
         tp: 8
@@ -6053,7 +6039,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
     # MTP low-latency: 1P6D
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512]
+    - conc-list: [4, 8, 16, 256]
       prefill:
         num-worker: 1
         tp: 8
@@ -6067,7 +6053,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
     # MTP max-tpt: 1P1D
-    - conc-list: [128, 256, 512, 1024]
+    - conc-list: [256]
       prefill:
         num-worker: 1
         tp: 8
@@ -6080,22 +6066,8 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         tp: 8
         ep: 8
         dp-attn: true
-    # MTP max-tpt: 1P2D
-    - conc-list: [128, 256, 512, 1024]
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/max-tpt-dep8-1p2d.yaml"
-      decode:
-        num-worker: 2
-        tp: 8
-        ep: 8
-        dp-attn: true
     # MTP max-tpt: 2P1D
-    - conc-list: [128, 256, 512, 1024]
+    - conc-list: [128, 512]
       prefill:
         num-worker: 2
         tp: 8
