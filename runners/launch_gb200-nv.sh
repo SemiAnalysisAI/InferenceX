@@ -11,7 +11,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
-        export SRT_SLURM_MODEL_PREFIX="dsr1"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
@@ -97,6 +97,7 @@ PY
 
     exit 0
 fi
+
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
