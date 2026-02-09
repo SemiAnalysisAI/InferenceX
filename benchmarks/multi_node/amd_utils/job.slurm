@@ -255,6 +255,8 @@ if ! command -v nicctl >/dev/null 2>&1; then
     exit 1
 fi
 
+# Reduce log spam
+export TQDM_MININTERVAL=20
 
 export DI_REPO_DIR=$DI_REPO_DIR
 export SGLANG_WS_PATH=$SGLANG_WS_PATH
