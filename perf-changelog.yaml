@@ -483,3 +483,11 @@
     - "Image: lmsysorg/sglang:v0.5.8-cu130"
     - "Update prefill/decode worker counts, TP/EP parallelism, and dp-attn settings for 1k1k and 8k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/635
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Add DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+    - "11 recipes: 5x 1k1k + 6x 8k1k, low-latency and max-throughput with EAGLE speculative decoding"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
