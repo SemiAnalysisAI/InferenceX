@@ -49,13 +49,13 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CLI_ARGS="${{ inputs.generate-cli-command }}"
           else
-            CLI_ARGS="full-sweep --config-files .github/configs/amd-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang vllm --runner-type h200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc ${PUSH_CONC}"
+            CLI_ARGS="full-sweep --config-files .github/configs/nvidia-master.yaml --runner-config .github/configs/runners.yaml --single-node --framework sglang vllm --runner-type h200 --model-prefix dsr1 --precision fp8 --seq-lens 1k1k --max-conc ${PUSH_CONC}"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
-        name: Filter single-node SGLang/vLLM jobs
+        name: Take first generated job
         shell: python
         run: |
           import json, os, sys
@@ -68,18 +68,14 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise
 
-          is_push = '${{ github.event_name }}' == 'push'
-          allowed_frameworks = {'sglang', 'vllm'}
-          try:
-            push_conc = int(os.getenv('PUSH_CONC', '64'))
-          except Exception:
-            push_conc = 64
-          filt = [d for d in data
-                  if d.get('framework') in allowed_frameworks
-                  and d.get('prefill') is None 
-                  and not d.get('disagg', False)
-                  and (not is_push or int(d.get('conc', 0)) == push_conc)]
-          
+          if not isinstance(data, list):
+            print('Generator output is not a list.', file=sys.stderr)
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write("filtered=[]\ncount=0\n")
+            raise SystemExit(1)
+
+          filt = data[:1]
+
           out = json.dumps(filt)
           print(out)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -90,9 +86,9 @@ jobs:
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "No single-node sglang/vllm entries produced by your CLI. Please constrain your args or check runner filters." >&2
+            echo "No entries were produced by your CLI command." >&2
           else
-            echo "No matching 1k1k@${PUSH_CONC} sglang/vllm entries found from configs." >&2
+            echo "No entries produced by generated default CLI command." >&2
           fi
           exit 1
 
