@@ -49,9 +49,11 @@ jobs:
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
+          settings: |
+            {"fastMode": true}
 
           claude_args: |
-            --model 'claude-opus-4-5-20251101'
+            --model 'claude-opus-4-6'
             --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax-repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
