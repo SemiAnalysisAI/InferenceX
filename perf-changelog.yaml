@@ -490,4 +490,4 @@
     - "Add DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration"
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
     - "11 recipes: 5x 1k1k + 6x 8k1k, low-latency and max-throughput with EAGLE speculative decoding"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/667
