@@ -9,8 +9,12 @@ set -x
 # local paths to avoid repeated downloading on the shared GB200 cluster.
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
-    if [[ $MODEL_PREFIX == "dsr1" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -50,7 +54,7 @@ srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX
 export ISL="$ISL"
 export OSL="$OSL"
 
-if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     export IMAGE=$SQUASH_FILE
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
     bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
@@ -93,6 +97,7 @@ PY
 
     exit 0
 fi
+
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
@@ -159,6 +164,7 @@ echo "Make setup complete"
 ls configs/
 
 echo "Submitting job with srtctl..."
+
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else

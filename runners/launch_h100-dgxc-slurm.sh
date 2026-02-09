@@ -37,9 +37,10 @@ CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
 # Map container image to local squash file
 SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
 
-if [[ $MODEL_PREFIX == "DeepSeek-R1-0528" ]]; then
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
     export SERVED_MODEL_NAME="DeepSeek-R1-0528"
+    export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
 else
     echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: DeepSeek-R1-0528"
     exit 1
@@ -64,7 +65,7 @@ network_interface: ""
 srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 # Model path aliases
 model_paths:
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
