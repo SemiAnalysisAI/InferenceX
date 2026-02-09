@@ -209,13 +209,15 @@ EOF
             continue
         fi
 
-        # Run benchmark (all requests in input file)
-        echo "Running benchmark (bs=$bs, all requests)..."
+        # Run benchmark
+        local num_requests=$((bs * 10))
+        echo "Running benchmark (bs=$bs, num_requests=$num_requests)..."
         local benchmark_cmd="python3 benchmark_serving_multi_turn.py"
         benchmark_cmd+=" -i $INPUT_FILE"
         benchmark_cmd+=" -m $MODEL"
         benchmark_cmd+=" -u http://localhost:$PORT"
         benchmark_cmd+=" -p $bs"
+        benchmark_cmd+=" -n $num_requests"
         benchmark_cmd+=" --max-retries $MAX_RETRIES"
         benchmark_cmd+=" --request-timeout $REQUEST_TIMEOUT"
         benchmark_cmd+=" --metrics-output $exp_dir/metrics"
