@@ -3723,7 +3723,7 @@ dsr1-fp8-gb200-dynamo-trt:
 
 
 dsr1-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.5.post2
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb200
@@ -3735,114 +3735,232 @@ dsr1-fp8-gb200-dynamo-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    # "Top of curve" (2 prefill workers each at DEP8 and 1 decode worker at DEP32)
-    - spec-decoding: "none"
-      conc-list: [ 4096 ]
-      prefill:
-        num-worker: 2
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
-        tp: 1
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=4"
-        - "N_ADDITIONAL_FRONTENDS=9"
-        - "SCRIPT_MODE=1k1k-max-tpt"
-      decode:
-        num-worker: 1
-        tp: 1
-        ep: 32
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=8"
-
-    # "Bottom of curve" (1 prefill worker at DEP4 and 4 decode workers at DEP4)
-    - spec-decoding: "none"
-      conc-list: [ 2, 4, 8, 16, 64, 128 ]
+   # "Low latency" (1 prefill worker at TP4 and 1 decode worker at TP4)
+    - conc-list: [4, 8]
       prefill:
         num-worker: 1
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
-        tp: 1
-        ep: 4
-        dp-attn: true
+        tp: 4
+        ep: 1
+        dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=1"
-        - "N_ADDITIONAL_FRONTENDS=9"
-        - "SCRIPT_MODE=1k1k-low-latency"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/low-latency.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/1k1k/low-latency.yaml"
       decode:
-        num-worker: 4
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=4"
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
 
-    # "Middle of curve" (3 prefill workers each at DEP8 and 1 decode worker at DEP48)
-    - spec-decoding: "none"
-      conc-list: [ 1024, 2048, 4096 ]
+    # "Mid curve" (3 prefill workers at DEP8 and 1 decode worker at DEP48)
+    - conc-list: [1024, 2048, 4096]
       prefill:
         num-worker: 3
-        # tp, ep, and dp-attn do nothing because they are hardcoded in the following file:
-        # https://github.com/Elnifio/dynamo/blob/update-result-file-name/components/backends/sglang/slurm_jobs/scripts/gb200-fp8.sh
-        tp: 1
+        tp: 8
         ep: 8
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=6"
-        - "N_ADDITIONAL_FRONTENDS=9"
-        - "SCRIPT_MODE=1k1k-max-tpt"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/mid-curve.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/1k1k/mid-curve.yaml"
       decode:
         num-worker: 1
-        tp: 1
+        tp: 48
         ep: 48
         dp-attn: true
+
+    # "Max throughput" (2 prefill workers at DEP8 and 1 decode worker at DEP32)
+    - conc-list: [1024, 2048, 4096, 6144]
+      prefill:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
         additional-settings:
-        - "DECODE_NODES=12"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/max-tpt.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/1k1k/max-tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+    # "Ultra throughput" (1 prefill workers at DEP8 and 1 decode worker at DEP8)
+    - conc-list: [4096]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/ultra-tpt.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/1k1k/ultra-tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
 
   - isl: 8192
     osl: 1024
     search-space:
-    # Low latency (1 prefill worker at DEP4 and 1 decode worker at DEP4)
-    - spec-decoding: "none"
-      conc-list: [ 4, 8, 16, 32 ]
+   # "Low latency" (1 prefill worker at TP8 and 1 decode worker at TP8)
+    - conc-list: [4, 8, 16]
       prefill:
         num-worker: 1
-        tp: 1
-        ep: 4
-        dp-attn: true
+        tp: 8
+        ep: 1
+        dp-attn: false
         additional-settings:
-        - "PREFILL_NODES=1"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=8k1k-low-latency"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/low-latency.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/8k1k/low-latency.yaml"
       decode:
         num-worker: 1
-        tp: 1
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=1"
+        tp: 8
+        ep: 1
+        dp-attn: false
 
-    # Middle and top of curve (5 prefill workers each at DEP8 and 1 decode worker at DEP32)
-    - spec-decoding: "none"
-      conc-list: [ 512, 1024, 2048, 6144 ]
+    # "Mid curve" (5 prefill workers at DEP8 and 1 decode worker at DEP32)
+    - conc-list: [512, 1024, 2048, 6144]
       prefill:
         num-worker: 5
-        tp: 1
+        tp: 8
         ep: 8
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=10"
-        - "N_ADDITIONAL_FRONTENDS=8"
-        - "SCRIPT_MODE=8k1k-max-tpt"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/mid-curve.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/8k1k/mid-curve.yaml"
       decode:
         num-worker: 1
-        tp: 1
+        tp: 32
         ep: 32
         dp-attn: true
+
+    # "Max throughput" (6 prefill workers at DEP8 and 1 decode worker at DEP24)
+    - conc-list: [2048, 4096, 6144]
+      prefill:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: true
         additional-settings:
-        - "DECODE_NODES=8"
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/max_tpt.yaml
+        - "CONFIG_FILE=recipes/gb200-fp8/8k1k/max_tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 24
+        ep: 24
+        dp-attn: true
+
+dsr1-fp8-gb300-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: gb300
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+   # "Low latency" (1 prefill worker at TP4 and 4 decode workers at TP4)
+    - conc-list: [4, 8, 16, 32]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/low-latency.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/low-latency.yaml"
+      decode:
+        num-worker: 4
+        tp: 4
+        ep: 1
+        dp-attn: false
+
+    # "Mid curve" (2 prefill workers at DEP8 and 1 decode worker at DEP32)
+    - conc-list: [1024, 2048, 4096, 6144]
+      prefill:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/mid.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/mid.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+    # "Max throughput" (1 prefill worker at DEP8 and 1 decode worker at DEP8)
+    - conc-list: [4096, 7168, 7680]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/max.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/max.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+   # "Low latency" (1 prefill worker at TP4 and 1 decode worker at TP4)
+    - conc-list: [4, 8]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/low-latency.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/low-latency.yaml"
+      decode:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+
+    # "Mid curve" (5 prefill workers at DEP8 and 1 decode worker at DEP32)
+    - conc-list: [128, 256, 512, 1024]
+      prefill:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/mid.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/mid.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+    # "Max throughput" (6 prefill workers at DEP8 and 1 decode worker at DEP24)
+    - conc-list: [2048, 4096]
+      prefill:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/max.yaml
+        - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/max.yaml"
+      decode:
+        num-worker: 1
+        tp: 24
+        ep: 24
+        dp-attn: true
 
 dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8-cu130"

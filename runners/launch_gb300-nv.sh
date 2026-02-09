@@ -72,6 +72,7 @@ model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
+  dynamo-sglang: ${SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF
 
