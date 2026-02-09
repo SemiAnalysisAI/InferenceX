@@ -224,6 +224,9 @@ run_benchmark_serving() {
         echo "Error: --result-dir is required"
         return 1
     fi
+    if [[ -z "$workspace_dir" ]]; then
+        workspace_dir=$(pwd)
+    fi
 
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
