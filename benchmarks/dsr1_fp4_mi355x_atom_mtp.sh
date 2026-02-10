@@ -41,7 +41,6 @@ set -x
 
 export AMDGCN_USE_BUFFER_OPS=1
 
-export PYTHONDONTWRITEBYTECODE=1
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
