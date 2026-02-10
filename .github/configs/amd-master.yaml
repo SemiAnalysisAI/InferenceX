@@ -298,7 +298,7 @@ dsr1-fp8-mi355x-atom-mtp:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
 dsr1-fp8-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.6.post1-rocm700-mi35x-mori-0113
+  image: rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -328,7 +328,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "mtp"
@@ -347,7 +347,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
@@ -368,7 +368,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # non-MTP configurations
     # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
@@ -451,7 +451,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "mtp"
@@ -470,7 +470,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
@@ -491,7 +491,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # non-MTP configurations
     # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)

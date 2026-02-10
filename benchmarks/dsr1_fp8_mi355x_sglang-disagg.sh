@@ -28,7 +28,7 @@ fi
 
 set -x
 
-git clone --branch sa-260203 https://github.com/billishyahao/sglang_disagg.git
+git clone --branch main https://github.com/billishyahao/sglang_disagg.git
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 
