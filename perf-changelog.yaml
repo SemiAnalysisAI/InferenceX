@@ -487,6 +487,14 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/635
 
 - config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Add DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+    - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput with EAGLE speculative decoding"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/667
+
+- config-keys:
     - dsr1-fp8-h100-dynamo-sglang
   description:
     - "Add DeepSeek-R1 FP8 H100 Dynamo SGLang MTP disaggregated multinode configurations"
