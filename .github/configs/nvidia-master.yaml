@@ -2513,6 +2513,110 @@ gptoss-fp4-h100-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
+dsr1-fp8-h100-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.8-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h100-multinode-slurm
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Max throughput TEP (1 prefill, 2 decode)
+    - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/1k1k/stp/h100-fp8-1p2d-max-tp.yaml"
+      decode:
+        num-worker: 2
+        tp: 16
+        ep: 1
+        dp-attn: false
+    # Max throughput DEP (1 prefill, 1 decode, dp-attention)
+    - conc-list: [1, 2, 4, 8, 16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/1k1k/stp/h100-fp8-1p1d-max-dep.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+  - isl: 1024
+    osl: 8192
+    search-space:
+    # Max throughput TEP (1 prefill, 2 decode)
+    - conc-list: [1, 2, 4, 8, 16, 32]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/1k8k/stp/h100-fp8-1p2d-max-tp.yaml"
+      decode:
+        num-worker: 2
+        tp: 16
+        ep: 1
+        dp-attn: false
+    # Max throughput DEP (1 prefill, 1 decode, dp-attention)
+    - conc-list: [1, 2, 4, 8]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/1k8k/stp/h100-fp8-1p1d-max-dep.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Max throughput TEP (1 prefill, 1 decode)
+    - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/8k1k/stp/h100-fp8-1p1d-max-tp.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+    # Max throughput DEP (1 prefill, 1 decode, dp-attention)
+    - conc-list: [1, 2, 4, 8, 16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 16
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/h100/8k1k/stp/h100-fp8-1p1d-max-dep.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+
 gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
   model: openai/gpt-oss-120b
@@ -6046,6 +6150,158 @@ dsr1-fp8-b200-dynamo-sglang:
         dp-attn: true
         additional-settings:
         - "CONFIG_FILE=recipes/b200-fp8/8k1k/stp/max-tpt-dep8-2p1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+
+dsr1-fp8-b200-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: b200-multinode-slurm
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # MTP low-latency: 1P1D
+    - spec-decoding: "mtp"
+      conc-list: [4, 64]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+    # MTP low-latency: 1P3D
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 32]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p3d.yaml"
+      decode:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: false
+    # MTP max-tpt: 1P5D
+    - spec-decoding: "mtp"
+      conc-list: [512, 4096]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p5d.yaml"
+      decode:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # MTP max-tpt: 2P5D
+    - spec-decoding: "mtp"
+      conc-list: [1024, 2048, 4096]
+      prefill:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-2p5d.yaml"
+      decode:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: true
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # MTP low-latency: 1P1D
+    - spec-decoding: "mtp"
+      conc-list: [16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/low-latency-tep8-1p1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+    # MTP low-latency: 1P4D
+    - spec-decoding: "mtp"
+      conc-list: [8, 256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/low-latency-tep8-1p4d.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    # MTP low-latency: 1P6D
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/low-latency-tep8-1p6d.yaml"
+      decode:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: false
+    # MTP max-tpt: 1P1D
+    - spec-decoding: "mtp"
+      conc-list: [256]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/max-tpt-dep8-1p1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # MTP max-tpt: 2P1D
+    - spec-decoding: "mtp"
+      conc-list: [128, 512]
+      prefill:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/b200-fp8/8k1k/mtp/max-tpt-dep8-2p1d.yaml"
       decode:
         num-worker: 1
         tp: 8
