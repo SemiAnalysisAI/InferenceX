@@ -491,3 +491,12 @@
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
     - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput with EAGLE speculative decoding"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/667
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Add DSR1 FP8/FP4 MI355X ATOM with MTP configuration"
+    - "Image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1"
+    - "Deepseek R1 with speculative decoding: 1k1k, 1k8k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/673
