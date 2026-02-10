@@ -497,6 +497,15 @@
 - config-keys:
     - dsr1-fp8-h100-dynamo-sglang
   description:
+    - "Add DeepSeek-R1 FP8 H100 Dynamo SGLang STP disaggregated multinode configurations"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130"
+    - "1k1k, 1k8k, 8k1k sequence lengths"
+    - "Two modes per seq-len: Max throughput TEP (1P2D) and Max throughput DEP (1P1D with dp-attention)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/643
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
     - "Add DeepSeek-R1 FP8 H100 Dynamo SGLang MTP disaggregated multinode configurations"
     - "Image: lmsysorg/sglang:v0.5.8-cu130"
     - "1k1k, 1k8k, 8k1k sequence lengths with MTP speculative decoding"
