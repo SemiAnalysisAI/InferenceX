@@ -2,6 +2,31 @@
 
 set -x
 
+# MODEL_PATH: Override with pre-downloaded paths on H100 runner
+# The yaml files specify HuggingFace model IDs for portability, but we use
+# local paths to avoid repeated downloading on the shared H100 cluster.
+if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+    else
+        echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
+        exit 1
+    fi
+elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+        export SERVED_MODEL_NAME="DeepSeek-R1-0528"
+        export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
+    else
+        echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
+        exit 1
+    fi
+else
+    echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+    exit 1
+fi
+
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 if [ -d "$SRT_REPO_DIR" ]; then
@@ -31,25 +56,24 @@ echo "Configs available at: $SRT_REPO_DIR/"
 export SLURM_PARTITION="hpc-gpu-1"
 export SLURM_ACCOUNT="customer"
 
-# Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+# Map container images to local squash files based on framework
+NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
 
-# Map container image to local squash file
-SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
-    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
-    export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
-else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: DeepSeek-R1-0528"
-    exit 1
+if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    # SGLang container mapping
+    SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
+    CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
+elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
+    # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
+    CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+    SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
 fi
 
 export ISL="$ISL"
 export OSL="$OSL"
 
-# Create srtslurm.yaml for srtctl
+# Create srtslurm.yaml for srtctl (used by both frameworks)
+SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for H100
@@ -62,11 +86,14 @@ default_time_limit: "4:00:00"
 gpus_per_node: 8
 network_interface: ""
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
+  dynamo-trtllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
+  nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
 # SLURM directive compatibility
