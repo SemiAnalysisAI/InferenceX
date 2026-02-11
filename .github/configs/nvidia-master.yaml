@@ -522,37 +522,6 @@ dsr1-fp4-b200-dynamo-sglang:
         tp: 8
         ep: 1
         dp-attn: false
-    - spec-decoding: "mtp"
-      conc-list: [1024]
-      prefill:
-        num-worker: 4
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/max-tpt-dep4-4p-dep8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/max-tpt-dep4-4p-dep8-1d.yaml"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-    - spec-decoding: "mtp"
-      conc-list: [1024, 2048]
-      prefill:
-        num-worker: 7
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/max-tpt-dep4-7p-dep8-2d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/max-tpt-dep4-7p-dep8-2d.yaml"
-      decode:
-        num-worker: 2
-        tp: 8
-        ep: 8
-        dp-attn: true
-
 
 dsr1-fp4-b300-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
