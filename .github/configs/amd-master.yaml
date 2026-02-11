@@ -46,6 +46,30 @@ dsr1-fp4-mi355x-atom:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 
+dsr1-fp4-mi355x-atom-mtp:
+  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
+  model: amd/DeepSeek-R1-0528-MXFP4
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp4
+  # WIP framwork (no customers yet)
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp  }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
+
 dsr1-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.7-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
@@ -249,6 +273,29 @@ dsr1-fp8-mi355x-atom:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 128 }
+
+dsr1-fp8-mi355x-atom-mtp:
+  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp8
+  # WIP framwork (no customers yet)
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
 dsr1-fp8-mi355x-sglang-disagg:
   image: rocm/sgl-dev:sglang-0.5.6.post1-rocm700-mi35x-mori-0113
