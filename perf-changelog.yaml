@@ -406,7 +406,7 @@
   description:
     - "Add --use-chat-template argument to benchmark_serving script"
     - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647  
 
 - config-keys: 
     - dsr1-fp8-b200-sglang-mtp
@@ -515,3 +515,12 @@
   description:
     - "Introduce new DSR1 FP8 B200 Dynamo TRT configurations for 8k1k and 1k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/616
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "bump MI355X MORI FP8/FP4 image to latest rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210"
+    - "bump mi355x sglang disagg recipe to sa-260211"
+    - "Add conc 4/8/16"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/674
