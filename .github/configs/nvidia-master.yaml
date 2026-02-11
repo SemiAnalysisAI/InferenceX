@@ -1804,6 +1804,28 @@ dsr1-fp8-b200-sglang-mtp:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
+glm5-fp8-b200-sglang:
+  image: lmsysorg/sglang:glm5-blackwell
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
   model: deepseek-ai/DeepSeek-R1-0528
