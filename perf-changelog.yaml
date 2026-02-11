@@ -520,7 +520,8 @@
     - dsr1-fp8-mi355x-sglang-disagg
     - dsr1-fp4-mi355x-sglang-disagg
   description:
-    - "bump MI355X MORI FP8/FP4 image to latest rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210"
-    - "bump mi355x sglang disagg recipe to sa-260211"
+    - "Bump MI355X MORI FP8/FP4 image to latest rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210"
+    - "Bump mi355x sglang disagg recipe to sa-260211"
     - "Add conc 4/8/16"
+    - "Use Pure TP with MTP=2 for conc smaller than 128"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/674
