@@ -523,5 +523,5 @@
     - "Bump MI355X MORI FP8/FP4 image to latest rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210"
     - "Bump mi355x sglang disagg recipe to sa-260211"
     - "Add conc 4/8/16"
-    - "Use Pure TP with MTP=2 for 1k1k conc smaller than ¤12 and reduce MTP to 1 for DEP configs"
+    - "Use Pure TP with MTP=2 for 1k1k conc smaller than 128 and reduce MTP to 1 for DEP configs"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/674
