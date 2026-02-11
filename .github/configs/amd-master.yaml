@@ -52,7 +52,6 @@ dsr1-fp4-mi355x-atom-mtp:
   model-prefix: dsr1
   runner: mi355x
   precision: fp4
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   seq-len-configs:
@@ -257,7 +256,6 @@ dsr1-fp8-mi355x-atom:
   model-prefix: dsr1
   runner: mi355x
   precision: fp8
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   seq-len-configs:
@@ -280,7 +278,6 @@ dsr1-fp8-mi355x-atom-mtp:
   model-prefix: dsr1
   runner: mi355x
   precision: fp8
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   seq-len-configs:
