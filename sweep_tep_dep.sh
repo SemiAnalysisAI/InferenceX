@@ -57,7 +57,7 @@ EXTRA_VLLM_FLAGS="${EXTRA_VLLM_FLAGS:-}"
 
 mkdir -p "$RESULT_DIR"
 SUMMARY_CSV="${RESULT_DIR}/summary.csv"
-echo "tp,dp,ep,concurrency,isl,osl,throughput_req_per_s,throughput_tok_per_s,mean_ttft_ms,median_ttft_ms,p99_ttft_ms,mean_tpot_ms,median_tpot_ms,p99_tpot_ms,mean_e2el_ms,median_e2el_ms,p99_e2el_ms" \
+echo "tp,dp,ep,concurrency,isl,osl,model_load_gib,kv_cache_avail_gib,kv_cache_tokens,max_concurrency_x,cudagraph_gib,weight_load_s,model_load_s,torch_compile_s,engine_init_s,local_experts,global_experts,attention_backend,moe_backend,throughput_req_per_s,throughput_tok_per_s,mean_ttft_ms,median_ttft_ms,p99_ttft_ms,mean_tpot_ms,median_tpot_ms,p99_tpot_ms,mean_e2el_ms,median_e2el_ms,p99_e2el_ms" \
     > "$SUMMARY_CSV"
 
 SERVER_PID=""
@@ -137,29 +137,117 @@ stop_server() {
     SERVER_PID=""
 }
 
-# Extract metrics from benchmark JSON and append to summary CSV
-extract_metrics() {
-    local json_file=$1 tp=$2 dp=$3 ep=$4 conc=$5
+# ---------------------------------------------------------------------------
+# Scrape server log for memory, timing, and config info.
+# Writes a per-run JSON and prints key values for the CSV.
+# Usage: scrape_server_log <server_log> <output_json>
+# Prints a single CSV-fragment line to stdout (the scraped columns).
+# ---------------------------------------------------------------------------
+scrape_server_log() {
+    local server_log=$1 out_json=$2
+    python3 - "$server_log" "$out_json" <<'PYEOF'
+import re, json, sys
+
+log_path, out_path = sys.argv[1], sys.argv[2]
+with open(log_path, errors="replace") as f:
+    text = f.read()
+
+def first_float(pattern, txt=text):
+    m = re.search(pattern, txt)
+    return float(m.group(1)) if m else ""
+
+def first_int(pattern, txt=text):
+    m = re.search(pattern, txt)
+    return int(m.group(1).replace(",", "")) if m else ""
+
+def first_str(pattern, txt=text):
+    m = re.search(pattern, txt)
+    return m.group(1).strip() if m else ""
+
+info = {}
+
+# ── Memory ────────────────────────────────────────────────────────────────
+info["model_load_gib"]      = first_float(r"Model loading took ([\d.]+) GiB")
+info["kv_cache_avail_gib"]  = first_float(r"Available KV cache memory: ([\d.]+) GiB")
+info["kv_cache_tokens"]     = first_int(r"GPU KV cache size: ([\d,]+) tokens")
+info["max_concurrency_x"]   = first_float(r"Maximum concurrency for [\d,]+ tokens per request: ([\d.]+)x")
+info["cudagraph_gib"]       = first_float(r"Graph capturing finished in \d+ secs, took ([-\d.]+) GiB")
+
+# ── Timing ────────────────────────────────────────────────────────────────
+info["weight_load_s"]       = first_float(r"Loading weights took ([\d.]+) seconds")
+info["model_load_s"]        = first_float(r"Model loading took [\d.]+ GiB memory and ([\d.]+) seconds")
+info["torch_compile_s"]     = first_float(r"torch\.compile takes ([\d.]+) s in total")
+info["engine_init_s"]       = first_float(r"init engine.*took ([\d.]+) seconds")
+
+# ── Expert placement ──────────────────────────────────────────────────────
+info["local_experts"]       = first_int(r"Local/global number of experts: (\d+)/\d+")
+info["global_experts"]      = first_int(r"Local/global number of experts: \d+/(\d+)")
+info["ep_strategy"]         = first_str(r"Expert placement strategy: (\w+)")
+
+# ── Backends ──────────────────────────────────────────────────────────────
+info["attention_backend"]   = first_str(r"Using (AttentionBackendEnum\.\w+) backend")
+info["moe_backend"]         = first_str(r"Using (\w+(?:\s+\w+)*) (?:Fp8 )?MoE backend")
+info["kv_cache_layout"]     = first_str(r"Using (\w+) KV cache layout")
+
+# ── Chunked prefill ──────────────────────────────────────────────────────
+info["chunked_prefill_max_tokens"] = first_int(r"Chunked prefill is enabled with max_num_batched_tokens=(\d+)")
+
+# ── CUDA graphs ──────────────────────────────────────────────────────────
+info["cudagraph_capture_s"] = first_float(r"Graph capturing finished in (\d+) secs")
+m = re.search(r"cudagraph_capture_sizes.*?\[([\d, ]+)\]", text)
+info["cudagraph_capture_sizes"] = m.group(1).strip() if m else ""
+
+# ── Compilation ──────────────────────────────────────────────────────────
+info["dynamo_transform_s"]  = first_float(r"Dynamo bytecode transform time: ([\d.]+) s")
+info["compile_range_s"]     = first_float(r"Compiling a graph for compile range.*takes ([\d.]+) s")
+
+# Write full metadata JSON
+with open(out_path, "w") as f:
+    json.dump(info, f, indent=2)
+
+# Print CSV fragment (order must match the CSV header between ep...throughput)
+cols = [
+    info.get("model_load_gib", ""),
+    info.get("kv_cache_avail_gib", ""),
+    info.get("kv_cache_tokens", ""),
+    info.get("max_concurrency_x", ""),
+    info.get("cudagraph_gib", ""),
+    info.get("weight_load_s", ""),
+    info.get("model_load_s", ""),
+    info.get("torch_compile_s", ""),
+    info.get("engine_init_s", ""),
+    info.get("local_experts", ""),
+    info.get("global_experts", ""),
+    info.get("attention_backend", ""),
+    info.get("moe_backend", ""),
+]
+print(",".join(str(c) for c in cols))
+PYEOF
+}
+
+# Extract perf metrics from benchmark JSON.
+# Prints a CSV-fragment line to stdout.
+extract_bench_metrics() {
+    local json_file=$1
     python3 -c "
-import json, sys
+import json
 with open('$json_file') as f:
     d = json.load(f)
-row = [
-    $tp, $dp, $ep, $conc, $ISL, $OSL,
-    d.get('request_throughput', 0),
-    d.get('output_throughput', 0),
-    d.get('mean_ttft_ms', 0),
-    d.get('median_ttft_ms', 0),
-    d.get('p99_ttft_ms', 0),
-    d.get('mean_tpot_ms', 0),
-    d.get('median_tpot_ms', 0),
-    d.get('p99_tpot_ms', 0),
-    d.get('mean_e2el_ms', 0),
-    d.get('median_e2el_ms', 0),
-    d.get('p99_e2el_ms', 0),
+cols = [
+    d.get('request_throughput', ''),
+    d.get('output_throughput', ''),
+    d.get('mean_ttft_ms', ''),
+    d.get('median_ttft_ms', ''),
+    d.get('p99_ttft_ms', ''),
+    d.get('mean_tpot_ms', ''),
+    d.get('median_tpot_ms', ''),
+    d.get('p99_tpot_ms', ''),
+    d.get('mean_e2el_ms', ''),
+    d.get('median_e2el_ms', ''),
+    d.get('p99_e2el_ms', ''),
 ]
-print(','.join(str(x) for x in row))
-" >> "$SUMMARY_CSV" 2>/dev/null || log "  WARN: could not extract metrics from $json_file"
+print(','.join(str(c) for c in cols))
+" 2>/dev/null || echo ",,,,,,,,,,,"
 }
 
 trap stop_server EXIT
@@ -216,6 +304,11 @@ for config in "${CONFIG_PAIRS[@]}"; do
             continue
         fi
 
+        # ── Scrape server log for memory/config info ──────────────────
+        META_JSON="${RESULT_DIR}/meta_${TAG}.json"
+        SERVER_CSV_FRAGMENT=$(scrape_server_log "$SERVER_LOG" "$META_JSON")
+        log "  Scraped server info → $META_JSON"
+
         # ── Run benchmark ─────────────────────────────────────────────
         CLIENT_LOG="${RESULT_DIR}/client_${TAG}.log"
 
@@ -238,12 +331,15 @@ for config in "${CONFIG_PAIRS[@]}"; do
             --result-filename "${TAG}.json" \
             2>&1 | tee "$CLIENT_LOG"
 
-        # Append to summary CSV
-        extract_metrics "${RESULT_DIR}/${TAG}.json" "$TP" "$DP" "$EP" "$CONC"
+        # ── Build CSV row: config + server scrape + bench metrics ─────
+        BENCH_CSV_FRAGMENT=$(extract_bench_metrics "${RESULT_DIR}/${TAG}.json")
+        echo "${TP},${DP},${EP},${CONC},${ISL},${OSL},${SERVER_CSV_FRAGMENT},${BENCH_CSV_FRAGMENT}" \
+            >> "$SUMMARY_CSV"
 
         log "Done → ${TAG}.json"
-        log "  server log: $SERVER_LOG"
-        log "  client log: $CLIENT_LOG"
+        log "  server log:  $SERVER_LOG"
+        log "  client log:  $CLIENT_LOG"
+        log "  server meta: $META_JSON"
         echo ""
     done
 done
