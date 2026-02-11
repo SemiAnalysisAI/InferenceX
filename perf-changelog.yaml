@@ -515,3 +515,11 @@
   description:
     - "Introduce new DSR1 FP8 B200 Dynamo TRT configurations for 8k1k and 1k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/616
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Add new GLM-5 FP8 B200 benchmark configuration using sglang glm5-blackwell image"
+    - "Model: zai-org/GLM-5-FP8 with EAGLE speculative decoding on B200 TP8"
+    - "Update launch_b200-nb.sh HF_HUB_CACHE_MOUNT to /mnt/data/hf_cache/hub/"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
