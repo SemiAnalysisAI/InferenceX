@@ -574,7 +574,7 @@ dsr1-fp8-mi355x-sglang-disagg:
   #       dp-attn: true
   #       additional-settings:
   #       - "DECODE_NODES=2"
-  #       - "DECODE_MTP_SIZE=2"
+  #       - "DECODE_MTP_SIZE=1"
 
 
   #   # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
@@ -594,7 +594,7 @@ dsr1-fp8-mi355x-sglang-disagg:
   #       dp-attn: true
   #       additional-settings:
   #       - "DECODE_NODES=2"
-  #       - "DECODE_MTP_SIZE=2"
+  #       - "DECODE_MTP_SIZE=1"
 
 
   #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
@@ -615,7 +615,7 @@ dsr1-fp8-mi355x-sglang-disagg:
   #       dp-attn: false
   #       additional-settings:
   #       - "DECODE_NODES=2"
-  #       - "DECODE_MTP_SIZE=2"
+  #       - "DECODE_MTP_SIZE=1"
 
   #   # non-MTP configurations
   #   # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
@@ -708,7 +708,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # non-MTP configurations
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
@@ -753,7 +753,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=2"
+        - "DECODE_MTP_SIZE=1"
 
     # non-MTP configurations
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
@@ -799,7 +799,7 @@ dsr1-fp4-mi355x-sglang-disagg:
   #       dp-attn: false
   #       additional-settings:
   #       - "DECODE_NODES=2"
-  #       - "DECODE_MTP_SIZE=2"
+  #       - "DECODE_MTP_SIZE=1"
 
   #   # non-MTP configurations
   #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
