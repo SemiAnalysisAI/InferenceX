@@ -6779,3 +6779,143 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         tp: 8
         ep: 8
         dp-attn: true
+
+dsr1-fp4-b200-dynamo-sglang-mtp:
+  image: "lmsysorg/sglang:v0.5.8.post1-cu130"
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  runner: b200-multinode-slurm
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - spec-decoding: "mtp"
+      conc-list: [16, 512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+      decode:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [32, 64, 256, 512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml"
+      decode:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [512, 1024]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - spec-decoding: "mtp"
+      conc-list: [512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: true
+
+
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - spec-decoding: "mtp"
+      conc-list: [64, 128]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [8]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+      decode:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [4, 128]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml"
+      decode:
+        num-worker: 5
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - spec-decoding: "mtp"
+      conc-list: [4, 8, 16, 64]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false

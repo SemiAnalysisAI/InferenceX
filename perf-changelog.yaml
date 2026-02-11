@@ -459,12 +459,14 @@
   description:
     - "New B300 FP8 Dynamo TRT configurations"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638
+
 - config-keys:
     - dsr1-fp8-h100-dynamo-trt
   description:
     - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
     - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
+
 - config-keys:
     - dsr1-fp4-gb200-dynamo-sglang
   description:
@@ -525,3 +527,11 @@
     - "Add conc 4/8/16"
     - "Use Pure TP with MTP=2 for 1k1k conc smaller than 128 and reduce MTP to 1 for DEP configs"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/674
+  
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add B200 configs for DSR1 FP4 SGLANG MTP mode for 1k1k and 8k1k"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/683
+  
