@@ -5237,7 +5237,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
 
 dsr1-fp4-gb300-dynamo-sglang:
-  image: "lmsysorg/sglang:v0.5.8-cu130-runtime"
+  image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
   runner: gb300
@@ -5268,7 +5268,7 @@ dsr1-fp4-gb300-dynamo-sglang:
 
     # Mid curve (4 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
-      conc-list: [ 512, 2048, 4096, 8192, 12000, 15000 ]
+      conc-list: [ 512, 2048, 4096, 8192 ]
       prefill:
         num-worker: 4
         tp: 4
