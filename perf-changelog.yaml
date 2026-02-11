@@ -569,4 +569,4 @@
     - dsr1-fp8-b200-dynamo-trt
   description:
     - "Update max_num_tokens and max_batch_size for min-latency decode workers"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/616
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/686
