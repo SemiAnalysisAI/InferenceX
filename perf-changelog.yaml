@@ -406,7 +406,7 @@
   description:
     - "Add --use-chat-template argument to benchmark_serving script"
     - "Without this arg, MTP acceptance rates are artificially high for DeepSeek with MTP"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647  
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/647
 
 - config-keys: 
     - dsr1-fp8-b200-sglang-mtp
