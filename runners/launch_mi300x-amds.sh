@@ -17,13 +17,6 @@ if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null";
     srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
 fi
 srun --jobid=$JOB_ID \
---container-image=$SQUASH_FILE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
---container-mount-home \
---container-writable \
---container-remap-root \
---container-workdir=/workspace/ \
---no-container-entrypoint --export=ALL \
 bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi300x.sh
 
 scancel $JOB_ID
