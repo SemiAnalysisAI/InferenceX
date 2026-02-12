@@ -697,14 +697,14 @@ dsr1-fp4-mi355x-sglang-disagg:
         num-worker: 1
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
       decode:
         num-worker: 2
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=1"
@@ -756,14 +756,14 @@ dsr1-fp4-mi355x-sglang-disagg:
         num-worker: 1
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
       decode:
         num-worker: 2
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
@@ -818,14 +818,14 @@ dsr1-fp4-mi355x-sglang-disagg:
         num-worker: 1
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
       decode:
         num-worker: 2
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=1"
@@ -877,14 +877,14 @@ dsr1-fp4-mi355x-sglang-disagg:
         num-worker: 1
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
       decode:
         num-worker: 2
         tp: 1
         ep: 8
-        dp-attn: true
+        dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
