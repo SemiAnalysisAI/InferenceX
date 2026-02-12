@@ -373,7 +373,7 @@ dsr1-fp8-mi355x-sglang-disagg:
     # non-MTP configurations
     # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
     - spec-decoding: "none"
-      conc-list: [ 2048 ]
+      conc-list: [ 1024, 2048 ]
       prefill:
         num-worker: 1
         tp: 1
@@ -392,7 +392,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
     - spec-decoding: "none"
-      conc-list: [ 1024, 512, 256 ]
+      conc-list: [ 1536, 1024, 512, 256 ]
       prefill:
         num-worker: 1
         tp: 1
@@ -412,7 +412,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -496,7 +496,7 @@ dsr1-fp8-mi355x-sglang-disagg:
     # non-MTP configurations
     # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
     - spec-decoding: "none"
-      conc-list: [ 2048 ]
+      conc-list: [ 1024, 2048 ]
       prefill:
         num-worker: 1
         tp: 1
@@ -515,7 +515,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
     - spec-decoding: "none"
-      conc-list: [ 1024, 512, 256 ]
+      conc-list: [ 1536, 1024, 512, 256 ]
       prefill:
         num-worker: 1
         tp: 1
