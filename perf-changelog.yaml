@@ -578,3 +578,11 @@
     - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
 
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Add new 1P2D max-throughput MTP config for 1k1k"
+    - "MTP settings: speculative-num-steps=1, speculative-num-draft-tokens=2"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/697
+
