@@ -1,4 +1,11 @@
 - config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Add GLM-5 FP8 benchmark on B200 with sglang (EAGLE speculative decoding)"
+    - "Update launch_b200-nb.sh HF_HUB_CACHE_MOUNT to /mnt/data/hf_cache/hub/"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
