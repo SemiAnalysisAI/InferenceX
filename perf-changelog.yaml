@@ -578,3 +578,8 @@
     - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
 
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update MI300X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/696
