@@ -8,4 +8,6 @@ jobs:
     runs-on: mi300x
     steps:
       - name: Drain node
-        run: sleep 86400
+        run: |
+          hostname
+          sleep 86400
