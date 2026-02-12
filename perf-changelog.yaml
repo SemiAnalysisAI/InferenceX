@@ -544,3 +544,11 @@
     - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
     - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/636
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Patches one missing concurrency point for "
+    - "DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration. "
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
