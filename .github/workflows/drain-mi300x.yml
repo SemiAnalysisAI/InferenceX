@@ -1,0 +1,24 @@
+name: Drain MI300X Nodes
+
+on:
+  push:
+
+jobs:
+  drain:
+    strategy:
+      matrix:
+        runner:
+          - mi300x-amd_0
+          - mi300x-amd_1
+          - mi300x-amd_2
+          - mi300x-amd_3
+          - mi300x-amd_4
+          - mi300x-cr_0
+          - mi300x-amds_0
+          - mi300x-amds_1
+          - mi300x-amds_2
+          - mi300x-amds_3
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Drain node
+        run: sleep 86400
