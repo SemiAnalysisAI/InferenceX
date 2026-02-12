@@ -560,6 +560,25 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/690
 
 - config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add more sweep points for DSR1 FP8 both MTP and non-MTP 1k1k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/689
+  
+- config-keys:
+    - dsr1-fp8-b200-dynamo-trt
+  description:
+    - "Update max_num_tokens and max_batch_size for min-latency decode workers"
+    - "See srt-slurm recipe changes: https://github.com/ishandhanani/srt-slurm/pull/173"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/686
+  
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/695
+  
+- config-keys:
     - dsr1-fp4-mi355x-sglang-disagg
   description:
     - "Add more sweep points for DSR1 FP4 both MTP and non-MTP 1k1k, 8k1k"
