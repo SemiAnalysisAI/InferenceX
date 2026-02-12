@@ -576,7 +576,7 @@
     - dsr1-fp8-mi325x-sglang
   description:
     - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/695
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
   
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg
