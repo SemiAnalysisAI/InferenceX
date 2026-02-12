@@ -569,4 +569,5 @@
     - dsr1-fp8-b200-dynamo-trt
   description:
     - "Update max_num_tokens and max_batch_size for min-latency decode workers"
+    - "See srt-slurm recipe changes: https://github.com/ishandhanani/srt-slurm/pull/173"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/686
