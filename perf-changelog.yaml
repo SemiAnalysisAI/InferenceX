@@ -615,3 +615,9 @@
     - "MTP settings: speculative-num-steps=1, speculative-num-draft-tokens=2"
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/697
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add min-latency configurations for H200 Dynamo TRT"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/698
