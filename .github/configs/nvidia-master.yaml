@@ -6772,7 +6772,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: false
     # MTP low-latency: 1P3D
     - spec-decoding: "mtp"
-      conc-list: [4, 8, 16, 32]
+      conc-list: [4, 8, 16, 32, 128]
       prefill:
         num-worker: 1
         tp: 8
