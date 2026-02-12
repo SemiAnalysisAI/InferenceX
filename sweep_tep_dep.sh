@@ -4,21 +4,20 @@ set -euo pipefail
 # =============================================================================
 # sweep_tep_dep.sh — TEP ↔ DEP sweep for DeepSeek-R1-0528 on 8x B200
 #
-# Sweeps across the tensor-expert parallelism spectrum with vLLM EP serving.
-# vLLM EP: --enable-expert-parallel, EP = TP × DP (derived, not a flag)
+# Sweeps across the tensor-expert parallelism spectrum with vLLM.
 # Total GPUs = TP × DP = 8
 #
-# Configs (TEP → DEP):
-#   TP=8  DP=1  (EP=8)  Pure TEP   — experts tensor-sharded, all-reduce dominant
-#   TP=4  DP=2  (EP=8)  Hybrid     — 2 DP replicas × TP=4
-#   TP=2  DP=4  (EP=8)  Hybrid     — 4 DP replicas × TP=2
-#   TP=1  DP=8  (EP=8)  Pure DEP   — full attention per GPU, all-to-all dominant
+# Config format: TP,DP,ep|noep
+#   ep   = --enable-expert-parallel (EP = TP × DP, experts distributed via all-to-all)
+#   noep = plain TP/DP (experts sharded by TP like all other weights)
 #
-# Memory per GPU (FP8, ~37B non-expert, ~634B expert, EP=8 in all configs):
-#   TP=8 DP=1: ~84 GB  (4.6 + 79)  →  ~108 GB free for KV cache
-#   TP=4 DP=2: ~88 GB  (9.2 + 79)  →  ~104 GB free
-#   TP=2 DP=4: ~98 GB  (18.5 + 79) →  ~94 GB free
-#   TP=1 DP=8: ~116 GB (37 + 79)   →  ~76 GB free
+# Configs:
+#   8,1,ep     TEP    — TP=8 with expert parallel
+#   4,2,ep     Hybrid — TP=4 DP=2 with expert parallel
+#   2,4,ep     Hybrid — TP=2 DP=4 with expert parallel
+#   1,8,ep     DEP    — TP=1 DP=8 with expert parallel
+#   8,1,noep   Pure TP=8, no expert parallel
+#   4,2,noep   TP=4 DP=2, no expert parallel
 #
 # Each (config, concurrency) pair gets a fresh server. All server and client
 # logs are saved per-run.
@@ -27,7 +26,7 @@ set -euo pipefail
 #   ./sweep_tep_dep.sh                              # fresh run
 #   ./sweep_tep_dep.sh ./results/tep_dep_sweep_...  # resume a previous run
 #   ISL=8192 OSL=1024 ./sweep_tep_dep.sh
-#   CONFIGS="8,1 4,2" CONCURRENCIES="4 16 64" ./sweep_tep_dep.sh
+#   CONFIGS="8,1,ep 8,1,noep" CONCURRENCIES="4 16 64" ./sweep_tep_dep.sh
 # =============================================================================
 
 # Resume mode: pass an existing result dir as $1 to skip completed runs
@@ -52,12 +51,11 @@ NUM_GPUS=8
 # Override-able arrays (space-separated)
 read -ra CONCURRENCIES <<< "${CONCURRENCIES:-4 8 16 32 64 128 256 512}"
 
-# TP,DP pairs — override with e.g. CONFIGS="8,1 4,2"
-# EP is derived: EP = TP × DP
+# TP,DP,ep|noep triples — override with e.g. CONFIGS="8,1,ep 8,1,noep"
 if [[ -n "${CONFIGS:-}" ]]; then
     read -ra CONFIG_PAIRS <<< "$CONFIGS"
 else
-    CONFIG_PAIRS=("8,1" "4,2" "2,4" "1,8")
+    CONFIG_PAIRS=("8,1,ep" "4,2,ep" "2,4,ep" "1,8,ep" "8,1,noep" "4,2,noep")
 fi
 
 # Extra vLLM flags (append whatever you need)
@@ -279,8 +277,14 @@ log "  Results:       $RESULT_DIR"
 echo ""
 
 for config in "${CONFIG_PAIRS[@]}"; do
-    IFS=',' read -r TP DP <<< "$config"
-    EP=$(( TP * DP ))
+    IFS=',' read -r TP DP EP_MODE <<< "$config"
+
+    # Derive EP value for tags and CSV
+    if [[ "$EP_MODE" == "ep" ]]; then
+        EP=$(( TP * DP ))
+    else
+        EP=1
+    fi
 
     for CONC in "${CONCURRENCIES[@]}"; do
         NUM_PROMPTS=$(( CONC * NUM_PROMPTS_MULT ))
@@ -294,7 +298,7 @@ for config in "${CONFIG_PAIRS[@]}"; do
         fi
 
         log "============================================================"
-        log "Run: TP=$TP  DP=$DP  EP=$EP  conc=$CONC"
+        log "Run: TP=$TP  DP=$DP  EP=$EP  EP_MODE=$EP_MODE  conc=$CONC"
         log "============================================================"
 
         # ── Stop previous server ──────────────────────────────────────
@@ -303,11 +307,16 @@ for config in "${CONFIG_PAIRS[@]}"; do
         # ── Start fresh server ────────────────────────────────────────
         SERVER_LOG="${RESULT_DIR}/server_${TAG}.log"
 
+        EP_FLAG=""
+        if [[ "$EP_MODE" == "ep" ]]; then
+            EP_FLAG="--enable-expert-parallel"
+        fi
+
         # shellcheck disable=SC2086
         vllm serve "$MODEL" \
             --tensor-parallel-size "$TP" \
             --data-parallel-size "$DP" \
-            --enable-expert-parallel \
+            $EP_FLAG \
             --port "$PORT" \
             --trust-remote-code \
             --enable-chunked-prefill \
