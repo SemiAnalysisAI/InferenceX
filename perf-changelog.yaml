@@ -551,4 +551,4 @@
     - "Patches one missing concurrency point for "
     - "DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration. "
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/691
