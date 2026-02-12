@@ -49,7 +49,7 @@ BENCHMARK_SCRIPT="${BENCHMARK_SCRIPT:-utils/bench_serving/benchmark_serving.py}"
 NUM_GPUS=8
 
 # Override-able arrays (space-separated)
-read -ra CONCURRENCIES <<< "${CONCURRENCIES:-4 8 16 32 64 128 256 512}"
+read -ra CONCURRENCIES <<< "${CONCURRENCIES:-1 4 8 16 32 64 128 256 512 1024}"
 
 # TP,DP,ep|noep triples — override with e.g. CONFIGS="8,1,ep 8,1,noep"
 if [[ -n "${CONFIGS:-}" ]]; then
