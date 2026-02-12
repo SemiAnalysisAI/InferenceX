@@ -5236,6 +5236,120 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
 
+dsr1-fp4-gb300-dynamo-sglang:
+  image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: gb300
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  # 1k1k configurations
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Low latency (1 prefill node, 2 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/1k1k/low_latency.yaml"
+      decode:
+        num-worker: 2
+        tp: 4
+        ep: 1
+        dp-attn: false
+
+    # Mid curve (4 prefill nodes, 8 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 512, 2048, 4096, 8192 ]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/1k1k/mid_curve.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+    # Max throughput (4 prefill nodes, 12 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 512, 2048, 4096, 8192 ]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/1k1k/max_tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 48
+        ep: 48
+        dp-attn: true
+
+  # 8k1k configurations
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Low latency (1 prefill node, 4 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 4, 8, 32, 64 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/8k1k/low_latency.yaml"
+      decode:
+        num-worker: 4
+        tp: 4
+        ep: 1
+        dp-attn: false
+
+    # Mid curve (6 prefill nodes, 12 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 512, 2048, 4096 ]
+      prefill:
+        num-worker: 6
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/8k1k/mid_curve.yaml"
+      decode:
+        num-worker: 1
+        tp: 48
+        ep: 48
+        dp-attn: true
+
+    # Max throughput (10 prefill nodes, 8 decode nodes)
+    - spec-decoding: "none"
+      conc-list: [ 2048 ]
+      prefill:
+        num-worker: 10
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/gb300-fp4/8k1k/max_tpt.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
 dsr1-fp8-gb300-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: deepseek-ai/DeepSeek-R1-0528

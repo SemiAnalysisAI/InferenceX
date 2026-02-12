@@ -52,7 +52,11 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_IMAGE="nginx:1.27.4"
+NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
 
 # Create srtslurm.yaml for srtctl
 echo "Creating srtslurm.yaml configuration..."
@@ -73,6 +77,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF
 
@@ -83,7 +88,9 @@ echo "Running make setup..."
 make setup ARCH=aarch64
 
 echo "Submitting job with srtctl..."
+
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output

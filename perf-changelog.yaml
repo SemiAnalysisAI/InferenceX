@@ -535,3 +535,12 @@
     - "Image: lmsysorg/sglang:v0.5.8.post1-cu130"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/683
   
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-sglang
+  description:
+    - "Add GB300 FP4 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
+    - "Recipes sourced from srt-slurm repo (recipes/gb300-fp4/ folder)"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/636
