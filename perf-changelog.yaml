@@ -601,3 +601,11 @@
   description:
     - "Update MI300X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/696
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "Add more sweep points for DSR1 FP4 both MTP and non-MTP 1k1k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
+  
+  
