@@ -621,3 +621,9 @@
   description:
     - "Add min-latency configurations for H200 Dynamo TRT"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/698
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add more sweep points for DSR1 FP8 both MTP and non-MTP 1k1k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/700
