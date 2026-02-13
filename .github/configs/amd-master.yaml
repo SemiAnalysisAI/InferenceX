@@ -93,7 +93,7 @@ dsr1-fp8-mi300x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.8-rocm700-mi30x
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi30x-20260212
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
