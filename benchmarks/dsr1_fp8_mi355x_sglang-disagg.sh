@@ -29,7 +29,7 @@ fi
 set -x
 
 AMD_DISAGG_REPO="https://github.com/billishyahao/sglang_disagg.git"
-COMMIT_ID="21c60a1f979f78e0459913bc37dd88a19344cea8"
+COMMIT_ID="953f7c512b713683ac3a7182f78f393dcdf3768c"
 
 git clone ${AMD_DISAGG_REPO} \
     && cd sglang_disagg \
