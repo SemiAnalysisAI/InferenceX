@@ -28,8 +28,13 @@ fi
 
 set -x
 
-# Always clone and setup sglang_disagg
-git clone --branch sa-260203 https://github.com/billishyahao/sglang_disagg.git
+AMD_DISAGG_REPO="https://github.com/billishyahao/sglang_disagg.git"
+COMMIT_ID="21c60a1f979f78e0459913bc37dd88a19344cea8"
+
+git clone ${AMD_DISAGG_REPO} \
+    && cd sglang_disagg \
+    && git fetch -v --prune -- origin ${COMMIT_ID} \
+    && git checkout FETCH_HEAD && cd ..
 
 cd "$SGL_SLURM_JOBS_PATH" || exit 1
 

@@ -459,12 +459,14 @@
   description:
     - "New B300 FP8 Dynamo TRT configurations"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/638
+
 - config-keys:
     - dsr1-fp8-h100-dynamo-trt
   description:
     - "Add DeepSeek R1 FP8 H100 Dynamo TRT-LLM disaggregated multinode configurations"
     - "fix model_prefix bug from https://github.com/InferenceMAX/InferenceMAX/pull/651"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/663
+
 - config-keys:
     - dsr1-fp4-gb200-dynamo-sglang
   description:
@@ -483,6 +485,142 @@
     - "Image: lmsysorg/sglang:v0.5.8-cu130"
     - "Update prefill/decode worker counts, TP/EP parallelism, and dp-attn settings for 1k1k and 8k1k"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/635
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Add DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+    - "9 recipes: 4x 1k1k + 5x 8k1k, low-latency and max-throughput with EAGLE speculative decoding"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/667
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Add DeepSeek-R1 FP8 H100 Dynamo SGLang STP disaggregated multinode configurations"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130"
+    - "1k1k, 1k8k, 8k1k sequence lengths"
+    - "Two modes per seq-len: Max throughput TEP (1P2D) and Max throughput DEP (1P1D with dp-attention)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/643
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Add DeepSeek-R1 FP8 H100 Dynamo SGLang MTP disaggregated multinode configurations"
+    - "Image: lmsysorg/sglang:v0.5.8-cu130"
+    - "1k1k, 1k8k, 8k1k sequence lengths with MTP speculative decoding"
+    - "Two modes per seq-len: Max throughput TEP (1P2D) and Max throughput DEP (1P1D with dp-attention)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/644
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Add DSR1 FP8/FP4 MI355X ATOM with MTP configuration"
+    - "Image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1"
+    - "Deepseek R1 with speculative decoding: 1k1k, 1k8k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/673
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang
+  description:
+    - "Add DSR1 FP4 B200 Dynamo SGLang STP mode"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
+    - "1k1k configs: low-latency DEP (1P5D, 1P6D), max-throughput DEP (1P1D, 1P2D)"
+    - "8k1k configs: low-latency DEP/TEP (1P1D, 1P5D, 2P5D), TEP (1P1D), max-throughput DEP (7P2D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/672
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-trt
+  description:
+    - "Introduce new DSR1 FP8 B200 Dynamo TRT configurations for 8k1k and 1k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/616
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "Bump MI355X MORI FP8/FP4 image to latest rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210"
+    - "Bump mi355x sglang disagg recipe to sa-260211"
+    - "Add conc 4/8/16"
+    - "Use Pure TP with MTP=2 for 1k1k conc smaller than 128 and reduce MTP to 1 for DEP configs"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/674
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add B200 configs for DSR1 FP4 SGLANG MTP mode for 1k1k and 8k1k"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/683
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-sglang
+  description:
+    - "Add GB300 FP4 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
+    - "Recipes sourced from srt-slurm repo (recipes/gb300-fp4/ folder)"
+    - "Add 1k1k configurations: low-latency (1P2D), mid-curve (4P8D), max-tpt (4P12D)"
+    - "Add 8k1k configurations: low-latency (1P4D), mid-curve (6P12D), max-tpt (10P8D)"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/636
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Patches one missing concurrency point for "
+    - "DSR1 FP8 B200 disaggregated SGLang MTP multinode configuration. "
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/691
+
+- config-keys:
+    - dsr1-fp8-b300-dynamo-trt
+  description:
+    - "Update max_num_tokens and max_batch_size for min-latency decode workers"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/690
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add more sweep points for DSR1 FP8 both MTP and non-MTP 1k1k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/689
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-trt
+  description:
+    - "Update max_num_tokens and max_batch_size for min-latency decode workers"
+    - "See srt-slurm recipe changes: https://github.com/ishandhanani/srt-slurm/pull/173"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/686
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update MI325X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update MI300X DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.8"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/696
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+  description:
+    - "Add more sweep points for DSR1 FP4 both MTP and non-MTP 1k1k, 8k1k"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/692
+  
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Add new 1P2D max-throughput MTP config for 1k1k"
+    - "MTP settings: speculative-num-steps=1, speculative-num-draft-tokens=2"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/697
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+  description:
+    - "Add min-latency configurations for H200 Dynamo TRT"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/698
 
 - config-keys:
     - dsr1-fp4-b200-sglang-mtp
