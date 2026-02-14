@@ -332,7 +332,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 1536, 1024, 512, 256, 128 ]
+      conc-list: [ 1536, 1024, 512, 256 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -392,7 +392,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
     - spec-decoding: "none"
-      conc-list: [ 1536, 1024, 512, 256, 128 ]
+      conc-list: [ 1536, 1024, 512, 256 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -473,7 +473,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 1536, 1024, 512, 256 ]
+      conc-list: [ 1536, 1024 ]
       prefill:
         num-worker: 1
         tp: 1
@@ -512,7 +512,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=2"
 
     # non-MTP configurations
-    - spec-decoding: "mtp"
+    - spec-decoding: "none"
       conc-list: [ 512, 1024 ]
       prefill:
         num-worker: 2
@@ -551,7 +551,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Middle of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
     - spec-decoding: "none"
-      conc-list: [ 1536, 1024, 512, 256 ]
+      conc-list: [ 1536, 1024 ]
       prefill:
         num-worker: 1
         tp: 1
