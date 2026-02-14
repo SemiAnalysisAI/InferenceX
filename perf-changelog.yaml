@@ -624,6 +624,10 @@
 
 - config-keys:
     - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg
   description:
-    - "Add more sweep points for DSR1 FP8 both MTP and non-MTP 1k1k, 8k1k"
+    - "Bump MI355X disagg recipe commit to 953f7c5 (bug fixes in sglang_disagg fork)"
+    - "1k1k: Switch prefill workers from DEP (tp:1, ep:8, dp-attn) to Pure TP (tp:8, ep:1) for MTP and non-MTP middle-of-curve 1P2D configs"
+    - "1k1k: Extend middle-of-curve concurrency range by adding conc=128 for both MTP and non-MTP 1P2D configs"
+    - "8k1k: Add new 2P1D (2-prefill, 1-decode) configs at conc [512, 1024] for both MTP (DECODE_MTP_SIZE=0) and non-MTP, with Pure TP prefill and DEP decode"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/700
