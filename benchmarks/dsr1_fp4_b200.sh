@@ -20,6 +20,8 @@ hf download "$MODEL"
 
 nvidia-smi
 
+export SGLANG_ENABLE_JIT_DEEPGEMM=false
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 

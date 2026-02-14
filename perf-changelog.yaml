@@ -621,3 +621,12 @@
   description:
     - "Add min-latency configurations for H200 Dynamo TRT"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/698
+
+- config-keys:
+    - dsr1-fp4-b200-sglang-mtp
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp8-b200-sglang
+  description:
+    - "Update DSR1 B200 configs for fp4 mtp, and fp4/fp8 stp"
+    - "Image: lmsysorg/sglang:v0.5.8.post1-cu130"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/631
