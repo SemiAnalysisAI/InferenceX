@@ -630,3 +630,9 @@
     - "1k1k: Extend middle-of-curve concurrency range by adding conc=128 for both MTP and non-MTP 1P2D configs"
     - "8k1k: Add new 2P1D (2-prefill, 1-decode) configs at conc [512, 1024] for both MTP (DECODE_MTP_SIZE=0) and non-MTP, with Pure TP prefill and DEP decode"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/700
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Bump MI355X disagg FP8 recipe commit to fix perf regression on 8k1k DEP8"
+  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/701
