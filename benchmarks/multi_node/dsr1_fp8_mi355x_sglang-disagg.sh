@@ -36,14 +36,24 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME="DeepSeek-R1"
 export CONTAINER_IMAGE=$IMAGE
 
+if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+export PREFILL_ENABLE_EP=false
+else
 export PREFILL_ENABLE_EP=true
+fi
+
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 export PREFILL_ENABLE_DP=true
 else
 export PREFILL_ENABLE_DP=false
 fi
 
+if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+export DECODE_ENABLE_EP=false
+else
 export DECODE_ENABLE_EP=true
+fi
+
 if [[ "$DECODE_DP_ATTN" == "true" ]]; then
 export DECODE_ENABLE_DP=true
 else
