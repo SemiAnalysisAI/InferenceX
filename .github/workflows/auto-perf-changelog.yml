@@ -1,0 +1,118 @@
+name: Auto Perf Changelog
+
+# Automatically generate perf-changelog.yaml entries when PRs that modify
+# master config files are merged WITHOUT manually updating the changelog.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths:
+      - '.github/configs/*-master.yaml'
+
+jobs:
+  auto-changelog:
+    # Only run when the PR was actually merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check if changelog was already updated
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Check if perf-changelog.yaml was modified in this PR
+          FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files \
+            --jq '.[].filename' | grep -c '^perf-changelog.yaml$' || true)
+          if [ "$FILES" -gt 0 ]; then
+            echo "Changelog was manually updated in this PR. Skipping auto-generation."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changelog was NOT updated. Will auto-generate entry."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+
+      - name: Setup Python
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: pip install pyyaml
+
+      - name: Generate changelog entry
+        if: steps.check.outputs.skip != 'true'
+        id: generate
+        run: |
+          python .github/scripts/generate_perf_changelog_entry.py \
+            --base-sha "${{ github.event.pull_request.base.sha }}" \
+            --head-sha "${{ github.event.pull_request.merge_commit_sha }}" \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --pr-title "${{ github.event.pull_request.title }}" \
+            --repo "${{ github.repository }}"
+
+      - name: Check for changes
+        if: steps.check.outputs.skip != 'true'
+        id: changes
+        run: |
+          if git diff --quiet perf-changelog.yaml; then
+            echo "No changes to perf-changelog.yaml"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changes detected in perf-changelog.yaml"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create branch and PR
+        if: steps.check.outputs.skip != 'true' && steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          BRANCH="auto/perf-changelog-pr-${PR_NUM}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add perf-changelog.yaml
+          git commit -m "Auto-update perf-changelog.yaml for PR #${PR_NUM}
+
+          Automatically generated perf-changelog entry for config changes
+          merged in PR #${PR_NUM}.
+
+          Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "Auto perf-changelog update for PR #${PR_NUM}" \
+            --body "$(cat <<'EOF'
+          ## Summary
+          - Auto-generated `perf-changelog.yaml` entry for config changes merged in #${{ github.event.pull_request.number }}
+          - Original PR: #${{ github.event.pull_request.number }} by @${{ github.event.pull_request.user.login }}
+
+          > **Note:** This PR was automatically created because the original PR modified master config files without updating `perf-changelog.yaml`. Please review the generated descriptions and edit if needed before merging.
+
+          ## Generated from
+          PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH" \
+            --assignee "${{ github.event.pull_request.user.login }}"
