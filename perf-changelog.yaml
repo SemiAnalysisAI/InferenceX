@@ -636,3 +636,11 @@
   description:
     - "Bump MI355X disagg FP8 recipe commit to fix perf regression on 8k1k DEP8"
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/701
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 SGLang benchmark for MI355X"
+    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi30x-20260215"
+    - "Uses triton attention backend, TP=8, concurrency 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
