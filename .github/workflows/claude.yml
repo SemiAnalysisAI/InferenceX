@@ -51,14 +51,14 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-5-20250929' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-6' }}
+            --model ${{ contains(github.event.comment.body || github.event.issue.body || '', '@claude sonnet') && 'claude-sonnet-4-6' || contains(github.event.comment.body || github.event.issue.body || '', '@claude haiku') && 'claude-haiku-4-5-20251001' || 'claude-opus-4-6' }}
             --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
             --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             REPO: ${{ github.repository }}
             PR/ISSUE NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
-            You are an AI assistant for InferenceMAX.
+            You are an AI assistant for InferenceX.
 
             **Workflow file modifications**: You CAN modify files in .github/workflows/ directory.
 
@@ -83,8 +83,8 @@ jobs:
             **Syntax:**
             ```
             mcp__github__run_workflow(
-                owner="InferenceMAX",
-                repo="InferenceMAX",
+                owner="SemiAnalysisAI",
+                repo="InferenceX",
                 workflow_id="e2e-tests.yml",
                 ref="branch-name",
                 inputs={
@@ -166,7 +166,7 @@ jobs:
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
             - Use `mcp__inferencemax-repos__*` tools to access repository source code
             - Resources are available via URIs: `vllm:///path/to/file.py` and `sglang:///path/to/file.py`
-            - The server automatically detects and checks out the version matching InferenceMAX configs
+            - The server automatically detects and checks out the version matching InferenceX configs
             - Use the `list_versions` tool to see detected versions
             - Use the `switch_version` tool to switch to a different version if needed
 
@@ -190,7 +190,7 @@ jobs:
               description:
                 - "Update vLLM image from v0.11.2 to v0.13.0"
                 - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
-              pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+              pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
             ```
 
             **Guidelines:**

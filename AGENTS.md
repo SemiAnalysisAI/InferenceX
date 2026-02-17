@@ -1,10 +1,10 @@
 # AGENT.md
 
-This file provides guidance for AI agents working with the InferenceMAX codebase.
+This file provides guidance for AI agents working with the InferenceX codebase.
 
 ## Project Overview
 
-InferenceMAX is an open-source, automated benchmarking system that continuously tracks LLM inference performance across different hardware platforms (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results are published to https://inferencemax.ai/.
+InferenceX is an open-source, automated benchmarking system that continuously tracks LLM inference performance across different hardware platforms (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results are published to https://inferencex.com/.
 
 ## Directory Structure
 
@@ -186,7 +186,7 @@ When working with benchmark configurations, use these valid values:
 
 ### Registering Recipes from srtslurm
 
-For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/ishandhanani/srt-slurm) repository. To stage these recipes in InferenceMAX:
+For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/ishandhanani/srt-slurm) repository. To stage these recipes in InferenceX:
 
 **1. Locate source recipes in srtslurm:**
 ```bash
@@ -260,7 +260,7 @@ dsr1-fp8-h200-dynamo-sglang:
     - "Add DSR1 FP8 H200 Dynamo SGLang disaggregated multinode configuration"
     - "Image: lmsysorg/sglang:v0.5.8-cu130-runtime"
     - "Recipes sourced from srtslurm repo (recipes/h200/)"
-  pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 ```
 
 **7. Validate configuration:**
@@ -283,7 +283,7 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
      description:
        - "Update vLLM image from v0.11.2 to v0.13.0"
        - "Add VLLM_MXFP4_USE_MARLIN=1 environment variable"
-     pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/XXX
+     pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
    ```
 4. This triggers benchmarks for affected configs and tracks performance changes
 
@@ -365,7 +365,7 @@ Eval results are collected by `.github/workflows/collect-evals.yml`:
 
 ```bash
 # Download eval results artifact
-gh run download <RUN_ID> --repo InferenceMAX/InferenceMAX -n eval_results_all -D ./evals
+gh run download <RUN_ID> --repo SemiAnalysisAI/InferenceX -n eval_results_all -D ./evals
 
 # View eval summary
 cat ./evals/agg_eval_all.json | jq -r '
@@ -445,10 +445,10 @@ When asked to analyze benchmark results from a GitHub Actions run URL, use the `
 ### Commands
 ```bash
 # List artifacts for a run
-gh api /repos/InferenceMAX/InferenceMAX/actions/runs/<RUN_ID>/artifacts --jq '.artifacts[].name'
+gh api /repos/SemiAnalysisAI/InferenceX/actions/runs/<RUN_ID>/artifacts --jq '.artifacts[].name'
 
 # Download aggregated results
-gh run download <RUN_ID> --repo InferenceMAX/InferenceMAX -n results_bmk -D ./results
+gh run download <RUN_ID> --repo SemiAnalysisAI/InferenceX -n results_bmk -D ./results
 ```
 ### Parsing Results (IMPORTANT: avoid dumping raw JSON)
 

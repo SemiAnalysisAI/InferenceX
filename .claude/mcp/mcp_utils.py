@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def get_config_paths() -> List[str]:
-    """Get paths to InferenceMAX config files."""
+    """Get paths to InferenceX config files."""
     root = Path(os.getenv('INFERENCEMAX_ROOT', Path.cwd()))
     return [
         str(root / '.github/configs/amd-master.yaml'),
