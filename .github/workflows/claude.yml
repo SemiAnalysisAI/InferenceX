@@ -227,4 +227,6 @@ jobs:
 
             ### Additional Knowledge
             - MI355 is gfx950 not gfx1201
+            - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
+            - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
 
