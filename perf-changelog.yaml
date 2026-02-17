@@ -638,9 +638,9 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/701
 
 - config-keys:
-    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang
   description:
-    - "Add Qwen3.5-397B-A17B FP8 SGLang benchmark for MI355X"
-    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi30x-20260215"
+    - "Add Qwen3.5-397B-A17B BF16 SGLang benchmark for MI355X"
+    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260215"
     - "Uses triton attention backend, TP=8, concurrency 4-64"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/705
