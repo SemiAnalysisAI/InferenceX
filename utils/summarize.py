@@ -102,7 +102,7 @@ def main():
         ]
 
         print("## Single-Node Results\n")
-        print("Only [InferenceMAX/InferenceMAX](https://github.com/InferenceMAX/InferenceMAX) repo contains the Official InferenceMAX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial. Forks may not remove this disclaimer.\n")
+        print("Only [InferenceX](https://github.com/SemiAnalysisAI/InferenceX) repo contains the Official InferenceX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial. Forks may not remove this disclaimer.\n")
         print(tabulate(single_node_rows, headers=single_node_headers, tablefmt="github"))
         print("\n")
 
@@ -149,7 +149,7 @@ def main():
         ]
 
         print("## Multi-Node Results\n")
-        print("Only [InferenceMAX/InferenceMAX](https://github.com/InferenceMAX/InferenceMAX) repo contains the Official InferenceMAX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial. Forks may not remove this disclaimer.\n")
+        print("Only [InferenceX](https://github.com/SemiAnalysisAI/InferenceX) repo contains the Official InferenceX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial. Forks may not remove this disclaimer.\n")
         print(tabulate(multinode_rows, headers=multinode_headers, tablefmt="github"))
 
 
