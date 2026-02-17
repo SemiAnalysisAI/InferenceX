@@ -46,6 +46,11 @@ InferenceMAX is an open-source, automated benchmarking system that continuously 
 └── perf-changelog.yaml      # Triggers benchmarks on changes
 ```
 
+## Terminology
+
+- **STP (Single Token Prediction)**: Standard autoregressive decoding where one token is generated per forward pass. No speculative decoding or MTP (Multi-Token Prediction) is used. When a benchmark is labeled "STP only", it means vanilla decoding without any speculation.
+- **MTP (Multi-Token Prediction)**: A technique where the model predicts multiple tokens per forward pass, typically using speculative decoding methods like EAGLE or NEXTN.
+
 ## Key Technologies
 
 - **Python 3.13**: Core automation and config generation

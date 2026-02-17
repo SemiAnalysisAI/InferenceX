@@ -638,6 +638,14 @@
   pr-link: https://github.com/InferenceMAX/InferenceMAX/pull/701
 
 - config-keys:
+    - qwen3.5-bf16-b200-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B200 SGLang benchmark"
+    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/704
+
+- config-keys:
     - qwen3.5-bf16-mi355x-sglang
   description:
     - "Add Qwen3.5-397B-A17B BF16 SGLang benchmark for MI355X"
