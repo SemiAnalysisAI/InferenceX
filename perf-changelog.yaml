@@ -670,4 +670,4 @@
     - "Image: vllm/vllm-openai-rocm:v0.15.1"
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=4 and TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
