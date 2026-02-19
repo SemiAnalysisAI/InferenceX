@@ -1786,7 +1786,7 @@ qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
-  runner: b200
+  runner: b200-nvs
   precision: bf16
   framework: sglang
   multinode: false
