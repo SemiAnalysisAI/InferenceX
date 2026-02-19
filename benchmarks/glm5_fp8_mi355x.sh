@@ -15,6 +15,9 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+# GLM-5 requires latest transformers for glm_moe_dsa model type support
+pip install git+https://github.com/huggingface/transformers.git
+
 hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
