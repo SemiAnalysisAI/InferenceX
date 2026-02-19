@@ -34,30 +34,33 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
-    export SGL_SLURM_JOBS_PATH="sglang_disagg"
-
     export MODEL_NAME="DeepSeek-R1"
-    export MODEL_PATH="/nfsdata"
+    export MODEL_PATH="/it-share/data"
+    export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+    export MORI_RDMA_TC=104
 
-    NODENAME=$(sinfo -N -h -t idle,mix -o "%N" | head -1)
-    if [[ $NODENAME == GPU* ]]; then
-        export MODEL_PATH="/nfsdata"
-    elif [[ $NODENAME == mia1* ]]; then
-        export MODEL_PATH="/it-share/data"
-    else
-        echo "[Error] No available nodes for launching slurm jobs"
-        exit 1
-    fi
+    # Set additional required env vars for multi_node scripts
+    export MODEL_DIR="$MODEL_PATH"  # job.slurm uses MODEL_DIR
+    export GPUS_PER_NODE=8          # MI355X has 8 GPUs (set to 4 for MI325X)
 
     export ISL="$ISL"
     export OSL="$OSL"
 
-    sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
+    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible, outside the repo tree)
+    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+    mkdir -p "$BENCHMARK_LOGS_DIR"
+    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
-    JOB_ID=$(bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh")
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
+        BENCHMARK_SUBDIR="multi_node"
+    else
+        BENCHMARK_SUBDIR="single_node"
+    fi
+    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
 
     # Wait for job to complete
-    LOG_FILE="$SGL_SLURM_JOBS_PATH/slurm_job-${JOB_ID}.out"
+    LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
 
     # Give slurm time to start the job and create log file
     sleep 10
@@ -105,7 +108,7 @@ for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for 
     print(path)
 PY
 
-    LOGS_DIR=$(python3 collect_latest_results.py "$SGL_SLURM_JOBS_PATH" "$ISL" "$OSL" 1)
+    LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
     if [ -z "$LOGS_DIR" ]; then
         echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
         exit 1
@@ -133,7 +136,15 @@ PY
     set -x
     echo "Canceled the slurm job $JOB_ID"
 
-    sudo rm -rf "$SGL_SLURM_JOBS_PATH/logs" 2>/dev/null || true
+    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
+
+    # Upload logs as artifact if running in GitHub Actions
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        ARTIFACT_DIR="$GITHUB_WORKSPACE/benchmark_artifacts"
+        mkdir -p "$ARTIFACT_DIR"
+        cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$ARTIFACT_DIR/" 2>/dev/null || true
+        echo "Logs copied to $ARTIFACT_DIR for artifact upload"
+    fi
 
 else
 
@@ -170,7 +181,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 

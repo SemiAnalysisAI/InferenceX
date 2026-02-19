@@ -17,4 +17,4 @@ docker run --rm --ipc=host --shm-size=16g --network=host --name=$server_name \
 -e ISL -e OSL -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RANDOM_RANGE_RATIO -e RESULT_FILENAME -e RUN_EVAL -e RUNNER_TYPE \
 --entrypoint=/bin/bash \
 $IMAGE \
-benchmarks/"${EXP_NAME%%_*}_${PRECISION}_mi300x.sh"
+benchmarks/single_node/"${EXP_NAME%%_*}_${PRECISION}_mi300x.sh"

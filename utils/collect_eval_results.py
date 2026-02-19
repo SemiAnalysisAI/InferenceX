@@ -157,6 +157,7 @@ def se(x: Any) -> str:
 def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     """Build a result row from metadata and extracted metrics."""
     row = {
+        'model_prefix': meta.get('infmax_model_prefix', 'unknown'),
         'model': m.get('model') or meta.get('model', 'unknown'),
         'hw': meta.get('hw', 'unknown').upper(),
         'framework': meta.get('framework', 'unknown').lower(),
@@ -194,7 +195,7 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
 
 def main():
     if len(sys.argv) < 3:
-        print('Usage: collect_eval_results.py <results_dir> <exp_name>')
+        print('Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]')
         sys.exit(1)
 
     root = Path(sys.argv[1])
@@ -219,23 +220,30 @@ def main():
             row = build_row(meta, m)
             rows.append(row)
 
-    # Sort for stable output
-    rows.sort(key=lambda r: (
-        r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc']
-    ))
+    # Sort for stable output (default: by model_prefix)
+    sort_by = sys.argv[3] if len(sys.argv) > 3 else 'model_prefix'
+    if sort_by == 'hw':
+        rows.sort(key=lambda r: (
+            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc']
+        ))
+    else:
+        rows.sort(key=lambda r: (
+            r['model_prefix'], r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc']
+        ))
 
     if not rows:
         print('> No eval results found to summarize.')
     else:
         # Print table using tabulate
+        MODEL_PREFIX = "Model Prefix"
         headers = [
-            MODEL, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING, TP, EP, CONC, DP_ATTENTION,
-            TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF
+            MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING, TP, EP, CONC, DP_ATTENTION,
+            TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL
         ]
 
         table_rows = [
             [
-                r['model'],
+                r['model_prefix'],
                 r['hw'],
                 r['framework'].upper(),
                 r['precision'].upper(),
@@ -248,7 +256,8 @@ def main():
                 f"{pct(r['score'])}{se(r['score_se'])}",
                 f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                 f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                r['n_eff'] or ''
+                r['n_eff'] or '',
+                r['model']
             ]
             for r in rows
         ]
