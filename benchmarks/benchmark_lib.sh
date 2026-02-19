@@ -92,7 +92,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --use-chat-template
+# All parameters are required except --use-chat-template and --trust-remote-code
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -105,6 +105,7 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     set +x
@@ -120,6 +121,7 @@ run_benchmark_serving() {
     local result_dir=""
     local workspace_dir=""
     local use_chat_template=false
+    local trust_remote_code=false
     local server_pid=""
 
     while [[ $# -gt 0 ]]; do
@@ -170,6 +172,10 @@ run_benchmark_serving() {
                 ;;
             --use-chat-template)
                 use_chat_template=true
+                shift
+                ;;
+            --trust-remote-code)
+                trust_remote_code=true
                 shift
                 ;;
             --server-pid)
@@ -253,6 +259,11 @@ run_benchmark_serving() {
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Add --trust-remote-code if requested
+    if [[ "$trust_remote_code" == true ]]; then
+        benchmark_cmd+=(--trust-remote-code)
     fi
 
     # Run benchmark with optional server monitoring

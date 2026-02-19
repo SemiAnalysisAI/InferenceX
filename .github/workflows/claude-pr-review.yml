@@ -125,6 +125,10 @@ jobs:
             - The perf-changelog entry should document what changed in the config and include the PR link
             - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
 
+            ## Terminology:
+            - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
+            - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
+
             Remember: Silence is golden. No comment is better than a low-value comment.
 
             ## Container Image Accessibility Validation:

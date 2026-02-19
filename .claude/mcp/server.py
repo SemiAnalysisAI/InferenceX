@@ -54,7 +54,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class InferenceMAXMCPServer:
+class InferenceXMCPServer:
     """MCP Server for vLLM and SGLang source code access."""
 
     def __init__(self):
@@ -81,7 +81,7 @@ class InferenceMAXMCPServer:
 
     async def initialize(self):
         """Initialize repositories and detect versions."""
-        logger.info("Initializing InferenceMAX MCP Server...")
+        logger.info("Initializing InferenceX MCP Server...")
 
         try:
             # Detect versions from config files
@@ -219,7 +219,7 @@ class InferenceMAXMCPServer:
             ),
             Tool(
                 name="list_versions",
-                description="List all detected versions from InferenceMAX configs",
+                description="List all detected versions from InferenceX configs",
                 inputSchema={
                     "type": "object",
                     "properties": {}
@@ -302,7 +302,7 @@ class InferenceMAXMCPServer:
             config_paths = get_config_paths()
             versions = detect_versions(config_paths)
 
-            result_lines = ["Detected versions from InferenceMAX configs:", ""]
+            result_lines = ["Detected versions from InferenceX configs:", ""]
             for framework, version_set in versions.items():
                 if version_set:
                     versions_str = ', '.join(sorted(version_set))
@@ -412,7 +412,7 @@ class InferenceMAXMCPServer:
 async def main():
     """Main entry point."""
     try:
-        server = InferenceMAXMCPServer()
+        server = InferenceXMCPServer()
         await server.run()
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
