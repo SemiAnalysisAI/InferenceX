@@ -41,7 +41,6 @@ fi
 # Set up environment variables for SLURM
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
-export SLURM_JOB_NAME="benchmark-dynamo.job"
 
 NGINX_IMAGE="nginx:1.27.4"
 
@@ -60,7 +59,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     bash benchmarks/"${EXP_NAME%%_*}_${PRECISION}_gb200_${FRAMEWORK}.sh"
     # Wait for all jobs to complete
     echo "Waiting for all jobs to complete..."
-    while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
+    while [ -n "$(squeue -j "$jobid" --noheader)" ]; do
         echo "Jobs still running..."
         squeue --steps -u $USER
         sleep 30
@@ -164,6 +163,9 @@ echo "Make setup complete"
 ls configs/
 
 echo "Submitting job with srtctl..."
+
+# Override the job name in the config file with the runner name
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
