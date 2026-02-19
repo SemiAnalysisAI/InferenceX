@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/benchmark_lib.sh"
+source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -23,6 +23,8 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+export VLLM_ROCM_USE_AITER=1
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -31,10 +33,9 @@ vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
---block-size=64 \
+--block-size=32 \
 --disable-log-requests \
---trust-remote-code \
---mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
