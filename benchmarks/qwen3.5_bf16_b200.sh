@@ -19,20 +19,53 @@ nvidia-smi
 
 hf download "$MODEL"
 
+export NCCL_NVLS_ENABLE=1
+export SGL_ENABLE_JIT_DEEPGEMM=false
+export SGLANG_ENABLE_FLASHINFER_GEMM=true
+export PYTHONUNBUFFERED=1
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-MEM_FRAC_STATIC=0.8
+# Low latency (conc 4,8): recv interval 10; max throughput (conc 16+): recv interval 30
+if [[ $CONC -ge 16 ]]; then
+  SCHEDULER_RECV_INTERVAL=30
+else
+  SCHEDULER_RECV_INTERVAL=10
+fi
+
+MEM_FRAC_STATIC=0.82
+CHUNKED_PREFILL_SIZE=32768
+MAX_PREFILL_TOKENS=32768
+CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
+MAX_RUNNING_REQUESTS=128
+CONTEXT_LENGTH=$((ISL + OSL + 20))
+
+echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 ps aux
 
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --model-path=$MODEL \
+    --served-model-name "Qwen/Qwen3.5-397B-A17B" \
     --host=0.0.0.0 \
     --port=$PORT \
+    --trust-remote-code \
     --tensor-parallel-size=$TP \
+    --disable-radix-cache \
     --mem-fraction-static $MEM_FRAC_STATIC \
+    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
+    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE \
+    --max-running-requests $MAX_RUNNING_REQUESTS \
+    --context-length $CONTEXT_LENGTH \
+    --attention-backend trtllm_mha \
+    --moe-runner-backend flashinfer_trtllm \
+    --tokenizer-worker-num 6 \
+    --stream-interval 30 \
+    --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+    --enable-flashinfer-allreduce-fusion \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
