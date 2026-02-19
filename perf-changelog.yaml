@@ -671,3 +671,42 @@
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
+
+- config-keys:
+    # NVIDIA single-node
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b200-trt
+    - dsr1-fp4-b200-trt-mtp
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b200-sglang-mtp
+    - dsr1-fp8-b200-trt
+    - dsr1-fp8-b200-trt-mtp
+    - dsr1-fp8-h200-sglang
+    - dsr1-fp8-h200-trt
+    - dsr1-fp8-h200-trt-mtp
+    - gptoss-fp4-b200-trt
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-trt
+    - gptoss-fp4-h200-vllm
+    - qwen3.5-bf16-b200-sglang
+    # AMD single-node
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-atom
+    - dsr1-fp8-mi355x-atom-mtp
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+    - gptoss-fp4-mi355x-atom
+    - kimik2.5-int4-mi355x-vllm
+    - minimaxm2.5-fp8-mi355x-vllm
+    - qwen3.5-bf16-mi355x-sglang
+  description:
+    - Rerun GSM8k eval results to all single-node scenarios
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/763
+  evals-only: true
