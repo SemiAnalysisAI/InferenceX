@@ -175,7 +175,7 @@ if [ -d "$PATCH_DIR" ]; then
     for patch_file in "$PATCH_DIR"/*.patch; do
         [ -f "$patch_file" ] || continue
         echo "Applying patch: $(basename "$patch_file")"
-        git apply "$patch_file" || echo "Warning: patch $(basename "$patch_file") did not apply cleanly"
+        git apply --recount "$patch_file" || echo "Warning: patch ... did not apply cleanly"
     done
 fi
 
@@ -345,22 +345,47 @@ else
   HEAD_NODE=""
 fi
 THIS_NODE="$(hostname -s)"
-if [[ -n "${HEAD_NODE}" ]]; then
-  if [[ "${THIS_NODE}" != "${HEAD_NODE}" ]]; then
-    exit 0
+
+# Prefer HEAD_NODE_IP (present in env from srtctl/srt-slurm)
+if [[ -n "${HEAD_NODE_IP:-}" ]]; then
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 addr show | grep -qw "${HEAD_NODE_IP}" || exit 0
+  else
+    # fallback
+    (hostname -I 2>/dev/null || true) | grep -qw "${HEAD_NODE_IP}" || exit 0
   fi
 else
-  if [[ "${SLURM_NODEID:-0}" != "0" ]]; then
+  # last resort if HEAD_NODE_IP isn't set
+  if command -v scontrol >/dev/null 2>&1 && [[ -n "${SLURM_JOB_NODELIST:-}" ]]; then
+    HEAD_NODE="$(scontrol show hostnames "${SLURM_JOB_NODELIST}" | head -n1)"
+    [[ "${THIS_NODE}" == "${HEAD_NODE}" ]] || exit 0
+  else
+    echo "[EPD] WARNING: cannot determine head node; skipping encoder launch to avoid port conflicts"
     exit 0
   fi
 fi
 
 echo "[EPD] Starting encoder-only servers on ${THIS_NODE}"
-
 PORT_BASE=${EPD_ENCODER_PORT_BASE:-40000}
+
 for GPU_ID in 0 1 2 3; do
   PORT=$((PORT_BASE + GPU_ID))
-  CUDA_VISIBLE_DEVICES="${GPU_ID}"     python3 -m sglang.launch_server       --model-path /model       --encoder-only       --tp-size 1       --host 0.0.0.0       --port "${PORT}"       --trust-remote-code       >"/logs/encoder_${GPU_ID}.log" 2>&1 &
+
+  # Idempotency: if something is already listening, don't try to bind again.
+  if (echo > /dev/tcp/127.0.0.1/${PORT}) >/dev/null 2>&1; then
+    echo "[EPD] Port ${PORT} already listening; skipping GPU ${GPU_ID}"
+    continue
+  fi
+
+  CUDA_VISIBLE_DEVICES="${GPU_ID}" \
+    python3 -m sglang.launch_server \
+      --model-path /model \
+      --encoder-only \
+      --tp-size 1 \
+      --host 0.0.0.0 \
+      --port "${PORT}" \
+      --trust-remote-code \
+      >"/logs/encoder_${GPU_ID}.log" 2>&1 &
 done
 
 # Best-effort wait for ports to open (no hard failure)
