@@ -3,54 +3,76 @@ index 0000000..0000001 100644
 --- a/src/srtctl/benchmarks/scripts/sa-bench/bench.sh
 +++ b/src/srtctl/benchmarks/scripts/sa-bench/bench.sh
 @@ -27,6 +27,18 @@ WORK_DIR="$(dirname "$0")"
-
- echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}"
-
-+# Vision/multimodal benchmark mode: when SA_BENCH_VISION=true, use the
-+# vision-arena dataset with the openai-chat backend instead of random text.
-+if [[ "${SA_BENCH_VISION:-}" == "true" ]]; then
-+    echo "Vision benchmark mode enabled"
-+    BACKEND="openai-chat"
-+    ENDPOINT_PATH="/v1/chat/completions"
-+    DATASET_ARGS="--dataset-name hf --dataset-path lmarena-ai/vision-arena-bench-v0.1 --hf-split train"
-+else
-+    BACKEND="dynamo"
-+    ENDPOINT_PATH="/v1/completions"
-+    DATASET_ARGS="--dataset-name random --random-input-len ${ISL} --random-output-len ${OSL} --random-range-ratio 0.8"
-+fi
-+
- # Parse concurrency list
- IFS='x' read -r -a CONCURRENCY_LIST <<< "$CONCURRENCIES"
-
+-
+-echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}"
+-
+-# Parse concurrency list
+-IFS='x' read -r -a CONCURRENCY_LIST <<< "$CONCURRENCIES"
++ 
++ echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}"
++ 
+++# Vision/multimodal benchmark mode: when SA_BENCH_VISION=true, use the
+++# vision-arena dataset with the openai-chat backend instead of random text.
+++if [[ "${SA_BENCH_VISION:-}" == "true" ]]; then
+++    echo "Vision benchmark mode enabled"
+++    BACKEND="openai-chat"
+++    ENDPOINT_PATH="/v1/chat/completions"
+++    DATASET_ARGS="--dataset-name hf --dataset-path lmarena-ai/vision-arena-bench-v0.1 --hf-split train"
+++else
+++    BACKEND="dynamo"
+++    ENDPOINT_PATH="/v1/completions"
+++    DATASET_ARGS="--dataset-name random --random-input-len ${ISL} --random-output-len ${OSL} --random-range-ratio 0.8"
+++fi
+++
++ # Parse concurrency list
++ IFS='x' read -r -a CONCURRENCY_LIST <<< "$CONCURRENCIES"
+ 
 @@ -49,14 +61,10 @@ for concurrency in "${CONCURRENCY_LIST[@]}"; do
-     python3 -u "${WORK_DIR}/benchmark_serving.py" \
-         --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
-         --host "$HOST" --port "$PORT" \
+-    python3 -u "${WORK_DIR}/benchmark_serving.py" \
+-        --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
+-        --host "$HOST" --port "$PORT" \
 -        --backend "dynamo" --endpoint /v1/completions \
-+        --backend "${BACKEND}" --endpoint "${ENDPOINT_PATH}" \
-         --disable-tqdm \
+-        --disable-tqdm \
 -        --dataset-name random \
-+        ${DATASET_ARGS} \
-         --num-prompts "$num_warmup_prompts" \
+-        --num-prompts "$num_warmup_prompts" \
 -        --random-input-len "$ISL" \
 -        --random-output-len "$OSL" \
 -        --random-range-ratio 0.8 \
-         --ignore-eos \
-         --request-rate 250 \
-         --percentile-metrics ttft,tpot,itl,e2el \
+-        --ignore-eos \
+-        --request-rate 250 \
+-        --percentile-metrics ttft,tpot,itl,e2el \
++    python3 -u "${WORK_DIR}/benchmark_serving.py" \
++        --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
++        --host "$HOST" --port "$PORT" \
++        --backend "${BACKEND}" --endpoint "${ENDPOINT_PATH}" \
++        --disable-tqdm \
++        ${DATASET_ARGS} \
++        --num-prompts "$num_warmup_prompts" \
++        --ignore-eos \
++        --request-rate 250 \
++        --percentile-metrics ttft,tpot,itl,e2el \
+ 
 @@ -75,14 +83,10 @@ for concurrency in "${CONCURRENCY_LIST[@]}"; do
-     python3 -u "${WORK_DIR}/benchmark_serving.py" \
-         --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
-         --host "$HOST" --port "$PORT" \
+-    python3 -u "${WORK_DIR}/benchmark_serving.py" \
+-        --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
+-        --host "$HOST" --port "$PORT" \
 -        --backend "dynamo" --endpoint /v1/completions \
-+        --backend "${BACKEND}" --endpoint "${ENDPOINT_PATH}" \
-         --disable-tqdm \
+-        --disable-tqdm \
 -        --dataset-name random \
-+        ${DATASET_ARGS} \
-         --num-prompts "$num_prompts" \
+-        --num-prompts "$num_prompts" \
 -        --random-input-len "$ISL" \
 -        --random-output-len "$OSL" \
 -        --random-range-ratio 0.8 \
-         --ignore-eos \
-         --request-rate "${REQ_RATE}" \
-         --percentile-metrics ttft,tpot,itl,e2el \
+-        --ignore-eos \
+-        --request-rate "${REQ_RATE}" \
+-        --percentile-metrics ttft,tpot,itl,e2el \
++    python3 -u "${WORK_DIR}/benchmark_serving.py" \
++        --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
++        --host "$HOST" --port "$PORT" \
++        --backend "${BACKEND}" --endpoint "${ENDPOINT_PATH}" \
++        --disable-tqdm \
++        ${DATASET_ARGS} \
++        --num-prompts "$num_prompts" \
++        --ignore-eos \
++        --request-rate "${REQ_RATE}" \
++        --percentile-metrics ttft,tpot,itl,e2el \
