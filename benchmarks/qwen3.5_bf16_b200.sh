@@ -66,7 +66,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --stream-interval 30 \
     --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
     --enable-flashinfer-allreduce-fusion \
-    --enable-symm-mem \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
