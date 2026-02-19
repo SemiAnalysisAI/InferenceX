@@ -201,6 +201,8 @@ while ! ls "$LOG_FILE" &>/dev/null; do
     sleep 5
 done
 
+set +x
+
 # Poll for job completion in background
 (
     while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
@@ -213,6 +215,8 @@ POLL_PID=$!
 tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
 wait $POLL_PID
+
+set -x
 
 echo "Job $JOB_ID completed!"
 
