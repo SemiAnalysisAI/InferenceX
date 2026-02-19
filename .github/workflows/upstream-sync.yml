@@ -23,7 +23,7 @@ jobs:
       - name: Add Upstream Remote (Fetch Only)
         run: |
           echo "Setting upstream as fetch-only (no push allowed)..."
-          git remote add upstream https://github.com/InferenceMAX/InferenceMAX.git
+          git remote add upstream https://github.com/SemiAnalysisAI/InferenceX.git
           git remote set-url --push upstream no_push
           git fetch upstream --tags
 
