@@ -192,7 +192,7 @@ while ! ls "$LOG_FILE" &>/dev/null; do
         scontrol show job "$JOB_ID"
         exit 1
     fi
-    echo "Waiting for $LOG_FILE to appear..."
+    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
     sleep 5
 done
 
