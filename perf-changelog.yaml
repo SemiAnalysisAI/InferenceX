@@ -679,5 +679,5 @@
     - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
     - "Add trtllm_mha attention backend, flashinfer_trtllm MOE runner"
     - "Add context-length, tokenizer-worker-num, env tuning (NCCL_NVLS_ENABLE, SGLANG_ENABLE_FLASHINFER_GEMM)"
-    - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval 10/30 based on concurrency"
+    - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval based on concurrency"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
