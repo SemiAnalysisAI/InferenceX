@@ -3015,6 +3015,31 @@ gptoss-fp4-b200-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
 
+minimaxm2.5-fp8-b200-vllm:
+  image: vllm/vllm-openai:v0.15.1-cu130
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: b200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.13.0
   model: openai/gpt-oss-120b

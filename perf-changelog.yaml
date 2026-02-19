@@ -671,3 +671,12 @@
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM benchmark for B200"
+    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.15.1-cu130"
+    - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
