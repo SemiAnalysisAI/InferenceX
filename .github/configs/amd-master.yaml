@@ -443,7 +443,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -503,7 +503,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -584,7 +584,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -661,7 +661,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 8
