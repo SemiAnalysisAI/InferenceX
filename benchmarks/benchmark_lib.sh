@@ -480,6 +480,7 @@ append_lm_eval_summary() {
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
   "hw": "${RUNNER_TYPE:-unknown}",
   "isl": "${ISL:-0}",
   "osl": "${OSL:-0}"
