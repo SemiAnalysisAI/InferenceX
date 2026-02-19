@@ -671,3 +671,12 @@
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang benchmark for MI355X"
+    - "Model: zai-org/GLM-5-FP8 with NSA tilelang backends"
+    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
