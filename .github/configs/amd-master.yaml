@@ -160,7 +160,7 @@ qwen3.5-bf16-mi355x-sglang:
 
 qwen3.5-fp8-mi355x-sglang:
   image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260215
-  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: mi355x
   precision: fp8
