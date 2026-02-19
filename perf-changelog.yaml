@@ -671,3 +671,13 @@
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang
+  description:
+    - "Update Qwen3.5-397B-A17B BF16 SGLang B200 benchmark launch config"
+    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
+    - "Add trtllm_mha attention backend, flashinfer_trtllm MOE runner"
+    - "Add context-length, tokenizer-worker-num, env tuning (NCCL_NVLS_ENABLE, SGLANG_ENABLE_FLASHINFER_GEMM)"
+    - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval 10/30 based on concurrency"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
