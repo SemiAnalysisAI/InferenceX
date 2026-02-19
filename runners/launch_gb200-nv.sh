@@ -323,7 +323,7 @@ benchmark:
   type: sa-bench
   isl: ${ISL}
   osl: ${OSL}
-  concurrencies: [${MAX_CONCURRENCY}]
+  concurrencies: [64]
 EOF
 
         # Setup script: install torchao and start 4 encoder-only servers on the infra node.
