@@ -192,18 +192,21 @@ minimaxm2.5-fp8-mi355x-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    # - { tp: 2, conc-start: 4, conc-end: 64 }
+    # - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    # - { tp: 2, conc-start: 4, conc-end: 64 }
+    # - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    # - { tp: 2, conc-start: 4, conc-end: 64 }
+    # - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.14.0

@@ -5,6 +5,7 @@ source "$(dirname "$0")/benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -25,6 +26,12 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 
+# Enable expert parallel if EP_SIZE > 1
+EP_FLAG=""
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP_FLAG="--enable-expert-parallel"
+fi
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -35,7 +42,7 @@ vllm serve $MODEL --port $PORT \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
 --disable-log-requests \
---trust-remote-code > $SERVER_LOG 2>&1 &
+--trust-remote-code $EP_FLAG > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
