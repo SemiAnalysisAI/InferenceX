@@ -4,6 +4,21 @@ h100:
 - 'h100-cw_0'
 - 'h100-cw_1'
 - 'h100-dgxc-slurm_0'
+- 'h100-dgxc-slurm_1'
+- 'h100-dgxc-slurm_2'
+- 'h100-dgxc-slurm_3'
+- 'h100-dgxc-slurm_4'
+- 'h100-dgxc-slurm_5'
+- 'h100-dgxc-slurm_6'
+- 'h100-dgxc-slurm_7'
+- 'h100-dgxc-slurm_8'
+- 'h100-dgxc-slurm_9'
+- 'h100-dgxc-slurm_10'
+- 'h100-dgxc-slurm_11'
+h100-multinode:
+- 'h100-dgxc-slurm_9'
+- 'h100-dgxc-slurm_10'
+- 'h100-dgxc-slurm_11'
 h200:
 - 'h200-cw_0'
 - 'h200-cw_1'
@@ -69,5 +84,3 @@ b300:
 - 'b300-nv_0'
 gb300:
 - 'gb300-nv_0'
-# h100-multinode-slurm:
-# - 'h100-dgxc-slurm_0'
