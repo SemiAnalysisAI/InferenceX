@@ -102,8 +102,6 @@ containers:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
-sbatch_directives:
-    exclude: "hpc-gpu-1-6,hpc-gpu-1-7" 
 EOF
 
     echo "Generated srtslurm.yaml:"
@@ -115,6 +113,7 @@ EOF
     echo "Submitting job with srtctl..."
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+    sed -i '/^name:.*/a sbatch_directives:\n  exclude: "hpc-gpu-1-6,hpc-gpu-1-7"' "$CONFIG_FILE"
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
