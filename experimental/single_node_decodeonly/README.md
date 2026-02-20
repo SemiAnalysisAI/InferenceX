@@ -11,6 +11,8 @@ vllm serve Qwen/Qwen3-30B-A3B-FP8 --tensor-parallel-size 1
 vllm bench serve --base-url http://127.0.0.1:8000 --model Qwen/Qwen3-30B-A3B-FP8 --dataset-name random --random-input-len 32768 --random-output-len 100  --max-concurrency 10 --seed 56075618 --num-prompts 20 --ignore-eos
 ```
 
+## experiment done on h200 sxm
+
 | Metric (Qwen3-30B-A3B, 32k ISL, TP1) | Without DecodeBenchConnector | With DecodeBenchConnector | Delta |
 | --- | --- | --- | --- |
 | TTFT (ms) | 5,220 | 341.57 | **15x faster** |
