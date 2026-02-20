@@ -33,12 +33,14 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Eval selection policy (single-node only):
+    """Eval selection policy:
     - Only consider 1k8k (isl=1024, osl=8192).
-    - For each unique (model, runner, framework, precision, isl, osl, spec-decoding):
-        - Mark highest TP with highest conc
-        - Mark lowest TP with highest conc
-        
+    - Single-node: for each unique (model, runner, framework, precision, isl, osl,
+      spec-decoding, dp-attn), mark highest TP with highest conc and lowest TP
+      with highest conc.
+    - Multi-node: for each unique (model, runner, framework, precision, isl, osl,
+      spec-decoding), mark the entry with the highest max concurrency.
+
     Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
     independently.
     """
@@ -46,6 +48,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     # Only run evals on 1k8k
     target_isl, target_osl = seq_len_stoi["1k8k"]
+
+    # --- Single-node eval selection ---
     # Group entries by (model, runner, framework, precision, isl, osl)
     # Only include entries that have a top-level TP (i.e., single-node schema).
     # This avoids relying on structural hints like prefill/decode which may be
@@ -97,6 +101,40 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 for i, e in lowest_tp_entries:
                     if e[Fields.CONC.value] == max_conc_lowest_tp:
                         eval_indices.add(i)
+
+    # --- Multi-node eval selection ---
+    # For multi-node (disaggregated) entries, pick one representative per group
+    # with the highest max concurrency.
+    mn_groups = defaultdict(list)
+    for i, entry in enumerate(matrix_values):
+        if Fields.TP.value in entry:
+            continue  # single-node, already handled
+        if Fields.PREFILL.value not in entry:
+            continue
+
+        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+            continue
+
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.ISL.value],
+            entry[Fields.OSL.value],
+            entry[Fields.SPEC_DECODING.value],
+        )
+        mn_groups[key].append((i, entry))
+
+    for key, entries in mn_groups.items():
+        if not entries:
+            continue
+        # Pick entry with highest max concurrency
+        def _max_conc(ie):
+            c = ie[1][Fields.CONC.value]
+            return max(c) if isinstance(c, list) else c
+        best = max(entries, key=_max_conc)
+        eval_indices.add(best[0])
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):

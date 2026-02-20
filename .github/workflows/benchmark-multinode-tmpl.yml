@@ -77,6 +77,10 @@ on:
         required: false
         type: string
         default: "[]"
+      run-eval:
+        type: boolean
+        required: false
+        default: false
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -96,6 +100,7 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  RUN_EVAL: ${{ inputs.run-eval }}
 
   PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
   PREFILL_TP: ${{ inputs.prefill-tp }}
@@ -146,6 +151,7 @@ jobs:
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
+          RUNNER_TYPE: ${{ inputs.runner }}
           # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
@@ -187,6 +193,23 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload eval results (if any)
+        if: ${{ env.RUN_EVAL == 'true' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          path: |
+            meta_env.json
+            results*.json
+            sample*.jsonl
+          if-no-files-found: ignore
+
+      - name: Cleanup eval outputs (post-upload)
+        if: ${{ env.RUN_EVAL == 'true' }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
 
       - name: Slurm cleanup (post-run)
         if: always()

@@ -93,6 +93,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            run-eval: ${{ matrix.config.run-eval }}
             ref: ${{ inputs.ref }}
 
     test-sweep-single-node:

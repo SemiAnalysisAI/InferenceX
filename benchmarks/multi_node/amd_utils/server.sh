@@ -478,6 +478,57 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
     fi
 
+    # Run evaluation if requested (before killing router)
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        echo "Running lm-eval evaluation on Node 0..."
+
+        # Must run from repo root so utils/evals/${task}.yaml resolves
+        pushd /workspace
+
+        # Source eval functions from benchmark_lib.sh
+        source /workspace/benchmarks/benchmark_lib.sh
+
+        # Determine eval concurrency (cap at 64 for eval stability)
+        IFS='x' read -r -a _conc_arr <<< "${BENCH_MAX_CONCURRENCY}"
+        EVAL_CONC="${_conc_arr[0]:-32}"
+        (( EVAL_CONC > 64 )) && EVAL_CONC=32
+
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo "DRY RUN: run_eval --framework lm-eval --port 30000 --concurrent-requests $EVAL_CONC"
+        else
+            # Run lm-eval against the router on port 30000
+            run_eval --framework lm-eval --port 30000 --concurrent-requests "$EVAL_CONC"
+
+            # Set metadata env vars for append_lm_eval_summary
+            export TP="${PREFILL_TP_SIZE}"
+            export CONC="${EVAL_CONC}"
+            export EP_SIZE=1
+            [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
+            export DP_ATTENTION="${PREFILL_ENABLE_DP}"
+            export ISL="${BENCH_INPUT_LEN}"
+            export OSL="${BENCH_OUTPUT_LEN}"
+            # FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE, RESULT_FILENAME
+            # are already set via Docker -e flags from job.slurm
+
+            append_lm_eval_summary
+            # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
+
+            # Copy eval artifacts to run_logs for NFS extraction by runner
+            EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+            mkdir -p "$EVAL_COPY_DIR"
+            for f in meta_env.json; do
+                [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+            done
+            # Use find for glob patterns to avoid "no match" errors
+            find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+            find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+
+            echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+        fi
+
+        popd
+    fi
+
     # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
     LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
     mkdir -p "$LOGS_OUTPUT"

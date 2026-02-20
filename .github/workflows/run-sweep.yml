@@ -105,6 +105,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            run-eval: ${{ matrix.config.run-eval }}
 
     sweep-multi-node-1k8k:
         needs: setup

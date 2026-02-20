@@ -285,6 +285,14 @@ export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
 export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 
+# Eval-related env vars (threaded from submit.sh)
+export RUN_EVAL="${RUN_EVAL:-false}"
+export FRAMEWORK="${FRAMEWORK:-}"
+export PRECISION="${PRECISION:-}"
+export MODEL_PREFIX="${MODEL_PREFIX:-}"
+export RUNNER_TYPE="${RUNNER_TYPE:-}"
+export RESULT_FILENAME="${RESULT_FILENAME:-}"
+
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
@@ -389,6 +397,12 @@ exec sudo docker run --rm \
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL \
     -e DRY_RUN=\$DRY_RUN \
     -e BENCHMARK_LOGS_DIR=/benchmark_logs \
+    -e RUN_EVAL=\$RUN_EVAL \
+    -e FRAMEWORK=\$FRAMEWORK \
+    -e PRECISION=\$PRECISION \
+    -e MODEL_PREFIX=\$MODEL_PREFIX \
+    -e RUNNER_TYPE=\$RUNNER_TYPE \
+    -e RESULT_FILENAME=\$RESULT_FILENAME \
     --name \"$DOCKER_CONT_NAME\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'

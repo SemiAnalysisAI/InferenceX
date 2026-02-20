@@ -129,6 +129,20 @@ PY
         fi
     done
 
+    # Extract eval results if eval was requested
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        EVAL_DIR="$(dirname "$LOGS_DIR")/eval_results"
+        if [ -d "$EVAL_DIR" ]; then
+            echo "Extracting eval results from $EVAL_DIR"
+            for eval_file in "$EVAL_DIR"/*; do
+                [ -f "$eval_file" ] && cp "$eval_file" "$GITHUB_WORKSPACE/"
+                echo "Copied eval artifact: $(basename "$eval_file")"
+            done
+        else
+            echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
+        fi
+    fi
+
     echo "All result files processed"
     # Use sync scancel to ensure nfs file handle is released in time
     set +x

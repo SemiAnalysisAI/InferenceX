@@ -103,6 +103,14 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=10
 export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
 
+# Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
+export RUN_EVAL="${RUN_EVAL:-false}"
+export FRAMEWORK="${FRAMEWORK:-}"
+export PRECISION="${PRECISION:-}"
+export MODEL_PREFIX="${MODEL_PREFIX:-}"
+export RUNNER_TYPE="${RUNNER_TYPE:-}"
+export RESULT_FILENAME="${RESULT_FILENAME:-}"
+
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 # SLURM writes output files on the batch node, so /tmp won't work (node-local).
 # Defaults to a sibling directory of the submit working directory.
