@@ -8,6 +8,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -28,6 +29,7 @@ set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.97 \
 --tensor-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
