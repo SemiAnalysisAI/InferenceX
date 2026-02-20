@@ -269,6 +269,9 @@ if [[ "${EPD:-}" == "1" || "${EPD:-}" == "true" ]]; then
         DECODE_BOOTSTRAP_PORT=${EPD_DECODE_BOOTSTRAP_PORT:-$((53000 + RANDOM % 1000))}
         echo "[INFO] Using EPD bootstrap ports: prefill=${PREFILL_BOOTSTRAP_PORT}, decode=${DECODE_BOOTSTRAP_PORT}"
 
+        # Convert space-separated CONC_LIST to JSON array for srtctl recipe
+        EPD_CONC_JSON="[$(echo "${CONC_LIST:-512}" | tr ' ' ',')]"
+
         cat > "${CONFIG_FILE}" <<EOF
 name: qwen3.5-epd-${PRECISION}-gb200
 model:
@@ -323,7 +326,7 @@ benchmark:
   type: sa-bench
   isl: ${ISL}
   osl: ${OSL}
-  concurrencies: [64]
+  concurrencies: ${EPD_CONC_JSON}
 EOF
 
         # Setup script: install torchao and start 4 encoder-only servers on the infra node.
@@ -508,6 +511,9 @@ if [[ -z "${EPD:-}" && "$MODEL_PREFIX" == "qwen3.5" && -n "${CONFIG_FILE:-}" ]];
     DECODE_BOOTSTRAP_PORT=${PD_DECODE_BOOTSTRAP_PORT:-$((53000 + RANDOM % 1000))}
     echo "[INFO] Using PD bootstrap port: decode=${DECODE_BOOTSTRAP_PORT}"
 
+    # Convert space-separated CONC_LIST to JSON array for srtctl recipe
+    PD_CONC_JSON="[$(echo "${CONC_LIST:-64}" | tr ' ' ',')]"
+
     cat > "${CONFIG_FILE}" <<EOF
 name: qwen3.5-pd-${PRECISION}-gb200
 model:
@@ -548,7 +554,7 @@ benchmark:
   type: sa-bench
   isl: ${ISL}
   osl: ${OSL}
-  concurrencies: [64]
+  concurrencies: ${PD_CONC_JSON}
 EOF
 
     # Setup script: torchao + bootstrap_room patch (no encoder servers)
