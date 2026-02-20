@@ -389,7 +389,7 @@ dsr1-fp8-mi355x-atom-mtp:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
 dsr1-fp8-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210
+  image: rocm/sgl-dev:sglang-0.5.8-rocm720-mi35x-mori-0218-2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -443,7 +443,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -459,6 +459,25 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=2"
+
+    - spec-decoding: "mtp"
+      conc-list: [ 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=2"
 
     # non-MTP configurations
@@ -503,7 +522,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -521,10 +540,47 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
 
+    - spec-decoding: "none"
+      conc-list: [ 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=0"
+
   - isl: 8192
     osl: 1024
     search-space:
     # MTP configurations
+    - spec-decoding: "mtp"
+      conc-list: [ 1024, 2048 ]
+      prefill:
+        num-worker: 2
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=2"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=1"
+
     - spec-decoding: "mtp"
       conc-list: [ 512, 1024 ]
       prefill:
@@ -584,7 +640,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -602,7 +658,44 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=2"
 
+    - spec-decoding: "mtp"
+      conc-list: [ 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=2"
+
     # non-MTP configurations
+    - spec-decoding: "none"
+      conc-list: [ 1024, 2048 ]
+      prefill:
+        num-worker: 2
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=2"
+      decode:
+        num-worker: 1
+        tp: 1
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=0"
+
     - spec-decoding: "none"
       conc-list: [ 512, 1024 ]
       prefill:
@@ -661,7 +754,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -677,6 +770,25 @@ dsr1-fp8-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    - spec-decoding: "none"
+      conc-list: [ 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
   # FIXME(billishyahao): disable 1k8k for now
