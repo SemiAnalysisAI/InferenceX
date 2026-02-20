@@ -673,6 +673,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/755
 
 - config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark configuration for MI355X"
+    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260218"
+    - "Uses triton attention backend, TP=8, concurrency 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/768
+  
+- config-keys:
     - minimaxm2.5-fp8-b200-vllm
   description:
     - "Add MiniMax-M2.5 FP8 vLLM benchmark for B200"
@@ -680,3 +688,4 @@
     - "Image: vllm/vllm-openai:v0.15.1-cu130"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/757 
+  
