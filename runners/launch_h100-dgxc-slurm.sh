@@ -117,6 +117,8 @@ echo "$SRTCTL_OUTPUT"
 # Extract JOB_ID from srtctl output
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
+set +x
+
 if [ -z "$JOB_ID" ]; then
     echo "Error: Failed to extract JOB_ID from srtctl output"
     exit 1
