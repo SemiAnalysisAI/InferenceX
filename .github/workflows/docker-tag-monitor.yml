@@ -1,0 +1,96 @@
+name: Docker Tag Monitor
+
+on:
+  schedule:
+    # Run weekly on Mondays at 6:00 UTC
+    - cron: '0 8 * * 6'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run - check releases but do not create issues'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  check-releases:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Check for Docker image updates via Claude
+        uses: anthropics/claude-code-action@beta
+        with:
+          direct_prompt: |
+            Check Docker Hub for new vLLM and SGLang releases and create an issue if updates are available.
+
+            ## Your Task
+
+            1. **Check Docker Hub for latest releases:**
+               - SGLang CUDA: `lmsysorg/sglang` - tags matching `v*-cu*-amd64` (e.g., v0.5.8-cu129-amd64)
+               - SGLang ROCm: `lmsysorg/sglang` - tags matching `v*-rocm*-mi*` (e.g., v0.5.8-rocm700-mi35x)
+               - vLLM CUDA: `vllm/vllm-openai` - tags matching `v*.*.*` (e.g., v0.13.0)
+               - vLLM ROCm: `vllm/vllm-openai-rocm` - tags matching `v*.*.*` (e.g., v0.14.0)
+
+            2. **Compare with current configs:**
+               - Read `.github/configs/nvidia-master.yaml` for NVIDIA/CUDA images
+               - Read `.github/configs/amd-master.yaml` for AMD/ROCm images
+               - Extract current image versions being used
+
+            3. **If updates are available AND this is not a dry run (${{ inputs.dry_run }} == 'false'):**
+               Create a new GitHub issue with:
+               - Title: `[Auto] Docker Image Updates Available - YYYY-MM-DD`
+               - Labels: `docker-update`, `claude-task`
+               - Body containing:
+                 - Table of available updates (image, latest tag, current tags)
+                 - Links to Docker Hub for each image
+                 - An `@claude` mention at the end asking to update the configs
+
+            4. **If dry run (${{ inputs.dry_run }} == 'true'):**
+               Just report what updates are available without creating an issue.
+
+            ## Issue Body Template (when creating issue)
+
+            ```
+            ## Docker Image Updates Available
+
+            New release tags have been detected on Docker Hub.
+
+            ### Updates Found
+
+            | Framework | Platform | Current | Latest | Docker Hub |
+            |-----------|----------|---------|--------|------------|
+            | ... | ... | ... | ... | [Link](...) |
+
+            ---
+
+            @claude Please update the configurations:
+
+            1. Update image tags in `.github/configs/nvidia-master.yaml` and/or `.github/configs/amd-master.yaml`
+            2. Add entries to `perf-changelog.yaml` documenting the version changes
+            3. Create a PR with these changes
+
+            Focus on updating single-node configurations. For each framework, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs.
+            ```
+
+            ## Important Notes
+
+            - Use `mcp__fetch__fetch` to check Docker Hub API: `https://hub.docker.com/v2/repositories/{repo}/tags?page_size=20&ordering=last_updated`
+            - Parse the JSON response to find matching version tags
+            - Compare semantic versions properly (v0.14.0 > v0.13.2)
+            - Only report genuine updates (newer versions than currently used)
+            - When checking SGLang, note that tags include CUDA version suffix (cu124, cu129) - compare the base version
+
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          model: sonnet
+          timeout_minutes: 10
+          allowed_tools: |
+            mcp__fetch__fetch
+            mcp__github__create_issue
+            Read
+            Glob
