@@ -26,11 +26,12 @@ PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---gpu-memory-utilization 0.9 \
+--gpu-memory-utilization 0.97 \
 --tensor-parallel-size $TP \
---mm-encoder-tp-mode data \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---max-num-seqs 512 \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
