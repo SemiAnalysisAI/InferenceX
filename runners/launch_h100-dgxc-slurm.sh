@@ -109,6 +109,8 @@ echo "Running make setup..."
 make setup ARCH=x86_64
 
 echo "Submitting job with srtctl..."
+# Override the job name in the config file with the runner name
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
