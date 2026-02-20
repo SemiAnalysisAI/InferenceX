@@ -27,9 +27,10 @@ PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---gpu-memory-utilization 0.97 \
+--gpu-memory-utilization 0.95 \
 --tensor-parallel-size $TP \
 --max-model-len $MAX_MODEL_LEN \
+--max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
