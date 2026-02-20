@@ -1,8 +1,13 @@
 #!/usr/bin/bash
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+# System-specific configuration for H100 DGXC Slurm cluster
+SLURM_PARTITION="hpc-gpu-1"
+SLURM_ACCOUNT="customer"
+SLURM_EXCLUDED_NODELIST="hpc-gpu-1-6,hpc-gpu-1-7"
 
-    set -x
+set -x
+
+if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # MODEL_PATH: Override with pre-downloaded paths on H100 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
@@ -54,9 +59,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     echo "Configs available at: $SRT_REPO_DIR/"
-
-    export SLURM_PARTITION="hpc-gpu-1"
-    export SLURM_ACCOUNT="customer"
 
     # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
@@ -113,7 +115,7 @@ EOF
     echo "Submitting job with srtctl..."
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i '/^name:.*/a sbatch_directives:\n  exclude: "hpc-gpu-1-6,hpc-gpu-1-7"' "$CONFIG_FILE"
+    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
@@ -217,11 +219,9 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
-    PARTITION="hpc-gpu-1"
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    set -x
-    salloc --partition=$PARTITION --account=customer --gres=gpu:$TP --exclusive --time=180 --no-shell
+    salloc --exclude="$SLURM_EXCLUDED_NODELIST" --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell
     JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
