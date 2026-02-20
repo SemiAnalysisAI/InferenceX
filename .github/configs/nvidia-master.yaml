@@ -7261,7 +7261,7 @@ qwen3.5-bf16-gb200-dynamo-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - conc-list: [64]
+    - conc-list: [1024]
       prefill:
         num-worker: 1
         tp: 8
