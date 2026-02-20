@@ -234,7 +234,7 @@ else
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-        --container-mount-home \
+        --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100.sh
