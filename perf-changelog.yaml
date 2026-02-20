@@ -689,3 +689,10 @@
     - "Add context-length, tokenizer-worker-num, env tuning (NCCL_NVLS_ENABLE, SGLANG_ENABLE_FLASHINFER_GEMM)"
     - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval based on concurrency"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  description:
+    - "Add more configs for MI355X FP8 Disagg"
+    - "Bump the MI355X mori image to rocm/sgl-dev:sglang-0.5.8-rocm720-mi35x-mori-0218-2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
