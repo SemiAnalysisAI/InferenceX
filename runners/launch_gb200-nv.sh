@@ -53,6 +53,7 @@ enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 export ISL="$ISL"
 export OSL="$OSL"
 
+# Legacy path that doesn't use srt-slurm
 if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     export IMAGE=$SQUASH_FILE
     export SGL_SLURM_JOBS_PATH="dynamo/examples/backends/sglang/slurm_jobs"
@@ -262,11 +263,5 @@ else
         done
     done
 fi
-
-# # Cleanup
-# echo "Cleaning up..."
-# deactivate 2>/dev/null || true
-# rm -rf .venv
-# echo "Cleanup complete"
 
 echo "All result files processed"
