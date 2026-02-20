@@ -38,8 +38,9 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     - Single-node: for each unique (model, runner, framework, precision, isl, osl,
       spec-decoding, dp-attn), mark highest TP with highest conc and lowest TP
       with highest conc.
-    - Multi-node: for each unique (model, runner, framework, precision, isl, osl,
-      spec-decoding), mark the entry with the highest max concurrency.
+    - Multi-node: for each unique (model, runner, framework, precision,
+      spec-decoding), prefer 1k8k entries if available, otherwise fall back to
+      any seq-len. Mark the entry with the highest max concurrency.
 
     Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
     independently.
@@ -103,8 +104,10 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
                         eval_indices.add(i)
 
     # --- Multi-node eval selection ---
-    # For multi-node (disaggregated) entries, pick one representative per group
-    # with the highest max concurrency.
+    # For multi-node (disaggregated) entries, pick one representative per group.
+    # Prefer 1k8k if available (matching single-node policy), otherwise fall back
+    # to whatever seq-len exists so eval coverage is not skipped entirely.
+    # Within a group, pick the entry with the highest max concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -112,16 +115,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if Fields.PREFILL.value not in entry:
             continue
 
-        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
-            continue
-
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
             entry[Fields.FRAMEWORK.value],
             entry[Fields.PRECISION.value],
-            entry[Fields.ISL.value],
-            entry[Fields.OSL.value],
             entry[Fields.SPEC_DECODING.value],
         )
         mn_groups[key].append((i, entry))
@@ -129,11 +127,18 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     for key, entries in mn_groups.items():
         if not entries:
             continue
+
+        # Prefer 1k8k entries; fall back to all entries if none exist
+        preferred = [(i, e) for i, e in entries
+                     if e.get(Fields.ISL.value) == target_isl
+                     and e.get(Fields.OSL.value) == target_osl]
+        candidates = preferred if preferred else entries
+
         # Pick entry with highest max concurrency
         def _max_conc(ie):
             c = ie[1][Fields.CONC.value]
             return max(c) if isinstance(c, list) else c
-        best = max(entries, key=_max_conc)
+        best = max(candidates, key=_max_conc)
         eval_indices.add(best[0])
 
     # Mark the selected entries
@@ -619,9 +624,18 @@ def generate_test_config_sweep(args, all_config_data):
         runner = val[Fields.RUNNER.value]
         disagg = val.get(Fields.DISAGG.value, False)
 
+        # Build seq-len filter if --seq-lens was provided
+        seq_lens_filter = None
+        if getattr(args, 'seq_lens', None):
+            seq_lens_filter = {seq_len_stoi[s] for s in args.seq_lens}
+
         for seq_len_config in val[Fields.SEQ_LEN_CONFIGS.value]:
             isl = seq_len_config[Fields.ISL.value]
             osl = seq_len_config[Fields.OSL.value]
+
+            if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+                continue
+
             seq_len_str = seq_len_to_str(isl, osl)
 
             for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
@@ -929,6 +943,13 @@ def main():
         type=int,
         required=False,
         help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+    )
+    test_config_keys_parser.add_argument(
+        '--seq-lens',
+        nargs='+',
+        choices=list(seq_len_stoi.keys()),
+        required=False,
+        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',
