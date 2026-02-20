@@ -216,6 +216,16 @@ EOF
 
     echo "All result files processed"
 
+    # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
+    # from blocking the next job's checkout on this runner
+    echo "Cleaning up srt-slurm outputs..."
+    for i in 1 2 3 4 5; do
+        rm -rf outputs 2>/dev/null && break
+        echo "Retry $i/5: Waiting for NFS locks to release..."
+        sleep 10
+    done
+    find . -name '.nfs*' -delete 2>/dev/null || true
+
 else
 
     HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
