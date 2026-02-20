@@ -490,8 +490,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
         # Determine eval concurrency (cap at 64 for eval stability)
         IFS='x' read -r -a _conc_arr <<< "${BENCH_MAX_CONCURRENCY}"
-        EVAL_CONC="${_conc_arr[0]:-32}"
-        (( EVAL_CONC > 64 )) && EVAL_CONC=32
+        EVAL_CONC="${_conc_arr[0]:-64}"
 
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: run_eval --framework lm-eval --port 30000 --concurrent-requests $EVAL_CONC"
