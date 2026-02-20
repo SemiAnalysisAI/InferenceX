@@ -689,3 +689,12 @@
     - "Add context-length, tokenizer-worker-num, env tuning (NCCL_NVLS_ENABLE, SGLANG_ENABLE_FLASHINFER_GEMM)"
     - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval based on concurrency"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.14.0 to v0.15.1 for MI300X and MI325X GPT-OSS"
+    - "Gains: ROCm skinny GEMM dispatch fix, MoRI EP all2all backend, KV cache shuffle + paged attention for AITER"
+    - "Note: v0.16.0 ROCm image not yet published; upgrade to v0.16.0 pending image availability"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
