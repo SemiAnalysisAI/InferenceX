@@ -62,6 +62,8 @@ gb200:
 - gb200-nv_0
 b200-multinode-slurm:
 - 'b200-dgxc-slurm_0'
+- 'b200-dgxc-slurm_1'
+- 'b200-dgxc-slurm_2'
 b300:
 - 'b300-nv_0'
 gb300:
