@@ -60,6 +60,8 @@ mi355x-disagg:
 - 'mi355x-amds_2'
 gb200:
 - gb200-nv_0
+- gb200-nv_1
+- gb200-nv_2
 b200-multinode-slurm:
 - 'b200-dgxc-slurm_0'
 b300:
