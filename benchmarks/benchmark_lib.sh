@@ -77,6 +77,15 @@ wait_for_server_ready() {
         return 1
     fi
 
+    # Wait for server log file to be created (container startup may delay this)
+    while [ ! -f "$server_log" ]; do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "Server died before creating log file. Exiting."
+            exit 1
+        fi
+        sleep 1
+    done
+
     # Show logs until server is ready
     tail -f -n +1 "$server_log" &
     local TAIL_PID=$!
