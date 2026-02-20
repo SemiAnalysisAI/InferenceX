@@ -679,3 +679,13 @@
     - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260218"
     - "Uses triton attention backend, TP=8, concurrency 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/768
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang
+  description:
+    - "Update Qwen3.5-397B-A17B BF16 SGLang B200 benchmark launch config"
+    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
+    - "Add trtllm_mha attention backend, flashinfer_trtllm MOE runner"
+    - "Add context-length, tokenizer-worker-num, env tuning (NCCL_NVLS_ENABLE, SGLANG_ENABLE_FLASHINFER_GEMM)"
+    - "Set cuda-graph-max-bs to match concurrency, scheduler-recv-interval based on concurrency"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
