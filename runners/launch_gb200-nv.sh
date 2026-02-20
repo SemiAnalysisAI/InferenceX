@@ -336,6 +336,30 @@ if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
 
+# Patch bootstrap_room dtype from int64 to uint64 on ALL nodes (before the
+# head-node-only encoder section which may exit 0 early).
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+p = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
+txt = p.read_text()
+
+# Only change the bootstrap_room tensor dtype
+txt2 = re.sub(
+    r"(self\.bootstrap_room\s*=\s*torch\.zeros\(\s*\(size,\s*8\),\s*dtype=torch\.)int64",
+    r"\1uint64",
+    txt,
+    count=1,
+)
+
+if txt2 == txt:
+    raise SystemExit(f"[bootstrap_room patch] Pattern not found in {p} (file changed?)")
+
+p.write_text(txt2)
+print(f"[bootstrap_room patch] Patched {p} to use torch.uint64 for bootstrap_room")
+PY
+
 # Start encoder-only servers on the first allocated node (reserved when infra.etcd_nats_dedicated_node=true)
 # Prefer scontrol if available; otherwise fall back to SLURM_NODEID==0.
 if command -v scontrol >/dev/null 2>&1; then
@@ -398,28 +422,6 @@ for GPU_ID in 0 1 2 3; do
 done
 
 echo "[EPD] Encoder servers ready"
-
-python3 - <<'PY'
-from pathlib import Path
-import re
-
-p = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
-txt = p.read_text()
-
-# Only change the bootstrap_room tensor dtype
-txt2 = re.sub(
-    r"(self\.bootstrap_room\s*=\s*torch\.zeros\(\s*\(size,\s*8\),\s*dtype=torch\.)int64",
-    r"\1uint64",
-    txt,
-    count=1,
-)
-
-if txt2 == txt:
-    raise SystemExit(f"[bootstrap_room patch] Pattern not found in {p} (file changed?)")
-
-p.write_text(txt2)
-print(f"[bootstrap_room patch] Patched {p} to use torch.uint64 for bootstrap_room")
-PY
 
 EOF
         chmod +x configs/qwen3.5-epd-setup.sh
