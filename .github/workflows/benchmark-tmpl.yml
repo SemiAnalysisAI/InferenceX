@@ -90,7 +90,7 @@ permissions:
 jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 240
     name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.run-eval && ' | eval' || '' }}"
     steps:
       - name: Resource cleanup (pre-run)
