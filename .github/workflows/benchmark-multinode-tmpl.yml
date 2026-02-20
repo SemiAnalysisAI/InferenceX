@@ -120,7 +120,7 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* ]]; then
+            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == h100-dgxc-slurm* ]]; then
               echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
               scancel --name="${{ runner.name }}" || true
               while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
