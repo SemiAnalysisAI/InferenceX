@@ -480,22 +480,22 @@ if [[ -z "${EPD:-}" && "$MODEL_PREFIX" == "qwen3.5" && -n "${CONFIG_FILE:-}" ]];
     echo "[INFO] Qwen3.5 PD mode: generating recipe at '${CONFIG_FILE}'"
     mkdir -p "$(dirname "${CONFIG_FILE}")"
 
-    # Compute stage node counts: nodes_per_worker = ceil(max(tp, ep) / gpus_per_node)
+    # Compute stage node counts
+    # With dp-attention, each worker's world = max(tp, ep) * dp_size, but
+    # srtctl computes dp from total GPUs, so we just need nodes = total_gpus / gpus_per_node.
     GPUS_PER_NODE=4
-    PREFILL_TP_VAL=${PREFILL_TP:-8}
-    PREFILL_EP_VAL=${PREFILL_EP:-${PREFILL_TP_VAL}}
-    DECODE_TP_VAL=${DECODE_TP:-8}
-    DECODE_EP_VAL=${DECODE_EP:-${DECODE_TP_VAL}}
+    PREFILL_TP_VAL=${PREFILL_TP:-1}
+    PREFILL_EP_VAL=${PREFILL_EP:-2}
+    DECODE_TP_VAL=${DECODE_TP:-1}
+    DECODE_EP_VAL=${DECODE_EP:-2}
 
-    PREFILL_WORLD=${PREFILL_TP_VAL}
-    if [[ ${PREFILL_EP_VAL} -gt ${PREFILL_WORLD} ]]; then PREFILL_WORLD=${PREFILL_EP_VAL}; fi
-    DECODE_WORLD=${DECODE_TP_VAL}
-    if [[ ${DECODE_EP_VAL} -gt ${DECODE_WORLD} ]]; then DECODE_WORLD=${DECODE_EP_VAL}; fi
+    # For dp-attention workers: each worker uses GPUS_PER_NODE GPUs (1 node)
+    # with dp_attention across all GPUs on that node.
+    PREFILL_NODES_PER_WORKER=1
+    # Decode: 32 GPUs = 8 nodes for 1 worker with dp-attention
+    DECODE_NODES_PER_WORKER=${DECODE_NODES_PER_WORKER:-8}
 
-    PREFILL_NODES_PER_WORKER=$(( (PREFILL_WORLD + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
-    DECODE_NODES_PER_WORKER=$(( (DECODE_WORLD + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
-
-    GEN_PREFILL_WORKERS=${PREFILL_NUM_WORKERS:-1}
+    GEN_PREFILL_WORKERS=${PREFILL_NUM_WORKERS:-10}
     GEN_DECODE_WORKERS=${DECODE_NUM_WORKERS:-1}
     GEN_PREFILL_NODES=$(( PREFILL_NODES_PER_WORKER * GEN_PREFILL_WORKERS ))
     GEN_DECODE_NODES=$(( DECODE_NODES_PER_WORKER * GEN_DECODE_WORKERS ))
@@ -528,13 +528,14 @@ resources:
   decode_nodes: ${GEN_DECODE_NODES}
   decode_workers: ${GEN_DECODE_WORKERS}
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
 backend:
   type: sglang
   sglang_config:
     prefill:
       tp-size: ${PREFILL_TP_VAL}
       ep-size: ${PREFILL_EP_VAL}
+      enable-dp-attention: true
       disaggregation-mode: prefill
       disaggregation-transfer-backend: nixl
       disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}
@@ -544,6 +545,7 @@ backend:
     decode:
       tp-size: ${DECODE_TP_VAL}
       ep-size: ${DECODE_EP_VAL}
+      enable-dp-attention: true
       disaggregation-mode: decode
       disaggregation-transfer-backend: nixl
       disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}
