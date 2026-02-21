@@ -766,7 +766,7 @@ dsr1-fp8-mi355x-sglang-disagg:
       decode:
         num-worker: 2
         tp: 8
-        ep: 8
+        ep: 1
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
