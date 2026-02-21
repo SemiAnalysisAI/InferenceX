@@ -389,7 +389,7 @@ dsr1-fp8-mi355x-atom-mtp:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
 dsr1-fp8-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.8-rocm720-mi35x-mori-0218-2
+  image: rocm/sgl-dev:sglang-0.5.8-rocm700-mi35x-mori-0210
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
