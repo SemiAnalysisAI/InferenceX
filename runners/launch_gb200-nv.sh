@@ -339,69 +339,27 @@ if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
 
-# Patch bootstrap_room overflow: values can exceed int64 max (2^63-1) causing
-# "Overflow when unpacking long long".  Convert to signed two's complement
-# before storing in the int64 tensor.  Must patch BOTH prefill (set_buf in
-# utils.py) AND decode validation (decode.py) so the comparison still works.
+# Patch bootstrap_room: change dtype from int64 to uint64 to test if this
+# alone fixes the "Overflow when unpacking long long" error.
 python3 - <<'PY'
 from pathlib import Path
+import re
 
-# Helper: convert unsigned bootstrap_room to signed two's complement int64
-SIGNED_CONV = """
-def _to_signed_i64(v):
-    return v - (1 << 64) if v > 0x7FFFFFFFFFFFFFFF else v
-""".strip()
+p = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
+txt = p.read_text()
 
-# ---------- 1. Patch utils.py  (set_buf: store as signed int64) ----------
-p_utils = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
-txt = p_utils.read_text()
-
-old_set = (
-    "self.bootstrap_room[req.metadata_buffer_index, 0] = (\n"
-    "            req.bootstrap_room if req.bootstrap_room is not None else 0\n"
-    "        )"
-)
-new_set = (
-    "_br = req.bootstrap_room if req.bootstrap_room is not None else 0\n"
-    "        self.bootstrap_room[req.metadata_buffer_index, 0] = _to_signed_i64(_br)"
+txt2 = re.sub(
+    r"(self\.bootstrap_room\s*=\s*torch\.zeros\(\s*\(size,\s*8\),\s*dtype=torch\.)int64",
+    r"\1uint64",
+    txt,
+    count=1,
 )
 
-if old_set not in txt:
-    raise SystemExit(f"[bootstrap_room patch] set_buf pattern not found in {p_utils}")
+if txt2 == txt:
+    raise SystemExit(f"[bootstrap_room patch] Pattern not found in {p} (file changed?)")
 
-# Inject the helper function near the top of the file (after imports)
-if "_to_signed_i64" not in txt:
-    # Insert after the last import block
-    anchor = "if TYPE_CHECKING:"
-    if anchor not in txt:
-        raise SystemExit(f"[bootstrap_room patch] Cannot find anchor '{anchor}' in {p_utils}")
-    txt = txt.replace(anchor, SIGNED_CONV + "\n\n" + anchor, 1)
-
-txt = txt.replace(old_set, new_set, 1)
-p_utils.write_text(txt)
-print(f"[bootstrap_room patch] Patched {p_utils}")
-
-# ---------- 2. Patch decode.py (validation: convert expected to signed) ----------
-p_decode = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/decode.py")
-txt = p_decode.read_text()
-
-old_expected = (
-    "expected_room = (\n"
-    "            decode_req.req.bootstrap_room\n"
-    "            if decode_req.req.bootstrap_room is not None\n"
-    "            else 0\n"
-    "        )"
-)
-new_expected = (
-    "_er = decode_req.req.bootstrap_room if decode_req.req.bootstrap_room is not None else 0\n"
-    "        expected_room = _er - (1 << 64) if _er > 0x7FFFFFFFFFFFFFFF else _er"
-)
-
-if old_expected not in txt:
-    raise SystemExit(f"[bootstrap_room patch] expected_room pattern not found in {p_decode}")
-txt = txt.replace(old_expected, new_expected, 1)
-p_decode.write_text(txt)
-print(f"[bootstrap_room patch] Patched {p_decode}")
+p.write_text(txt2)
+print(f"[bootstrap_room patch] Patched {p} to use torch.uint64 for bootstrap_room")
 PY
 
 # Start encoder-only servers on the first allocated node (reserved when infra.etcd_nats_dedicated_node=true)
@@ -578,67 +536,27 @@ if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
 
-# Patch bootstrap_room overflow: values can exceed int64 max (2^63-1) causing
-# "Overflow when unpacking long long".  Convert to signed two's complement
-# before storing in the int64 tensor.
+# Patch bootstrap_room: change dtype from int64 to uint64 to test if this
+# alone fixes the "Overflow when unpacking long long" error.
 python3 - <<'PY'
 from pathlib import Path
+import re
 
-# Helper: convert unsigned bootstrap_room to signed two's complement int64
-SIGNED_CONV = """
-def _to_signed_i64(v):
-    return v - (1 << 64) if v > 0x7FFFFFFFFFFFFFFF else v
-""".strip()
+p = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
+txt = p.read_text()
 
-# ---------- 1. Patch utils.py  (set_buf: store as signed int64) ----------
-p_utils = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/utils.py")
-txt = p_utils.read_text()
-
-old_set = (
-    "self.bootstrap_room[req.metadata_buffer_index, 0] = (\n"
-    "            req.bootstrap_room if req.bootstrap_room is not None else 0\n"
-    "        )"
-)
-new_set = (
-    "_br = req.bootstrap_room if req.bootstrap_room is not None else 0\n"
-    "        self.bootstrap_room[req.metadata_buffer_index, 0] = _to_signed_i64(_br)"
+txt2 = re.sub(
+    r"(self\.bootstrap_room\s*=\s*torch\.zeros\(\s*\(size,\s*8\),\s*dtype=torch\.)int64",
+    r"\1uint64",
+    txt,
+    count=1,
 )
 
-if old_set not in txt:
-    raise SystemExit(f"[bootstrap_room patch] set_buf pattern not found in {p_utils}")
+if txt2 == txt:
+    raise SystemExit(f"[bootstrap_room patch] Pattern not found in {p} (file changed?)")
 
-# Inject the helper function near the top of the file (after imports)
-if "_to_signed_i64" not in txt:
-    anchor = "if TYPE_CHECKING:"
-    if anchor not in txt:
-        raise SystemExit(f"[bootstrap_room patch] Cannot find anchor '{anchor}' in {p_utils}")
-    txt = txt.replace(anchor, SIGNED_CONV + "\n\n" + anchor, 1)
-
-txt = txt.replace(old_set, new_set, 1)
-p_utils.write_text(txt)
-print(f"[bootstrap_room patch] Patched {p_utils}")
-
-# ---------- 2. Patch decode.py (validation: convert expected to signed) ----------
-p_decode = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/decode.py")
-txt = p_decode.read_text()
-
-old_expected = (
-    "expected_room = (\n"
-    "            decode_req.req.bootstrap_room\n"
-    "            if decode_req.req.bootstrap_room is not None\n"
-    "            else 0\n"
-    "        )"
-)
-new_expected = (
-    "_er = decode_req.req.bootstrap_room if decode_req.req.bootstrap_room is not None else 0\n"
-    "        expected_room = _er - (1 << 64) if _er > 0x7FFFFFFFFFFFFFFF else _er"
-)
-
-if old_expected not in txt:
-    raise SystemExit(f"[bootstrap_room patch] expected_room pattern not found in {p_decode}")
-txt = txt.replace(old_expected, new_expected, 1)
-p_decode.write_text(txt)
-print(f"[bootstrap_room patch] Patched {p_decode}")
+p.write_text(txt2)
+print(f"[bootstrap_room patch] Patched {p} to use torch.uint64 for bootstrap_room")
 PY
 EOF
     chmod +x configs/qwen3.5-pd-setup.sh
