@@ -60,8 +60,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Import containers via enroot
-    srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+    enroot import -o $SQUASH_FILE docker://$IMAGE
+    enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
     export ISL="$ISL"
     export OSL="$OSL"
@@ -221,11 +221,11 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    enroot import -o $SQUASH_FILE docker://$IMAGE
     if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
         echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+        rm -f $SQUASH_FILE
+        enroot import -o $SQUASH_FILE docker://$IMAGE
     fi
 
     srun --jobid=$JOB_ID \
