@@ -2,7 +2,7 @@
 
 # System-specific configuration for B200 DGXC Slurm cluster
 SLURM_PARTITION="gpu"
-SLURM_ACCOUNT="root"
+SLURM_ACCOUNT="benchmark"
 
 set -x
 
@@ -37,36 +37,22 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q1-2026
 
     echo "Installing srtctl..."
+    export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
+    export PATH="$UV_INSTALL_DIR:$PATH"
 
-    uv venv
-    source .venv/bin/activate
-
-    # Retry uv pip install to handle "Text file busy" when multiple runners
-    # share the uv binary and one is still being written by the installer.
-    UV_INSTALL_RETRIES=5
-    UV_INSTALL_DELAY=10
-    for i in $(seq 1 $UV_INSTALL_RETRIES); do
-        uv pip install -e . && break
-        echo "uv pip install attempt $i/$UV_INSTALL_RETRIES failed, retrying in ${UV_INSTALL_DELAY}s..."
-        sleep $UV_INSTALL_DELAY
-        if [ $i -eq $UV_INSTALL_RETRIES ]; then
-            echo "Error: uv pip install failed after $UV_INSTALL_RETRIES attempts"
-            exit 1
-        fi
-    done
+    uv venv "$GITHUB_WORKSPACE/.venv"
+    source "$GITHUB_WORKSPACE/.venv/bin/activate"
+    uv pip install -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
         exit 1
     fi
-
-    echo "Configs available at: $SRT_REPO_DIR/"
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
