@@ -227,7 +227,7 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/home/sa-shared/hf-hub-cache/"
+    HF_HUB_CACHE_MOUNT="/home/sa-shared/gharunners/hf-hub-cache/"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
