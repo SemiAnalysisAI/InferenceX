@@ -691,7 +691,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
 
 - config-keys:
-    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b200-trt
+    - dsr1-fp8-b200-sglang
+    # - dsr1-fp8-b200-dynamo-sglang-mtp
+    # - dsr1-fp8-b200-dynamo-sglang
+    # - dsr1-fp4-b200-dynamo-sglang
+    # - gptoss-fp4-gb200-dynamo-trt
   description:
-    - "Add more configs for MI355X FP8 Disagg"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
+    - "Test"
+  pr-link: Test
