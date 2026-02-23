@@ -2508,7 +2508,7 @@ dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode-slurm
+  runner: h100-multinode
   precision: fp8
   framework: dynamo-trt
   multinode: true
@@ -3047,7 +3047,7 @@ dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode-slurm
+  runner: h100-multinode
   precision: fp8
   framework: dynamo-sglang
   multinode: true
