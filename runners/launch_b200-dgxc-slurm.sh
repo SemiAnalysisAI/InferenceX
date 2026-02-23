@@ -29,7 +29,7 @@ fi
 echo "Configs available at: $SRT_REPO_DIR/"
 
 export SLURM_PARTITION="gpu"
-export SLURM_ACCOUNT="root"
+export SLURM_ACCOUNT="benchmark"
 
 if [[ $MODEL_PREFIX == "dsr1" ]]; then
     if [[ $PRECISION == "fp4" ]]; then
