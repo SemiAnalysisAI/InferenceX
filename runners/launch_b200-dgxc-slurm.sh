@@ -222,7 +222,7 @@ else
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     enroot import -o $SQUASH_FILE docker://$IMAGE
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
+    if ! unsquashfs -l $SQUASH_FILE > /dev/null; then
         echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
         rm -f $SQUASH_FILE
         enroot import -o $SQUASH_FILE docker://$IMAGE
