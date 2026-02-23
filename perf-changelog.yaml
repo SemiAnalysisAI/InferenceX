@@ -695,9 +695,8 @@
   description:
     - "Add more configs for MI355X FP8 Disagg"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
-  
-  
-  - config-keys:
+
+- config-keys:
     - kimik2.5-int4-b200-vllm
   description:
     - "Add Kimi-K2.5 INT4 vLLM benchmark for B200"
