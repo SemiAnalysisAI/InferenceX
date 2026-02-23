@@ -14,10 +14,39 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # MODEL_PATH: Override with pre-downloaded paths on B200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared B200 cluster.
-    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+echo "Installing srtctl..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+uv venv
+source .venv/bin/activate
+
+# Retry uv pip install to handle "Text file busy" when multiple runners
+# share the uv binary and one is still being written by the installer.
+UV_INSTALL_RETRIES=5
+UV_INSTALL_DELAY=10
+for i in $(seq 1 $UV_INSTALL_RETRIES); do
+    uv pip install -e . && break
+    echo "uv pip install attempt $i/$UV_INSTALL_RETRIES failed, retrying in ${UV_INSTALL_DELAY}s..."
+    sleep $UV_INSTALL_DELAY
+    if [ $i -eq $UV_INSTALL_RETRIES ]; then
+        echo "Error: uv pip install failed after $UV_INSTALL_RETRIES attempts"
+        exit 1
+    fi
+done
+
+if ! command -v srtctl &> /dev/null; then
+    echo "Error: Failed to install srtctl"
+    exit 1
+fi
+
+echo "Configs available at: $SRT_REPO_DIR/"
+
+export SLURM_PARTITION="gpu"
+export SLURM_ACCOUNT="root"
+
+if [[ $MODEL_PREFIX == "dsr1" ]]; then
+    if [[ $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
         export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
