@@ -695,3 +695,13 @@
   description:
     - "Add more configs for MI355X FP8 Disagg"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Update search-space configurations for DSR1 FP4 MI355X ATOM and ATOM-MTP"
+    - "Comment out TP=4 configs, consolidate to TP=8 only"
+    - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
+    - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
