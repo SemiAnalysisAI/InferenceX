@@ -3110,7 +3110,7 @@ minimaxm2.5-fp8-b200-vllm:
   image: vllm/vllm-openai:v0.15.1-cu130
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: b200-nvs
+  runner: b200
   precision: fp8
   framework: vllm
   multinode: false
