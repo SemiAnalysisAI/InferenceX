@@ -3,7 +3,7 @@
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
-SLURM_EXCLUDED_NODELIST="hpc-gpu-1-6,hpc-gpu-1-7"
+SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
 
 set -x
 

@@ -2,7 +2,7 @@
 
 # System-specific configuration for B200 DGXC Slurm cluster
 SLURM_PARTITION="gpu"
-SLURM_ACCOUNT="benchmark"
+SLURM_ACCOUNT="root"
 
 set -x
 
@@ -14,39 +14,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
-uv venv
-source .venv/bin/activate
-
-# Retry uv pip install to handle "Text file busy" when multiple runners
-# share the uv binary and one is still being written by the installer.
-UV_INSTALL_RETRIES=5
-UV_INSTALL_DELAY=10
-for i in $(seq 1 $UV_INSTALL_RETRIES); do
-    uv pip install -e . && break
-    echo "uv pip install attempt $i/$UV_INSTALL_RETRIES failed, retrying in ${UV_INSTALL_DELAY}s..."
-    sleep $UV_INSTALL_DELAY
-    if [ $i -eq $UV_INSTALL_RETRIES ]; then
-        echo "Error: uv pip install failed after $UV_INSTALL_RETRIES attempts"
-        exit 1
-    fi
-done
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
-
-echo "Configs available at: $SRT_REPO_DIR/"
-
-export SLURM_PARTITION="gpu"
-export SLURM_ACCOUNT="root"
-
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    if [[ $PRECISION == "fp4" ]]; then
+    # MODEL_PATH: Override with pre-downloaded paths on B200 runner
+    # The yaml files specify HuggingFace model IDs for portability, but we use
+    # local paths to avoid repeated downloading on the shared B200 cluster.
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
         export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
@@ -66,22 +37,36 @@ if [[ $MODEL_PREFIX == "dsr1" ]]; then
     fi
 
     git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR"
     git checkout sa-submission-q1-2026
 
     echo "Installing srtctl..."
-    export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$UV_INSTALL_DIR:$PATH"
+    source $HOME/.local/bin/env
 
-    uv venv "$GITHUB_WORKSPACE/.venv"
-    source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install -e .
+    uv venv
+    source .venv/bin/activate
+
+    # Retry uv pip install to handle "Text file busy" when multiple runners
+    # share the uv binary and one is still being written by the installer.
+    UV_INSTALL_RETRIES=5
+    UV_INSTALL_DELAY=10
+    for i in $(seq 1 $UV_INSTALL_RETRIES); do
+        uv pip install -e . && break
+        echo "uv pip install attempt $i/$UV_INSTALL_RETRIES failed, retrying in ${UV_INSTALL_DELAY}s..."
+        sleep $UV_INSTALL_DELAY
+        if [ $i -eq $UV_INSTALL_RETRIES ]; then
+            echo "Error: uv pip install failed after $UV_INSTALL_RETRIES attempts"
+            exit 1
+        fi
+    done
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
         exit 1
     fi
+
+    echo "Configs available at: $SRT_REPO_DIR/"
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
@@ -89,8 +74,8 @@ if [[ $MODEL_PREFIX == "dsr1" ]]; then
     NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Import containers via enroot
-    enroot import -o $SQUASH_FILE docker://$IMAGE
-    enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+    srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
 
     export ISL="$ISL"
     export OSL="$OSL"
@@ -242,7 +227,7 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/home/sa-shared/gharunners/hf-hub-cache/"
+    HF_HUB_CACHE_MOUNT="/home/sa-shared/hf-hub-cache/"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
@@ -250,11 +235,11 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    enroot import -o $SQUASH_FILE docker://$IMAGE
-    if ! unsquashfs -l $SQUASH_FILE > /dev/null; then
+    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
         echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        rm -f $SQUASH_FILE
-        enroot import -o $SQUASH_FILE docker://$IMAGE
+        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
     fi
 
     srun --jobid=$JOB_ID \
