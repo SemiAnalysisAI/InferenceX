@@ -8,6 +8,7 @@ from generate_sweep_configs import (
     generate_full_sweep,
     generate_runner_model_sweep_config,
     apply_node_type_defaults,
+    expand_config_keys,
 )
 
 
@@ -1507,3 +1508,80 @@ class TestRunnerModelSweepMixed:
         )
         # mi300x only has single-node configs, so multi-node filter should produce empty
         assert len(result) == 0
+
+
+# =============================================================================
+# Test expand_config_keys
+# =============================================================================
+
+class TestExpandConfigKeys:
+    """Tests for expand_config_keys glob/wildcard matching."""
+
+    AVAILABLE = [
+        "dsr1-fp4-b200-sglang",
+        "dsr1-fp8-mi300x-sglang",
+        "dsr1-fp8-h200-trt",
+        "gptoss-fp4-b200-vllm",
+        "gptoss-fp8-b200-sglang",
+    ]
+
+    def test_exact_keys_pass_through(self):
+        """Exact keys should be returned unchanged."""
+        result = expand_config_keys(
+            ["dsr1-fp4-b200-sglang", "dsr1-fp8-h200-trt"], self.AVAILABLE
+        )
+        assert result == ["dsr1-fp4-b200-sglang", "dsr1-fp8-h200-trt"]
+
+    def test_star_sglang_matches(self):
+        """*-sglang should match all keys ending with -sglang."""
+        result = expand_config_keys(["*-sglang"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "gptoss-fp8-b200-sglang",
+        ]
+
+    def test_prefix_glob(self):
+        """dsr1* should match all keys starting with dsr1."""
+        result = expand_config_keys(["dsr1*"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "dsr1-fp8-h200-trt",
+        ]
+
+    def test_question_mark_wildcard(self):
+        """? wildcard should match a single character."""
+        result = expand_config_keys(["?sr1-fp8-mi300x-sglang"], self.AVAILABLE)
+        assert result == ["dsr1-fp8-mi300x-sglang"]
+
+    def test_no_match_pattern_raises(self):
+        """Pattern matching nothing should raise ValueError."""
+        with pytest.raises(ValueError, match="matched no config keys"):
+            expand_config_keys(["*-b300"], self.AVAILABLE)
+
+    def test_missing_exact_key_raises(self):
+        """Missing exact key should raise ValueError."""
+        with pytest.raises(ValueError, match="Config key\\(s\\) not found"):
+            expand_config_keys(["nonexistent-key"], self.AVAILABLE)
+
+    def test_mixed_exact_and_glob(self):
+        """Mix of exact keys and glob patterns should work."""
+        result = expand_config_keys(
+            ["dsr1-fp8-h200-trt", "gptoss*"], self.AVAILABLE
+        )
+        assert result == [
+            "dsr1-fp8-h200-trt",
+            "gptoss-fp4-b200-vllm",
+            "gptoss-fp8-b200-sglang",
+        ]
+
+    def test_overlapping_patterns_deduplicate(self):
+        """Overlapping patterns should deduplicate while preserving order."""
+        result = expand_config_keys(["dsr1*", "*-sglang"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "dsr1-fp8-h200-trt",
+            "gptoss-fp8-b200-sglang",
+        ]

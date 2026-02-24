@@ -1,4 +1,5 @@
 from ast import For
+import fnmatch
 import json
 import argparse
 import sys
@@ -560,18 +561,11 @@ def generate_test_config_sweep(args, all_config_data):
     Validates that all specified config keys exist before generating.
     Expands all configs fully without any filtering.
     """
-    # Validate all config keys exist
-    missing_keys = [key for key in args.config_keys if key not in all_config_data]
-    if missing_keys:
-        available_keys = sorted(all_config_data.keys())
-        raise ValueError(
-            f"Config key(s) not found: {', '.join(missing_keys)}.\n"
-            f"Available keys: {', '.join(available_keys)}"
-        )
+    resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
 
     matrix_values = []
 
-    for key in args.config_keys:
+    for key in resolved_keys:
         val = all_config_data[key]
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
@@ -690,6 +684,37 @@ def generate_test_config_sweep(args, all_config_data):
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
     return matrix_values
+
+
+def expand_config_keys(config_keys, available_keys):
+    """Expand config key patterns (glob wildcards) against available keys.
+
+    Keys containing '*' or '?' are treated as glob patterns and expanded via
+    fnmatch.filter(). Plain keys are validated for existence. Results are
+    deduplicated while preserving order.
+
+    Raises ValueError if a pattern matches nothing or an exact key is missing.
+    """
+    available = list(available_keys)
+    seen = {}  # use dict to preserve insertion order
+    for key in config_keys:
+        if '*' in key or '?' in key:
+            matches = fnmatch.filter(available, key)
+            if not matches:
+                raise ValueError(
+                    f"Pattern '{key}' matched no config keys.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            for m in matches:
+                seen.setdefault(m, None)
+        else:
+            if key not in available:
+                raise ValueError(
+                    f"Config key(s) not found: {key}.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            seen.setdefault(key, None)
+    return list(seen)
 
 
 def apply_node_type_defaults(args):
