@@ -722,4 +722,4 @@
     - "Remove deprecated async-scheduling flag (now enabled by default since v0.14.0)"
     - "Gains: CUTLASS MoE optimizations (~8% throughput), FP4 kernel improvements (~4% E2E on B200), torch.compile cold-start fix"
     - "v0.15.1 includes fix for prefix cache hit rate of 0% on GPT-OSS hybrid attention models"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/789
