@@ -27,7 +27,7 @@ options:
 
 ## `full-sweep` Command
 
-The `full-sweep` command generates benchmark configurations with optional filtering. It requires specifying either `--single-node` or `--multi-node`.
+The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
 usage: generate_sweep_configs.py full-sweep
@@ -42,10 +42,17 @@ usage: generate_sweep_configs.py full-sweep
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
     [--max-ep MAX_EP]
-    (--single-node | --multi-node)
+    [--single-node] [--multi-node]
 ```
 
+If neither `--single-node` nor `--multi-node` is specified, both types are generated.
+
 ### Examples
+
+**Generate all single-node and multi-node configurations (default):**
+```
+full-sweep --config-files .github/configs/nvidia-master.yaml
+```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
@@ -79,7 +86,7 @@ full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
 
 ## `runner-model-sweep` Command
 
-The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. It requires specifying either `--single-node` or `--multi-node`.
+The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
 usage: generate_sweep_configs.py runner-model-sweep
@@ -87,7 +94,7 @@ usage: generate_sweep_configs.py runner-model-sweep
     [--runner-config RUNNER_CONFIG]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
-    (--single-node | --multi-node)
+    [--single-node] [--multi-node]
 ```
 
 ### Scenario: Validating Runner Infrastructure
