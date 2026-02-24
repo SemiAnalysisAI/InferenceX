@@ -62,7 +62,7 @@ jobs:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node
+        name: multi-node \
         strategy:
             fail-fast: false
             matrix:
@@ -100,7 +100,7 @@ jobs:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: single-node
+        name: single-node \
         strategy:
             fail-fast: false
             matrix:
