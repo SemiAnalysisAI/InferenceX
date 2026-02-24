@@ -93,6 +93,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+  "${MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
@@ -257,7 +258,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200.sh
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
 
     scancel $JOB_ID
 
