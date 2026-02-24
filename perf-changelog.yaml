@@ -691,13 +691,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/758
 
 - config-keys:
-    - dsr1-fp4-b200-dynamo-sglang-mtp
-    - dsr1-fp4-b200-trt
-    - dsr1-fp8-b200-sglang
-    # - dsr1-fp8-b200-dynamo-sglang-mtp
-    # - dsr1-fp8-b200-dynamo-sglang
-    # - dsr1-fp4-b200-dynamo-sglang
-    # - gptoss-fp4-gb200-dynamo-trt
+    - "*-b300-*"
   description:
     - "Test"
   pr-link: Test
