@@ -712,10 +712,3 @@
     - "Image: vllm/vllm-openai:v0.15.1"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/735
-
-- config-keys:
-    - dsr1-fp4-b300-dynamo-trt
-    - dsr1-fp8-b300-dynamo-trt
-  description:
-    - "Test"
-  pr-link: Test
