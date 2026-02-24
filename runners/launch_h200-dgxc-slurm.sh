@@ -232,12 +232,21 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    fi
+    # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
+    DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
+    LOCK_FILE="${SQUASH_FILE}.lock"
+
+    # Use flock to serialize concurrent imports to the same squash file
+    srun --jobid=$JOB_ID bash -c "
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
+        fi
+    "
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
