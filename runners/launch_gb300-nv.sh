@@ -6,6 +6,7 @@ set -x
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
+export ENROOT_ROOTFS_WRITABLE=1
 
 export MODEL_PATH=$MODEL
 
