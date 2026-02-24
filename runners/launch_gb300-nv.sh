@@ -85,6 +85,7 @@ containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+use_segment_sbatch_directive: false
 EOF
 
 echo "Generated srtslurm.yaml:"
