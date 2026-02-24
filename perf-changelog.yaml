@@ -715,7 +715,8 @@
 <<<<<<< chore/add-more-nv-runners
 
 - config-keys:
-    - "*-b300-*"
+    - dsr1-fp4-b300-dynamo-trt
+    - dsr1-fp8-b300-dynamo-trt
   description:
     - "Test"
   pr-link: Test
