@@ -712,9 +712,12 @@
     - "Image: vllm/vllm-openai:v0.15.1"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/735
+<<<<<<< chore/add-more-nv-runners
 
 - config-keys:
     - "*-b300-*"
   description:
     - "Test"
   pr-link: Test
+=======
+>>>>>>> main
