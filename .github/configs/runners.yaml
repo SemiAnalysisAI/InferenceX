@@ -38,7 +38,7 @@ h200:
 - 'h200-dgxc-slurm_11'
 - 'h200-dgxc-slurm_12'
 - 'h200-dgxc-slurm_13'
-h200-multinode-slurm:
+h200-multinode:
 - 'h200-dgxc-slurm_11'
 - 'h200-dgxc-slurm_12'
 - 'h200-dgxc-slurm_13'
