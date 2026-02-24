@@ -8,9 +8,9 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    EP_SIZE
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -20,24 +20,22 @@ hf download "$MODEL"
 
 nvidia-smi
 
+export PYTHONNOUSERSITE=1
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
-if [[ $CONC -ge 16 ]]; then
-  SCHEDULER_RECV_INTERVAL=30
-else
-  SCHEDULER_RECV_INTERVAL=10
-fi
-echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
-
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
---chunked-prefill-size 16384 \
---ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 > $SERVER_LOG 2>&1 &
+vllm serve $MODEL --host 0.0.0.0 --port $PORT \
+--gpu-memory-utilization 0.95 \
+--tensor-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
+--max-num-seqs $CONC \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
+--trust-remote-code \
+--disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -53,10 +51,11 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $((CONC * 10)) \
+    --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
