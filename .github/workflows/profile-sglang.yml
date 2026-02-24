@@ -1,6 +1,9 @@
 name: Profile
 
 on:
+  push:
+    branches:
+      - 'add-profiling-support'
   workflow_dispatch:
     inputs:
       config-key:
@@ -12,13 +15,8 @@ on:
         required: false
         type: string
         default: '.github/configs/nvidia-master.yaml'
-      seq-lens:
-        description: "Sequence length config (e.g. 1k1k, 1k8k, 8k1k)"
-        required: false
-        type: string
-        default: '1k1k'
       conc:
-        description: "Concurrency value"
+        description: "Concurrency value (must exist in config's conc-range/list)"
         required: false
         type: string
         default: '64'
@@ -57,7 +55,12 @@ jobs:
         name: Generate matrix via script
         run: |
           pip install pydantic
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --seq-lens ${{ inputs.seq-lens }} --conc ${{ inputs.conc }} --single-node"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
+          else
+            # Default for push trigger — adjust as needed for testing
+            CLI_ARGS="test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp8-h200-sglang --conc 64"
+          fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
