@@ -35,7 +35,8 @@ jobs:
     get-jobs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
+            single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
+            multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -52,20 +53,20 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x]))")
+                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x]))")
+                  echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
+                  echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
         needs: get-jobs
-        # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests.
-        # We only need to check the first entry because by design, all entries in the matrix will be of the same type (there will
-        # never be a mix of multi-node and single-node entries as output from generate_sweep_configs.py).
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill != null }}
+        if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: ${{ inputs.generate-cli-command }} multi-node
+        name: multi-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
         with:
             isl: ${{ matrix.config.isl }}
@@ -97,13 +98,13 @@ jobs:
 
     test-sweep-single-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill == null }}
+        if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: ${{ inputs.generate-cli-command }} single-node
+        name: single-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}

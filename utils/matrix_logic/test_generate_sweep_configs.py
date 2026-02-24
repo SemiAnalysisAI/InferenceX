@@ -7,6 +7,8 @@ from generate_sweep_configs import (
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    apply_node_type_defaults,
+    expand_config_keys,
 )
 
 
@@ -1295,3 +1297,291 @@ class TestArgumentDefaults:
 
         # Verify the explicit value
         assert args.runner_config == 'custom/path/runners.yaml'
+
+
+# =============================================================================
+# Mixed-mode fixtures
+# =============================================================================
+
+@pytest.fixture
+def sample_mixed_config(sample_single_node_config, sample_multinode_config):
+    """Config dict containing both single-node and multinode entries."""
+    merged = {}
+    merged.update(sample_single_node_config)
+    merged.update(sample_multinode_config)
+    return merged
+
+
+@pytest.fixture
+def full_sweep_args_both():
+    """Args for full-sweep with both single_node and multi_node True."""
+    args = argparse.Namespace()
+    args.model_prefix = None
+    args.precision = None
+    args.framework = None
+    args.runner_type = None
+    args.seq_lens = None
+    args.step_size = 2
+    args.min_conc = None
+    args.max_conc = None
+    args.max_tp = None
+    args.max_ep = None
+    args.runner_node_filter = None
+    args.single_node = True
+    args.multi_node = True
+    return args
+
+
+# =============================================================================
+# Test apply_node_type_defaults
+# =============================================================================
+
+class TestApplyNodeTypeDefaults:
+    """Tests for apply_node_type_defaults function."""
+
+    def test_neither_flag_sets_both_true(self):
+        """When neither flag is set, both should become True."""
+        args = argparse.Namespace(single_node=False, multi_node=False)
+        apply_node_type_defaults(args)
+        assert args.single_node is True
+        assert args.multi_node is True
+
+    def test_single_only_stays_single(self):
+        """When only single_node is set, it stays that way."""
+        args = argparse.Namespace(single_node=True, multi_node=False)
+        apply_node_type_defaults(args)
+        assert args.single_node is True
+        assert args.multi_node is False
+
+    def test_multi_only_stays_multi(self):
+        """When only multi_node is set, it stays that way."""
+        args = argparse.Namespace(single_node=False, multi_node=True)
+        apply_node_type_defaults(args)
+        assert args.single_node is False
+        assert args.multi_node is True
+
+    def test_both_flags_stays_both(self):
+        """When both flags are set, they stay that way."""
+        args = argparse.Namespace(single_node=True, multi_node=True)
+        apply_node_type_defaults(args)
+        assert args.single_node is True
+        assert args.multi_node is True
+
+    def test_no_node_attrs_is_noop(self):
+        """When args lacks node type attrs, nothing happens."""
+        args = argparse.Namespace(command="test-config")
+        apply_node_type_defaults(args)
+        assert not hasattr(args, 'single_node')
+        assert not hasattr(args, 'multi_node')
+
+
+# =============================================================================
+# Test generate_full_sweep mixed mode
+# =============================================================================
+
+class TestGenerateFullSweepMixed:
+    """Tests for generate_full_sweep with both single-node and multi-node configs."""
+
+    def test_both_flags_generates_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_both):
+        """Both flags True should produce both single-node and multinode entries."""
+        result = generate_full_sweep(
+            full_sweep_args_both,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        has_single = any("tp" in entry and "prefill" not in entry for entry in result)
+        has_multi = any("prefill" in entry for entry in result)
+        assert has_single, "Expected single-node entries in mixed output"
+        assert has_multi, "Expected multinode entries in mixed output"
+
+    def test_single_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_single_node):
+        """--single-node should skip multinode entries from mixed config."""
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        assert len(result) > 0
+        assert all("prefill" not in entry for entry in result), "No multinode entries expected"
+        assert all("tp" in entry for entry in result), "All entries should have tp field"
+
+    def test_multi_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_multi_node):
+        """--multi-node should skip single-node entries from mixed config."""
+        result = generate_full_sweep(
+            full_sweep_args_multi_node,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        assert len(result) > 0
+        assert all("prefill" in entry for entry in result), "All entries should be multinode"
+
+
+# =============================================================================
+# Test runner-model-sweep with both flags (regression for filtering bug)
+# =============================================================================
+
+class TestRunnerModelSweepMixed:
+    """Tests for runner-model-sweep with both node types enabled."""
+
+    @pytest.fixture
+    def runner_sweep_args_both(self):
+        """Args for runner-model-sweep with both single_node and multi_node True."""
+        args = argparse.Namespace()
+        args.runner_type = "gb200"
+        args.runner_config = "runners.yaml"
+        args.runner_node_filter = None
+        args.model_prefix = None
+        args.precision = None
+        args.framework = None
+        args.conc = None
+        args.single_node = True
+        args.multi_node = True
+        return args
+
+    def test_both_flags_with_mixed_config(self, sample_mixed_config, sample_runner_config, runner_sweep_args_both):
+        """Both flags should produce multinode entries for gb200 runner."""
+        # gb200 runner has multinode config (dsr1-fp4-gb200-dynamo-trt)
+        result = generate_runner_model_sweep_config(
+            runner_sweep_args_both,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        assert len(result) > 0
+        assert all("prefill" in entry for entry in result), "gb200 configs are multinode"
+
+    def test_both_flags_single_node_runner(self, sample_mixed_config, sample_runner_config):
+        """Both flags with mi300x runner should produce single-node entries."""
+        args = argparse.Namespace()
+        args.runner_type = "mi300x"
+        args.runner_config = "runners.yaml"
+        args.runner_node_filter = None
+        args.model_prefix = None
+        args.precision = None
+        args.framework = None
+        args.conc = None
+        args.single_node = True
+        args.multi_node = True
+        result = generate_runner_model_sweep_config(
+            args,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        assert len(result) > 0
+        assert all("tp" in entry and "prefill" not in entry for entry in result), "mi300x configs are single-node"
+
+    def test_single_only_skips_multinode(self, sample_mixed_config, sample_runner_config):
+        """--single-node only should skip multinode configs in runner-model-sweep."""
+        args = argparse.Namespace()
+        args.runner_type = "gb200"
+        args.runner_config = "runners.yaml"
+        args.runner_node_filter = None
+        args.model_prefix = None
+        args.precision = None
+        args.framework = None
+        args.conc = None
+        args.single_node = True
+        args.multi_node = False
+        result = generate_runner_model_sweep_config(
+            args,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        # gb200 only has multinode configs, so single-node filter should produce empty
+        assert len(result) == 0
+
+    def test_multi_only_skips_singlenode(self, sample_mixed_config, sample_runner_config):
+        """--multi-node only should skip single-node configs in runner-model-sweep."""
+        args = argparse.Namespace()
+        args.runner_type = "mi300x"
+        args.runner_config = "runners.yaml"
+        args.runner_node_filter = None
+        args.model_prefix = None
+        args.precision = None
+        args.framework = None
+        args.conc = None
+        args.single_node = False
+        args.multi_node = True
+        result = generate_runner_model_sweep_config(
+            args,
+            sample_mixed_config,
+            sample_runner_config
+        )
+        # mi300x only has single-node configs, so multi-node filter should produce empty
+        assert len(result) == 0
+
+
+# =============================================================================
+# Test expand_config_keys
+# =============================================================================
+
+class TestExpandConfigKeys:
+    """Tests for expand_config_keys glob/wildcard matching."""
+
+    AVAILABLE = [
+        "dsr1-fp4-b200-sglang",
+        "dsr1-fp8-mi300x-sglang",
+        "dsr1-fp8-h200-trt",
+        "gptoss-fp4-b200-vllm",
+        "gptoss-fp8-b200-sglang",
+    ]
+
+    def test_exact_keys_pass_through(self):
+        """Exact keys should be returned unchanged."""
+        result = expand_config_keys(
+            ["dsr1-fp4-b200-sglang", "dsr1-fp8-h200-trt"], self.AVAILABLE
+        )
+        assert result == ["dsr1-fp4-b200-sglang", "dsr1-fp8-h200-trt"]
+
+    def test_star_sglang_matches(self):
+        """*-sglang should match all keys ending with -sglang."""
+        result = expand_config_keys(["*-sglang"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "gptoss-fp8-b200-sglang",
+        ]
+
+    def test_prefix_glob(self):
+        """dsr1* should match all keys starting with dsr1."""
+        result = expand_config_keys(["dsr1*"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "dsr1-fp8-h200-trt",
+        ]
+
+    def test_question_mark_wildcard(self):
+        """? wildcard should match a single character."""
+        result = expand_config_keys(["?sr1-fp8-mi300x-sglang"], self.AVAILABLE)
+        assert result == ["dsr1-fp8-mi300x-sglang"]
+
+    def test_no_match_pattern_raises(self):
+        """Pattern matching nothing should raise ValueError."""
+        with pytest.raises(ValueError, match="matched no config keys"):
+            expand_config_keys(["*-b300"], self.AVAILABLE)
+
+    def test_missing_exact_key_raises(self):
+        """Missing exact key should raise ValueError."""
+        with pytest.raises(ValueError, match="Config key\\(s\\) not found"):
+            expand_config_keys(["nonexistent-key"], self.AVAILABLE)
+
+    def test_mixed_exact_and_glob(self):
+        """Mix of exact keys and glob patterns should work."""
+        result = expand_config_keys(
+            ["dsr1-fp8-h200-trt", "gptoss*"], self.AVAILABLE
+        )
+        assert result == [
+            "dsr1-fp8-h200-trt",
+            "gptoss-fp4-b200-vllm",
+            "gptoss-fp8-b200-sglang",
+        ]
+
+    def test_overlapping_patterns_deduplicate(self):
+        """Overlapping patterns should deduplicate while preserving order."""
+        result = expand_config_keys(["dsr1*", "*-sglang"], self.AVAILABLE)
+        assert result == [
+            "dsr1-fp4-b200-sglang",
+            "dsr1-fp8-mi300x-sglang",
+            "dsr1-fp8-h200-trt",
+            "gptoss-fp8-b200-sglang",
+        ]
