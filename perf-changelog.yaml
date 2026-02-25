@@ -712,3 +712,25 @@
     - "Image: vllm/vllm-openai:v0.15.1"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/735
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.13.0 to v0.15.1 for NVIDIA GPT-OSS configs"
+    - "Remove deprecated async-scheduling flag (now enabled by default since v0.14.0)"
+    - "Gains: CUTLASS MoE optimizations (~8% throughput), FP4 kernel improvements (~4% E2E on B200), torch.compile cold-start fix"
+    - "v0.15.1 includes fix for prefix cache hit rate of 0% on GPT-OSS hybrid attention models"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/789
+  
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Update search-space configurations for DSR1 FP4 MI355X ATOM and ATOM-MTP"
+    - "Comment out TP=4 configs, consolidate to TP=8 only"
+    - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
+    - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
+  

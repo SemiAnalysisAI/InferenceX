@@ -1987,7 +1987,7 @@ dsr1-fp8-h200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-multinode-slurm
+  runner: h200-multinode
   precision: fp8
   framework: dynamo-trt
   multinode: true
@@ -2530,7 +2530,7 @@ dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode-slurm
+  runner: h100-multinode
   precision: fp8
   framework: dynamo-trt
   multinode: true
@@ -3007,7 +3007,7 @@ gptoss-fp4-b200-trt:
     - { tp: 8, conc-start:   4, conc-end:   4}
 
 gptoss-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.13.0
+  image: vllm/vllm-openai:v0.15.1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -3038,7 +3038,7 @@ gptoss-fp4-b200-vllm:
     - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.13.0
+  image: vllm/vllm-openai:v0.15.1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -3069,7 +3069,7 @@ dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode-slurm
+  runner: h100-multinode
   precision: fp8
   framework: dynamo-sglang
   multinode: true
@@ -3292,7 +3292,7 @@ gptoss-fp4-h200-trt:
     - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.13.0
+  image: vllm/vllm-openai:v0.15.1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -6409,7 +6409,7 @@ dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-multinode-slurm
+  runner: h200-multinode
   precision: fp8
   framework: dynamo-sglang
   multinode: true

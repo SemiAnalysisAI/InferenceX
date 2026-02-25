@@ -31,7 +31,6 @@ fi
 
 # Create config.yaml
 cat > config.yaml << EOF
-async-scheduling: true
 no-enable-prefix-caching: true
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192

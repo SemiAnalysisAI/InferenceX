@@ -24,7 +24,8 @@ check_env_vars \
     DECODE_MAX_BATCH_SIZE \
     DECODE_GPU_MEM_FRACTION \
     MODEL_PATH \
-    SERVED_MODEL_NAME
+    SERVED_MODEL_NAME \
+    RUNNER_NAME
 
 if [[ "$SPEC_DECODING" == "mtp" ]]; then
     check_env_vars DECODE_MTP_SIZE
@@ -65,6 +66,7 @@ decode_eplb_num_slots=0
 sbatch --nodes=${total_nodes} \
     --ntasks=${total_tasks} \
     --ntasks-per-node=${ntasks_per_node} \
+    --job-name="${RUNNER_NAME}" \
     --segment=${total_nodes} ${additional_slurm_args} \
     benchmark_disagg.slurm \
     ${PREFILL_NUM_WORKERS} ${PREFILL_TP} \
