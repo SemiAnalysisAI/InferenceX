@@ -66,7 +66,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
     # Wait for all jobs to complete
     echo "Waiting for all jobs to complete..."
-    while [ -n "$(squeue -j "$jobid" --noheader)" ]; do
+    while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
         echo "Jobs still running..."
         squeue --steps -u $USER
         sleep 30
