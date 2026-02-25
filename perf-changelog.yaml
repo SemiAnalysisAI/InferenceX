@@ -695,7 +695,24 @@
   description:
     - "Add more configs for MI355X FP8 Disagg"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
+  
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.14.0 to v0.15.1 for MI300X and MI325X GPT-OSS"
+    - "Gains: ROCm skinny GEMM dispatch fix, MoRI EP all2all backend, KV cache shuffle + paged attention for AITER"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/781
 
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 vLLM benchmark for B200"
+    - "Model: moonshotai/Kimi-K2.5 with --mm-encoder-tp-mode data and --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.15.1"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/735
+  
 - config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
@@ -705,3 +722,4 @@
     - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
     - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
+  

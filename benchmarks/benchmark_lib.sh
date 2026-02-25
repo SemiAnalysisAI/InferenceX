@@ -77,6 +77,15 @@ wait_for_server_ready() {
         return 1
     fi
 
+    # Wait for server log file to be created (container startup may delay this)
+    while [ ! -f "$server_log" ]; do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "Server died before creating log file. Exiting."
+            exit 1
+        fi
+        sleep 1
+    done
+
     # Show logs until server is ready
     tail -f -n +1 "$server_log" &
     local TAIL_PID=$!
@@ -431,6 +440,7 @@ run_lm_eval() {
       --tasks "utils/evals/${task}.yaml" \
       --num_fewshot "${num_fewshot}" \
       --output_path "${results_dir}" \
+      --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
       --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?

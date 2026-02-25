@@ -1,4 +1,5 @@
 from ast import For
+import fnmatch
 import json
 import argparse
 import sys
@@ -185,11 +186,13 @@ def generate_full_sweep(args, all_config_data, runner_data):
             bmk_space = seq_config[Fields.SEARCH_SPACE.value]
 
             for bmk in bmk_space:
-                if is_multinode:
-                    # Skip multinode configs when --single-node is specified
-                    if not args.multi_node:
-                        continue
+                # Skip configs that don't match the requested node type
+                if is_multinode and not args.multi_node:
+                    continue
+                if not is_multinode and not args.single_node:
+                    continue
 
+                if is_multinode:
                     # Multinode configuration
                     # spec_decoding defaults to "none" if not specified
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -283,7 +286,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                         validate_matrix_entry(entry, is_multinode)
                         matrix_values.append(entry)
-                elif args.single_node:
+                else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
                     conc_start = bmk[Fields.CONC_START.value]
@@ -433,9 +436,9 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
         # Skip configs that don't match the requested node type
-        if args.single_node and is_multinode:
+        if is_multinode and not args.multi_node:
             continue
-        if args.multi_node and not is_multinode:
+        if not is_multinode and not args.single_node:
             continue
 
         # Get model code for exp_name
@@ -558,18 +561,11 @@ def generate_test_config_sweep(args, all_config_data):
     Validates that all specified config keys exist before generating.
     Expands all configs fully without any filtering.
     """
-    # Validate all config keys exist
-    missing_keys = [key for key in args.config_keys if key not in all_config_data]
-    if missing_keys:
-        available_keys = sorted(all_config_data.keys())
-        raise ValueError(
-            f"Config key(s) not found: {', '.join(missing_keys)}.\n"
-            f"Available keys: {', '.join(available_keys)}"
-        )
+    resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
 
     matrix_values = []
 
-    for key in args.config_keys:
+    for key in resolved_keys:
         val = all_config_data[key]
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
@@ -690,6 +686,46 @@ def generate_test_config_sweep(args, all_config_data):
     return matrix_values
 
 
+def expand_config_keys(config_keys, available_keys):
+    """Expand config key patterns (glob wildcards) against available keys.
+
+    Keys containing '*' or '?' are treated as glob patterns and expanded via
+    fnmatch.filter(). Plain keys are validated for existence. Results are
+    deduplicated while preserving order.
+
+    Raises ValueError if a pattern matches nothing or an exact key is missing.
+    """
+    available = list(available_keys)
+    seen = {}  # use dict to preserve insertion order
+    for key in config_keys:
+        if '*' in key or '?' in key:
+            matches = fnmatch.filter(available, key)
+            if not matches:
+                raise ValueError(
+                    f"Pattern '{key}' matched no config keys.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            for m in matches:
+                seen.setdefault(m, None)
+        else:
+            if key not in available:
+                raise ValueError(
+                    f"Config key(s) not found: {key}.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            seen.setdefault(key, None)
+    return list(seen)
+
+
+def apply_node_type_defaults(args):
+    """Default both single_node and multi_node to True when neither is specified."""
+    if hasattr(args, 'single_node') and hasattr(args, 'multi_node'):
+        if not args.single_node and not args.multi_node:
+            args.single_node = True
+            args.multi_node = True
+    return args
+
+
 def main():
     # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
@@ -801,16 +837,15 @@ def main():
         required=False,
         help='Maximum expert parallelism value to include (single-node only)'
     )
-    node_type_group = full_sweep_parser.add_mutually_exclusive_group(required=True)
-    node_type_group.add_argument(
+    full_sweep_parser.add_argument(
         '--single-node',
         action='store_true',
-        help='Only generate single-node configurations'
+        help='Only generate single-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
-    node_type_group.add_argument(
+    full_sweep_parser.add_argument(
         '--multi-node',
         action='store_true',
-        help='Only generate multi-node configurations'
+        help='Only generate multi-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
     full_sweep_parser.add_argument(
         '-h', '--help',
@@ -854,17 +889,15 @@ def main():
         required=False,
         help='Override concurrency value for all runs (default: uses lowest concurrency from config)'
     )
-    test_node_group = test_config_parser.add_mutually_exclusive_group(
-        required=True)
-    test_node_group.add_argument(
+    test_config_parser.add_argument(
         '--single-node',
         action='store_true',
-        help='Generate single-node configurations only'
+        help='Generate single-node configurations only. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
-    test_node_group.add_argument(
+    test_config_parser.add_argument(
         '--multi-node',
         action='store_true',
-        help='Generate multi-node configurations only'
+        help='Generate multi-node configurations only. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
     test_config_parser.add_argument(
         '-h', '--help',
@@ -899,6 +932,7 @@ def main():
     )
 
     args = parser.parse_args()
+    apply_node_type_defaults(args)
 
     # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
