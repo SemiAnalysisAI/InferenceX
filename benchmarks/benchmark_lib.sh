@@ -388,13 +388,13 @@ move_profile_trace_for_relay() {
     done
 
     local trace_file=""
-    local wait_attempts=180
+    local wait_attempts=10
     for (( i=1; i<=wait_attempts; i++ )); do
         trace_file="$(_find_latest_profile_trace "${search_dirs[@]}")"
         if [[ -n "$trace_file" ]]; then
             break
         fi
-        sleep 1
+        sleep 10
     done
 
     if [[ -z "$trace_file" ]]; then
