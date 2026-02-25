@@ -1,172 +1,265 @@
 #!/usr/bin/bash
 
+# System-specific configuration for H200 DGXC Slurm cluster
+SLURM_PARTITION="main"
+SLURM_ACCOUNT="sa-shared"
+
 set -x
 
-echo "Cloning srt-slurm repository..."
-TRTLLM_REPO_DIR="srt-slurm"
-if [ -d "$TRTLLM_REPO_DIR" ]; then
-    echo "Removing existing $TRTLLM_REPO_DIR..."
-    rm -rf "$TRTLLM_REPO_DIR"
-fi
+if [[ "$IS_MULTINODE" == "true" ]]; then
 
-git clone https://github.com/ishandhanani/srt-slurm.git "$TRTLLM_REPO_DIR"
-cd "$TRTLLM_REPO_DIR"
-git checkout sa-submission-q1-2026
+    # MODEL_PATH: Override with pre-downloaded paths on H200 runner
+    # The yaml files specify HuggingFace model IDs for portability, but we use
+    # local paths to avoid repeated downloading on the shared H200 cluster.
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/models/DeepSeek-R1-0528"
+            export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+        else
+            echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
+    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
+        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/models/DeepSeek-R1-0528"
+            export SERVED_MODEL_NAME="DeepSeek-R1-0528"
+            export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
+        else
+            echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
+    else
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        exit 1
+    fi
 
-echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
+    echo "Cloning srt-slurm repository..."
+    SRT_REPO_DIR="srt-slurm"
+    if [ -d "$SRT_REPO_DIR" ]; then
+        echo "Removing existing $SRT_REPO_DIR..."
+        rm -rf "$SRT_REPO_DIR"
+    fi
 
-uv venv
-source .venv/bin/activate
-uv pip install -e .
+    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q1-2026
 
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
+    echo "Installing srtctl..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    source $HOME/.local/bin/env
 
-echo "Configs available at: $TRTLLM_REPO_DIR/"
+    uv venv
+    source .venv/bin/activate
+    uv pip install -e .
 
-export SLURM_PARTITION="main"
-export SLURM_ACCOUNT="sa-shared"
+    if ! command -v srtctl &> /dev/null; then
+        echo "Error: Failed to install srtctl"
+        exit 1
+    fi
 
-SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-# Convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+    echo "Configs available at: $SRT_REPO_DIR/"
 
-if [[ $MODEL_PREFIX == "dsr1" ]]; then
-    export MODEL_PATH="/models/DeepSeek-R1-0528"
-    export SERVED_MODEL_NAME="DeepSeek-R1-0528"
-else
-    echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1"
-    exit 1
-fi
+    # Map container images to local squash files based on framework
+    NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
-export ISL="$ISL"
-export OSL="$OSL"
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        # SGLang container mapping
+        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        CONTAINER_KEY="$IMAGE"
+    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
+        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
+        CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
+        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    fi
 
-# Create srtslurm.yaml for srtctl
-echo "Creating srtslurm.yaml configuration..."
-cat > srtslurm.yaml <<EOF
+    export ISL="$ISL"
+    export OSL="$OSL"
+
+    # Create srtslurm.yaml for srtctl (used by both frameworks)
+    SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+    echo "Creating srtslurm.yaml configuration..."
+    cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for H200
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
-
 # Resource defaults
 gpus_per_node: 8
 network_interface: ""
-
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/${TRTLLM_REPO_DIR}"
-
+srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
+  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
   "${MODEL_PREFIX}": "${MODEL_PATH}"
-
-# Container aliases
 containers:
+  dynamo-trtllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
+  nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
-  nginx: "/data/containers/nginx+1.27.4.sqsh"
+# SLURM directive compatibility
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
 EOF
 
-echo "Generated srtslurm.yaml:"
-cat srtslurm.yaml
+    echo "Generated srtslurm.yaml:"
+    cat srtslurm.yaml
 
-echo "Running make setup..."
-make setup ARCH=x86_64
+    echo "Running make setup..."
+    make setup ARCH=x86_64
 
-echo "Submitting job with srtctl..."
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,dsr1,fp8,${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
-echo "$SRTCTL_OUTPUT"
+    echo "Submitting job with srtctl..."
+    # Override the job name in the config file with the runner name
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    echo "$SRTCTL_OUTPUT"
 
-# Extract JOB_ID from srtctl output
-JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
+    # Extract JOB_ID from srtctl output
+    JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
-if [ -z "$JOB_ID" ]; then
-    echo "Error: Failed to extract JOB_ID from srtctl output"
-    exit 1
-fi
+    set +x
 
-echo "Extracted JOB_ID: $JOB_ID"
+    if [ -z "$JOB_ID" ]; then
+        echo "Error: Failed to extract JOB_ID from srtctl output"
+        exit 1
+    fi
 
-# Wait for this specific job to complete
-echo "Waiting for job $JOB_ID to complete..."
-while [ -n "$(squeue -j $JOB_ID --noheader 2>/dev/null)" ]; do
-    echo "Job $JOB_ID still running..."
-    squeue -j $JOB_ID
-    sleep 30
-done
-echo "Job $JOB_ID completed!"
+    echo "Extracted JOB_ID: $JOB_ID"
 
-echo "Collecting results..."
+    # Use the JOB_ID to find the logs directory
+    # srtctl creates logs in outputs/JOB_ID/logs/
+    LOGS_DIR="outputs/$JOB_ID/logs"
+    LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Display sweep log for debugging
-SWEEP_LOG="outputs/$JOB_ID/logs/sweep_${JOB_ID}.log"
-if [ -f "$SWEEP_LOG" ]; then
-    echo "=== Sweep Log ($SWEEP_LOG) ==="
-    cat "$SWEEP_LOG"
-    echo "=== End Sweep Log ==="
-else
-    echo "Warning: Sweep log not found at $SWEEP_LOG"
-fi
-
-# Use the JOB_ID to find the logs directory
-# srtctl creates logs in outputs/JOB_ID/logs/
-LOGS_DIR="outputs/$JOB_ID/logs"
-
-if [ ! -d "$LOGS_DIR" ]; then
-    echo "Warning: Logs directory not found at $LOGS_DIR"
-    exit 1
-fi
-
-echo "Found logs directory: $LOGS_DIR"
-
-# Find all result subdirectories
-RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-if [ -z "$RESULT_SUBDIRS" ]; then
-    echo "Warning: No result subdirectories found in $LOGS_DIR"
-else
-    # Process results from all configurations
-    for result_subdir in $RESULT_SUBDIRS; do
-        echo "Processing result subdirectory: $result_subdir"
-
-        # Extract configuration info from directory name
-        CONFIG_NAME=$(basename "$result_subdir")
-
-        # Find all result JSON files
-        RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-        for result_file in $RESULT_FILES; do
-            if [ -f "$result_file" ]; then
-                # Extract metadata from filename
-                filename=$(basename "$result_file")
-                concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
-                ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-            fi
-        done
+    # Wait for log file to appear (also check job is still alive)
+    while ! ls "$LOG_FILE" &>/dev/null; do
+        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+            echo "ERROR: Job $JOB_ID failed before creating log file"
+            scontrol show job "$JOB_ID"
+            exit 1
+        fi
+        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
+        sleep 5
     done
+
+    # Poll for job completion in background
+    (
+        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+            sleep 10
+        done
+    ) &
+    POLL_PID=$!
+
+    echo "Tailing LOG_FILE: $LOG_FILE"
+
+    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+
+    wait $POLL_PID
+
+    set -x
+
+    echo "Job $JOB_ID completed!"
+    echo "Collecting results..."
+
+    if [ ! -d "$LOGS_DIR" ]; then
+        echo "Warning: Logs directory not found at $LOGS_DIR"
+        exit 1
+    fi
+
+    echo "Found logs directory: $LOGS_DIR"
+
+    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+
+    # Find all result subdirectories
+    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+
+    if [ -z "$RESULT_SUBDIRS" ]; then
+        echo "Warning: No result subdirectories found in $LOGS_DIR"
+    else
+        # Process results from all configurations
+        for result_subdir in $RESULT_SUBDIRS; do
+            echo "Processing result subdirectory: $result_subdir"
+
+            # Extract configuration info from directory name
+            CONFIG_NAME=$(basename "$result_subdir")
+
+            # Find all result JSON files
+            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+
+            for result_file in $RESULT_FILES; do
+                if [ -f "$result_file" ]; then
+                    # Extract metadata from filename
+                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                    filename=$(basename "$result_file")
+                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+
+                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
+
+                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                fi
+            done
+        done
+    fi
+
+    echo "All result files processed"
+
+    # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
+    # from blocking the next job's checkout on this runner
+    echo "Cleaning up srt-slurm outputs..."
+    for i in 1 2 3 4 5; do
+        rm -rf outputs 2>/dev/null && break
+        echo "Retry $i/5: Waiting for NFS locks to release..."
+        sleep 10
+    done
+    find . -name '.nfs*' -delete 2>/dev/null || true
+
+else
+
+    HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
+    SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+    # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
+    DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
+    LOCK_FILE="${SQUASH_FILE}.lock"
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Use flock to serialize concurrent imports to the same squash file
+    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
+    srun --jobid=$JOB_ID bash -c "
+        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
+        mkdir -p \$ENROOT_CACHE_PATH
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
+        fi
+    "
+
+    srun --jobid=$JOB_ID \
+        --container-image=$SQUASH_FILE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --no-container-mount-home \
+        --container-workdir=/workspace/ \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
+
+    scancel $JOB_ID
+
 fi
-
-echo "All result files processed"
-
-# Cleanup
-echo "Cleaning up..."
-deactivate 2>/dev/null || true
-rm -rf .venv
-echo "Cleanup complete"
-
