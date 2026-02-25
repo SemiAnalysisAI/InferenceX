@@ -244,10 +244,11 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
-    # Profiling support: SGLang only (vLLM has no step-based profiling control).
+    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
+    # and cap num_prompts to keep traces small.
     local profile_flag=()
-    if [[ "${PROFILE:-}" == "1" && "$backend" != "vllm" ]]; then
-        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-}"
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
         if [[ -n "$_prof_dir" ]]; then
             mkdir -p "$_prof_dir"
         fi
