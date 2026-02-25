@@ -37,7 +37,7 @@ env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   RANDOM_RANGE_RATIO: '0.8'
-  PERFETTO_RELAY_URL: https://oseltamivir.github.io/profiler-storage
+  PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
 
 jobs:
   get-jobs:
@@ -59,7 +59,7 @@ jobs:
             CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
           else
             # Default for push trigger — adjust as needed for testing
-            CLI_ARGS="test-config --config-files .github/configs/nvidia-master.yaml --config-keys gptoss-fp4-b200-vllm --conc 64"
+            CLI_ARGS="test-config --config-files .github/configs/nvidia-master.yaml --config-keys gptoss-fp4-mi325x-vllm --conc 64"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
@@ -126,24 +126,35 @@ jobs:
     steps:
       - name: Resource cleanup
         run: |
+          # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f || true
-            docker network prune -f || true
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
             while [ -n "$(docker ps -aq)" ]; do
               docker ps -a
               sleep 5
             done
           fi
+
+          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up resources ..."
-            scancel -u $USER || true
-            while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
-              squeue -u $USER
-              sleep 5
-            done
+            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
           fi
-          sudo find . -not -user $USER -exec rm -rf {} + || true
 
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -240,7 +251,7 @@ jobs:
         if: ${{ steps.run.outputs.trace != '' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          repository: Oseltamivir/profiler-storage
+          repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
           ref: main
           ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
@@ -268,7 +279,7 @@ jobs:
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/Oseltamivir/profiler-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
           export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
 
           enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
