@@ -59,7 +59,7 @@ jobs:
             CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
           else
             # Default for push trigger — adjust as needed for testing
-            CLI_ARGS="test-config --config-files .github/configs/nvidia-master.yaml --config-keys gptoss-fp4-mi325x-vllm --conc 64"
+            CLI_ARGS="test-config --config-files .github/configs/amd-master.yaml --config-keys gptoss-fp4-mi325x-vllm --conc 64"
           fi
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
