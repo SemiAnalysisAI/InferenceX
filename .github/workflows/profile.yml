@@ -253,7 +253,7 @@ jobs:
         with:
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
-          ref: main
+          ref: master
           ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
           fetch-depth: 0
 
