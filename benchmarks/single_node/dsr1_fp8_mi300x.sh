@@ -15,6 +15,38 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+patch_sgl_components() {
+    local aiter_ref="9046b6f446e35c5d712ca092b9d84a5db8319ef8"
+    local sgl_kernel_ref="d40cb2f72551c4a597108dda16507e8188b666b7"
+
+    if [[ ! -d /sgl-workspace ]]; then
+        echo "/sgl-workspace not found; assuming image ships correct versions."
+        return 0
+    fi
+
+    (
+        set -e
+
+        cd /sgl-workspace/aiter
+        git fetch && git checkout "$aiter_ref"
+        python setup.py develop
+        echo "aiter ($aiter_ref) installed."
+
+        cd /sgl-workspace/sgl-kernel
+        git fetch && git checkout "$sgl_kernel_ref"
+        python setup_rocm.py install
+        echo "sgl-kernel ($sgl_kernel_ref) installed."
+
+        cd /sgl-workspace/sglang
+        rm -f python/pyproject.toml
+        cp python/pyproject_other.toml python/pyproject.toml
+        pip install -e "python[all_hip]"
+        echo "sglang reinstalled."
+    )
+}
+# Apply patch_sgl_components for lmsysorg/sglang:v0.5.8-rocm700-mi30x ONLY
+patch_sgl_components
+
 hf download "$MODEL"
 
 # Reference
