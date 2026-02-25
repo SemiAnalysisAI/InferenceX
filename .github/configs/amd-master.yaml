@@ -38,13 +38,13 @@ dsr1-fp4-mi355x-atom:
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - { tp: 4, ep: 1, conc-start: 128, conc-end: 256 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 
 dsr1-fp4-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
@@ -59,18 +59,18 @@ dsr1-fp4-mi355x-atom-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-    - { tp: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-    - { tp: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    # - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-    - { tp: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    #- { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.8-rocm700-mi30x
