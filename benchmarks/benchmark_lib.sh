@@ -244,6 +244,18 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
+    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
+    # and cap num_prompts to keep traces small.
+    local profile_flag=()
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
+        if [[ -n "$_prof_dir" ]]; then
+            mkdir -p "$_prof_dir"
+        fi
+        profile_flag+=(--profile)
+        num_prompts="$max_concurrency"
+    fi
+
     # Build benchmark command
     local benchmark_cmd=(
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
@@ -258,6 +270,7 @@ run_benchmark_serving() {
         --max-concurrency "$max_concurrency"
         --request-rate inf
         --ignore-eos
+        "${profile_flag[@]}"
         --save-result
         --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
@@ -304,7 +317,110 @@ run_benchmark_serving() {
     fi
     set +x
 
+    # If profiling, move trace to relay-upload location
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        move_profile_trace_for_relay
+    fi
+
     return $benchmark_exit_code
+}
+
+
+# --------------------------------
+# Profiling trace helpers
+# --------------------------------
+
+_find_latest_profile_trace() {
+    local latest=""
+    local dir="" candidate="" base=""
+    local -a search_roots=()
+
+    for dir in "$@"; do
+        search_roots=()
+        if [[ -d "$dir" ]]; then
+            search_roots+=("$dir")
+        fi
+        if [[ -d "$dir/profiles" ]]; then
+            search_roots+=("$dir/profiles")
+        fi
+        if [[ ${#search_roots[@]} -eq 0 ]]; then
+            continue
+        fi
+
+        while IFS= read -r -d '' candidate; do
+            base="$(basename "$candidate")"
+            if [[ "$base" == profile_*.trace.json.gz ]]; then
+                continue
+            fi
+            if [[ -z "$latest" || "$candidate" -nt "$latest" ]]; then
+                latest="$candidate"
+            fi
+        done < <(
+            find "${search_roots[@]}" -maxdepth 1 -type f \
+                \( -name "*.trace.json" -o -name "*.trace.json.gz" -o -name "*trace*.json" -o -name "*trace*.json.gz" -o -name "*profile*.json" -o -name "*profile*.json.gz" \) \
+                -print0 2>/dev/null
+        )
+    done
+
+    printf '%s' "$latest"
+}
+
+# Move profiler trace into a stable workspace path for workflow relay/upload.
+move_profile_trace_for_relay() {
+    if [[ "${PROFILE:-}" != "1" ]]; then
+        return 0
+    fi
+
+    if [[ -z "${RESULT_FILENAME:-}" ]]; then
+        echo "[PROFILE] RESULT_FILENAME is not set; skipping relay trace staging." >&2
+        return 0
+    fi
+
+    local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
+    local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    local -a search_dirs=()
+    local dir="" existing=""
+    local seen=0
+
+    for dir in "$sglang_dir" "$vllm_dir" "/workspace"; do
+        if [[ -z "$dir" ]]; then
+            continue
+        fi
+        seen=0
+        for existing in "${search_dirs[@]}"; do
+            if [[ "$existing" == "$dir" ]]; then
+                seen=1
+                break
+            fi
+        done
+        if [[ "$seen" -eq 0 ]]; then
+            search_dirs+=("$dir")
+        fi
+    done
+
+    local trace_file=""
+    local wait_attempts=10
+    for (( i=1; i<=wait_attempts; i++ )); do
+        trace_file="$(_find_latest_profile_trace "${search_dirs[@]}")"
+        if [[ -n "$trace_file" ]]; then
+            break
+        fi
+        sleep 10
+    done
+
+    if [[ -z "$trace_file" ]]; then
+        echo "[PROFILE] No trace found for relay under: ${search_dirs[*]}" >&2
+        return 0
+    fi
+
+    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    if [[ "$trace_file" == *.gz ]]; then
+        cp -f "$trace_file" "$dest_trace"
+    else
+        gzip -c "$trace_file" > "$dest_trace"
+    fi
+
+    echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
 }
 
 

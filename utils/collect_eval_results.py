@@ -16,11 +16,17 @@ from summarize import (
 
 def find_eval_sets(root: Path) -> List[Path]:
     """Return directories that contain a meta_env.json (one set per job).
-    
+
     Structure: eval_results/<artifact-name>/meta_env.json
+    When download-artifact downloads a single artifact, files may be
+    extracted flat into root (no subdirectory), so check root itself too.
     """
     out: List[Path] = []
     try:
+        # Handle flat structure (single artifact extracted directly into root)
+        if (root / 'meta_env.json').exists():
+            out.append(root)
+        # Handle nested structure (multiple artifacts in subdirectories)
         for d in root.iterdir():
             if d.is_dir() and (d / 'meta_env.json').exists():
                 out.append(d)

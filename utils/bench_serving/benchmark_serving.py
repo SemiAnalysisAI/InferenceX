@@ -400,6 +400,7 @@ async def benchmark(
                                          api_url=base_url + "/start_profile",
                                          prompt_len=test_prompt_len,
                                          output_len=test_output_len,
+                                         extra_body={"num_steps": 1, "merge_profiles": True, "profile_by_stage": True},
                                          logprobs=logprobs,
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,

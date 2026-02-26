@@ -15,6 +15,7 @@ docker run --rm --ipc=host --shm-size=16g --network=host --name=$server_name \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e PORT=$PORT \
 -e ISL -e OSL -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RANDOM_RANGE_RATIO -e RESULT_FILENAME -e RUN_EVAL -e RUNNER_TYPE \
+-e PROFILE -e SGLANG_TORCH_PROFILER_DIR -e VLLM_TORCH_PROFILER_DIR -e VLLM_RPC_TIMEOUT \
 --entrypoint=/bin/bash \
 $IMAGE \
 benchmarks/single_node/"${EXP_NAME%%_*}_${PRECISION}_mi300x.sh"

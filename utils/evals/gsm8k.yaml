@@ -24,7 +24,6 @@ metric_list:
       - "\\.$"
 generation_kwargs:
   until:
-    - "Question:"
     - "</s>"
     - "<|im_end|>"
   do_sample: false
