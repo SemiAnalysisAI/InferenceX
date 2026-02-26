@@ -733,4 +733,15 @@
     - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
     - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
-  
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD GPT-OSS vLLM images to v0.16.0 (MI300X/MI325X from v0.15.1, MI355X from custom v0.10.1)"
+    - "MI355X: Fix env vars (VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION), add VLLM_ROCM_USE_AITER=1, remove deprecated flags"
+    - "MI355X: Simplify compilation config to cudagraph_mode FULL_AND_PIECEWISE, add HIP_VISIBLE_DEVICES Ray fix"
+    - "Gains: fused add+rmsnorm+pad for GPT-OSS (automatic via PassManager), AITER attention block size fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/806
+
