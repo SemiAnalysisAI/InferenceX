@@ -7,7 +7,7 @@
 # =============================================================================
 
 NODE0_ADDR="${NODE0_ADDR:-localhost}"
-NODE_RANK="${NODE_RANK:-0}"
+NODE_RANK="${NODE_RANK:-${SLURM_PROCID:-0}}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
 

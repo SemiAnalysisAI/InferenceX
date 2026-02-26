@@ -79,7 +79,8 @@ profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
 # Export variables for the SLURM job
 export MODEL_DIR=$MODEL_PATH
-export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
+export CONTAINER_IMAGE=$CONTAINER_IMAGE
+export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE  # legacy
 export PROFILER_ARGS=$profiler_args
 
 
