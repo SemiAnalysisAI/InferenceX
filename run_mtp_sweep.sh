@@ -9,6 +9,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_SCRIPT="${SCRIPT_DIR}/run_mtp_local_test.sh"
 
+# IMAGE="${IMAGE:-lmsysorg/sglang:v0.5.9-rocm720-mi35x}"
+IMAGE="${IMAGE:-lmsysorg/sglang:v0.5.8-rocm700-mi35x}"
+MODEL="${MODEL:-amd/DeepSeek-R1-0528-MXFP4-Preview}"
+DRAFT_MODEL="${DRAFT_MODEL:-lmsys/DeepSeek-R1-NextN}"
+TP="${TP:-8}"
+RANDOM_RANGE_RATIO="${RANDOM_RANGE_RATIO:-0.8}"
+
+export IMAGE MODEL DRAFT_MODEL TP RANDOM_RANGE_RATIO
+
 SCENARIOS=(
     "1024 1024 4"
     "1024 1024 8"
@@ -34,6 +43,12 @@ FAILED_LIST=()
 
 echo "============================================"
 echo " MTP Benchmark Sweep: ${TOTAL} scenarios"
+echo "============================================"
+echo " Image:       ${IMAGE}"
+echo " Model:       ${MODEL}"
+echo " Draft model: ${DRAFT_MODEL}"
+echo " TP:          ${TP}"
+echo " Range ratio: ${RANDOM_RANGE_RATIO}"
 echo "============================================"
 
 for i in "${!SCENARIOS[@]}"; do
