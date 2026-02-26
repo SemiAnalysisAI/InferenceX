@@ -1,9 +1,6 @@
 name: Profile
 
 on:
-  push:
-    branches:
-      - 'add-profiling-support'
   workflow_dispatch:
     inputs:
       config-key:
@@ -55,12 +52,7 @@ jobs:
         name: Generate matrix via script
         run: |
           pip install pydantic
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          else
-            # Default for push trigger — adjust as needed for testing
-            CLI_ARGS="test-config --config-files .github/configs/amd-master.yaml --config-keys dsr1-fp4-mi355x-sglang --conc 64"
-          fi
+          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
