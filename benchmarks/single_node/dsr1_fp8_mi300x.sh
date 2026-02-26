@@ -15,6 +15,33 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+patch_sgl_components() {
+    local work_dir="/sgl-workspace"
+    local aiter_ref="d2ca5a897"
+
+    if [[ ! -d "$work_dir" ]]; then
+        echo "$work_dir not found; assuming image ships correct versions."
+        return 0
+    fi
+
+    (
+        set -e
+
+        pip uninstall amd-aiter -y
+
+        cd "$work_dir"
+        rm -rf aiter
+        git clone --recursive https://github.com/ROCm/aiter.git
+        cd aiter
+        git fetch && git reset --hard "$aiter_ref"
+        rm -rf aiter/jit/**.so
+        PREBUILD_KERNELS=0 python setup.py develop
+        echo "aiter ($aiter_ref) installed."
+    )
+}
+# Apply patch_sgl_components for lmsysorg/sglang:v0.5.9-rocm720-mi30x ONLY
+patch_sgl_components
+
 hf download "$MODEL"
 
 # Reference
