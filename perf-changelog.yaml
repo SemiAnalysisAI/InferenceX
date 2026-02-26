@@ -725,16 +725,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/789
 
 - config-keys:
-    - gptoss-fp4-b200-vllm
-    - gptoss-fp4-h100-vllm
-    - gptoss-fp4-h200-vllm
-  description:
-    - "Update vLLM image from v0.15.1 to v0.16.0 for NVIDIA GPT-OSS configs"
-    - "All existing BKC flags preserved (VLLM_MXFP4_USE_MARLIN=1 on H100/H200, VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 on B200)"
-    - "v0.16.0 key changes: async scheduling + PP (30.8% throughput), new MXFP4 backends (SM90 FlashInfer BF16, SM100 CUTLASS), MoE cold start optimization"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
   description:
@@ -846,48 +836,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
   
 - config-keys:
-    - dsr1-fp8-mi355x-sglang-disagg
-    - dsr1-fp8-mi355x-sglang-disagg-mtp
-    - dsr1-fp4-mi355x-sglang-disagg
-    - dsr1-fp4-mi355x-sglang-disagg-mtp
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
   description:
-    - "Add more sweep configs for MI355X FP8/FP4 Disagg"
-    - "Add TP/DP/EP size < 8 support "
-    - "Support DSR1-0528 MTP Disagg"
-    - "Bump SGL mori image to Feb 27"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/823
-
-- config-keys:
-    - minimaxm2.5-fp8-h100-vllm
-  description:
-    - "Add MiniMax-M2.5 FP8 vLLM benchmark for H100"
-    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
-    - "Image: vllm/vllm-openai:v0.16.0"
-    - "Switch from TP=8/EP=8 to TP=4/EP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k"
-    - "Script uses conditional --enable-expert-parallel based on EP_SIZE env var"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/832
-
-- config-keys:
-    - qwen3.5-fp8-b200-sglang
-  description:
-    - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark configuration for B200"
-    - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
-    - "Uses trtllm_mha attention backend and flashinfer_trtllm MOE runner"
-    - "Enable SGLANG_ENABLE_FLASHINFER_GEMM=true, NCCL_NVLS_ENABLE=1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/804
-
-- config-keys: 
-    - qwen3.5-fp8-h200-sglang
-  description:
-    - "Add Qwen 3.5 FP8 H200 SGLang configuration"
-    - "Model: Qwen/Qwen3.5-397B-A17B-FP8, runner: h200, image: lmsysorg/sglang:v0.5.8-cu130-amd64"
-    - "Benchmark script: benchmarks/single_node/qwen3.5_fp8_h200.sh"
-    - "Server: reasoning-parser qwen3, tool-call-parser qwen3_coder, enable-flashinfer-allreduce-fusion, mem-fraction-static 0.8"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/855
-
-- config-keys:
-    - dsr1-fp8-mi355x-sglang
-  description:
-    - "Expanding TP search space"
-    - "Adding kv-cache-fp8"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
+    - "Update vLLM image from v0.15.1 to v0.16.0 for NVIDIA GPT-OSS configs"
+    - "All existing BKC flags preserved (VLLM_MXFP4_USE_MARLIN=1 on H100/H200, VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 on B200)"
+    - "v0.16.0 key changes: async scheduling + PP (30.8% throughput), new MXFP4 backends (SM90 FlashInfer BF16, SM100 CUTLASS), MoE cold start optimization"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/800
+  
