@@ -27,14 +27,18 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 set -x
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MLA=0
 vllm serve $MODEL --port $PORT \
+--config config.yaml \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
---block-size=64 \
+--max-num-seqs 256 \
 --disable-log-requests \
 --trust-remote-code \
---mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
+--block-size=64 \
+--mm-encoder-tp-mode data \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

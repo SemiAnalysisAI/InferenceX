@@ -734,3 +734,10 @@
     - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
   
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update moe optimized custom docker img."
+    - "Will change to the upstream vLLM image"
+    - "When this PR is merged (https://github.com/vllm-project/vllm/pull/35093)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/807
