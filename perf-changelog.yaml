@@ -723,7 +723,17 @@
     - "Gains: CUTLASS MoE optimizations (~8% throughput), FP4 kernel improvements (~4% E2E on B200), torch.compile cold-start fix"
     - "v0.15.1 includes fix for prefix cache hit rate of 0% on GPT-OSS hybrid attention models"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/789
-  
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.15.1 to v0.16.0 for NVIDIA GPT-OSS configs"
+    - "All existing BKC flags preserved (VLLM_MXFP4_USE_MARLIN=1 on H100/H200, VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 on B200)"
+    - "v0.16.0 key changes: async scheduling + PP (30.8% throughput), new MXFP4 backends (SM90 FlashInfer BF16, SM100 CUTLASS), MoE cold start optimization"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
 - config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
