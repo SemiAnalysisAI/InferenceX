@@ -740,4 +740,4 @@
     - "Update moe optimized custom docker img."
     - "Will change to the upstream vLLM image"
     - "When this PR is merged (https://github.com/vllm-project/vllm/pull/35093)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/807
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/808
