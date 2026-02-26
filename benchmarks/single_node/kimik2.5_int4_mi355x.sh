@@ -30,7 +30,6 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MLA=0
 vllm serve $MODEL --port $PORT \
---config config.yaml \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs 256 \
