@@ -747,5 +747,5 @@
     - "dsr1-fp8-h200-sglang: v0.5.7-cu129-amd64 → v0.5.9-cu129-amd64"
     - "Fix deprecated SGL_ENABLE_JIT_DEEPGEMM → SGLANG_ENABLE_JIT_DEEPGEMM in dsr1_fp8_b200.sh"
     - "SGLang 0.5.9 gains: Flashinfer 0.6.3, TRT-LLM NSA kernels for Blackwell, SpecV2 GC bug fix, MoE fused kernel optimizations"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/814
 
