@@ -1,1 +1,7 @@
 * @InferenceMAX/core
+
+# AMD master config
+.github/configs/amd-master.yaml @billishyahao @chunfangamd
+
+# NVIDIA master config
+.github/configs/nvidia-master.yaml @ankursingh-nv @yunzhoul-nv @kedarpotdar-nv @csahithi @jgangani
