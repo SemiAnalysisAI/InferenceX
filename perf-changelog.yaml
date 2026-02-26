@@ -522,14 +522,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/673
 
 - config-keys:
-    - dsr1-fp4-mi355x-sglang-mtp
-  description:
-    - "Add DSR1 FP4 MI355X SGLang with MTP (EAGLE speculative decoding)"
-    - "Image: lmsysorg/sglang:v0.5.8-rocm700-mi35x"
-    - "1k1k, 1k8k, 8k1k with speculative-algorithm EAGLE, num-steps 3, draft-tokens 4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
     - dsr1-fp4-b200-dynamo-sglang
   description:
     - "Add DSR1 FP4 B200 Dynamo SGLang STP mode"
