@@ -33,7 +33,7 @@ cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 # Set up SGL launch script-specific environment variables
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
-export MODEL_NAME="DeepSeek-R1"
+export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
 if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then

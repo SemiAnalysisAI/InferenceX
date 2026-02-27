@@ -33,17 +33,27 @@ cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 # Set up SGL launch script-specific environment variables
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
-export MODEL_NAME="DeepSeek-R1-0528-MXFP4-Preview"
+export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
+if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+export PREFILL_ENABLE_EP=false
+else
 export PREFILL_ENABLE_EP=true
+fi
+
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 export PREFILL_ENABLE_DP=true
 else
 export PREFILL_ENABLE_DP=false
 fi
 
+if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+export DECODE_ENABLE_EP=false
+else
 export DECODE_ENABLE_EP=true
+fi
+
 if [[ "$DECODE_DP_ATTN" == "true" ]]; then
 export DECODE_ENABLE_DP=true
 else
