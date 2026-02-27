@@ -107,15 +107,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
 
-      - name: Fetch LFS files
-        run: |
-          # Install git-lfs if not available
-          if ! command -v git-lfs >/dev/null 2>&1; then
-            curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
-            sudo apt-get install -y git-lfs
-          fi
-          git lfs install
-          git lfs pull
 
       - name: Launch job script
         env:
