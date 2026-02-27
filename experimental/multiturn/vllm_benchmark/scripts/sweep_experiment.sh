@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # Change to the vllm_benchmark directory (required for bench module imports)
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$SCRIPT_DIR"
+export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 
 # Sweep experiment for multi-turn benchmark
 # Sweeps: TP (1,2,4,8) x BS (8-2048) x mode (on/off/noprefix)
