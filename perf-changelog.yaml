@@ -745,3 +745,12 @@
     - "Gains: fused add+rmsnorm+pad for GPT-OSS (automatic via PassManager), AITER attention block size fix"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/806
 
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.8 to v0.5.9 for AMD single-node DeepSeek R1 configs"
+    - "Key changes: AITER v0.1.10.post3 with FP8 Prefill/Decode/KV Cache, FP8 prefill attention kernel, MORI EP two-batch overlapping, OOM fix for DeepSeek weight loading"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
