@@ -115,7 +115,7 @@ BENCH_CMD+=" --responses-file $RESULT_DIR/responses.json"
 echo "$BENCH_CMD" > "$RESULT_DIR/benchmark_command.txt"
 
 set -x
-if $BENCH_CMD > "$RESULT_DIR/benchmark.log" 2>&1; then
+if $BENCH_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log"; then
     echo "SUCCESS" > "$RESULT_DIR/status.txt"
     echo "Benchmark completed successfully"
 else

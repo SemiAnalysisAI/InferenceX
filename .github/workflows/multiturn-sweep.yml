@@ -27,7 +27,7 @@ on:
       duration:
         description: 'Benchmark duration in seconds'
         required: true
-        default: '180'
+        default: '300'
         type: string
       think_time:
         description: 'Log-normal think-time params (mu,sigma)'
