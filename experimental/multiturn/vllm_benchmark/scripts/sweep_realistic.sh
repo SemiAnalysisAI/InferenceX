@@ -182,12 +182,16 @@ run_experiment() {
 kv-cache-dtype: fp8
 compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}'
 async-scheduling: true
-max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 EOF
 
         # Build vllm command
         local max_seqs=$users
+        # Cap cudagraph capture size to avoid OOM during graph capture
+        local cudagraph_cap=$max_seqs
+        if [ $cudagraph_cap -gt 512 ]; then
+            cudagraph_cap=512
+        fi
 
         local vllm_cmd="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
         vllm_cmd+=" --config $exp_dir/config.yaml"
