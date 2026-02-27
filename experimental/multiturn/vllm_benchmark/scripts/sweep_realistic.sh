@@ -20,6 +20,7 @@ PORT=8888
 TOTAL_CPU_DRAM_GB=300
 REQUEST_TIMEOUT=3600
 MAX_RETRIES=3
+DURATION=180  # 3 minutes per experiment
 
 # Log-normal think-time parameters (mu, sigma)
 # mu=1.39, sigma=1.26 → median ~4s, mean ~8.8s, P90 ~20s
@@ -49,7 +50,7 @@ echo "========================================"
 TP_VALUES=(1 2 4 8)
 # Number of concurrent users (not constant batch size — actual in-flight
 # concurrency fluctuates due to think-time)
-USER_VALUES=(16 32 64 128 256 512)
+USER_VALUES=(8 16 32 64 128 256 512 1024 2048)
 # on=prefix caching + CPU offload, off=prefix caching only, noprefix=no prefix caching
 OFFLOAD_VALUES=(on off noprefix)
 
@@ -233,15 +234,13 @@ EOF
         fi
 
         # Run benchmark
-        # num_requests scales with users to ensure enough data
-        local num_requests=$((users * 10))
-        echo "Running benchmark (users=$users, num_requests=$num_requests, think_time=$THINK_TIME)..."
+        echo "Running benchmark (users=$users, duration=${DURATION}s, think_time=$THINK_TIME)..."
         local benchmark_cmd="python3 benchmark/benchmark_serving_multi_turn.py"
         benchmark_cmd+=" -i $INPUT_FILE"
         benchmark_cmd+=" -m $MODEL"
         benchmark_cmd+=" -u http://localhost:$PORT"
         benchmark_cmd+=" -p $users"
-        benchmark_cmd+=" -n $num_requests"
+        benchmark_cmd+=" --duration $DURATION"
         benchmark_cmd+=" --think-time-lognormal $THINK_TIME"
         benchmark_cmd+=" --max-retries $MAX_RETRIES"
         benchmark_cmd+=" --request-timeout $REQUEST_TIMEOUT"

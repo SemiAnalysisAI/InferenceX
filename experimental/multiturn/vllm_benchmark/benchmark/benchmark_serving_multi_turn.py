@@ -68,6 +68,7 @@ class BenchmarkArgs(NamedTuple):
     num_clients: int
     early_stop: bool
     max_num_requests: int | None = None
+    duration_sec: int | None = None
 
 
 class ServerResponse(NamedTuple):
@@ -986,6 +987,23 @@ async def main_mp(
         clients.append(client)
         client.start()
 
+    # Duration timer — sets stop_event after the specified time
+    duration_timer = None
+    if bench_args.duration_sec is not None:
+        import threading
+        def _duration_expired():
+            logger.info(
+                f"{Color.YELLOW}Duration limit reached ({bench_args.duration_sec}s). "
+                f"Stopping all clients...{Color.RESET}"
+            )
+            stop_event.set()
+        duration_timer = threading.Timer(bench_args.duration_sec, _duration_expired)
+        duration_timer.daemon = True
+        duration_timer.start()
+        logger.info(
+            f"{Color.CYAN}Duration limit: {bench_args.duration_sec}s{Color.RESET}"
+        )
+
     # Submit all the input conversations as tasks for the clients (shuffled)
     conv_items = list(input_conv.items())
     random.shuffle(conv_items)
@@ -1114,6 +1132,10 @@ async def main_mp(
                 f"{Color.RED}Client {client.name} exited "
                 f"with exit code {exitcode}{Color.RESET}"
             )
+
+    # Cancel duration timer if it hasn't fired yet
+    if duration_timer is not None:
+        duration_timer.cancel()
 
     logger.info(
         f"All {bench_args.num_clients} clients exited (successfully "
@@ -1414,7 +1436,15 @@ async def main() -> None:
         "--max-num-requests",
         type=int,
         default=None,
-        help="Max number of requests to send (total for all clients)",
+        help="Max number of requests to send (total for all clients). "
+        "Mutually exclusive with --duration.",
+    )
+    parser.add_argument(
+        "--duration",
+        type=int,
+        default=None,
+        help="Max benchmark duration in seconds. Stops all clients when time is up. "
+        "Mutually exclusive with -n/--max-num-requests.",
     )
 
     parser.add_argument(
@@ -1665,6 +1695,10 @@ async def main() -> None:
             f"is limited to {args.max_turns}{Color.RESET}"
         )
 
+    # Validate mutually exclusive stopping conditions
+    if args.max_num_requests is not None and args.duration is not None:
+        raise ValueError("--max-num-requests and --duration are mutually exclusive")
+
     # Create benchmark configurations
     client_args, req_args = get_client_config(args, conversations)
 
@@ -1673,6 +1707,7 @@ async def main() -> None:
         num_clients=args.num_clients,
         early_stop=not args.no_early_stop,
         max_num_requests=args.max_num_requests,
+        duration_sec=args.duration,
     )
 
     warmup_runtime_sec: float | None = None
@@ -1737,10 +1772,15 @@ async def main() -> None:
     # Cap by max_num_requests if set
     if args.max_num_requests is not None:
         total_requests = min(total_requests, args.max_num_requests)
+    # With --duration, we don't know how many requests will be sent
+    if args.duration is not None:
+        total_requests = None
     # Note: with early_stop (default), this is an upper bound estimate
     # since the benchmark stops when the first client finishes
     is_estimate = not args.no_early_stop
     estimate_note = " (estimate, early_stop enabled)" if is_estimate else ""
+    if args.duration is not None:
+        estimate_note = f" (duration-limited: {args.duration}s)"
     logger.info(
         f"{Color.CYAN}Total expected requests: {total_requests}{estimate_note}{Color.RESET}"
     )
