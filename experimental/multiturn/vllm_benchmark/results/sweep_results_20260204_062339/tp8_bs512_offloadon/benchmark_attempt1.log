@@ -1,556 +1,0 @@
-05-02-2026 06:48:50 [INFO] - Namespace(input_file='sample_5k.json', output_file=None, responses_file='sweep_results_20260204_062339/tp8_bs512_offloadon/responses.json', seed=0, model='nvidia/Llama-3.3-70B-Instruct-FP4', served_model_name=None, url='http://localhost:8888', num_clients=512, max_active_conversations=None, max_num_requests=3600, warmup_step=False, max_turns=None, no_early_stop=False, limit_max_tokens=0, limit_min_tokens=0, request_rate=0, max_retries=3, conversation_sampling=<ConversationSampling.ROUND_ROBIN: 'round_robin'>, verify_output=False, request_timeout_sec=3600, no_stream=False, excel_output=False, verbose=False, print_content=False, warmup_percentages='0%', backend='vllm', metrics_poll_interval=1.0, metrics_output='sweep_results_20260204_062339/tp8_bs512_offloadon/metrics', no_metrics=False, metrics_csv=True)
-05-02-2026 06:48:50 [INFO] - [92mInput parameters:[0m
-05-02-2026 06:48:50 [INFO] - url=http://localhost:8888
-05-02-2026 06:48:50 [INFO] - model=nvidia/Llama-3.3-70B-Instruct-FP4
-05-02-2026 06:48:50 [INFO] - num_clients=512
-05-02-2026 06:48:50 [INFO] - Warmup percentages (percentage of samples): [0.0]
-05-02-2026 06:48:50 [INFO] - Loading tokenizer
-05-02-2026 06:48:52 [INFO] - [94mCollecting information from server: http://localhost:8888[0m
-05-02-2026 06:48:52 [INFO] - [94mServer version: {"version":"0.15.0"}[0m
-05-02-2026 06:48:52 [INFO] - [94mModels:[0m
-05-02-2026 06:48:52 [INFO] - [94m	model_id='nvidia/Llama-3.3-70B-Instruct-FP4', max_model_len=131072[0m
-05-02-2026 06:48:52 [INFO] - Reading input file: sample_5k.json
-05-02-2026 06:48:53 [INFO] - Found 5000 conversations in the input file
-05-02-2026 06:48:53 [INFO] - Loaded 5000 unique conversations
-05-02-2026 06:48:53 [INFO] - [94mMetrics collection enabled (poll interval: 1.0s)[0m
-05-02-2026 06:48:53 [INFO] - [94mStarted metrics collection[0m
-05-02-2026 06:48:53 [INFO] - [96mTotal expected requests: 3600 (estimate, early_stop enabled)[0m
-05-02-2026 06:48:53 [INFO] - [96mGlobal request limit: 3600[0m
-05-02-2026 06:48:53 [INFO] - [92mStarting 512 clients[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 0: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 1: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 2: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 3: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 4: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 5: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 6: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 7: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 8: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 9: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 10: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 11: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 12: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 13: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 14: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 15: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 16: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 17: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 18: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 19: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 20: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:53 [INFO] - [96mStarted client 21: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 22: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 23: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 24: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 25: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 26: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 27: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 28: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 29: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 30: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 31: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 32: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 33: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 34: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 35: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 36: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 37: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 38: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 39: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 40: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 41: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 42: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 43: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 44: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 45: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 46: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 47: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 48: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 49: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 50: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 51: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 52: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 53: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 54: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 55: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 56: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 57: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 58: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 59: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 60: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 61: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 62: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 63: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 64: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 65: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 66: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 67: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 68: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 69: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 70: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 71: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 72: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 73: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 74: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 75: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 76: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 77: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 78: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 79: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 80: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 81: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 82: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 83: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 84: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 85: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 86: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 87: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 88: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 89: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 90: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 91: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 92: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 93: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 94: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 95: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 96: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 97: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 98: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 99: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 100: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 101: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 102: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 103: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 104: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 105: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 106: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 107: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 108: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 109: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 110: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 111: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 112: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 113: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 114: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 115: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 116: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 117: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 118: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 119: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 120: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 121: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 122: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 123: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 124: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 125: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 126: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 127: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 128: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 129: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 130: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 131: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 132: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 133: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 134: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 135: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 136: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 137: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 138: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 139: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 140: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 141: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 142: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 143: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 144: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 145: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 146: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 147: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 148: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 149: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 150: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 151: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 152: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 153: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 154: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 155: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 156: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 157: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 158: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 159: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 160: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 161: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 162: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 163: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 164: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 165: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:54 [INFO] - [96mStarted client 166: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 167: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 168: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 169: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 170: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 171: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 172: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 173: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 174: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 175: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 176: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 177: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 178: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 179: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 180: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 181: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 182: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 183: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 184: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 185: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 186: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 187: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 188: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 189: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 190: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 191: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 192: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 193: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 194: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 195: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 196: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 197: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 198: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 199: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 200: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 201: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 202: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 203: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 204: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 205: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 206: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 207: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 208: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 209: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 210: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 211: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 212: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 213: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 214: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 215: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 216: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 217: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 218: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 219: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 220: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 221: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 222: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 223: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 224: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 225: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 226: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 227: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 228: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 229: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 230: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 231: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 232: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 233: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 234: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 235: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 236: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 237: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 238: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 239: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 240: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 241: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 242: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 243: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 244: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 245: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 246: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 247: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 248: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 249: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 250: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 251: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 252: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 253: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 254: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 255: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 256: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 257: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 258: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 259: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 260: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 261: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 262: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 263: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 264: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 265: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 266: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 267: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 268: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 269: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 270: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 271: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 272: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 273: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 274: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 275: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 276: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 277: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 278: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 279: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 280: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 281: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 282: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 283: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 284: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 285: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 286: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 287: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 288: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 289: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 290: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 291: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 292: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 293: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 294: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 295: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 296: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 297: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 298: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 299: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 300: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 301: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 302: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 303: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 304: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 305: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 306: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 307: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 308: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:55 [INFO] - [96mStarted client 309: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 310: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 311: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 312: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 313: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 314: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 315: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 316: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 317: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 318: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 319: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 320: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 321: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 322: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 323: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 324: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 325: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 326: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 327: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 328: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 329: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 330: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 331: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 332: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 333: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 334: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 335: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 336: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 337: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 338: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 339: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 340: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 341: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 342: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 343: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 344: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 345: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 346: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 347: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 348: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 349: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 350: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 351: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 352: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 353: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 354: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 355: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 356: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 357: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 358: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 359: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 360: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 361: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 362: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 363: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 364: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 365: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 366: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 367: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 368: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 369: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 370: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 371: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 372: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 373: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 374: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 375: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 376: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 377: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 378: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 379: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 380: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 381: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 382: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 383: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 384: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 385: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 386: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 387: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 388: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 389: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 390: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 391: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 392: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 393: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 394: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 395: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 396: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 397: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 398: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 399: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 400: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 401: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 402: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 403: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 404: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 405: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 406: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 407: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 408: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 409: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 410: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 411: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 412: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 413: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 414: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 415: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 416: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 417: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 418: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 419: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 420: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 421: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 422: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 423: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 424: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 425: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 426: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 427: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 428: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 429: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 430: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 431: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 432: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 433: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 434: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 435: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 436: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 437: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 438: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 439: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 440: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 441: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 442: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 443: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 444: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 445: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 446: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 447: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 448: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 449: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 450: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 451: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:56 [INFO] - [96mStarted client 452: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 453: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 454: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 455: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 456: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 457: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 458: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 459: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 460: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 461: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 462: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 463: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 464: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 465: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 466: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 467: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 468: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 469: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 470: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 471: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 472: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 473: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 474: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 475: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 476: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 477: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 478: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 479: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 480: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 481: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 482: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 483: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 484: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 485: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 486: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 487: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 488: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 489: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 490: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 491: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 492: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 493: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 494: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 495: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 496: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 497: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 498: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 499: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 500: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 501: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 502: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 503: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 504: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 505: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 506: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 507: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 508: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 509: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 510: max_num_requests=3600 (global), max_active_conversations=1[0m
-05-02-2026 06:48:57 [INFO] - [96mStarted client 511: max_num_requests=3600 (global), max_active_conversations=1[0m
-Requests completed:   0%|          | 0/3600 [00:00<?, ?req/s]Requests completed:   0%|          | 1/3600 [00:11<11:08:17, 11.14s/req]Requests completed:   2%|▏         | 58/3600 [00:12<09:47,  6.03req/s]  Requests completed:   3%|▎         | 116/3600 [00:13<04:04, 14.24req/s]Requests completed:   4%|▎         | 134/3600 [00:15<04:51, 11.88req/s]Requests completed:   5%|▍         | 171/3600 [00:16<03:48, 15.03req/s]Requests completed:   5%|▌         | 188/3600 [00:17<03:08, 18.09req/s]Requests completed:   5%|▌         | 197/3600 [00:21<06:05,  9.31req/s]Requests completed:   6%|▋         | 225/3600 [00:34<13:51,  4.06req/s]Requests completed:   8%|▊         | 282/3600 [00:35<07:09,  7.72req/s]Requests completed:   8%|▊         | 300/3600 [00:49<07:07,  7.72req/s]Requests completed:   8%|▊         | 301/3600 [00:51<14:42,  3.74req/s]Requests completed:  10%|▉         | 358/3600 [00:55<09:29,  5.69req/s]Requests completed:  11%|█         | 379/3600 [01:07<13:28,  3.98req/s]Requests completed:  12%|█▏        | 416/3600 [01:15<12:41,  4.18req/s]Requests completed:  12%|█▏        | 436/3600 [01:20<12:50,  4.11req/s]Requests completed:  13%|█▎        | 451/3600 [01:32<18:08,  2.89req/s]Requests completed:  14%|█▎        | 487/3600 [02:14<34:01,  1.52req/s]Requests completed:  15%|█▌        | 544/3600 [02:20<20:33,  2.48req/s]Requests completed:  17%|█▋        | 602/3600 [02:26<13:54,  3.59req/s]Requests completed:  18%|█▊        | 632/3600 [02:31<12:26,  3.98req/s]Requests completed:  18%|█▊        | 640/3600 [02:35<13:47,  3.58req/s]Requests completed:  18%|█▊        | 653/3600 [02:37<12:15,  4.00req/s]Requests completed:  18%|█▊        | 658/3600 [02:40<13:59,  3.51req/s]Requests completed:  19%|█▊        | 667/3600 [02:41<12:39,  3.86req/s]Requests completed:  19%|█▊        | 670/3600 [02:42<12:23,  3.94req/s]Requests completed:  19%|█▊        | 671/3600 [02:45<18:08,  2.69req/s]Requests completed:  19%|█▉        | 679/3600 [02:47<15:12,  3.20req/s]Requests completed:  19%|█▉        | 681/3600 [02:49<18:03,  2.69req/s]Requests completed:  19%|█▉        | 683/3600 [03:08<1:09:17,  1.43s/req]Requests completed:  20%|██        | 720/3600 [03:10<18:42,  2.57req/s]  Requests completed:  20%|██        | 724/3600 [03:26<37:00,  1.29req/s]Requests completed:  21%|██        | 754/3600 [03:33<23:20,  2.03req/s]Requests completed:  21%|██▏       | 767/3600 [03:38<21:44,  2.17req/s]Requests completed:  21%|██▏       | 773/3600 [03:45<26:16,  1.79req/s]Requests completed:  22%|██▏       | 782/3600 [03:53<30:18,  1.55req/s]Requests completed:  22%|██▏       | 790/3600 [04:12<48:40,  1.04s/req]Requests completed:  23%|██▎       | 822/3600 [04:22<28:55,  1.60req/s]Requests completed:  23%|██▎       | 838/3600 [04:23<21:42,  2.12req/s]Requests completed:  23%|██▎       | 840/3600 [04:41<40:19,  1.14req/s]Requests completed:  24%|██▍       | 868/3600 [04:43<21:59,  2.07req/s]Requests completed:  24%|██▍       | 873/3600 [04:46<22:38,  2.01req/s]Requests completed:  24%|██▍       | 877/3600 [05:09<49:37,  1.09s/req]Requests completed:  25%|██▌       | 902/3600 [05:13<28:02,  1.60req/s]Requests completed:  25%|██▌       | 910/3600 [05:37<47:09,  1.05s/req]Requests completed:  26%|██▌       | 938/3600 [05:54<37:28,  1.18req/s]Requests completed:  27%|██▋       | 959/3600 [06:03<30:36,  1.44req/s]Requests completed:  27%|██▋       | 973/3600 [06:05<24:59,  1.75req/s]Requests completed:  27%|██▋       | 977/3600 [06:07<24:20,  1.80req/s]Requests completed:  27%|██▋       | 980/3600 [06:16<33:23,  1.31req/s]Requests completed:  27%|██▋       | 988/3600 [06:19<29:34,  1.47req/s]Requests completed:  28%|██▊       | 995/3600 [06:20<23:45,  1.83req/s]Requests completed:  28%|██▊       | 997/3600 [06:22<26:36,  1.63req/s]Requests completed:  28%|██▊       | 999/3600 [06:23<25:32,  1.70req/s]Requests completed:  28%|██▊       | 1002/3600 [06:25<25:14,  1.72req/s]Requests completed:  28%|██▊       | 1003/3600 [06:31<45:04,  1.04s/req]Requests completed:  28%|██▊       | 1014/3600 [06:47<55:03,  1.28s/req]Requests completed:  29%|██▊       | 1028/3600 [06:49<29:27,  1.45req/s]Requests completed:  29%|██▊       | 1030/3600 [06:52<33:50,  1.27req/s]Requests completed:  29%|██▉       | 1038/3600 [07:02<39:41,  1.08req/s]Requests completed:  29%|██▉       | 1050/3600 [07:03<23:55,  1.78req/s]Requests completed:  29%|██▉       | 1054/3600 [07:08<29:38,  1.43req/s]Requests completed:  29%|██▉       | 1060/3600 [07:17<38:42,  1.09req/s]Requests completed:  30%|██▉       | 1075/3600 [07:28<34:37,  1.22req/s]Requests completed:  30%|███       | 1086/3600 [07:31<26:31,  1.58req/s]Requests completed:  30%|███       | 1091/3600 [07:35<28:40,  1.46req/s]Requests completed:  30%|███       | 1096/3600 [07:39<29:14,  1.43req/s]Requests completed:  31%|███       | 1103/3600 [07:43<27:06,  1.54req/s]Requests completed:  31%|███       | 1108/3600 [07:47<28:04,  1.48req/s]Requests completed:  31%|███       | 1110/3600 [07:50<31:45,  1.31req/s]Requests completed:  31%|███       | 1115/3600 [07:53<31:28,  1.32req/s]Requests completed:  31%|███       | 1117/3600 [07:55<32:27,  1.27req/s]Requests completed:  31%|███       | 1119/3600 [08:08<1:11:07,  1.72s/req]Requests completed:  32%|███▏      | 1134/3600 [08:10<28:26,  1.44req/s]  Requests completed:  32%|███▏      | 1137/3600 [08:13<30:15,  1.36req/s]Requests completed:  32%|███▏      | 1138/3600 [08:17<39:09,  1.05req/s]Requests completed:  32%|███▏      | 1144/3600 [08:21<34:37,  1.18req/s]Requests completed:  32%|███▏      | 1150/3600 [08:40<1:09:30,  1.70s/req]Requests completed:  32%|███▎      | 1170/3600 [08:54<43:27,  1.07s/req]  Requests completed:  33%|███▎      | 1185/3600 [09:04<36:47,  1.09req/s]Requests completed:  33%|███▎      | 1197/3600 [09:05<26:10,  1.53req/s]Requests completed:  33%|███▎      | 1198/3600 [09:18<42:52,  1.07s/req]Requests completed:  34%|███▎      | 1207/3600 [09:26<40:35,  1.02s/req]Requests completed:  34%|███▍      | 1217/3600 [09:33<36:22,  1.09req/s]Requests completed:  34%|███▍      | 1223/3600 [09:43<43:20,  1.09s/req]Requests completed:  34%|███▍      | 1231/3600 [09:45<33:20,  1.18req/s]Requests completed:  34%|███▍      | 1236/3600 [10:01<51:43,  1.31s/req]Requests completed:  35%|███▍      | 1247/3600 [10:04<35:29,  1.10req/s]Requests completed:  35%|███▍      | 1250/3600 [10:10<41:31,  1.06s/req]Requests completed:  35%|███▍      | 1256/3600 [10:17<43:03,  1.10s/req]Requests completed:  35%|███▌      | 1269/3600 [10:32<43:30,  1.12s/req]Requests completed:  36%|███▌      | 1282/3600 [10:40<35:39,  1.08req/s]Requests completed:  36%|███▌      | 1290/3600 [10:55<44:20,  1.15s/req]Requests completed:  36%|███▋      | 1313/3600 [11:24<46:09,  1.21s/req]Requests completed:  37%|███▋      | 1336/3600 [11:34<33:44,  1.12req/s]Requests completed:  38%|███▊      | 1351/3600 [11:43<30:05,  1.25req/s]Requests completed:  38%|███▊      | 1360/3600 [11:46<26:38,  1.40req/s]Requests completed:  38%|███▊      | 1361/3600 [11:49<29:26,  1.27req/s]Requests completed:  38%|███▊      | 1366/3600 [11:55<31:15,  1.19req/s]Requests completed:  38%|███▊      | 1374/3600 [11:56<23:38,  1.57req/s]Requests completed:  38%|███▊      | 1376/3600 [11:58<25:10,  1.47req/s]Requests completed:  38%|███▊      | 1378/3600 [12:18<1:06:19,  1.79s/req]Requests completed:  39%|███▊      | 1387/3600 [12:30<58:30,  1.59s/req]  Requests completed:  39%|███▉      | 1402/3600 [12:41<42:05,  1.15s/req]Requests completed:  39%|███▉      | 1413/3600 [12:43<29:56,  1.22req/s]Requests completed:  39%|███▉      | 1417/3600 [12:48<31:22,  1.16req/s]Requests completed:  39%|███▉      | 1421/3600 [13:03<51:29,  1.42s/req]Requests completed:  40%|███▉      | 1435/3600 [13:04<28:14,  1.28req/s]Requests completed:  40%|███▉      | 1437/3600 [13:18<46:26,  1.29s/req]Requests completed:  40%|████      | 1450/3600 [13:20<28:04,  1.28req/s]Requests completed:  40%|████      | 1453/3600 [13:26<33:53,  1.06req/s]Requests completed:  40%|████      | 1458/3600 [13:34<38:46,  1.09s/req]Requests completed:  41%|████      | 1463/3600 [13:35<30:53,  1.15req/s]Requests completed:  41%|████      | 1464/3600 [13:36<31:23,  1.13req/s]Requests completed:  41%|████      | 1466/3600 [13:40<38:49,  1.09s/req]Requests completed:  41%|████      | 1470/3600 [13:42<32:24,  1.10req/s]Requests completed:  41%|████      | 1472/3600 [13:54<1:03:26,  1.79s/req]Requests completed:  41%|████▏     | 1485/3600 [13:58<30:39,  1.15req/s]  Requests completed:  41%|████▏     | 1489/3600 [14:05<38:15,  1.09s/req]Requests completed:  42%|████▏     | 1497/3600 [14:16<41:19,  1.18s/req]Requests completed:  42%|████▏     | 1506/3600 [14:18<28:40,  1.22req/s]Requests completed:  42%|████▏     | 1508/3600 [14:32<51:59,  1.49s/req]Requests completed:  42%|████▏     | 1526/3600 [14:37<26:28,  1.31req/s]Requests completed:  42%|████▏     | 1529/3600 [14:39<26:16,  1.31req/s]05-02-2026 07:03:36 [INFO] - [96mFinished 128 out of 5000 conversations (3%), 0 out of 512 clients finished, collected 1530 measurements, runtime 882.846 sec[0m
-05-02-2026 07:03:36 [INFO] - [96mEstimated req/sec N/A, estimated runtime left N/A sec[0m
-05-02-2026 07:03:36 [INFO] - --------------------------------------------------
-05-02-2026 07:03:36 [INFO] - [moving_avg_ttft_ms       ] avg:   2831.685 (500 samples)
-05-02-2026 07:03:36 [INFO] - [moving_avg_tpot_ms       ] avg:    853.557 (500 samples)
-05-02-2026 07:03:36 [INFO] - [ttft_ms                  ] avg:   3193.113, min:    128.968, max:   8477.056
-05-02-2026 07:03:36 [INFO] - [tpot_ms                  ] avg:    491.821, min:     43.574, max:   1102.454
-05-02-2026 07:03:36 [INFO] - [latency_ms               ] avg: 175463.712, min:    317.490, max: 851732.567
-05-02-2026 07:03:36 [INFO] - [input_num_turns          ] avg:      3.835, min:      1.000, max:     15.000
-05-02-2026 07:03:36 [INFO] - [input_num_tokens         ] avg:    849.984, min:      0.000, max:   3033.000
-05-02-2026 07:03:36 [INFO] - [output_num_tokens        ] avg:    324.351, min:      2.000, max:   1321.000
-05-02-2026 07:03:36 [INFO] - --------------------------------------------------
-Requests completed:  43%|████▎     | 1531/3600 [14:54<51:01,  1.48s/req]Requests completed:  43%|████▎     | 1540/3600 [15:09<53:31,  1.56s/req]Requests completed:  43%|████▎     | 1562/3600 [15:11<23:53,  1.42req/s]Requests completed:  43%|████▎     | 1565/3600 [15:19<30:31,  1.11req/s]Requests completed:  44%|████▎     | 1573/3600 [15:21<24:18,  1.39req/s]Requests completed:  44%|████▍     | 1575/3600 [15:24<26:43,  1.26req/s]Requests completed:  44%|████▍     | 1577/3600 [15:34<42:58,  1.27s/req]Requests completed:  44%|████▍     | 1582/3600 [15:44<49:40,  1.48s/req]Requests completed:  44%|████▍     | 1588/3600 [16:03<1:08:36,  2.05s/req]Requests completed:  44%|████▍     | 1599/3600 [16:14<52:22,  1.57s/req]  Requests completed:  45%|████▍     | 1607/3600 [16:38<1:07:02,  2.02s/req]Requests completed:  45%|████▌     | 1628/3600 [16:44<35:17,  1.07s/req]  Requests completed:  45%|████▌     | 1632/3600 [16:52<39:17,  1.20s/req]Requests completed:  46%|████▌     | 1640/3600 [17:10<47:51,  1.46s/req]Requests completed:  46%|████▌     | 1652/3600 [17:12<32:08,  1.01req/s]Requests completed:  46%|████▌     | 1653/3600 [17:43<1:12:39,  2.24s/req]Requests completed:  47%|████▋     | 1684/3600 [17:48<28:33,  1.12req/s]  Requests completed:  47%|████▋     | 1688/3600 [17:53<29:50,  1.07req/s]Requests completed:  47%|████▋     | 1695/3600 [18:08<37:50,  1.19s/req]Requests completed:  47%|████▋     | 1707/3600 [18:30<44:08,  1.40s/req]Requests completed:  48%|████▊     | 1728/3600 [18:49<36:52,  1.18s/req]Requests completed:  48%|████▊     | 1738/3600 [18:52<30:16,  1.03req/s]Requests completed:  48%|████▊     | 1740/3600 [19:00<35:47,  1.15s/req]Requests completed:  48%|████▊     | 1746/3600 [19:02<30:28,  1.01req/s]Requests completed:  49%|████▊     | 1748/3600 [19:08<35:29,  1.15s/req]Requests completed:  49%|████▉     | 1757/3600 [19:09<23:29,  1.31req/s]Requests completed:  49%|████▉     | 1758/3600 [19:12<27:49,  1.10req/s]Requests completed:  49%|████▉     | 1761/3600 [19:18<34:52,  1.14s/req]Requests completed:  49%|████▉     | 1767/3600 [19:21<26:28,  1.15req/s]Requests completed:  49%|████▉     | 1769/3600 [19:49<1:24:55,  2.78s/req]Requests completed:  50%|████▉     | 1792/3600 [19:52<28:00,  1.08req/s]  Requests completed:  50%|████▉     | 1798/3600 [19:56<25:49,  1.16req/s]Requests completed:  50%|█████     | 1802/3600 [20:27<1:00:22,  2.01s/req]Requests completed:  51%|█████     | 1828/3600 [20:30<25:06,  1.18req/s]  Requests completed:  51%|█████     | 1834/3600 [20:32<22:50,  1.29req/s]Requests completed:  51%|█████     | 1838/3600 [21:03<50:24,  1.72s/req]Requests completed:  52%|█████▏    | 1855/3600 [21:05<29:05,  1.00s/req]Requests completed:  52%|█████▏    | 1857/3600 [21:19<41:40,  1.43s/req]Requests completed:  52%|█████▏    | 1866/3600 [21:40<49:32,  1.71s/req]Requests completed:  52%|█████▏    | 1884/3600 [21:57<38:46,  1.36s/req]Requests completed:  53%|█████▎    | 1900/3600 [22:10<32:40,  1.15s/req]Requests completed:  53%|█████▎    | 1911/3600 [22:14<25:56,  1.09req/s]Requests completed:  53%|█████▎    | 1914/3600 [22:32<40:10,  1.43s/req]Requests completed:  54%|█████▍    | 1940/3600 [22:43<24:16,  1.14req/s]Requests completed:  54%|█████▍    | 1954/3600 [22:57<24:56,  1.10req/s]Requests completed:  54%|█████▍    | 1961/3600 [23:35<46:35,  1.71s/req]Requests completed:  55%|█████▌    | 1982/3600 [23:46<32:05,  1.19s/req]Requests completed:  55%|█████▌    | 1989/3600 [23:48<28:07,  1.05s/req]Requests completed:  55%|█████▌    | 1992/3600 [23:54<30:27,  1.14s/req]Requests completed:  56%|█████▌    | 1998/3600 [23:58<27:18,  1.02s/req]Requests completed:  56%|█████▌    | 2001/3600 [24:01<27:44,  1.04s/req]Requests completed:  56%|█████▌    | 2002/3600 [24:08<37:12,  1.40s/req]Requests completed:  56%|█████▌    | 2013/3600 [24:21<34:24,  1.30s/req]Requests completed:  56%|█████▌    | 2015/3600 [24:24<34:01,  1.29s/req]Requests completed:  56%|█████▌    | 2019/3600 [24:31<37:27,  1.42s/req]Requests completed:  56%|█████▋    | 2025/3600 [24:53<57:23,  2.19s/req]Requests completed:  57%|█████▋    | 2042/3600 [24:54<24:54,  1.04req/s]Requests completed:  57%|█████▋    | 2045/3600 [25:03<31:02,  1.20s/req]Requests completed:  57%|█████▋    | 2055/3600 [25:05<21:32,  1.20req/s]Requests completed:  57%|█████▋    | 2056/3600 [25:16<34:47,  1.35s/req]Requests completed:  57%|█████▋    | 2063/3600 [25:23<31:51,  1.24s/req]Requests completed:  57%|█████▋    | 2066/3600 [25:37<45:51,  1.79s/req]Requests completed:  58%|█████▊    | 2074/3600 [25:55<50:43,  1.99s/req]Requests completed:  58%|█████▊    | 2085/3600 [26:09<41:54,  1.66s/req]Requests completed:  58%|█████▊    | 2094/3600 [26:14<32:09,  1.28s/req]Requests completed:  58%|█████▊    | 2098/3600 [26:23<37:03,  1.48s/req]Requests completed:  58%|█████▊    | 2106/3600 [26:26<27:00,  1.08s/req]Requests completed:  59%|█████▊    | 2107/3600 [26:30<32:01,  1.29s/req]Requests completed:  59%|█████▊    | 2113/3600 [26:47<43:26,  1.75s/req]Requests completed:  59%|█████▉    | 2124/3600 [26:57<34:05,  1.39s/req]Requests completed:  59%|█████▉    | 2130/3600 [26:59<27:22,  1.12s/req]Requests completed:  59%|█████▉    | 2135/3600 [27:23<48:30,  1.99s/req]Requests completed:  60%|█████▉    | 2156/3600 [27:46<35:10,  1.46s/req]Requests completed:  60%|██████    | 2174/3600 [27:54<24:44,  1.04s/req]Requests completed:  61%|██████    | 2182/3600 [28:10<29:08,  1.23s/req]Requests completed:  61%|██████    | 2189/3600 [28:11<23:50,  1.01s/req]Requests completed:  61%|██████    | 2191/3600 [28:25<34:25,  1.47s/req]Requests completed:  61%|██████    | 2200/3600 [28:36<32:22,  1.39s/req]Requests completed:  61%|██████▏   | 2210/3600 [28:38<22:50,  1.01req/s]Requests completed:  61%|██████▏   | 2211/3600 [28:43<27:09,  1.17s/req]Requests completed:  61%|██████▏   | 2213/3600 [28:47<28:50,  1.25s/req]Requests completed:  62%|██████▏   | 2215/3600 [29:04<53:19,  2.31s/req]Requests completed:  62%|██████▏   | 2227/3600 [29:11<31:06,  1.36s/req]Requests completed:  62%|██████▏   | 2231/3600 [29:17<31:51,  1.40s/req]Requests completed:  62%|██████▏   | 2236/3600 [29:34<44:06,  1.94s/req]Requests completed:  63%|██████▎   | 2252/3600 [29:40<24:13,  1.08s/req]Requests completed:  63%|██████▎   | 2255/3600 [29:56<35:53,  1.60s/req]Requests completed:  63%|██████▎   | 2267/3600 [29:57<21:23,  1.04req/s]Requests completed:  63%|██████▎   | 2269/3600 [30:04<26:51,  1.21s/req]Requests completed:  63%|██████▎   | 2274/3600 [30:13<30:09,  1.36s/req]Requests completed:  63%|██████▎   | 2283/3600 [30:31<35:17,  1.61s/req]Requests completed:  64%|██████▎   | 2293/3600 [30:34<23:41,  1.09s/req]Requests completed:  64%|██████▍   | 2296/3600 [30:55<42:18,  1.95s/req]Requests completed:  64%|██████▍   | 2309/3600 [30:57<23:21,  1.09s/req]Requests completed:  64%|██████▍   | 2311/3600 [31:18<42:31,  1.98s/req]Requests completed:  64%|██████▍   | 2321/3600 [31:25<31:17,  1.47s/req]Requests completed:  65%|██████▍   | 2329/3600 [31:28<24:07,  1.14s/req]Requests completed:  65%|██████▍   | 2331/3600 [31:31<24:06,  1.14s/req]Requests completed:  65%|██████▍   | 2332/3600 [31:40<36:20,  1.72s/req]Requests completed:  65%|██████▌   | 2342/3600 [31:43<20:57,  1.00req/s]Requests completed:  65%|██████▌   | 2344/3600 [31:44<19:55,  1.05req/s]Requests completed:  65%|██████▌   | 2345/3600 [31:50<28:43,  1.37s/req]Requests completed:  65%|██████▌   | 2349/3600 [31:59<34:19,  1.65s/req]Requests completed:  65%|██████▌   | 2352/3600 [32:05<36:13,  1.74s/req]Requests completed:  65%|██████▌   | 2355/3600 [32:08<31:13,  1.50s/req]Requests completed:  65%|██████▌   | 2356/3600 [32:24<1:04:20,  3.10s/req]Requests completed:  66%|██████▌   | 2364/3600 [32:25<29:56,  1.45s/req]  Requests completed:  66%|██████▌   | 2366/3600 [32:42<55:02,  2.68s/req]Requests completed:  66%|██████▌   | 2373/3600 [32:51<40:36,  1.99s/req]Requests completed:  66%|██████▌   | 2378/3600 [32:57<36:01,  1.77s/req]Requests completed:  66%|██████▌   | 2382/3600 [33:15<51:06,  2.52s/req]Requests completed:  67%|██████▋   | 2395/3600 [33:23<29:04,  1.45s/req]Requests completed:  67%|██████▋   | 2402/3600 [33:39<33:32,  1.68s/req]Requests completed:  67%|██████▋   | 2412/3600 [33:47<26:43,  1.35s/req]Requests completed:  67%|██████▋   | 2417/3600 [33:58<30:20,  1.54s/req]Requests completed:  67%|██████▋   | 2425/3600 [34:00<22:11,  1.13s/req]Requests completed:  67%|██████▋   | 2427/3600 [34:11<31:07,  1.59s/req]Requests completed:  68%|██████▊   | 2433/3600 [34:14<23:50,  1.23s/req]Requests completed:  68%|██████▊   | 2435/3600 [34:47<1:01:41,  3.18s/req]Requests completed:  68%|██████▊   | 2456/3600 [34:55<25:51,  1.36s/req]  Requests completed:  68%|██████▊   | 2465/3600 [35:21<34:00,  1.80s/req]Requests completed:  69%|██████▉   | 2476/3600 [35:35<30:08,  1.61s/req]05-02-2026 07:24:32 [INFO] - [96mFinished 256 out of 5000 conversations (5%), 0 out of 512 clients finished, collected 2484 measurements, runtime 2138.962 sec[0m
-05-02-2026 07:24:32 [INFO] - [96mEstimated req/sec N/A, estimated runtime left 39637.637 sec[0m
-05-02-2026 07:24:32 [INFO] - --------------------------------------------------
-05-02-2026 07:24:32 [INFO] - [moving_avg_ttft_ms       ] avg:   3334.113 (500 samples)
-05-02-2026 07:24:32 [INFO] - [moving_avg_tpot_ms       ] avg:   1166.609 (500 samples)
-05-02-2026 07:24:32 [INFO] - [ttft_ms                  ] avg:   3183.312, min:    128.968, max:   8477.056
-05-02-2026 07:24:32 [INFO] - [tpot_ms                  ] avg:    727.290, min:     43.574, max:   1340.163
-05-02-2026 07:24:32 [INFO] - [latency_ms               ] avg: 330744.617, min:    317.490, max: 2032918.709
-05-02-2026 07:24:32 [INFO] - [input_num_turns          ] avg:      4.381, min:      1.000, max:     15.000
-05-02-2026 07:24:32 [INFO] - [input_num_tokens         ] avg:   1142.581, min:      0.000, max:   3525.000
-05-02-2026 07:24:32 [INFO] - [output_num_tokens        ] avg:    408.302, min:      2.000, max:   2330.000
-05-02-2026 07:24:32 [INFO] - --------------------------------------------------
-Requests completed:  69%|██████▉   | 2485/3600 [35:37<22:56,  1.23s/req]Requests completed:  69%|██████▉   | 2487/3600 [35:41<23:48,  1.28s/req]Requests completed:  69%|██████▉   | 2490/3600 [36:18<54:20,  2.94s/req]Requests completed:  70%|██████▉   | 2511/3600 [36:41<33:30,  1.85s/req]Requests completed:  70%|██████▉   | 2517/3600 [36:59<37:10,  2.06s/req]Requests completed:  70%|███████   | 2527/3600 [37:06<29:02,  1.62s/req]Requests completed:  70%|███████   | 2530/3600 [37:16<32:24,  1.82s/req]Requests completed:  70%|███████   | 2535/3600 [37:34<39:16,  2.21s/req]Requests completed:  71%|███████   | 2549/3600 [37:35<21:18,  1.22s/req]

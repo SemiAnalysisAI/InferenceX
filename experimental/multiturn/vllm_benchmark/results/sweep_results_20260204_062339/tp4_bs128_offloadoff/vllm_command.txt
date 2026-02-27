@@ -1,1 +1,0 @@
-vllm serve nvidia/Llama-3.3-70B-Instruct-FP4 --host 0.0.0.0 --port 8888 --config sweep_results_20260204_062339/tp4_bs128_offloadoff/config.yaml --max-num-seqs 128 --gpu-memory-utilization 0.9 --tensor-parallel-size 4 --attention-config.use_trtllm_attention=0

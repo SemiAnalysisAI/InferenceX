@@ -1,1490 +1,0 @@
-04-02-2026 19:45:40 [INFO] - Namespace(input_file='sample_5k.json', output_file=None, responses_file='sweep_results_20260204_062339/tp2_bs256_offloadoff/responses.json', seed=0, model='nvidia/Llama-3.3-70B-Instruct-FP4', served_model_name=None, url='http://localhost:8888', num_clients=256, max_active_conversations=None, max_num_requests=3600, warmup_step=False, max_turns=None, no_early_stop=False, limit_max_tokens=0, limit_min_tokens=0, request_rate=0, max_retries=3, conversation_sampling=<ConversationSampling.ROUND_ROBIN: 'round_robin'>, verify_output=False, request_timeout_sec=3600, no_stream=False, excel_output=False, verbose=False, print_content=False, warmup_percentages='0%', backend='vllm', metrics_poll_interval=1.0, metrics_output='sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics', no_metrics=False, metrics_csv=True)
-04-02-2026 19:45:40 [INFO] - [92mInput parameters:[0m
-04-02-2026 19:45:40 [INFO] - url=http://localhost:8888
-04-02-2026 19:45:40 [INFO] - model=nvidia/Llama-3.3-70B-Instruct-FP4
-04-02-2026 19:45:40 [INFO] - num_clients=256
-04-02-2026 19:45:40 [INFO] - Warmup percentages (percentage of samples): [0.0]
-04-02-2026 19:45:40 [INFO] - Loading tokenizer
-04-02-2026 19:45:42 [INFO] - [94mCollecting information from server: http://localhost:8888[0m
-04-02-2026 19:45:42 [INFO] - [94mServer version: {"version":"0.15.0"}[0m
-04-02-2026 19:45:42 [INFO] - [94mModels:[0m
-04-02-2026 19:45:42 [INFO] - [94m	model_id='nvidia/Llama-3.3-70B-Instruct-FP4', max_model_len=131072[0m
-04-02-2026 19:45:42 [INFO] - Reading input file: sample_5k.json
-04-02-2026 19:45:43 [INFO] - Found 5000 conversations in the input file
-04-02-2026 19:45:44 [INFO] - Loaded 5000 unique conversations
-04-02-2026 19:45:44 [INFO] - [94mMetrics collection enabled (poll interval: 1.0s)[0m
-04-02-2026 19:45:44 [INFO] - [94mStarted metrics collection[0m
-04-02-2026 19:45:44 [INFO] - [96mTotal expected requests: 3600 (estimate, early_stop enabled)[0m
-04-02-2026 19:45:44 [INFO] - [96mGlobal request limit: 3600[0m
-04-02-2026 19:45:44 [INFO] - [92mStarting 256 clients[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 0: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 1: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 2: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 3: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 4: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 5: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 6: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 7: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 8: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 9: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 10: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 11: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 12: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 13: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 14: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 15: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 16: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 17: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 18: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 19: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 20: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 21: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 22: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 23: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 24: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 25: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 26: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 27: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 28: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 29: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 30: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 31: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 32: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 33: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 34: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 35: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 36: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 37: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 38: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 39: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 40: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 41: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 42: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 43: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 44: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 45: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 46: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 47: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 48: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 49: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 50: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 51: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 52: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 53: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 54: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 55: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 56: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 57: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 58: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 59: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 60: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 61: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 62: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 63: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 64: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 65: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 66: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 67: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 68: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 69: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 70: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 71: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 72: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 73: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 74: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 75: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 76: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 77: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 78: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 79: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 80: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 81: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 82: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 83: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 84: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 85: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 86: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 87: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 88: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 89: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 90: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 91: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 92: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 93: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 94: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 95: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 96: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 97: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 98: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 99: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 100: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 101: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 102: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 103: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:44 [INFO] - [96mStarted client 104: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 105: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 106: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 107: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 108: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 109: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 110: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 111: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 112: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 113: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 114: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 115: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 116: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 117: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 118: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 119: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 120: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 121: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 122: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 123: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 124: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 125: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 126: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 127: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 128: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 129: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 130: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 131: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 132: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 133: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 134: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 135: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 136: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 137: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 138: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 139: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 140: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 141: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 142: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 143: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 144: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 145: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 146: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 147: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 148: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 149: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 150: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 151: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 152: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 153: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 154: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 155: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 156: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 157: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 158: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 159: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 160: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 161: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 162: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 163: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 164: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 165: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 166: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 167: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 168: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 169: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 170: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 171: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 172: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 173: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 174: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 175: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 176: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 177: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 178: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 179: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 180: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 181: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 182: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 183: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 184: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 185: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 186: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 187: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 188: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 189: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 190: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 191: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 192: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 193: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 194: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 195: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 196: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 197: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 198: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 199: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 200: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 201: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 202: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 203: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 204: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 205: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 206: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 207: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 208: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 209: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 210: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 211: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 212: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 213: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:45 [INFO] - [96mStarted client 214: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 215: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 216: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 217: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 218: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 219: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 220: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 221: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 222: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 223: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 224: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 225: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 226: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 227: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 228: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 229: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 230: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 231: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 232: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 233: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 234: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 235: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 236: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 237: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 238: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 239: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 240: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 241: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 242: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 243: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 244: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 245: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 246: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 247: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 248: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 249: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 250: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 251: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 252: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 253: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 254: max_num_requests=3600 (global), max_active_conversations=1[0m
-04-02-2026 19:45:46 [INFO] - [96mStarted client 255: max_num_requests=3600 (global), max_active_conversations=1[0m
-Requests completed:   0%|          | 0/3600 [00:00<?, ?req/s]Requests completed:   0%|          | 1/3600 [01:09<68:58:53, 69.00s/req]Requests completed:  12%|█▏        | 431/3600 [01:22<07:34,  6.97req/s] Requests completed:  14%|█▍        | 514/3600 [01:27<06:29,  7.93req/s]Requests completed:  15%|█▍        | 539/3600 [01:31<06:27,  7.90req/s]Requests completed:  16%|█▌        | 560/3600 [01:33<06:22,  7.96req/s]Requests completed:  16%|█▌        | 571/3600 [01:37<07:00,  7.20req/s]Requests completed:  16%|█▋        | 590/3600 [01:37<06:10,  8.13req/s]Requests completed:  16%|█▋        | 592/3600 [01:37<06:07,  8.18req/s]Requests completed:  16%|█▋        | 594/3600 [01:39<07:22,  6.80req/s]Requests completed:  17%|█▋        | 606/3600 [01:40<06:11,  8.05req/s]Requests completed:  17%|█▋        | 608/3600 [01:41<07:13,  6.90req/s]Requests completed:  17%|█▋        | 615/3600 [01:41<06:13,  8.00req/s]Requests completed:  17%|█▋        | 617/3600 [01:41<06:19,  7.86req/s]Requests completed:  17%|█▋        | 620/3600 [01:42<07:19,  6.78req/s]Requests completed:  17%|█▋        | 626/3600 [01:43<06:49,  7.26req/s]Requests completed:  18%|█▊        | 630/3600 [01:44<09:26,  5.24req/s]Requests completed:  18%|█▊        | 641/3600 [01:45<05:47,  8.52req/s]Requests completed:  18%|█▊        | 643/3600 [01:45<05:53,  8.36req/s]Requests completed:  18%|█▊        | 645/3600 [01:46<09:50,  5.00req/s]Requests completed:  18%|█▊        | 655/3600 [01:48<08:22,  5.86req/s]Requests completed:  18%|█▊        | 663/3600 [01:48<06:33,  7.47req/s]Requests completed:  18%|█▊        | 665/3600 [01:50<10:07,  4.83req/s]Requests completed:  19%|█▉        | 677/3600 [01:50<05:46,  8.44req/s]Requests completed:  19%|█▉        | 680/3600 [01:52<08:57,  5.43req/s]Requests completed:  19%|█▉        | 689/3600 [01:54<10:01,  4.84req/s]Requests completed:  19%|█▉        | 698/3600 [01:55<07:30,  6.45req/s]Requests completed:  19%|█▉        | 701/3600 [01:58<13:40,  3.53req/s]Requests completed:  20%|█▉        | 717/3600 [01:59<08:13,  5.85req/s]Requests completed:  20%|██        | 725/3600 [02:01<08:55,  5.37req/s]Requests completed:  20%|██        | 738/3600 [02:02<06:52,  6.94req/s]Requests completed:  21%|██        | 746/3600 [02:03<06:52,  6.92req/s]Requests completed:  21%|██        | 754/3600 [02:03<05:48,  8.18req/s]Requests completed:  21%|██        | 758/3600 [02:04<05:37,  8.41req/s]Requests completed:  21%|██        | 760/3600 [02:05<07:04,  6.69req/s]Requests completed:  21%|██▏       | 768/3600 [02:06<06:36,  7.14req/s]Requests completed:  22%|██▏       | 775/3600 [02:06<05:04,  9.29req/s]Requests completed:  22%|██▏       | 777/3600 [02:08<10:47,  4.36req/s]Requests completed:  22%|██▏       | 786/3600 [02:11<12:53,  3.64req/s]Requests completed:  22%|██▏       | 802/3600 [02:16<13:40,  3.41req/s]Requests completed:  23%|██▎       | 827/3600 [02:17<06:48,  6.78req/s]Requests completed:  23%|██▎       | 829/3600 [02:18<07:26,  6.20req/s]Requests completed:  23%|██▎       | 836/3600 [02:19<07:22,  6.24req/s]Requests completed:  23%|██▎       | 842/3600 [02:19<06:05,  7.55req/s]Requests completed:  23%|██▎       | 844/3600 [02:20<08:49,  5.20req/s]Requests completed:  24%|██▎       | 852/3600 [02:21<07:35,  6.04req/s]Requests completed:  24%|██▍       | 856/3600 [02:22<08:37,  5.30req/s]Requests completed:  24%|██▍       | 860/3600 [02:23<09:18,  4.91req/s]Requests completed:  24%|██▍       | 866/3600 [02:24<06:59,  6.51req/s]Requests completed:  24%|██▍       | 868/3600 [02:26<11:46,  3.87req/s]Requests completed:  24%|██▍       | 879/3600 [02:26<06:15,  7.24req/s]Requests completed:  24%|██▍       | 882/3600 [02:26<06:26,  7.04req/s]Requests completed:  25%|██▍       | 885/3600 [02:29<11:39,  3.88req/s]Requests completed:  25%|██▍       | 896/3600 [02:30<09:17,  4.85req/s]Requests completed:  25%|██▌       | 903/3600 [02:32<08:57,  5.02req/s]Requests completed:  25%|██▌       | 912/3600 [02:32<06:41,  6.69req/s]Requests completed:  25%|██▌       | 917/3600 [02:33<07:36,  5.88req/s]Requests completed:  26%|██▌       | 923/3600 [02:36<11:20,  3.93req/s]Requests completed:  26%|██▌       | 934/3600 [02:36<06:45,  6.57req/s]Requests completed:  26%|██▌       | 937/3600 [02:38<08:30,  5.22req/s]04-02-2026 19:48:24 [INFO] - [96mFinished 64 out of 5000 conversations (1%), 0 out of 256 clients finished, collected 941 measurements, runtime 160.407 sec[0m
-04-02-2026 19:48:24 [INFO] - [96mEstimated req/sec N/A, estimated runtime left N/A sec[0m
-04-02-2026 19:48:24 [INFO] - --------------------------------------------------
-04-02-2026 19:48:24 [INFO] - [moving_avg_ttft_ms       ] avg:  20688.248 (500 samples)
-04-02-2026 19:48:24 [INFO] - [moving_avg_tpot_ms       ] avg:     44.124 (500 samples)
-04-02-2026 19:48:24 [INFO] - [ttft_ms                  ] avg:  17891.190, min:   2749.036, max:  24773.152
-04-02-2026 19:48:24 [INFO] - [tpot_ms                  ] avg:     41.808, min:     25.189, max:     60.186
-04-02-2026 19:48:24 [INFO] - [latency_ms               ] avg:  35668.275, min:   3220.266, max: 130236.741
-04-02-2026 19:48:24 [INFO] - [input_num_turns          ] avg:      3.835, min:      1.000, max:     13.000
-04-02-2026 19:48:24 [INFO] - [input_num_tokens         ] avg:   1080.811, min:      0.000, max:   3482.000
-04-02-2026 19:48:24 [INFO] - [output_num_tokens        ] avg:    427.321, min:      4.000, max:   2584.000
-04-02-2026 19:48:24 [INFO] - --------------------------------------------------
-Requests completed:  26%|██▌       | 942/3600 [02:40<10:32,  4.20req/s]Requests completed:  26%|██▋       | 949/3600 [02:40<07:58,  5.54req/s]Requests completed:  26%|██▋       | 953/3600 [02:40<06:53,  6.40req/s]Requests completed:  27%|██▋       | 955/3600 [02:41<07:28,  5.90req/s]Requests completed:  27%|██▋       | 957/3600 [02:43<13:23,  3.29req/s]Requests completed:  27%|██▋       | 967/3600 [02:43<07:20,  5.98req/s]Requests completed:  27%|██▋       | 969/3600 [02:44<09:23,  4.67req/s]Requests completed:  27%|██▋       | 973/3600 [02:45<07:29,  5.84req/s]Requests completed:  27%|██▋       | 975/3600 [02:46<13:17,  3.29req/s]Requests completed:  27%|██▋       | 980/3600 [02:47<09:06,  4.80req/s]Requests completed:  27%|██▋       | 982/3600 [02:47<10:15,  4.25req/s]Requests completed:  27%|██▋       | 984/3600 [02:48<11:43,  3.72req/s]Requests completed:  28%|██▊       | 990/3600 [02:50<10:29,  4.15req/s]Requests completed:  28%|██▊       | 993/3600 [02:50<08:31,  5.10req/s]Requests completed:  28%|██▊       | 994/3600 [02:51<13:58,  3.11req/s]Requests completed:  28%|██▊       | 1000/3600 [02:52<10:14,  4.23req/s]Requests completed:  28%|██▊       | 1003/3600 [02:53<11:25,  3.79req/s]Requests completed:  28%|██▊       | 1010/3600 [02:54<09:45,  4.42req/s]Requests completed:  28%|██▊       | 1016/3600 [02:55<07:16,  5.92req/s]Requests completed:  28%|██▊       | 1017/3600 [02:55<09:22,  4.59req/s]Requests completed:  28%|██▊       | 1020/3600 [02:56<09:46,  4.40req/s]Requests completed:  28%|██▊       | 1025/3600 [02:58<11:47,  3.64req/s]Requests completed:  29%|██▉       | 1036/3600 [03:00<08:38,  4.95req/s]Requests completed:  29%|██▉       | 1047/3600 [03:01<07:56,  5.36req/s]Requests completed:  29%|██▉       | 1056/3600 [03:02<05:36,  7.56req/s]Requests completed:  29%|██▉       | 1058/3600 [03:02<06:10,  6.86req/s]Requests completed:  29%|██▉       | 1061/3600 [03:02<05:52,  7.19req/s]Requests completed:  30%|██▉       | 1063/3600 [03:03<07:51,  5.38req/s]Requests completed:  30%|██▉       | 1064/3600 [03:05<12:16,  3.44req/s]Requests completed:  30%|██▉       | 1069/3600 [03:05<09:50,  4.29req/s]Requests completed:  30%|██▉       | 1072/3600 [03:06<08:08,  5.17req/s]Requests completed:  30%|██▉       | 1074/3600 [03:06<07:43,  5.45req/s]Requests completed:  30%|██▉       | 1075/3600 [03:06<08:37,  4.88req/s]Requests completed:  30%|██▉       | 1076/3600 [03:07<13:33,  3.10req/s]Requests completed:  30%|███       | 1080/3600 [03:07<08:05,  5.19req/s]Requests completed:  30%|███       | 1082/3600 [03:08<06:47,  6.18req/s]Requests completed:  30%|███       | 1086/3600 [03:09<08:29,  4.93req/s]Requests completed:  30%|███       | 1089/3600 [03:10<09:48,  4.26req/s]Requests completed:  30%|███       | 1092/3600 [03:11<11:31,  3.63req/s]Requests completed:  30%|███       | 1096/3600 [03:11<08:01,  5.20req/s]Requests completed:  30%|███       | 1098/3600 [03:13<13:26,  3.10req/s]Requests completed:  31%|███       | 1103/3600 [03:14<11:21,  3.66req/s]Requests completed:  31%|███       | 1108/3600 [03:14<09:15,  4.49req/s]Requests completed:  31%|███       | 1111/3600 [03:18<20:20,  2.04req/s]Requests completed:  31%|███▏      | 1127/3600 [03:21<11:26,  3.60req/s]Requests completed:  32%|███▏      | 1143/3600 [03:21<06:23,  6.40req/s]Requests completed:  32%|███▏      | 1145/3600 [03:22<07:49,  5.23req/s]Requests completed:  32%|███▏      | 1149/3600 [03:23<07:49,  5.23req/s]Requests completed:  32%|███▏      | 1153/3600 [03:24<08:23,  4.86req/s]Requests completed:  32%|███▏      | 1156/3600 [03:25<09:30,  4.29req/s]Requests completed:  32%|███▏      | 1162/3600 [03:26<07:11,  5.65req/s]Requests completed:  32%|███▏      | 1165/3600 [03:26<07:24,  5.48req/s]Requests completed:  32%|███▏      | 1169/3600 [03:28<09:19,  4.35req/s]Requests completed:  33%|███▎      | 1181/3600 [03:28<04:43,  8.54req/s]Requests completed:  33%|███▎      | 1183/3600 [03:29<05:55,  6.80req/s]Requests completed:  33%|███▎      | 1188/3600 [03:29<05:38,  7.12req/s]Requests completed:  33%|███▎      | 1193/3600 [03:30<05:57,  6.74req/s]Requests completed:  33%|███▎      | 1198/3600 [03:31<06:58,  5.74req/s]Requests completed:  33%|███▎      | 1203/3600 [03:32<05:10,  7.72req/s]Requests completed:  34%|███▎      | 1207/3600 [03:33<08:40,  4.59req/s]Requests completed:  34%|███▎      | 1214/3600 [03:34<06:04,  6.55req/s]04-02-2026 19:49:20 [INFO] - [96mFinished 128 out of 5000 conversations (3%), 0 out of 256 clients finished, collected 1214 measurements, runtime 216.530 sec[0m
-04-02-2026 19:49:20 [INFO] - [96mEstimated req/sec N/A, estimated runtime left N/A sec[0m
-04-02-2026 19:49:20 [INFO] - --------------------------------------------------
-04-02-2026 19:49:20 [INFO] - [moving_avg_ttft_ms       ] avg:  23429.880 (500 samples)
-04-02-2026 19:49:20 [INFO] - [moving_avg_tpot_ms       ] avg:     45.753 (500 samples)
-04-02-2026 19:49:20 [INFO] - [ttft_ms                  ] avg:  19470.750, min:   2749.036, max:  27347.052
-04-02-2026 19:49:20 [INFO] - [tpot_ms                  ] avg:     42.776, min:     25.189, max:     60.186
-04-02-2026 19:49:20 [INFO] - [latency_ms               ] avg:  38996.380, min:   3220.266, max: 148759.343
-04-02-2026 19:49:20 [INFO] - [input_num_turns          ] avg:      4.343, min:      1.000, max:     15.000
-04-02-2026 19:49:20 [INFO] - [input_num_tokens         ] avg:   1282.790, min:      0.000, max:   4535.000
-04-02-2026 19:49:20 [INFO] - [output_num_tokens        ] avg:    456.762, min:      3.000, max:   2985.000
-04-02-2026 19:49:20 [INFO] - --------------------------------------------------
-Requests completed:  34%|███▍      | 1216/3600 [03:35<08:22,  4.74req/s]Requests completed:  34%|███▍      | 1225/3600 [03:36<07:29,  5.29req/s]Requests completed:  34%|███▍      | 1231/3600 [03:37<06:54,  5.72req/s]Requests completed:  34%|███▍      | 1237/3600 [03:38<06:26,  6.12req/s]Requests completed:  34%|███▍      | 1241/3600 [03:39<05:56,  6.62req/s]Requests completed:  34%|███▍      | 1242/3600 [03:39<06:09,  6.38req/s]Requests completed:  35%|███▍      | 1244/3600 [03:40Requests completedRequests completed:  35%|███▍      | 1251/3600 [03:41Requests completedRequests completed:  35%|███▍      | 1255/3600 [03:43<12:14,  3.19req/s]Requests completed:  35%|███▌      | 1264/3600 [03:44<06:56,  5.61req/s]Requests completed:  35%|███▌      | 1266/3600 [03:44<07:56,  4.90req/s]Requests completed:  35%|███▌      | 1268/3600 [03:45<08:07,  4.78req/s]Requests completed:  35%|███▌      | 1270/3600 [03:47<14:46,  2.63req/s]Requests completed:  36%|███▌      | 1278/3600 [03:48<10:04,  3.84req/s]Requests completed:  36%|███▌      | 1284/3600 [03:51<11:57,  3.23req/s]Requests completed:  36%|███▌      | 1291/3600 [03:56<17:29,  2.20req/s]Requests completed:  36%|███▋      | 1314/3600 [03:56<06:46,  5.62req/s]Requests completed:  37%|███▋      | 1318/3600 [04:04<15:48,  2.40req/s]Requests completed:  37%|███▋      | 1341/3600 [04:06<09:20,  4.03req/s]Requests completed:  38%|███▊      | 1352/3600 [04:08<08:36,  4.35req/s]Requests completed:  38%|███▊      | 1358/3600 [04:08<07:15,  5.15req/s]Requests completed:  38%|███▊      | 1361/3600 [04:09<07:12,  5.18req/s]Requests completed:  38%|███▊      | 1363/3600 [04:09<06:49,  5.47req/s]Requests completed:  38%|███▊      | 1366/3600 [04:09<07:09,  5.21req/s]Requests completed:  38%|███▊      | 1372/3600 [04:10<05:54,  6.29req/s]Requests completed:  38%|███▊      | 1374/3600 [04:12<08:55,  4.15req/s]Requests completed:  38%|███▊      | 1382/3600 [04:18<17:18,  2.14req/s]Requests completed:  39%|███▉      | 1412/3600 [04:19<06:04,  6.00req/s]Requests completed:  39%|███▉      | 1416/3600 [04:19<05:53,  6.18req/s]Requests completed:  39%|███▉      | 1418/3600 [04:19<05:40,  6.41req/s]Requests completed:  39%|███▉      | 1420/3600 [04:20<05:55,  6.13req/s]Requests completed:  40%|███▉      | 1423/3600 [04:21<07:20,  4.94req/s]Requests completed:  40%|███▉      | 1426/3600 [04:21<06:49,  5.31req/s]Requests completed:  40%|███▉      | 1429/3600 [04:22<06:49,  5.30req/s]Requests completed:  40%|███▉      | 1433/3600 [04:24<09:33,  3.78req/s]Requests completed:  40%|████      | 1440/3600 [04:25<07:59,  4.50req/s]Requests completed:  40%|████      | 1442/3600 [04:28<15:30,  2.32req/s]Requests completed:  40%|████      | 1457/3600 [04:30<08:06,  4.40req/s]Requests completed:  41%|████      | 1463/3600 [04:31<07:43,  4.61req/s]Requests completed:  41%|████      | 1465/3600 [04:33<11:17,  3.15req/s]Requests completed:  41%|████      | 1471/3600 [04:34<09:38,  3.68req/s]Requests completed:  41%|████      | 1473/3600 [04:35<09:32,  3.71req/s]Requests completed:  41%|████      | 1476/3600 [04:37<12:27,  2.84req/s]Requests completed:  41%|████      | 1480/3600 [04:37<09:23,  3.76req/s]Requests completed:  41%|████      | 1483/3600 [04:38<10:56,  3.23req/s]Requests completed:  41%|████▏     | 1489/3600 [04:39<07:53,  4.45req/s]Requests completed:  41%|████▏     | 1492/3600 [04:40<09:34,  3.67req/s]Requests completed:  42%|████▏     | 1494/3600 [04:42<14:03,  2.50req/s]Requests completed:  42%|████▏     | 1499/3600 [04:44<14:18,  2.45req/s]Requests completed:  42%|████▏     | 1510/3600 [04:49<14:59,  2.32req/s]Requests completed:  42%|████▎     | 1530/3600 [04:50<06:39,  5.19req/s]Requests completed:  43%|████▎     | 1533/3600 [04:52<08:40,  3.97req/s]Requests completed:  43%|████▎     | 1543/3600 [04:52<06:15,  5.49req/s]Requests completed:  43%|████▎     | 1548/3600 [04:53<06:06,  5.60req/s]Requests completed:  43%|████▎     | 1559/3600 [04:55<05:59,  5.68req/s]Requests completed:  43%|████▎     | 1564/3600 [04:56<05:33,  6.10req/s]Requests completed:  44%|████▎     | 1567/3600 [04:57<07:23,  4.59req/s]Requests completed:  44%|████▎     | 1572/3600 [04:58<06:26,  5.24req/s]Requests completed:  44%|████▎     | 1573/3600 [04:58<06:18,  5.35req/s]Requests completed:  44%|████▎     | 1574/3600 [04:58<06:43,  5.02req/s]Requests completed:  44%|████▍     | 1576/3600 [04:59<06:22,  5.30req/s]04-02-2026 19:50:45 [INFO] - [96mFinished 192 out of 5000 conversations (4%), 0 out of 256 clients finished, collected 1576 measurements, runtime 301.288 sec[0m
-04-02-2026 19:50:45 [INFO] - [96mEstimated req/sec 5.231, estimated runtime left N/A sec[0m
-04-02-2026 19:50:45 [INFO] - --------------------------------------------------
-04-02-2026 19:50:45 [INFO] - [moving_avg_ttft_ms       ] avg:  27222.360 (500 samples)
-04-02-2026 19:50:45 [INFO] - [moving_avg_tpot_ms       ] avg:     47.716 (500 samples)
-04-02-2026 19:50:45 [INFO] - [ttft_ms                  ] avg:  21373.883, min:   2749.036, max:  32815.862
-04-02-2026 19:50:45 [INFO] - [tpot_ms                  ] avg:     43.983, min:     25.189, max:     60.186
-04-02-2026 19:50:45 [INFO] - [latency_ms               ] avg:  42815.419, min:   3220.266, max: 148759.343
-04-02-2026 19:50:45 [INFO] - [input_num_turns          ] avg:      4.657, min:      1.000, max:     15.000
-04-02-2026 19:50:45 [INFO] - [input_num_tokens         ] avg:   1433.286, min:      0.000, max:   5111.000
-04-02-2026 19:50:45 [INFO] - [output_num_tokens        ] avg:    485.569, min:      2.000, max:   2985.000
-04-02-2026 19:50:45 [INFO] - --------------------------------------------------
-Requests completed:  44%|████▍     | 1577/3600 [04:59<06:29,  5.19req/s]Requests completed:  44%|████▍     | 1578/3600 [04:59<07:13,  4.66req/s]Requests completed:  44%|████▍     | 1579/3600 [04:59<08:24,  4.00req/s]Requests completed:  44%|████▍     | 1580/3600 [05:00<08:24,  4.00req/s]Requests completed:  44%|████▍     | 1581/3600 [05:01<13:02,  2.58req/s]Requests completed:  44%|████▍     | 1585/3600 [05:02<11:19,  2.96req/s]Requests completed:  44%|████▍     | 1591/3600 [05:04<12:07,  2.76req/s]Requests completed:  44%|████▍     | 1597/3600 [05:06<10:46,  3.10req/s]Requests completed:  45%|████▍     | 1604/3600 [05:07<08:37,  3.85req/s]Requests completed:  45%|████▍     | 1607/3600 [05:08<09:40,  3.43req/s]Requests completed:  45%|████▍     | 1612/3600 [05:09<07:42,  4.30req/s]Requests completed:  45%|████▍     | 1615/3600 [05:09<06:46,  4.88req/s]Requests completed:  45%|████▍     | 1616/3600 [05:10<10:02,  3.30req/s]Requests completed:  45%|████▌     | 1620/3600 [05:13<13:38,  2.42req/s]Requests completed:  45%|████▌     | 1630/3600 [05:13<07:13,  4.54req/s]Requests completed:  45%|████▌     | 1635/3600 [05:14<06:19,  5.18req/s]Requests completed:  46%|████▌     | 1640/3600 [05:17<09:06,  3.59req/s]Requests completed:  46%|████▌     | 1653/3600 [05:18<06:26,  5.03req/s]Requests completed:  46%|████▌     | 1658/3600 [05:20<08:23,  3.86req/s]Requests completed:  46%|████▋     | 1666/3600 [05:21<06:13,  5.18req/s]Requests completed:  46%|████▋     | 1668/3600 [05:21<05:50,  5.51req/s]Requests completed:  46%|████▋     | 1670/3600 [05:23<08:14,  3.91req/s]Requests completed:  47%|████▋     | 1677/3600 [05:27<12:05,  2.65req/s]Requests completed:  47%|████▋     | 1692/3600 [05:27<05:43,  5.56req/s]Requests completed:  47%|████▋     | 1695/3600 [05:28<06:12,  5.11req/s]Requests completed:  47%|████▋     | 1697/3600 [05:29<08:31,  3.72req/s]Requests completed:  47%|████▋     | 1701/3600 [05:32<12:16,  2.58req/s]Requests completed:  48%|████▊     | 1710/3600 [05:34<08:41,  3.63req/s]Requests completed:  48%|████▊     | 1714/3600 [05:34<08:11,  3.84req/s]Requests completed:  48%|████▊     | 1717/3600 [05:35<07:56,  3.95req/s]Requests completed:  48%|████▊     | 1722/3600 [05:35<05:47,  5.40req/s]Requests completed:  48%|████▊     | 1724/3600 [05:36<05:41,  5.50req/s]Requests completed:  48%|███Requests completed:  46%|████▋     | Requests completed:  48%|███Requests completed:  47%|████▋     | Requests completed:  48%|████▊     | 1740/3600 [05:41<09:10,  3.38req/s]Requests completed:  49%|████▊     | 1749/3600 [05:46<13:00,  2.37req/s]Requests completed:  49%|████▉     | 1769/3600 [05:47<05:51,  5.21req/s]Requests completed:  49%|████▉     | 1771/3600 [05:47<06:01,  5.05req/s]Requests completed:  49%|████▉     | 1773/3600 [05:48<06:25,  4.75req/s]Requests completed:  49%|████▉     | 1775/3600 [05:49<08:15,  3.68req/s]Requests completed:  49%|████▉     | 1780/3600 [05:54<14:08,  2.15req/s]Requests completed:  50%|█████     | 1801/3600 [05:56<06:24,  4.68req/s]Requests completed:  50%|█████     | 1809/3600 [05:57<05:47,  5.15req/s]Requests completed:  50%|█████     | 1816/3600 [05:58<05:34,  5.33req/s]Requests completed:  51%|█████     | 1822/3600 [05:59<05:32,  5.35req/s]Requests completed:  51%|█████     | 1828/3600 [06:03<09:24,  3.14req/s]Requests completed:  51%|█████▏    | 1848/3600 [06:04<04:46,  6.12req/s]Requests completed:  51%|█████▏    | 1852/3600 [06:05<05:31,  5.27req/s]Requests completed:  52%|█████▏    | 1855/3600 [06:06<05:24,  5.37req/s]Requests completed:  52%|█████▏    | 1859/3600 [06:09<08:23,  3.46req/s]Requests completed:  52%|█████▏    | 1871/3600 [06:11<06:34,  4.38req/s]Requests completed:  52%|█████▏    | 1880/3600 [06:11<05:18,  5.39req/s]Requests completed:  52%|█████▏    | 1883/3600 [06:12<05:23,  5.31req/s]Requests completed:  52%|█████▏    | 1887/3600 [06:13<05:40,  5.04req/s]Requests completed:  52%|█████▏    | 1889/3600 [06:14<06:44,  4.23req/s]Requests completed:  53%|█████▎    | 1893/3600 [06:14<05:44,  4.95req/s]Requests completed:  53%|█████▎    | 1895/3600 [06:17<10:32,  2.70req/s]Requests completed:  53%|█████▎    | 1906/3600 [06:22<12:09,  2.32req/s]Requests completed:  53%|█████▎    | 1924/3600 [06:23<05:33,  5.02req/s]04-02-2026 19:52:09 [INFO] - [96mFinished 256 out of 5000 conversations (5%), 0 out of 256 clients finished, collected 1925 measurements, runtime 385.362 sec[0m
-04-02-2026 19:52:09 [INFO] - [96mEstimated req/sec 4.995, estimated runtime left 7141.238 sec[0m
-04-02-2026 19:52:09 [INFO] - --------------------------------------------------
-04-02-2026 19:52:09 [INFO] - [moving_avg_ttft_ms       ] avg:  30354.502 (500 samples)
-04-02-2026 19:52:09 [INFO] - [moving_avg_tpot_ms       ] avg:     48.804 (500 samples)
-04-02-2026 19:52:09 [INFO] - [ttft_ms                  ] avg:  23083.194, min:   2749.036, max:  33167.962
-04-02-2026 19:52:09 [INFO] - [tpot_ms                  ] avg:     44.908, min:     25.189, max:     60.186
-04-02-2026 19:52:09 [INFO] - [latency_ms               ] avg:  46417.956, min:   3220.266, max: 151279.968
-04-02-2026 19:52:09 [INFO] - [input_num_turns          ] avg:      4.839, min:      1.000, max:     15.000
-04-02-2026 19:52:09 [INFO] - [input_num_tokens         ] avg:   1548.126, min:      0.000, max:   6260.000
-04-02-2026 19:52:09 [INFO] - [output_num_tokens        ] avg:    515.760, min:      2.000, max:   2985.000
-04-02-2026 19:52:09 [INFO] - --------------------------------------------------
-Requests completed:  54%|█████▎    | 1926/3600 [06:23<05:13,  5.35req/s]Requests completed:  54%|█████▎    | 1928/3600 [06:23<05:47,  4.81req/s]Requests completed:  54%|█████▎    | 1931/3600 [06:25<07:24,  3.75req/s]Requests completed:  54%|█████▍    | 1938/3600 [06:28<09:16,  2.99req/s]Requests completed:  54%|█████▍    | 1949/3600 [06:29<06:29,  4.24req/s]Requests completed:  54%|█████▍    | 1956/3600 [06:32<06:59,  3.92req/s]Requests completed:  55%|█████▍    | 1963/3600 [06:34<07:36,  3.59req/s]Requests completed:  55%|█████▍    | 1975/3600 [06:35<05:16,  5.14req/s]Requests completed:  55%|█████▌    | 1981/3600 [06:36<05:38,  4.79req/s]Requests completed:  55%|█████▌    | 1990/3600 [06:37<04:11,  6.41req/s]Requests completed:  55%|█████▌    | 1992/3600 [06:39<06:27,  4.15req/s]Requests completed:  56%|█████▌    | 2005/3600 [06:40<03:55,  6.77req/s]Requests completed:  56%|█████▌    | 2008/3600 [06:41<04:46,  5.56req/s]Requests completed:  56%|█████▌    | 2015/3600 [06:42<05:07,  5.16req/s]Requests completed:  56%|█████▌    | 2017/3600 [06:44<06:47,  3.88req/s]Requests completed:  56%|█████▋    | 2027/3600 [06:45<05:36,  4.68req/s]Requests completed:  56%|█████▋    | 2034/3600 [06:47<05:19,  4.90req/s]Requests completed:  57%|█████▋    | 2040/3600 [06:47<04:01,  6.46req/s]Requests completed:  57%|█████▋    | 2042/3600 [06:48<05:39,  4.60req/s]Requests completed:  57%|█████▋    | 2045/3600 [06:48<04:45,  5.44req/s]Requests completed:  57%|█████▋    | 2047/3600 [06:49<04:48,  5.38req/s]Requests completed:  57%|█████▋    | 2049/3600 [06:52<12:35,  2.05req/s]Requests completed:  57%|█████▋    | 2055/3600 [06:53<07:45,  3.32req/s]Requests completed:  57%|█████▋    | 2057/3600 [06:54<08:34,  3.00req/s]Requests completed:  57%|█████▋    | 2066/3600 [06:55<06:38,  3.85req/s]Requests completed:  57%|█████▋    | 2068/3600 [06:57<07:55,  3.22req/s]Requests completed:  57%|█████▊    | 2070/3600 [06:57<07:48,  3.26req/s]Requests completed:  58%|█████▊    | 2073/3600 [06:58<07:56,  3.20req/s]Requests completed:  58%|█████▊    | 2079/3600 [07:02<10:46,  2.35req/s]RequestsRequests completed:  56%|█████▌    | 2135/3840 [07:06<15:22,  1.85req/s]Requests completed:  56%|█████▋    | 2163/3840 [07:07<05:24,  5.17req/s]Requests completed:  56%|█████▋    | 2165/3840 [07:09<06:51,  4.07req/s]Requests completed:  57%|█████▋    | 2172/3840 [07:09<05:32,  5RequestsRequests completed:  57%|█████▋    | 2175/3840 [07:11<07:08,  3Requests completed:  59%|█████▉    | 2119/3600 [07:12<06:01,  4.10req/s]Requests completed:  59%|█████▉    | 2123/3600 [07:13<06:21,  3.87req/s]Requests completed:  59%|█████▉    | 2129/3600 [07:16<07:22,  3.32req/s]Requests completed:  59%|█████▉    | 2140/3600 [07:17<05:19,  4.57req/s]Requests completed:  60%|█████▉    | 2146/3600 [07:18<05:45,  4.21req/s]Requests completed:  60%|█████▉    | 2151/3600 [07:19<05:00,  4.83req/s]Requests completed:  60%|█████▉    | 2154/3600 [07:21<06:35,  3.66req/s]Requests completed:  60%|██████    | 2163/3600 [07:23<05:44,  4.17req/s]Requests completed:  60%|██████    | 2168/3600 [07:25<06:49,  3.50req/s]Requests completed:  60%|██████    | 2177/3600 [07:25<04:35,  5.17req/s]Requests completed:  60%|██████    | 2178/3600 [07:29<09:24,  2.52req/s]Requests completed:  61%|██████    | 2186/3600 [07:29<05:49,  4.04req/s]Requests completed:  61%|██████    | 2188/3600 [07:31<08:05,  2.91req/s]Requests completed:  61%|██████    | 2196/3600 [07:32<05:40,  4.13req/s]Requests completed:  61%|██████    | 2201/3600 [07:33<05:30,  4.23req/s]Requests completed:  61%|██████▏   | 2205/3600 [07:34<06:09,  3.77req/s]Requests completed:  61%|██████▏   | 2209/3600 [07:35<05:41,  4.07req/s]Requests completed:  62%|██████▏   | 2214/3600 [07:39<08:51,  2.61req/s]Requests completed:  62%|██████▏   | 2221/3600 [07:40<07:51,  2.92req/s]Requests completed:  62%|██████▏   | 2227/3600 [07:42<06:51,  3.34req/s]Requests completed:  62%|██████▏   | 2234/3600 [07:45<08:08,  2.80req/s]Requests completed:  62%|██████▏   | 2244/3600 [07:46<05:25,  4.16req/s]Requests completed:  62%|██████▏   | 2246/3600 [07:47<06:25,  3.51req/s]Requests completed:  62%|██████▎   | 2250/3600 [07:48<06:21,  3.54req/s]Requests completed:  63%|██████▎   | 2259/3600 [07:48<03:46,  5.92req/s]Requests completed:  63%|██████▎   | 2262/3600 [07:55<11:40,  1.91req/s]04-02-2026 19:53:41 [INFO] - [96mFinished 320 out of 5000 conversations (6%), 0 out of 256 clients finished, collected 2280 measurements, runtime 477.895 sec[0m
-04-02-2026 19:53:41 [INFO] - [96mEstimated req/sec 4.771, estimated runtime left 6989.218 sec[0m
-04-02-2026 19:53:41 [INFO] - --------------------------------------------------
-04-02-2026 19:53:41 [INFO] - [moving_avg_ttft_ms       ] avg:  31064.562 (500 samples)
-04-02-2026 19:53:41 [INFO] - [moving_avg_tpot_ms       ] avg:     50.316 (500 samples)
-04-02-2026 19:53:42 [INFO] - [ttft_ms                  ] avg:  24340.643, min:   2749.036, max:  36201.275
-04-02-2026 19:53:42 [INFO] - [tpot_ms                  ] avg:     45.797, min:     25.189, max:     62.849
-04-02-2026 19:53:42 [INFO] - [latency_ms               ] avg:  48752.300, min:   3220.266, max: 151279.968
-04-02-2026 19:53:42 [INFO] - [input_num_turns          ] avg:      4.965, min:      1.000, max:     15.000
-04-02-2026 19:53:42 [INFO] - [input_num_tokens         ] avg:   1628.224, min:      0.000, max:   7448.000
-04-02-2026 19:53:42 [INFO] - [output_num_tokens        ] avg:    528.751, min:      2.000, max:   2985.000
-04-02-2026 19:53:42 [INFO] - --------------------------------------------------
-Requests completed:  63%|██████▎   | 2281/3600 [07:56<04:57,  4.44req/s]Requests completed:  64%|██████▎   | 2286/3600 [07:56<04:08,  5.28req/s]Requests completed:  64%|██████▎   | 2289/3600 [08:01<08:30,  2.57req/s]Requests completed:  64%|██████▍   | 2308/3600 [08:03<05:12,  4.14req/s]Requests completed:  64%|██████▍   | 2317/3600 [08:04<04:36,  4.64req/s]Requests completed:  65%|██████▍   | 2323/3600 [08:05<03:53,  5.48req/s]Requests completed:  65%|██████▍   | 2326/3600 [08:06<04:12,  5.05req/s]Requests completed:  65%|██████▍   | 2328/3600 [08:06<04:04,  5.21req/s]Requests completed:  65%|██████▍   | 2330/3600 [08:08<05:57,  3.56req/s]Requests completed:  65%|██████▍   | 2337/3600 [08:09<04:55,  4.28req/s]Requests completed:  65%|██████▌   | 2340/3600 [08:09<04:13,  4.97req/s]Requests completed:  65%|██████▌   | 2341/3600 [08:13<10:29,  2.00req/s]Requests completed:  65%|██████▌   | 2354/3600 [08:14<05:21,  3.87req/s]Requests completed:  66%|██████▌   | 2358/3600 [08:17<06:51,  3.02req/s]Requests completed:  66%|██████▌   | 2367/3600 [08:17<04:27,  4.61req/s]Requests completed:  66%|██████▌   | 2369/3600 [08:20<07:25,  2.76req/s]Requests completed:  66%|██████▌   | 2382/3600 [08:20<03:57,  5.13req/s]Requests completed:  66%|██████▋   | 2385/3600 [08:21<04:01,  5.03req/s]Requests completed:  66%|██████▋   | 2389/3600 [08:22<03:42,  5.45req/s]Requests completed:  66%|██████▋   | 2391/3600 [08:22<03:27,  5.84req/s]Requests completed:  66%|██████▋   | 2393/3600 Requests completed:  64%|██████▍   | 2455/3840 [08:28<10:51,  2.13req/s]Requests completed:  64%|██████▍   | 2474/3840 [08:29<04:59,  4.55req/s]Requests completed:  65%|██████▍   | 2479/3840 [08:29<04:17,  5.29req/s]Requests completed:  65%|██████▍   | 2481/3840 [08:33<07:28,  3.03req/s]Requests completed:  65%|██████▍   | 2494/3840 [08:33<04:12,  5.33req/s]Requests completed:  65%Requests completed:  67%|██████▋   | 2426/3600 Requests completed:  65%Requests completed:  68%|██████▊   | 2436/3600 [08:41<10:28,  1.85req/s]Requests completed:  68%|██████▊   | 2462/3600 [08:42<04:13,  4.49req/s]Requests completed:  68%|██████▊   | 2465/3600 [08:42<04:01,  4.69req/s]Requests completed:  69%|██████▊   | 2467/3600 [08:43<03:48,  4.96req/s]Requests completed:  69%|██████▊   | 2469/3600 [08:43<04:04,  4.62req/s]Requests completed:  69%|██████▊   | 2472/3600 [08:45<05:48,  3.23req/s]Requests completed:  69%|██████▉   | 2479/3600 [08:46<03:41,  5.05req/s]Requests completed:  69%|██████▉   | 2482/3600 Requests completed:  66%|██████▌   | 2534/3840 [08:48<08:51,  2.46req/s]Requests completed:  66%Requests completed:  69%|██████▉   | 2489/3600 Requests completed:  66%Requests completed:  69%|██████▉   | 2491/3600 Requests completed:  66%|██████▋   | 2553/3840 [08:51<06:56,  3.09req/s]Requests completed:  67%|██████▋   | 2562/3840 [08:52<04:41,  4.53req/s]Requests completed:  67%|██████▋   | 2565/3840 [08:54<06:09,  3.45req/s]Requests completed:  67%|██████▋   | 2572/3840 [08:58<08:38,  2.44req/s]Requests completed:  67%|██████▋   | 2588/3840 [08:59<04:41,  4.45req/s]Requests completed:  67%|██████▋   | 2590/3840 [09:00<04:30,  4.63req/s]Requests completed:  68%|██████▊   | 2592/3840 [09:01<05:17,  3.93req/s]Requests completed:  68%Requests completed:  70%|██████▉   | 2519/3600 Requests completed:  68%Requests completed:  71%|███████   | 2544/3600 Requests completed:  68%Requests completed:  71%|███████   | 2561/3600 Requests completed:  68%|██████▊   | 2627/3840 [09:12<05:16,  3.83req/s]Requests completed:  68%|██████▊   | 2630/3840 [09:14<06:01,  3.35req/s]Requests completed:  69%|██████▊   | 2636/3840 [09:18<07:56,  2.53req/s]Requests completed:  69%|██████▉   | 2655/3840 [09:19<04:15,  4.63req/s]04-02-2026 19:55:05 [INFO] - [96mFinished 384 out of 5000 conversations (8%), 0 out of 256 clients finished, collected 2660 measurements, runtime 561.400 sec[0m
-04-02-2026 19:55:05 [INFO] - [96mEstimated req/sec 4.738, estimated runtime left 6748.491 sec[0m
-04-02-2026 19:55:05 [INFO] - --------------------------------------------------
-04-02-2026 19:55:05 [INFO] - [moving_avg_ttft_mRequests completed:  72%|███████▏  | 2597/3600 [09:26<17:12,  1.03s/req]Requests completed:  73%|███████▎  | 2621/3600 [09:29<05:37,  2.90req/s]Requests completed:  73%|███████▎  | 2630/3600 [09:32<05:42,  2.83req/s]Requests completed:  74%|███████▎  | 2651/3600 [09:38<05:09,  3.06req/s]04-02-2026 19:55:25 [INFO] - [96mFinished 384 out of 5000 conversations (8%), 0 out of 256 clients finished, collected 2670 measurements, runtime 581.210 sec[0m
-04-02-2026 19:55:25 [INFO] - [96mEstimated req/sec 4.594, estimated runtime left 6986.623 sec[0m
-04-02-2026 19:55:25 [INFO] - --------------------------------------------------
-04-02-2026 19:55:25 [INFO] - [moving_avg_ttft_ms       ] avg:  33734.877 (500 samples)
-04-02-2026 19:55:25 [INFO] - [moving_avg_tpot_ms       ] avg:     51.750 (500 samples)
-04-02-2026 19:55:25 [INFO] - [ttft_ms                  ] avg:  25730.984, min:   2749.036, max:  37103.174
-04-02-2026 19:55:25 [INFO] - [tpot_ms                  ] avg:     46.726, min:     25.189, max:     62.849
-04-02-2026 19:55:25 [INFO] - [latency_ms               ] avg:  51609.069, min:   3220.266, max: 167411.303
-04-02-2026 19:55:25 [INFO] - [input_num_turns          ] avg:      5.087, min:      1.000, max:     15.000
-04-02-2026 19:55:25 [INFO] - [input_num_tokens         ] avg:   1710.341, min:      0.000, max:   8063.000
-04-02-2026 19:55:25 [INFO] - [output_num_tokens        ] avg:    548.601, min:      2.000, max:   2985.000
-04-02-2026 19:55:25 [INFO] - --------------------------------------------------
-Requests completed:  74%|███████▍  | 2671/3600 [09:40<03:36,  4.29req/s]Requests completed:  74%|███████▍  | 2680/3600 [09:42<03:26,  4.45req/s]Requests completed:  75%|███████▍  | 2685/3600 [09:42<02:59,  5.09req/s]Requests completed:  75%|███████▍  | 2687/3600 [09:44<04:02,  3.77req/s]Requests completed:  75%|███████▍  | 2695/3600 [09:45<03:19,  4.54req/s]Requests completed:  75%|███████▍  | 2697/3600 [09:47<04:02,  3.73req/s]Requests completed:  75%|███████▍  | 2699/3600 [09:48<04:28,  3.35req/s]Requests completed:  75%|███████▌  | 2704/3600 [09:51<06:03,  2.47req/s]Requests completed:  75%|███████▌  | 2712/3600 [09:53<04:46,  3.10req/s]Requests completed:  75%|███████▌  | 2716/3600 [09:56<06:51,  2.15req/s]Requests completed:  76%|███████▌  | 2728/3600 [09:59<04:43,  3.07req/s]Requests completed:  76%|███████▌  | 2735/3600 [09:59<03:27,  4.17req/s]Requests completed:  76%|███████▌  | 2737/3600 [10:00<04:01,  3.57req/s]Requests completed:  76%|███████▌  | 2742/3600 [10:02<04:06,  3.48req/s]Requests completed:  76%|███████▌  | 2744/3600 [10:04<06:02,  2.36req/s]Requests completed:  76%|███████▋  | 2751/3600 [10:08<06:35,  2.15req/s]Requests completed:  77%|███████▋  | 2763/3600 [10:11<04:45,  2.93req/s]Requests completed:  77%|███████▋  | 2768/3600 [10:11<03:47,  3.66req/s]Requests completed:  77%|███████▋  | 2769/3600 [10:14<06:25,  2.15req/s]Requests completed:  77%|███████▋  | 2775/3600 [10:15<05:07,  2.68req/s]Requests completed:  77%|███████▋  | 2779/3600 [10:18<06:25,  2.13req/s]Requests completed:  77%|███████▋  | 2785/3600 [10:19<04:35,  2.96req/s]Requests completed:  77%|███████▋  | 2786/3600 [10:21<06:05,  2.23req/s]Requests completed:  78%|███████▊  | 2792/3600 [10:22<05:12,  2.59req/s]Requests completed:  78%|███████▊  | 2793/3600 [10:24<06:18,  2.13req/s]Requests completed:  78%|███████▊  | 2797/3600 [10:25<05:10,  2.59req/s]Requests completed:  78%|███████▊  | 2800/3600 [10:26<05:10,  2.58req/s]Requests completed:  78%|███████▊  | 2803/3600 [10:27<05:18,  2.50req/s]Requests completed:  78%|███████▊  | 2807/3600 [10:28<04:22,  3.02req/s]Requests completed:  78%|███████▊  | 2811/3600 [10:31<05:45,  2.29req/s]Requests completed:  78%|███████▊  | 2820/3600 [10:33<04:52,  2.67req/s]Requests completed:  79%|███████▊  | 2832/3600 [10:35<03:14,  3.96req/s]Requests completed:  79%|██Requests completed:  75%|███████▌  | 2881/3840 [10:41<13:11,  1.21req/s]Requests completed:  76%|███████▌  | 2906/3840 [10:42<04:47,  3.25req/s]Requests completed:  76%|███████▌  | 2914/3840 [10:43<04:00,  3.85req/s]Requests completed:  76%|███████▌  | 2917/3840 [10:43<03:37,  4.25req/s]Requests completed:  76%|███████▌  | 2919/3840 [10:44<03:51,  3.98req/s]Requests completed:  76%|███████▌  | 292Requests completed:  79%|██Requests completed:  76%|███████▌  | 2927/3840 [10:46<04:53,  3.12req/s]Requests completed:  76%|███████▋  | 2936/3840 [10:48<03:31,  4.27req/s]Requests completed:  77%|███████▋  | 2940/3840 [10:52<06:10,  2.43req/s]Requests completed:  77%|███████▋  | 2952/3840 [11:01<08:33,  1.73req/s]Requests completed:  78%|███████▊  | 2981/3840 [11:02<03:26,  4.17req/s]Requests completed:  78%|███████▊  | 2985/3840 [11:02<03:05,  4.62req/s]Requests completed:  78%|███████▊  | 2987/3840 [11:02<02:54,  4.88req/s]Requests completed:  78%|███████▊  | 2989/3840 [11:05<04:48,  2.95req/s]04-02-2026 19:56:51 [INFO] - [96mFinished 448 out of 5000 conversations (9%), 0 out of 256 clients finished, collected 2995 measurements, runtime 667.991 sec[0m
-04-02-2026 19:56:51 [INFO] - [96mEstimated req/sec 4.484, estimated runtime left 6787.264 sec[0m
-04-02-2026 19:56:51 [INFO] - -----------------------------------Requests completed:  81%|████████▏ | 2929/3600 [11:05<02:56,  3.80req/s]Requests completed:  81%|████████▏ | 2933/3600 [11:05<02:18,  4.82req/s]Requests completed:  82%|████████▏ | 2935/3600 [11:09<05:27,  2.03req/s]Requests completed:  82%|████████▏ | 2952/3600 [11:11<02:30,  4.30req/s]Requests completed:  82%|████████▏ | 2957/3600 [11:14<03:29,  3.08req/s]Requests completed:  82%|████████▏ | 2965/3600 [11:15<02:51,  3.71req/s]Requests completed:  82%|████████▎ | 2970/3600 [11:16<02:17,  4.58req/s]Requests completed:  83%|████████▎ | 2973/3600 [11:17<02:45,  3.80req/s]Requests completed:  83%|████████▎ | 2979/3600 [11:20<03:17,  3.15req/s]Requests completed:  83%|████████▎ | 2995/3600 [11:21<01:50,  5.48req/s]04-02-2026 19:57:07 [INFO] - [96mFinished 448 out of 5000 conversations (9%), 0 out of 256 clients finished, collected 2997 measurements, runtime 683.612 sec[0m
-04-02-2026 19:57:07 [INFO] - [96mEstimated req/sec 4.384, estimated runtime left 6945.99 sec[0m
-04-02-2026 19:57:07 [INFO] - --------------------------------------------------
-04-02-2026 19:57:07 [INFO] - [moving_avg_ttft_ms       ] avg:  37131.726 (500 samples)
-04-02-2026 19:57:07 [INFO] - [moving_avg_tpot_ms       ] avg:     59.853 (500 samples)
-04-02-2026 19:57:07 [INFO] - [ttft_ms                  ] avg:  27157.824, min:   2749.036, max:  47384.168
-04-02-2026 19:57:07 [INFO] - [tpot_ms                  ] avg:     48.548, min:     25.189, mRequests completed:  80%|███████▉  | 3053/3840 [11:27<06:24,  2.05req/s]Requests completed:  80%|████████  | 3074/3840 [11:28<02:58,  4.29req/s]Requests completed:  80%|████████  | 3077/3840 [11:29<02:57,  4.31req/s]Requests completed:  80%|████████  | 3080/3840 [11:30<03:22,  3.75req/s]Requests completed:  80%|████████  | 3088/3840 [11:32<03:12,  3.90req/s]Requests completed:  81%|████████  | 3093/3840 [11:36<04:43,  2.64req/s]Requests completed:  81%|████████  | 3106/3840 [11:40<04:13,  2.90req/s]Requests completed:  81%|████████▏ | 3120/3840 [11:41<02:50,  4.23req/s]Requests completed:  81%|████████▏ | 3127/3840 [11:43<02:46,  4.28req/s]Requests completed:  82%|████████▏ | 3132/3840 [11:44<02:39,  4.44req/s]Requests completed:  82%|████████▏ | 3137/3840 [11:44<02:13,  5.29req/s]Requests completed:  82%|████████▏ | 3140/3840 [11:44<02:15,  5.17req/s]Requests completed:  82%|████████▏ | 3143/3840 [11:47<03:19,  3.49req/s]Requests completed:  82%|████████▏ | 3149/3840 [11:48<03:08,  3.67req/s]Requests completed:  82%|████████▏ | 3156/3840 [11:50<02:50,  4.00req/s]Requests completed:  82%|████████▏ | 3161/3840 [11:50<02:14,  5.05req/s]Requests completed:  82%|████████▏ | 3162/3840 [11:52<03:59,  2.83req/s]Requests completed:  83%|████████▎ | 3169/3840 [11:52<02:23,  4.68req/s]Requests completed:  83%|████████▎ | 3172/3840 [11:55<03:40,  3.03req/s]Requests completed:  83%|████████▎ | 3183/3840 [11:59<03:49,  2.86req/s]Requests completed:  83%|████████▎ | 3192/3840 [12:00<02:52,  3.77req/s]Requests completed:  83%|████████▎ | 3195/3840 [12:02<03:21,  3.20req/s]Requests completed:  83%|████████▎ | 3197/3840 [12:03<03:43,  2.87req/s]Requests completed:  83%|████████▎ | 3199/3840 [12:04<04:33,  2.35req/s]Requests completed:  83%|████████▎ | 3203/3840 [12:07<05:17,  2.01req/s]Requests completed:  84%|████████▎ | 3213/3840 [12:12<04:51,  2.15req/s]Requests completed:  84%|████████▍ | 3226/3840 [12:13<02:50,  3.59req/s]Requests completed:  84%|████████▍ | 3228/3840 [12:13<02:57,  3.45req/s]Requests completed:  84%|████████▍ | 3231/3840 [12:14<02:54,  3.50req/s]Requests completed:  84%|████████▍ | 3233/3840 [12:16<03:36,  2.81req/s]Requests completed:  84%|████████▍ | 3236/3840 [12:20<05:51,  1.72req/s]Requests completed:  84%|████████▍ | 3243/3840 [12:25<06:39,  1.49req/s]Requests completed:  85%|████████▍ | 3256/3840 [12:26<03:19,  2.93req/s]Requests completed:  85%|████████▍ | 3259/3840 [12:27<03:24,  2.85req/s]Requests completed:  85%|████████▍ | 3261/3840 [12:29<03:55,  2.46req/s]Requests completed:  85%|████████▌ | 3265/3840 [12:35<06:50,  1.40req/s]Requests completed:  85%|████████▌ | 3281/3840 [12:38<03:34,  2.61req/s]Requests completed:  86%|████████▌ | 3290/3840 [12:45<04:44,  1.93req/s]Requests completed:  86%|████████▌ | 3303/3840 [12:45<02:51,  3.13req/s]Requests completed:  86%|████████▌ | 3305/3840 [12:47<03:09,  2.83req/s]Requests completed:  86%|████████▌ | 3309/3840 [12:47<02:46,  3.18req/s]Requests completed:  86%|████████▌ | 3310/3840 [12:48<02:51,  3.10req/s]Requests completed:  86%|████████▋ | 3312/3840 [12:49<03:22,  2.61req/s]Requests completed:  86%|████████▋ | 3316/3840 [12:53<04:41,  1.86req/s]Requests completed:  87%|████████▋ | 3327/3840 [12:53<02:16,  3.76req/s]Requests completed:  87%|████████▋ | 3330/3840 [12:53<01:58,  4.29req/s]Requests completed:  87%|████████▋ | 3332/3840 [12:56<03:21,  2.52req/s]Requests completed:  87%|████████▋ | 3345/3840 [12:58<02:08,  3.86req/s]Requests completed:  87%|████████▋ | 3351/3840 [12:59<01:52,  4.33req/s]Requests completed:  87%|████████▋ | 3354/3840 [12:59<01:36,  5.02req/s]Requests completed:  87%|████████▋ | 3356/3840 [13:01<02:09,  3.72req/s]04-02-2026 19:58:46 [INFO] - [96mFinished 512 out of 5000 conversations (10%), 0 out of 256 clients finished, collected 3357 measurements, runtime 783.145 sec[0m
-04-02-2026 19:58:46 [INFO] - [96mEstimated req/sec 4.287, estimated runtime left 6864.758 sec[0m
-04-Requests completed:  91%|█████████▏| 3287/3600 [13:00<01:41,  3.10req/s]Requests completed:  91%|█████████▏| 3293/3600 [13:04<02:06,  2.42req/s]Requests completed:  92%|█████████▏| 3306/3600 [13:06<01:29,  3.27req/s]Requests completed:  92%|█████████▏| 3313/3600 [13:07<01:05,  4.42req/s]Requests completed:  92%|█████████▏| 3315/3600 [13:08<01:11,  3.99req/s]Requests completed:  92%|█████████▏| 3320/3600 [13:09<01:05,  4.25req/s]Requests completed:  92%|█████████▏| 3324/3600 [13:09<00:52,  5.21req/s]Requests completed:  92%|█████████▏| 3326/3600 [13:09<00:56,  4.86req/s]Requests completed:  93%|█████████▎| 3331/3600 [13:10<00:48,  5.60req/s]Requests completed:  93%|█████████▎| 3334/3600 [13:10<00:43,  6.11req/s]Requests completed:  93%|█████████▎| 3335/3600 [13:11<00:44,  5.89req/s]Requests completed:  93%|█████████▎| 3336/3600 [13:12<01:16,  3.46req/s]Requests completed:  93%|█████████▎| 3342/3600 [13:12<00:45,  5.64req/s]Requests completed:  93%|█████████▎| 3344/3600 [13:15<01:48,  2.36req/s]04-02-2026 19:59:01 [INFO] - [96mFinished 512 out of 5000 conversations (10%), 0 out of 256 clients finished, collected 3356 measurements, runtime 797.770 sec[0m
-04-02-2026 19:59:01 [INFO] - [96mEstimated req/sec 4.207, estimated runtime left 6992.949 sec[0m
-04-02-2026 19:59:01 [INFO] - --------------------------------------------------
-04-02-2026 19:59:01 [INFO] - [moving_avg_ttft_ms       ] avg:  40116.822 (500 samples)
-04-02-2026 19:59:01 [INFO] - [moving_avg_tpot_ms       ] avg:     65.508 (500 samples)
-04-02-2026 19:59:01 [INFO] - [ttft_ms                  ] avg:  28482.357, min:   2749.036, max:  51131.318
-04-02-2026 19:59:01 [INFO] - [tpot_ms                  ] avg:     50.399, min:     25.189, max:    122.554
-04-02-2026 19:59:01 [INFO] - [latency_ms               ] avg:  57167.789, min:   3220.266, max: 299975.079
-04-02-2026 19:59:01 [INFO] - [input_num_turns          ] avg:      5.274, min:      1.000, max:     15.000
-Requests completed:  89%|████████▉ | 3414/3840 [13:17<01:59,  3.55req/s]Requests completed:  89%|████████▉ | 3419/3840 [13:21<03:30,  2.00req/s]Requests completed:  89%|████████▉ | 3430/3840 [13:23<02:12,  3.09req/s]Requests completed:  90%|████████▉ | 3440/3840 [13:24<01:23,  4.81req/s]Requests completed:  90%|████████▉ | 3442/3840 [13:26<02:03,  3.22req/s]Requests completed:  90%|████████▉ | 3449/3840 [13:27<01:39,  3.94req/s]Requests completed:  90%|████████▉ | 3453/3840 [13:29<01:49,  3.54req/s]Requests completed:  90%|█████████ | 3460/3840 [13:29<01:15,  5.03req/s]Requests completed:  90%|█████████ | 3463/3840 [13:31<01:59,  3.16req/s]Requests completed:  90%|█████████ | 3469/3840 [13:32<01:29,  4.12req/s]Requests completed:  90%|█████████ | 3473/3840 [13:33<01:30,  4.07req/s]Requests completed:  90%|█████████ | 3475/3840 [13:36<02:22,  2.56req/s]Requests completed:  91%|█████████ | 3490/3840 [13:37<01:13,  4.73req/s]Requests completed:  91%|█████████ | 3493/3840 [13:40<01:57,  2.97req/s]Requests completed:  91%|█████████ | 3501/3840 [13:41<01:26,  3.93req/s]Requests completed:  91%|█████████▏| 3506/3840 [13:42<01:16,  4.36req/s]Requests completed:  91%|█████████▏| 3509/3840 [13:42<01:06,  4.94req/s]Requests completed:  91%|█████████▏| 3510/3840 [13:43<01:20,  4.12req/s]Requests completed:  92%|█████████▏| 3514/3840 [13:43<00:59,  5.47req/s]Requests completed:  92%|█████████▏| 3517/3840 [13:45<01:50,  2.91req/s]Requests completed:  92%|█████████▏| 3527/3840 [13:47<01:13,  4.27req/s]Requests completed:  92%|█████████▏| 3532/3840 [13:47<00:56,  5.42req/s]Requests completed:  92%|█████████▏| 3534/3840 [13:48<01:16,  4.00req/s]Requests completed:  92%|█████████▏| 3535/3840 [13:50<01:52,  2.71req/s]Requests completed:  92%|█████████▏| 3540/3840 [13:54<02:38,  1.90req/s]Requests completed:  92%|█████████▏| 3550/3840 [13:55<01:27,  3.30req/s]Requests completed:  93%|█████████▎| 3554/3840 [13:55<01:09,  4.11req/s]Requests completed:  93%|█████████▎| 3556/3840 [14:00<02:35,  1.83req/s]Requests completed:  93%|█████████▎| 3576/3840 [14:04<01:24,  3.12req/s]Requests completed:  94%|█████████▎| 3597/3840 [14:05<00:44,  5.52req/s]Requests completed:  94%|█████████▍| 3600/3840 [14:05<00:42,  5.70req/s]Requests completed:  94%|█████████▍| 3602/3840 [14:06<00:42,  5.58req/s]Requests completed:  94%|█████████▍| 3604/3840 [14:06<00:40,  5.80req/s]Requests completed:  94%|█████████▍| 3606/3840 [14:09<01:15,  3.09req/s]Requests completed:  94%|█████████▍| 3616/3840 [14:11<01:01,  3.64req/s]Requests completed:  94%|█████████▍| 3619/3840 [14:12<01:08,  3.22req/s]Requests completed:  94%|█████████▍| 3622/3840 [14:13<01:00,  3.59req/s]Requests completed:  94%|█████████▍| 3624/3840 [14:14<01:06,  3.25req/s]Requests completed:  94%|██████�Requests completed:  98%|███████�Requests completed:  95%|██████�Requests completed:  99%|█████████▉| 3561/3600 [14:15<00:10,  3.65req/s]Requests completed:  99%|█████████▉| 3568/3600 [14:16<00:07,  4.43req/s]Requests completed:  99%|█████████▉| 3570/3600 [14:16<00:06,  4.42req/s]Requests completed:  99%|███████�Requests completed:  95%|██████�Requests completed:  99%|█████████▉| 3578/3600 [14:19<00:06,  3.52req/s]Requests completed: 100%|█████████▉| 3592/3600 [14:20<00:01,  6.06req/s]Requests completed: 100%|█████████▉| 3596/3600 [14:21<00:00,  6.31req/s]04-02-2026 20:00:07 [INFO] - [93mClient 108: glRequests completed:  95%|█████████▌| 3657/3840 [14:22<01:14,  2.47req/s]04-02-2026 20:00:08 [INFO] - [96mFinished 576 out of 5000 conversations (12%), 0 out of 256 clients finished, collected 3665 measurements, runtime 864.899 sec[0m
-04-02-2026 20:00:08 [INFO] - [96mEstimated req/sec 4.237, estimated runtime left 6642.902 sec[0m
-04-02-2026 20:00:08 [INFO] - --------------------------------------------------
-04-02-2026 20:00:08 [INFO] - [moving_avg_ttft_ms       ] avg:  39682.340 (500 samples)
-04-02-2026 20:00:08 [INFO] - [moving_avg_tpot_ms       ] avg:     65.890 (500 samples)
-04-02-2026 20:00:08 [INFO] - [ttft_ms                  ] avg:  28294.148, min:    190.466, max:  51292.872
-04-02-2026 20:00:08 [INFO] - [tpot_ms                  ] avg:     52.345, min:     27.087, max:    227.304
-04-02-2026 20:00:08 [INFO] - [latency_ms               ] avg:  57533.746, min:   2163.374, max: 359933.935
-04-02-2026 20:00:08 [INFO] - [input_num_turns          ] avg:      5.332, min:      1.000, max:     15.000
-04-02-2026 20:00:08 [INFO] - [input_num_tokens         ] avg:   1856.509, min:      0.000, max:  10254.000
-04-02-2026 20:00:08 [INFO] - [output_num_tokens        ] avg:    566.166, min:      2.000, max:   5285.000
-04-02-2026 20:00:08 [INFO] - --------------------------------------------------
-Requests completed:  95%|█████████▌| 3666/3840 [14:23<00:39,  4.39req/s]Requests completed:  96%|█████████▌| 3668/3840 [14:23<00:35,  4.86req/s]Requests completed:  96%|█████████▌| 3669/3840 [14:26<01:16,  2.25req/s]Requests completed:  96%|█████████▌| 3681/3840 [14:29<00:53,  2.97req/s]Requests completed:  96%|█████████▌| 3690/3840 [14:31<00:43,  3.44req/s]Requests completed:  96%|█████████▋| 3699/3840 [14:34<00:39,  3.59req/s]Requests completed:  96%|█████████▋| 3704/3840 [14:35<00:35,  3.86req/s]Requests completed:  97%|█████████▋| 3709/3840 [14:36<00:34,  3.78req/s]Requests completed:  97%|█████████▋| 3714/3840 [14:36<00:25,  4.94req/s]Requests completed:  97%|█████████▋| 3716/3840 [14:37<00:28,  4.43req/s]Requests completed:  97%|█████████▋| 3719/3840 [14:38<00:29,  4.12req/s]Requests completed:  97%|█████████▋| 3720/3840 [14:38<00:33,  3.60req/s]Requests completed:  97%|█████████▋| 3723/3840 [14:41<00:53,  2.21req/s]Requests completed:  97%|█████████▋| 3735/3840 [14:41<00:19,  5.52req/s]Requests completed:  97%|█████████▋| 3738/3840 [14:48<00:54,  1.88req/s]Requests completed:  98%|█████████▊| 3757/3840 [14:48<00:17,  4.82req/s]Requests completed:  98%|█████████▊| 3762/3840 [14:51<00:21,  3.64req/s]Requests completed:  98%|█████████▊| 3770/3840 [14:52<00:16,  4.34req/s]Requests completed:  98%|█████████▊| 3773/3840 [14:53<00:18,  3.71req/s]Requests completed:  98%|█████████▊| 3780/3840 [14:54<00:12,  4.88req/s]Requests completed:  99%|█████████▊| 3784/3840 [14:54<00:09,  5.87req/s]Requests completed:  99%|█████████▊| 3787/3840 [14:54<00:07,  6.79req/s]Requests completed:  99%|█████████▊| 3790/3840 [14:54<00:08,  6.21req/s]Requests completed:  99%|█████████▉| 3792/3840 [14:55<00:08,  5.91req/s]Requests completed:  99%|█████████▉| 3796/3840 [14:57<00:12,  3.39req/s]Requests completed:  99%|█████████▉| 3803/3840 [14:58<00:09,  4.03req/s]Requests completed:  99%|█████████▉| 3808/3840 [15:00<00:08,  3.61req/s]Requests completed:  99%|█████████▉| 3816/3840 [15:02<00:05,  4.00req/s]Requests completed: 100%|█████████▉| 3821/3840 [15:03<00:04,  4.02req/s]Requests completed: 100%|█████████▉| 3825/3840 [15:05<00:04,  3.23req/s]04-02-2026 20:00:53 [INFO] - [93mClient 104: global request limit reached (3840)[0m
-04-02-2026 20:00:53 [INFO] - [96mClient 104 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 100%|█████████▉| 3833/3840 [15:08<00:02,  3.27req/s]04-02-2026 20:00:53 [INFO] - [96m1 out of 256 clients finished[0m
-04-02-2026 20:00:53 [INFO] - [93mSending termination signal to clients[0m
-04-02-2026 20:00:53 [INFO] - [93mClient 65: global request limit reached (3840)[0m
-04-02-2026 20:00:53 [INFO] - [96mClient 65 is done (num_successes=21, num_failures=0)[0m
-04-02-2026 20:00:53 [INFO] - [93mClient 232: global request limit reached (3840)[0m
-04-02-2026 20:00:53 [INFO] - [96mClient 232 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:00:54 [INFO] - [93mClient 109: global request limit reached (3840)[0m
-04-02-2026 20:00:54 [INFO] - [96mClient 109 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:00:54 [INFO] - [94mStopped metrics collection (early stop)[0m
-Requests completed: 3841req [15:09,  4.18req/s]                         04-02-2026 20:00:54 [INFO] - [96m2 out of 256 clients finished[0m
-04-02-2026 20:00:54 [INFO] - [96m3 out of 256 clients finished[0m
-04-02-2026 20:00:54 [INFO] - [96m4 out of 256 clients finished[0m
-04-02-2026 20:00:55 [INFO] - [93mClient 242: global request limit reached (3840)[0m
-04-02-2026 20:00:55 [INFO] - [96mClient 242 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3844req [15:09,  4.64req/s]04-02-2026 20:00:55 [INFO] - [96m5 out of 256 clients finished[0m
-04-02-2026 20:00:55 [INFO] - [93mClient 165: global request limit reached (3840)[0m
-04-02-2026 20:00:55 [INFO] - [96mClient 165 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:00:55 [INFO] - [93mClient 201: global request limit reached (3840)[0m
-Requests completed: 3845req [15:09,  4.66req/s]04-02-2026 20:00:55 [INFO] - [96m6 out of 256 clients finished[0m
-04-02-2026 20:00:55 [INFO] - [93mClient 188: global request limit reached (3840)[0m
-04-02-2026 20:00:55 [INFO] - [96mClient 201 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:00:55 [INFO] - [96m7 out of 256 clients finished[0m
-04-02-2026 20:00:55 [INFO] - [96mClient 188 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:00:55 [INFO] - [96m8 out of 256 clients finished[0m
-04-02-2026 20:00:55 [INFO] - [93mClient 216: global request limit reached (3840)[0m
-04-02-2026 20:00:55 [INFO] - [96mClient 216 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3848req [15:09,  5.08req/s]04-02-2026 20:00:55 [INFO] - [96m9 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 192: global request limit reached (3840)[0m
-04-02-2026 20:00:56 [INFO] - [96mClient 192 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 5: global request limit reached (3840)[0m
-Requests completed: 3849req [15:10,  4.48req/s]04-02-2026 20:00:56 [INFO] - [96mClient 5 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:00:56 [INFO] - [96m10 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [96m11 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 137: global request limit reached (3840)[0m
-04-02-2026 20:00:56 [INFO] - [96mClient 137 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 3851req [15:10,  4.96req/s]04-02-2026 20:00:56 [INFO] - [96m12 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 73: global request limit reached (3840)[0m
-Requests completed: 3852req [15:10,  5.07req/s]04-02-2026 20:00:56 [INFO] - [96mClient 73 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 67: global request limit reached (3840)[0m
-04-02-2026 20:00:56 [INFO] - [96m13 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [93mClient 243: global request limit reached (3840)[0m
-04-02-2026 20:00:56 [INFO] - [96mClient 67 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:00:56 [INFO] - [96m14 out of 256 clients finished[0m
-04-02-2026 20:00:56 [INFO] - [96mClient 243 is done (num_successes=10, num_failures=0)[0m
-04-02-2026 20:00:56 [INFO] - [96m15 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 150: global request limit reached (3840)[0m
-04-02-2026 20:00:57 [INFO] - [96mClient 150 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3855req [15:11,  5.17req/s]04-02-2026 20:00:57 [INFO] - [96m16 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 143: global request limit reached (3840)[0m
-04-02-2026 20:00:57 [INFO] - [96mClient 143 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:00:57 [INFO] - [96m17 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 113: global request limit reached (3840)[0m
-04-02-2026 20:00:57 [INFO] - [96mClient 113 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3857req [15:11,  5.29req/s]04-02-2026 20:00:57 [INFO] - [96m18 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 56: global request limit reached (3840)[0m
-04-02-2026 20:00:57 [INFO] - [96mClient 56 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3858req [15:11,  5.09req/s]04-02-2026 20:00:57 [INFO] - [96m19 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 131: global request limit reached (3840)[0m
-04-02-2026 20:00:57 [INFO] - [96mClient 131 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:00:57 [INFO] - [96m20 out of 256 clients finished[0m
-04-02-2026 20:00:57 [INFO] - [93mClient 57: global request limit reached (3840)[0m
-Requests completed: 3860req [15:12,  5.38req/s]04-02-2026 20:00:57 [INFO] - [96mClient 57 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:00:57 [INFO] - [96m21 out of 256 clients finished[0m
-04-02-2026 20:00:58 [INFO] - [93mClient 18: global request limit reached (3840)[0m
-04-02-2026 20:00:58 [INFO] - [96mClient 18 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3861req [15:12,  5.78req/s]04-02-2026 20:00:58 [INFO] - [96m22 out of 256 clients finished[0m
-04-02-2026 20:00:58 [INFO] - [93mClient 64: global request limit reached (3840)[0m
-04-02-2026 20:00:58 [INFO] - [96mClient 64 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3862req [15:12,  5.65req/s]04-02-2026 20:00:58 [INFO] - [96m23 out of 256 clients finished[0m
-04-02-2026 20:00:58 [INFO] - [93mClient 254: global request limit reached (3840)[0m
-04-02-2026 20:00:58 [INFO] - [96mClient 254 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:00:58 [INFO] - [96m24 out of 256 clients finished[0m
-04-02-2026 20:00:58 [INFO] - [93mClient 46: global request limit reached (3840)[0m
-04-02-2026 20:00:58 [INFO] - [96mClient 46 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 3864req [15:12,  5.54req/s]04-02-2026 20:00:58 [INFO] - [96m25 out of 256 clients finished[0m
-04-02-2026 20:00:59 [INFO] - [93mClient 58: global request limit reached (3840)[0m
-04-02-2026 20:00:59 [INFO] - [96mClient 58 is done (num_successes=20, num_failures=0)[0m
-Requests completed: 3865req [15:13,  4.61req/s]04-02-2026 20:00:59 [INFO] - [96m26 out of 256 clients finished[0m
-04-02-2026 20:00:59 [INFO] - [93mClient 204: global request limit reached (3840)[0m
-04-02-2026 20:00:59 [INFO] - [96mClient 204 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:00:59 [INFO] - [96m27 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 146: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 34: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [96mClient 146 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3867req [15:14,  3.03req/s]04-02-2026 20:01:00 [INFO] - [96mClient 34 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:00 [INFO] - [96m28 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [96m29 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 231: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [96mClient 231 is done (num_successes=21, num_failures=0)[0m
-04-02-2026 20:01:00 [INFO] - [96m30 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 246: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [96mClient 246 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3870req [15:14,  4.97req/s]04-02-2026 20:01:00 [INFO] - [96m31 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 45: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 139: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [96mClient 45 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 3872req [15:14,  5.05req/s]04-02-2026 20:01:00 [INFO] - [96mClient 139 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:00 [INFO] - [96m32 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [96m33 out of 256 clients finished[0m
-04-02-2026 20:01:00 [INFO] - [93mClient 213: global request limit reached (3840)[0m
-04-02-2026 20:01:00 [INFO] - [96mClient 213 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3873req [15:15,  4.79req/s]04-02-2026 20:01:00 [INFO] - [96m34 out of 256 clients finished[0m
-04-02-2026 20:01:01 [INFO] - [93mClient 81: global request limit reached (3840)[0m
-Requests completed: 3874req [15:15,  4.29req/s]04-02-2026 20:01:01 [INFO] - [96mClient 81 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:01 [INFO] - [96m35 out of 256 clients finished[0m
-04-02-2026 20:01:01 [INFO] - [93mClient 126: global request limit reached (3840)[0m
-Requests completed: 3875req [15:15,  4.80req/s]04-02-2026 20:01:01 [INFO] - [96mClient 126 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:01 [INFO] - [96m36 out of 256 clients finished[0m
-04-02-2026 20:01:01 [INFO] - [93mClient 94: global request limit reached (3840)[0m
-04-02-2026 20:01:01 [INFO] - [96mClient 94 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3876req [15:16,  3.18req/s]04-02-2026 20:01:01 [INFO] - [96m37 out of 256 clients finished[0m
-04-02-2026 20:01:02 [INFO] - [93mClient 53: global request limit reached (3840)[0m
-04-02-2026 20:01:02 [INFO] - [96mClient 53 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3877req [15:16,  2.68req/s]04-02-2026 20:01:02 [INFO] - [96m38 out of 256 clients finished[0m
-04-02-2026 20:01:02 [INFO] - [93mClient 206: global request limit reached (3840)[0m
-Requests completed: 3878req [15:16,  3.25req/s]04-02-2026 20:01:02 [INFO] - [96mClient 206 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:02 [INFO] - [96m39 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 189: global request limit reached (3840)[0m
-Requests completed: 3879req [15:17,  2.37req/s]04-02-2026 20:01:03 [INFO] - [96mClient 189 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:03 [INFO] - [96m40 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 80: global request limit reached (3840)[0m
-Requests completed: 3880req [15:17,  2.97req/s]04-02-2026 20:01:03 [INFO] - [96mClient 80 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:03 [INFO] - [96m41 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 205: global request limit reached (3840)[0m
-04-02-2026 20:01:03 [INFO] - [96mClient 205 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:03 [INFO] - [96m42 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 27: global request limit reached (3840)[0m
-04-02-2026 20:01:03 [INFO] - [96mClient 27 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3882req [15:17,  4.55req/s]04-02-2026 20:01:03 [INFO] - [96m43 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 172: global request limit reached (3840)[0m
-04-02-2026 20:01:03 [INFO] - [96mClient 172 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3883req [15:18,  4.70req/s]04-02-2026 20:01:03 [INFO] - [96m44 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 105: global request limit reached (3840)[0m
-04-02-2026 20:01:03 [INFO] - [96mClient 105 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:03 [INFO] - [96m45 out of 256 clients finished[0m
-04-02-2026 20:01:03 [INFO] - [93mClient 101: global request limit reached (3840)[0m
-04-02-2026 20:01:03 [INFO] - [96mClient 101 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3885req [15:18,  5.95req/s]04-02-2026 20:01:03 [INFO] - [96m46 out of 256 clients finished[0m
-04-02-2026 20:01:04 [INFO] - [93mClient 144: global request limit reached (3840)[0m
-04-02-2026 20:01:04 [INFO] - [96mClient 144 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3886req [15:18,  4.86req/s]04-02-2026 20:01:04 [INFO] - [96m47 out of 256 clients finished[0m
-04-02-2026 20:01:04 [INFO] - [93mClient 82: global request limit reached (3840)[0m
-04-02-2026 20:01:04 [INFO] - [96mClient 82 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3887req [15:18,  4.67req/s]04-02-2026 20:01:04 [INFO] - [96m48 out of 256 clients finished[0m
-04-02-2026 20:01:04 [INFO] - [93mClient 195: global request limit reached (3840)[0m
-04-02-2026 20:01:04 [INFO] - [96mClient 195 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3888req [15:19,  3.77req/s]04-02-2026 20:01:04 [INFO] - [96m49 out of 256 clients finished[0m
-04-02-2026 20:01:04 [INFO] - [93mClient 163: global request limit reached (3840)[0m
-04-02-2026 20:01:04 [INFO] - [96mClient 163 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:04 [INFO] - [96m50 out of 256 clients finished[0m
-04-02-2026 20:01:05 [INFO] - [93mClient 99: global request limit reached (3840)[0m
-04-02-2026 20:01:05 [INFO] - [96mClient 99 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:05 [INFO] - [96m51 out of 256 clients finished[0m
-04-02-2026 20:01:05 [INFO] - [93mClient 194: global request limit reached (3840)[0m
-04-02-2026 20:01:05 [INFO] - [96mClient 194 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3891req [15:19,  5.93req/s]04-02-2026 20:01:05 [INFO] - [96m52 out of 256 clients finished[0m
-04-02-2026 20:01:05 [INFO] - [93mClient 14: global request limit reached (3840)[0m
-04-02-2026 20:01:05 [INFO] - [96mClient 14 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3892req [15:19,  4.39req/s]04-02-2026 20:01:05 [INFO] - [96m53 out of 256 clients finished[0m
-04-02-2026 20:01:05 [INFO] - [93mClient 235: global request limit reached (3840)[0m
-04-02-2026 20:01:05 [INFO] - [96mClient 235 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:05 [INFO] - [96m54 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 123: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 84: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [96mClient 123 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3894req [15:20,  4.71req/s]04-02-2026 20:01:06 [INFO] - [96mClient 84 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:06 [INFO] - [96m55 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [96m56 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 61: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [96mClient 61 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3896req [15:20,  5.38req/s]04-02-2026 20:01:06 [INFO] - [96m57 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 176: global request limit reached (3840)[0m
-Requests completed: 3897req [15:20,  4.99req/s]04-02-2026 20:01:06 [INFO] - [96mClient 176 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:06 [INFO] - [96m58 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 180: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [96mClient 180 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:06 [INFO] - [96m59 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 238: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [96mClient 238 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:06 [INFO] - [96m60 out of 256 clients finished[0m
-04-02-2026 20:01:06 [INFO] - [93mClient 166: global request limit reached (3840)[0m
-04-02-2026 20:01:06 [INFO] - [96mClient 166 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3900req [15:21,  7.10req/s]04-02-2026 20:01:06 [INFO] - [96m61 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 38: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 38 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3901req [15:21,  6.12req/s]04-02-2026 20:01:07 [INFO] - [96m62 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 198: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 198 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:07 [INFO] - [96m63 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 71: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 19: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 71 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3903req [15:21,  7.49req/s]04-02-2026 20:01:07 [INFO] - [96mClient 19 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:07 [INFO] - [96m64 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [96m65 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 140: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 140 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3905req [15:21,  9.30req/s]04-02-2026 20:01:07 [INFO] - [96m66 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 249: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 249 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:07 [INFO] - [96m67 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 29: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [93mClient 207: global request limit reached (3840)[0m
-04-02-2026 20:01:07 [INFO] - [96mClient 29 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3907req [15:22,  5.78req/s]04-02-2026 20:01:07 [INFO] - [96mClient 207 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:07 [INFO] - [96m68 out of 256 clients finished[0m
-04-02-2026 20:01:07 [INFO] - [96m69 out of 256 clients finished[0m
-04-02-2026 20:01:08 [INFO] - [93mClient 214: global request limit reached (3840)[0m
-04-02-2026 20:01:08 [INFO] - [96mClient 214 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3909req [15:22,  7.41req/s]04-02-2026 20:01:08 [INFO] - [96m70 out of 256 clients finished[0m
-04-02-2026 20:01:08 [INFO] - [93mClient 190: global request limit reached (3840)[0m
-04-02-2026 20:01:08 [INFO] - [96mClient 190 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:08 [INFO] - [96m71 out of 256 clients finished[0m
-04-02-2026 20:01:08 [INFO] - [93mClient 245: global request limit reached (3840)[0m
-Requests completed: 3911req [15:22,  9.09req/s]04-02-2026 20:01:08 [INFO] - [96mClient 245 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:08 [INFO] - [96m72 out of 256 clients finished[0m
-04-02-2026 20:01:08 [INFO] - [93mClient 227: global request limit reached (3840)[0m
-04-02-2026 20:01:08 [INFO] - [96mClient 227 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:08 [INFO] - [96m73 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [93mClient 219: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 219 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3913req [15:23,  4.76req/s]04-02-2026 20:01:09 [INFO] - [96m74 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [93mClient 120: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 120 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:09 [INFO] - [96m75 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [93mClient 252: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 252 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 3915req [15:23,  5.87req/s]04-02-2026 20:01:09 [INFO] - [96m76 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [93mClient 125: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 125 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:01:09 [INFO] - [96m77 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [93mClient 93: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 93 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3917req [15:24,  4.23req/s]04-02-2026 20:01:09 [INFO] - [93mClient 102: global request limit reached (3840)[0m
-04-02-2026 20:01:09 [INFO] - [96m78 out of 256 clients finished[0m
-04-02-2026 20:01:09 [INFO] - [96mClient 102 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:09 [INFO] - [96m79 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 173: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 173 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3919req [15:24,  5.28req/s]04-02-2026 20:01:10 [INFO] - [96m80 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 2: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 2 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 202: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96m81 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 202 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:10 [INFO] - [96m82 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 92: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 92 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3922req [15:24,  7.05req/s]04-02-2026 20:01:10 [INFO] - [96m83 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 220: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 220 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:01:10 [INFO] - [96m84 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 50: global request limit reached (3840)[0m
-04-02-2026 20:01:10 [INFO] - [96mClient 50 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:10 [INFO] - [96m85 out of 256 clients finished[0m
-04-02-2026 20:01:10 [INFO] - [93mClient 230: global request limit reached (3840)[0m
-Requests completed: 3925req [15:24,  8.14req/s]04-02-2026 20:01:10 [INFO] - [96mClient 230 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:10 [INFO] - [96m86 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 145: global request limit reached (3840)[0m
-04-02-2026 20:01:11 [INFO] - [96mClient 145 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:01:11 [INFO] - [96m87 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 23: global request limit reached (3840)[0m
-04-02-2026 20:01:11 [INFO] - [96mClient 23 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3927req [15:25,  5.93req/s]04-02-2026 20:01:11 [INFO] - [96m88 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 152: global request limit reached (3840)[0m
-04-02-2026 20:01:11 [INFO] - [96mClient 152 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3928req [15:25,  4.91req/s]04-02-2026 20:01:11 [INFO] - [96m89 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 155: global request limit reached (3840)[0m
-04-02-2026 20:01:11 [INFO] - [96mClient 155 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3929req [15:25,  5.40req/s]04-02-2026 20:01:11 [INFO] - [96m90 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 160: global request limit reached (3840)[0m
-Requests completed: 3930req [15:26,  5.32req/s]04-02-2026 20:01:11 [INFO] - [96mClient 160 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:11 [INFO] - [96m91 out of 256 clients finished[0m
-04-02-2026 20:01:11 [INFO] - [93mClient 66: global request limit reached (3840)[0m
-04-02-2026 20:01:11 [INFO] - [96mClient 66 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:11 [INFO] - [96m92 out of 256 clients finished[0m
-04-02-2026 20:01:12 [INFO] - [93mClient 83: global request limit reached (3840)[0m
-Requests completed: 3932req [15:26,  5.82req/s]04-02-2026 20:01:12 [INFO] - [96mClient 83 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:12 [INFO] - [96m93 out of 256 clients finished[0m
-04-02-2026 20:01:12 [INFO] - [93mClient 69: global request limit reached (3840)[0m
-04-02-2026 20:01:12 [INFO] - [96mClient 69 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3933req [15:26,  6.04req/s]04-02-2026 20:01:12 [INFO] - [96m94 out of 256 clients finished[0m
-04-02-2026 20:01:12 [INFO] - [93mClient 228: global request limit reached (3840)[0m
-04-02-2026 20:01:12 [INFO] - [96mClient 228 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:12 [INFO] - [96m95 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 187: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 187 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3935req [15:27,  4.15req/s]04-02-2026 20:01:13 [INFO] - [96m96 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 148: global request limit reached (3840)[0m
-Requests completed: 3936req [15:27,  4.15req/s]04-02-2026 20:01:13 [INFO] - [96mClient 148 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:13 [INFO] - [96m97 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 85: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 85 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:13 [INFO] - [96m98 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 158: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 158 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3938req [15:27,  5.64req/s]04-02-2026 20:01:13 [INFO] - [96m99 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 74: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 74 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3939req [15:27,  5.57req/s]04-02-2026 20:01:13 [INFO] - [96m100 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 199: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 199 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:13 [INFO] - [96m101 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 122: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 122 is done (num_successes=10, num_failures=0)[0m
-04-02-2026 20:01:13 [INFO] - [96m102 out of 256 clients finished[0m
-04-02-2026 20:01:13 [INFO] - [93mClient 141: global request limit reached (3840)[0m
-04-02-2026 20:01:13 [INFO] - [96mClient 141 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3942req [15:28,  7.62req/s]04-02-2026 20:01:13 [INFO] - [96m103 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 217: global request limit reached (3840)[0m
-Requests completed: 3943req [15:28,  5.65req/s]04-02-2026 20:01:14 [INFO] - [96mClient 217 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m104 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 24: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 24 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m105 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 135: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 135 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3945req [15:28,  5.55req/s]04-02-2026 20:01:14 [INFO] - [96m106 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 119: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 119 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m107 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 54: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 54 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m108 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 184: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 184 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3948req [15:29,  8.15req/s]04-02-2026 20:01:14 [INFO] - [96m109 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 62: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 62 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m110 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 255: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 255 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3950req [15:29,  9.29req/s]04-02-2026 20:01:14 [INFO] - [96m111 out of 256 clients finished[0m
-04-02-2026 20:01:14 [INFO] - [93mClient 244: global request limit reached (3840)[0m
-04-02-2026 20:01:14 [INFO] - [96mClient 244 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:14 [INFO] - [96m112 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 117: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [96mClient 117 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3952req [15:29,  6.96req/s]04-02-2026 20:01:15 [INFO] - [96m113 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 88: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [96mClient 88 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:15 [INFO] - [96m114 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 200: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 247: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [96mClient 200 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3954req [15:29,  7.77req/s]04-02-2026 20:01:15 [INFO] - [96mClient 247 is done (num_successes=22, num_failures=0)[0m
-04-02-2026 20:01:15 [INFO] - [96m115 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [96m116 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 98: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [96mClient 98 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 3956req [15:30,  6.89req/s]04-02-2026 20:01:15 [INFO] - [96m117 out of 256 clients finished[0m
-04-02-2026 20:01:15 [INFO] - [93mClient 226: global request limit reached (3840)[0m
-04-02-2026 20:01:15 [INFO] - [96mClient 226 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:15 [INFO] - [96m118 out of 256 clients finished[0m
-04-02-2026 20:01:16 [INFO] - [93mClient 48: global request limit reached (3840)[0m
-Requests completed: 3958req [15:30,  8.20req/s]04-02-2026 20:01:16 [INFO] - [96mClient 48 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:16 [INFO] - [96m119 out of 256 clients finished[0m
-04-02-2026 20:01:16 [INFO] - [93mClient 221: global request limit reached (3840)[0m
-04-02-2026 20:01:16 [INFO] - [96mClient 221 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:16 [INFO] - [96m120 out of 256 clients finished[0m
-04-02-2026 20:01:16 [INFO] - [93mClient 211: global request limit reached (3840)[0m
-04-02-2026 20:01:16 [INFO] - [96mClient 211 is done (num_successes=22, num_failures=0)[0m
-04-02-2026 20:01:16 [INFO] - [96m121 out of 256 clients finished[0m
-04-02-2026 20:01:16 [INFO] - [93mClient 157: global request limit reached (3840)[0m
-04-02-2026 20:01:16 [INFO] - [96mClient 157 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3961req [15:31,  5.06req/s]04-02-2026 20:01:16 [INFO] - [96m122 out of 256 clients finished[0m
-04-02-2026 20:01:17 [INFO] - [93mClient 32: global request limit reached (3840)[0m
-04-02-2026 20:01:17 [INFO] - [96mClient 32 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3962req [15:31,  5.32req/s]04-02-2026 20:01:17 [INFO] - [96m123 out of 256 clients finished[0m
-04-02-2026 20:01:17 [INFO] - [93mClient 44: global request limit reached (3840)[0m
-04-02-2026 20:01:17 [INFO] - [96mClient 44 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3963req [15:31,  5.36req/s]04-02-2026 20:01:17 [INFO] - [96m124 out of 256 clients finished[0m
-04-02-2026 20:01:17 [INFO] - [93mClient 234: global request limit reached (3840)[0m
-04-02-2026 20:01:17 [INFO] - [96mClient 234 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:17 [INFO] - [96m125 out of 256 clients finished[0m
-04-02-2026 20:01:17 [INFO] - [93mClient 128: global request limit reached (3840)[0m
-04-02-2026 20:01:17 [INFO] - [96mClient 128 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3965req [15:31,  5.95req/s]04-02-2026 20:01:17 [INFO] - [96m126 out of 256 clients finished[0m
-04-02-2026 20:01:18 [INFO] - [93mClient 175: global request limit reached (3840)[0m
-04-02-2026 20:01:18 [INFO] - [96mClient 175 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3966req [15:32,  4.02req/s]04-02-2026 20:01:18 [INFO] - [96m127 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 96: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 96 is done (num_successes=20, num_failures=0)[0m
-Requests completed: 3967req [15:33,  2.44req/s]04-02-2026 20:01:19 [INFO] - [96m128 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 9: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 9 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:19 [INFO] - [96m129 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 116: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 116 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3969req [15:33,  3.58req/s]04-02-2026 20:01:19 [INFO] - [96m130 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 203: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 203 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3970req [15:33,  3.74req/s]04-02-2026 20:01:19 [INFO] - [96m131 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 1: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 1 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3971req [15:33,  4.07req/s]04-02-2026 20:01:19 [INFO] - [96m132 out of 256 clients finished[0m
-04-02-2026 20:01:19 [INFO] - [93mClient 10: global request limit reached (3840)[0m
-04-02-2026 20:01:19 [INFO] - [96mClient 10 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 3972req [15:34,  4.02req/s]04-02-2026 20:01:19 [INFO] - [96m133 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 108: global request limit reached (3840)[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 134: global request limit reached (3840)[0m
-04-02-2026 20:01:20 [INFO] - [96mClient 108 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 3973req [15:34,  4.60req/s]04-02-2026 20:01:20 [INFO] - [96mClient 134 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:20 [INFO] - [96m134 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [96m135 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 130: global request limit reached (3840)[0m
-04-02-2026 20:01:20 [INFO] - [96mClient 130 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3975req [15:34,  6.59req/s]04-02-2026 20:01:20 [INFO] - [96m136 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 209: global request limit reached (3840)[0m
-Requests completed: 3976req [15:34,  6.35req/s]04-02-2026 20:01:20 [INFO] - [96mClient 209 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:20 [INFO] - [96m137 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 132: global request limit reached (3840)[0m
-04-02-2026 20:01:20 [INFO] - [96mClient 132 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3977req [15:35,  4.65req/s]04-02-2026 20:01:20 [INFO] - [96m138 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 121: global request limit reached (3840)[0m
-04-02-2026 20:01:20 [INFO] - [96mClient 121 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:20 [INFO] - [96m139 out of 256 clients finished[0m
-04-02-2026 20:01:20 [INFO] - [93mClient 224: global request limit reached (3840)[0m
-Requests completed: 3979req [15:35,  6.21req/s]04-02-2026 20:01:20 [INFO] - [96mClient 224 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:20 [INFO] - [96m140 out of 256 clients finished[0m
-04-02-2026 20:01:21 [INFO] - [93mClient 161: global request limit reached (3840)[0m
-04-02-2026 20:01:21 [INFO] - [96mClient 161 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3980req [15:35,  5.45req/s]04-02-2026 20:01:21 [INFO] - [96m141 out of 256 clients finished[0m
-04-02-2026 20:01:21 [INFO] - [93mClient 162: global request limit reached (3840)[0m
-04-02-2026 20:01:21 [INFO] - [96mClient 162 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:21 [INFO] - [96m142 out of 256 clients finished[0m
-04-02-2026 20:01:21 [INFO] - [93mClient 124: global request limit reached (3840)[0m
-04-02-2026 20:01:21 [INFO] - [96mClient 124 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3982req [15:35,  6.22req/s]04-02-2026 20:01:21 [INFO] - [93mClient 136: global request limit reached (3840)[0m
-04-02-2026 20:01:21 [INFO] - [96m143 out of 256 clients finished[0m
-04-02-2026 20:01:21 [INFO] - [96mClient 136 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:21 [INFO] - [96m144 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 222: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 222 is done (num_successes=11, num_failures=0)[0m
-Requests completed: 3984req [15:36,  4.25req/s]04-02-2026 20:01:22 [INFO] - [96m145 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 168: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 168 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:22 [INFO] - [96m146 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 179: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 179 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3986req [15:36,  5.47req/s]04-02-2026 20:01:22 [INFO] - [96m147 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 191: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 191 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 3987req [15:36,  5.89req/s]04-02-2026 20:01:22 [INFO] - [96m148 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 49: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 49 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 3988req [15:36,  5.69req/s]04-02-2026 20:01:22 [INFO] - [96m149 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 154: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [93mClient 159: global request limit reached (3840)[0m
-04-02-2026 20:01:22 [INFO] - [96mClient 154 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3989req [15:37,  6.13req/s]04-02-2026 20:01:22 [INFO] - [96mClient 159 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:22 [INFO] - [96m150 out of 256 clients finished[0m
-04-02-2026 20:01:22 [INFO] - [96m151 out of 256 clients finished[0m
-04-02-2026 20:01:23 [INFO] - [93mClient 15: global request limit reached (3840)[0m
-Requests completed: 3991req [15:37,  6.43req/s]04-02-2026 20:01:23 [INFO] - [96mClient 15 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:23 [INFO] - [96m152 out of 256 clients finished[0m
-04-02-2026 20:01:23 [INFO] - [93mClient 210: global request limit reached (3840)[0m
-04-02-2026 20:01:23 [INFO] - [96mFinished 640 out of 5000 conversations (13%), 152 out of 256 clients finished, collected 3992 measurements, runtime 939.444 sec[0m
-04-02-2026 20:01:23 [INFO] - [96mClient 210 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:23 [INFO] - [96mEstimated req/sec 4.249, estimated runtime left 6399.963 sec[0m
-04-02-2026 20:01:23 [INFO] - --------------------------------------------------
-04-02-2026 20:01:23 [INFO] - [moving_avg_ttft_ms       ] avg:  33142.686 (500 samples)
-04-02-2026 20:01:23 [INFO] - [moving_avg_tpot_ms       ] avg:     58.996 (500 samples)
-04-02-2026 20:01:23 [INFO] - [ttft_ms                  ] avg:  28518.056, min:    190.466, max:  51292.872
-04-02-2026 20:01:23 [INFO] - [tpot_ms                  ] avg:     52.840, min:     27.087, max:    227.304
-04-02-2026 20:01:23 [INFO] - [latency_ms               ] avg:  57942.460, min:   2163.374, max: 359933.935
-04-02-2026 20:01:23 [INFO] - [input_num_turns          ] avg:      5.358, min:      1.000, max:     15.000
-04-02-2026 20:01:23 [INFO] - [input_num_tokens         ] avg:   1860.767, min:      0.000, max:  10254.000
-04-02-2026 20:01:23 [INFO] - [output_num_tokens        ] avg:    563.868, min:      2.000, max:   5285.000
-04-02-2026 20:01:23 [INFO] - --------------------------------------------------
-04-02-2026 20:01:23 [INFO] - [96m153 out of 256 clients finished[0m
-04-02-2026 20:01:23 [INFO] - [93mClient 229: global request limit reached (3840)[0m
-04-02-2026 20:01:23 [INFO] - [96mClient 229 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 3993req [15:37,  6.33req/s]04-02-2026 20:01:23 [INFO] - [96m154 out of 256 clients finished[0m
-04-02-2026 20:01:23 [INFO] - [93mClient 90: global request limit reached (3840)[0m
-04-02-2026 20:01:23 [INFO] - [96mClient 90 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3994req [15:38,  5.21req/s]04-02-2026 20:01:23 [INFO] - [96m155 out of 256 clients finished[0m
-04-02-2026 20:01:23 [INFO] - [93mClient 223: global request limit reached (3840)[0m
-Requests completed: 3995req [15:38,  4.74req/s]04-02-2026 20:01:23 [INFO] - [96mClient 223 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:23 [INFO] - [96m156 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 197: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [96mClient 197 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:24 [INFO] - [96m157 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 239: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [96mClient 239 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:24 [INFO] - [96m158 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 111: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 39: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [96mClient 111 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 3998req [15:38,  5.39req/s]04-02-2026 20:01:24 [INFO] - [96mClient 39 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:24 [INFO] - [96m159 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [96m160 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 40: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [96mClient 40 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4000req [15:38,  6.90req/s]04-02-2026 20:01:24 [INFO] - [96m161 out of 256 clients finished[0m
-04-02-2026 20:01:24 [INFO] - [93mClient 86: global request limit reached (3840)[0m
-04-02-2026 20:01:24 [INFO] - [96mClient 86 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 4001req [15:38,  7.11req/s]04-02-2026 20:01:24 [INFO] - [96m162 out of 256 clients finished[0m
-04-02-2026 20:01:25 [INFO] - [93mClient 178: global request limit reached (3840)[0m
-04-02-2026 20:01:25 [INFO] - [96mClient 178 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 4002req [15:39,  5.62req/s]04-02-2026 20:01:25 [INFO] - [96m163 out of 256 clients finished[0m
-04-02-2026 20:01:25 [INFO] - [93mClient 87: global request limit reached (3840)[0m
-Requests completed: 4003req [15:39,  5.33req/s]04-02-2026 20:01:25 [INFO] - [96mClient 87 is done (num_successes=6, num_failures=0)[0m
-04-02-2026 20:01:25 [INFO] - [96m164 out of 256 clients finished[0m
-04-02-2026 20:01:25 [INFO] - [93mClient 129: global request limit reached (3840)[0m
-04-02-2026 20:01:25 [INFO] - [96mClient 129 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4004req [15:40,  3.63req/s]04-02-2026 20:01:25 [INFO] - [96m165 out of 256 clients finished[0m
-04-02-2026 20:01:25 [INFO] - [93mClient 91: global request limit reached (3840)[0m
-04-02-2026 20:01:25 [INFO] - [96mClient 91 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 4005req [15:40,  4.13req/s]04-02-2026 20:01:25 [INFO] - [96m166 out of 256 clients finished[0m
-04-02-2026 20:01:26 [INFO] - [93mClient 106: global request limit reached (3840)[0m
-04-02-2026 20:01:26 [INFO] - [96mClient 106 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 4006req [15:40,  4.17req/s]04-02-2026 20:01:26 [INFO] - [96m167 out of 256 clients finished[0m
-04-02-2026 20:01:26 [INFO] - [93mClient 11: global request limit reached (3840)[0m
-04-02-2026 20:01:26 [INFO] - [96mClient 11 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 4007req [15:40,  3.85req/s]04-02-2026 20:01:26 [INFO] - [96m168 out of 256 clients finished[0m
-04-02-2026 20:01:26 [INFO] - [93mClient 37: global request limit reached (3840)[0m
-04-02-2026 20:01:26 [INFO] - [96mClient 37 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:26 [INFO] - [96m169 out of 256 clients finished[0m
-04-02-2026 20:01:26 [INFO] - [93mClient 147: global request limit reached (3840)[0m
-04-02-2026 20:01:26 [INFO] - [96mClient 147 is done (num_successes=10, num_failures=0)[0m
-Requests completed: 4009req [15:41,  4.95req/s]04-02-2026 20:01:26 [INFO] - [96m170 out of 256 clients finished[0m
-04-02-2026 20:01:27 [INFO] - [93mClient 30: global request limit reached (3840)[0m
-04-02-2026 20:01:27 [INFO] - [96mClient 30 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 4010req [15:41,  3.52req/s]04-02-2026 20:01:27 [INFO] - [96m171 out of 256 clients finished[0m
-04-02-2026 20:01:27 [INFO] - [93mClient 16: global request limit reached (3840)[0m
-04-02-2026 20:01:27 [INFO] - [96mClient 16 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:27 [INFO] - [96m172 out of 256 clients finished[0m
-04-02-2026 20:01:27 [INFO] - [93mClient 138: global request limit reached (3840)[0m
-04-02-2026 20:01:27 [INFO] - [96mClient 138 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4012req [15:42,  3.26req/s]04-02-2026 20:01:27 [INFO] - [96m173 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 89: global request limit reached (3840)[0m
-Requests completed: 4013req [15:42,  3.67req/s]04-02-2026 20:01:28 [INFO] - [96mClient 89 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:28 [INFO] - [96m174 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 212: global request limit reached (3840)[0m
-04-02-2026 20:01:28 [INFO] - [96mClient 212 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 4014req [15:42,  3.48req/s]04-02-2026 20:01:28 [INFO] - [96m175 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 233: global request limit reached (3840)[0m
-04-02-2026 20:01:28 [INFO] - [96mClient 233 is done (num_successes=11, num_failures=0)[0m
-Requests completed: 4015req [15:42,  3.94req/s]04-02-2026 20:01:28 [INFO] - [96m176 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 115: global request limit reached (3840)[0m
-04-02-2026 20:01:28 [INFO] - [96mClient 115 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:28 [INFO] - [96m177 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 28: global request limit reached (3840)[0m
-04-02-2026 20:01:28 [INFO] - [96mClient 28 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4017req [15:43,  5.83req/s]04-02-2026 20:01:28 [INFO] - [96m178 out of 256 clients finished[0m
-04-02-2026 20:01:28 [INFO] - [93mClient 236: global request limit reached (3840)[0m
-04-02-2026 20:01:28 [INFO] - [96mClient 236 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4018req [15:43,  5.97req/s]04-02-2026 20:01:28 [INFO] - [96m179 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 20: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 20 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 4019req [15:43,  6.11req/s]04-02-2026 20:01:29 [INFO] - [96m180 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 21: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 21 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:29 [INFO] - [96m181 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 156: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 156 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4021req [15:43,  7.90req/s]04-02-2026 20:01:29 [INFO] - [96m182 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 250: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 250 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 78: global request limit reached (3840)[0m
-Requests completed: 4022req [15:43,  7.25req/s]04-02-2026 20:01:29 [INFO] - [96mClient 78 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:29 [INFO] - [96m183 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [96m184 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 72: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 72 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4024req [15:43,  9.37req/s]04-02-2026 20:01:29 [INFO] - [96m185 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 47: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 47 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:29 [INFO] - [96m186 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 171: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 171 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 4026req [15:43, 10.33req/s]04-02-2026 20:01:29 [INFO] - [96m187 out of 256 clients finished[0m
-04-02-2026 20:01:29 [INFO] - [93mClient 114: global request limit reached (3840)[0m
-04-02-2026 20:01:29 [INFO] - [96mClient 114 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:29 [INFO] - [96m188 out of 256 clients finished[0m
-04-02-2026 20:01:30 [INFO] - [93mClient 43: global request limit reached (3840)[0m
-04-02-2026 20:01:30 [INFO] - [96mClient 43 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 4028req [15:44,  6.96req/s]04-02-2026 20:01:30 [INFO] - [96m189 out of 256 clients finished[0m
-04-02-2026 20:01:30 [INFO] - [93mClient 253: global request limit reached (3840)[0m
-04-02-2026 20:01:30 [INFO] - [96mClient 253 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:30 [INFO] - [96m190 out of 256 clients finished[0m
-04-02-2026 20:01:30 [INFO] - [93mClient 164: global request limit reached (3840)[0m
-04-02-2026 20:01:30 [INFO] - [96mClient 164 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:30 [INFO] - [96m191 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 251: global request limit reached (3840)[0m
-04-02-2026 20:01:31 [INFO] - [96mClient 251 is done (num_successes=20, num_failures=0)[0m
-Requests completed: 4031req [15:45,  4.69req/s]04-02-2026 20:01:31 [INFO] - [96m192 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 153: global request limit reached (3840)[0m
-04-02-2026 20:01:31 [INFO] - [96mClient 153 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4032req [15:45,  4.44req/s]04-02-2026 20:01:31 [INFO] - [96m193 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 70: global request limit reached (3840)[0m
-04-02-2026 20:01:31 [INFO] - [96mClient 70 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4033req [15:45,  4.14req/s]04-02-2026 20:01:31 [INFO] - [96m194 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 237: global request limit reached (3840)[0m
-04-02-2026 20:01:31 [INFO] - [96mClient 237 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:31 [INFO] - [96m195 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 41: global request limit reached (3840)[0m
-04-02-2026 20:01:31 [INFO] - [96mClient 41 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:31 [INFO] - [93mClient 185: global request limit reached (3840)[0m
-Requests completed: 4035req [15:46,  5.11req/s]04-02-2026 20:01:31 [INFO] - [96mClient 185 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:31 [INFO] - [96m196 out of 256 clients finished[0m
-04-02-2026 20:01:31 [INFO] - [96m197 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 33: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 33 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 4037req [15:46,  6.18req/s]04-02-2026 20:01:32 [INFO] - [96m198 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 25: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 25 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 4038req [15:46,  6.18req/s]04-02-2026 20:01:32 [INFO] - [96m199 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 77: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 77 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:32 [INFO] - [96m200 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 112: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 112 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 4040req [15:46,  6.76req/s]04-02-2026 20:01:32 [INFO] - [96m201 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 79: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 79 is done (num_successes=16, num_failures=0)[0m
-04-02-2026 20:01:32 [INFO] - [96m202 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 59: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 59 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4042req [15:46,  7.96req/s]04-02-2026 20:01:32 [INFO] - [96m203 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 55: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 55 is done (num_successes=14, num_failures=0)[0m
-Requests completed: 4043req [15:47,  7.21req/s]04-02-2026 20:01:32 [INFO] - [96m204 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 193: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 193 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:32 [INFO] - [96m205 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 52: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 52 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:32 [INFO] - [96m206 out of 256 clients finished[0m
-04-02-2026 20:01:32 [INFO] - [93mClient 118: global request limit reached (3840)[0m
-04-02-2026 20:01:32 [INFO] - [96mClient 118 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4046req [15:47, 10.20req/s]04-02-2026 20:01:32 [INFO] - [96m207 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 241: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 241 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:33 [INFO] - [96m208 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 13: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 13 is done (num_successes=23, num_failures=0)[0m
-Requests completed: 4048req [15:47,  8.00req/s]04-02-2026 20:01:33 [INFO] - [96m209 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 208: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 208 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4049req [15:47,  8.07req/s]04-02-2026 20:01:33 [INFO] - [96m210 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 169: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 169 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 35: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96m211 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 35 is done (num_successes=19, num_failures=0)[0m
-04-02-2026 20:01:33 [INFO] - [96m212 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 63: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 63 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 4052req [15:47, 11.73req/s]04-02-2026 20:01:33 [INFO] - [96m213 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 110: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 110 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:33 [INFO] - [96m214 out of 256 clients finished[0m
-04-02-2026 20:01:33 [INFO] - [93mClient 107: global request limit reached (3840)[0m
-04-02-2026 20:01:33 [INFO] - [96mClient 107 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 4054req [15:48,  7.98req/s]04-02-2026 20:01:33 [INFO] - [96m215 out of 256 clients finished[0m
-04-02-2026 20:01:34 [INFO] - [93mClient 142: global request limit reached (3840)[0m
-04-02-2026 20:01:34 [INFO] - [96mClient 142 is done (num_successes=13, num_failures=0)[0m
-04-02-2026 20:01:34 [INFO] - [96m216 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 177: global request limit reached (3840)[0m
-Requests completed: 4056req [15:49,  3.22req/s]04-02-2026 20:01:35 [INFO] - [96mClient 177 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m217 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 181: global request limit reached (3840)[0m
-04-02-2026 20:01:35 [INFO] - [96mClient 181 is done (num_successes=12, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m218 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 186: global request limit reached (3840)[0m
-04-02-2026 20:01:35 [INFO] - [96mClient 186 is done (num_successes=22, num_failures=0)[0m
-Requests completed: 4058req [15:49,  4.26req/s]04-02-2026 20:01:35 [INFO] - [96m219 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 60: global request limit reached (3840)[0m
-04-02-2026 20:01:35 [INFO] - [96mClient 60 is done (num_successes=18, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m220 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 68: global request limit reached (3840)[0m
-Requests completed: 4060req [15:50,  4.71req/s]04-02-2026 20:01:35 [INFO] - [96mClient 68 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m221 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 182: global request limit reached (3840)[0m
-04-02-2026 20:01:35 [INFO] - [96mClient 182 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m222 out of 256 clients finished[0m
-04-02-2026 20:01:35 [INFO] - [93mClient 151: global request limit reached (3840)[0m
-04-02-2026 20:01:35 [INFO] - [96mClient 151 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:35 [INFO] - [96m223 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 17: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 17 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4063req [15:50,  6.87req/s]04-02-2026 20:01:36 [INFO] - [96m224 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 240: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 240 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:36 [INFO] - [96m225 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 149: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 149 is done (num_successes=10, num_failures=0)[0m
-Requests completed: 4065req [15:50,  6.99req/s]04-02-2026 20:01:36 [INFO] - [96m226 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 218: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 218 is done (num_successes=20, num_failures=0)[0m
-04-02-2026 20:01:36 [INFO] - [96m227 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 103: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 103 is done (num_successes=16, num_failures=0)[0m
-Requests completed: 4067req [15:51,  6.13req/s]04-02-2026 20:01:36 [INFO] - [96m228 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 75: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 75 is done (num_successes=11, num_failures=0)[0m
-04-02-2026 20:01:36 [INFO] - [96m229 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 0: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 0 is done (num_successes=23, num_failures=0)[0m
-Requests completed: 4069req [15:51,  7.42req/s]04-02-2026 20:01:36 [INFO] - [96m230 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 170: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 170 is done (num_successes=17, num_failures=0)[0m
-04-02-2026 20:01:36 [INFO] - [96m231 out of 256 clients finished[0m
-04-02-2026 20:01:36 [INFO] - [93mClient 225: global request limit reached (3840)[0m
-04-02-2026 20:01:36 [INFO] - [96mClient 225 is done (num_successes=15, num_failures=0)[0m
-04-02-2026 20:01:36 [INFO] - [96m232 out of 256 clients finished[0m
-04-02-2026 20:01:37 [INFO] - [93mClient 8: global request limit reached (3840)[0m
-04-02-2026 20:01:37 [INFO] - [96mClient 8 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4072req [15:51,  5.70req/s]04-02-2026 20:01:37 [INFO] - [96m233 out of 256 clients finished[0m
-04-02-2026 20:01:37 [INFO] - [93mClient 174: global request limit reached (3840)[0m
-04-02-2026 20:01:37 [INFO] - [96mClient 174 is done (num_successes=17, num_failures=0)[0m
-Requests completed: 4073req [15:52,  5.82req/s]04-02-2026 20:01:37 [INFO] - [96m234 out of 256 clients finished[0m
-04-02-2026 20:01:37 [INFO] - [93mClient 100: global request limit reached (3840)[0m
-04-02-2026 20:01:37 [INFO] - [96mClient 100 is done (num_successes=21, num_failures=0)[0m
-04-02-2026 20:01:37 [INFO] - [96m235 out of 256 clients finished[0m
-04-02-2026 20:01:38 [INFO] - [93mClient 127: global request limit reached (3840)[0m
-04-02-2026 20:01:38 [INFO] - [96mClient 127 is done (num_successes=11, num_failures=0)[0m
-Requests completed: 4075req [15:52,  6.08req/s]04-02-2026 20:01:38 [INFO] - [96m236 out of 256 clients finished[0m
-04-02-2026 20:01:38 [INFO] - [93mClient 42: global request limit reached (3840)[0m
-04-02-2026 20:01:38 [INFO] - [96mClient 42 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4076req [15:52,  5.76req/s]04-02-2026 20:01:38 [INFO] - [96m237 out of 256 clients finished[0m
-04-02-2026 20:01:38 [INFO] - [93mClient 95: global request limit reached (3840)[0m
-04-02-2026 20:01:38 [INFO] - [96mClient 95 is done (num_successes=19, num_failures=0)[0m
-Requests completed: 4077req [15:52,  5.72req/s]04-02-2026 20:01:38 [INFO] - [96m238 out of 256 clients finished[0m
-04-02-2026 20:01:39 [INFO] - [93mClient 12: global request limit reached (3840)[0m
-04-02-2026 20:01:39 [INFO] - [96mClient 12 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4078req [15:53,  3.47req/s]04-02-2026 20:01:39 [INFO] - [96m239 out of 256 clients finished[0m
-04-02-2026 20:01:39 [INFO] - [93mClient 215: global request limit reached (3840)[0m
-04-02-2026 20:01:39 [INFO] - [96mClient 215 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 4079req [15:53,  3.87req/s]04-02-2026 20:01:39 [INFO] - [96m240 out of 256 clients finished[0m
-04-02-2026 20:01:39 [INFO] - [93mClient 6: global request limit reached (3840)[0m
-04-02-2026 20:01:39 [INFO] - [96mClient 6 is done (num_successes=18, num_failures=0)[0m
-Requests completed: 4080req [15:53,  4.02req/s]04-02-2026 20:01:39 [INFO] - [96m241 out of 256 clients finished[0m
-04-02-2026 20:01:39 [INFO] - [93mClient 167: global request limit reached (3840)[0m
-04-02-2026 20:01:39 [INFO] - [96mClient 167 is done (num_successes=21, num_failures=0)[0m
-Requests completed: 4081req [15:53,  4.67req/s]04-02-2026 20:01:39 [INFO] - 04-02-2026 20:01:40 [INFO] - [93mClient 107: global request limit reached (3600)[0m
-04-02-2026 20:01:40 [INFO] - [96mClient 107 is done (num_successes=13, num_failures=0)[0m
-Requests completed: 3851req [15:54,  1.71s/req]04-02-2026 20:01:40 [INFO] - [96m252 out of 256 clients finished[0m
-04-02-2026 20:01:41 [INFO] - [93mClient 89: global request limit reached (3600)[0m
-04-02-2026 20:01:41 [INFO] - [96mClient 89 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 3852req [15:55,  1.40s/req]04-02-2026 20:01:41 [INFO] - [96m253 out of 256 clients finished[0m
-04-02-2026 20:01:41 [INFO] - [93mClient 48: global request limit reached (3600)[0m
-Requests completed: 3853req [15:55,  1.02s/req]04-02-2026 20:01:41 [INFO] - [96mClient 48 is done (num_successes=14, num_failures=0)[0m
-04-02-2026 20:01:41 [INFO] - [96m254 out of 256 clients finished[0m
-04-02-2026 20:01:42 [INFO] - [93mCli04-02-2026 20:01:43 [INFO] - [93mClient 248: global request limit reached (3840)[0m
-04-02-2026 20:01:43 [INFO] - [96mClient 248 is done (num_successes=15, num_failures=0)[0m
-Requests completed: 4085req [15:57,  1.14req/s]04-02-2026 20:01:43 [INFO] - [9604-02-2026 20:02:41 [INFO] - [93mClient 3: global request limit reached (3600)[0m
-04-02-2026 20:02:42 [INFO] - [96mClient 3 is done (num_successes=12, num_failures=0)[0m
-Requests completed: 3855req [16:55, 18.42s/req]04-02-2026 20:02:42 [INFO] - [96m256 out of 256 clients finished[0m
-04-02-2026 20:02:42 [INFO] - [96mAll 256 clients finished[0m
-Requests completed: 3855req [16:55,  3.80req/s]
-04-02-2026 20:02:42 [INFO] - Collected 3855 samples from all the clients
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_0 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_1 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_2 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_3 (is alive: True)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_4 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_5 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_6 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_7 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_8 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_9 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_10 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_11 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_12 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_13 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_14 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_15 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_16 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_17 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_18 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_19 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_20 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_21 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_22 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_23 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_24 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_25 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_26 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_27 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_28 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_29 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_30 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_31 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_32 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_33 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_34 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_35 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_36 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_37 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_38 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_39 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_40 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_41 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_42 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_43 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_44 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_45 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_46 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_47 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_48 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_49 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_50 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_51 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_52 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_53 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_54 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_55 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_56 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_57 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_58 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_59 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_60 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_61 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_62 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_63 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_64 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_65 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_66 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_67 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_68 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_69 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_70 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_71 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_72 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_73 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_74 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_75 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_76 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_77 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_78 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_79 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_80 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_81 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_82 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_83 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_84 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_85 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_86 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_87 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_88 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_89 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_90 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_91 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_92 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_93 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_94 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_95 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_96 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_97 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_98 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_99 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_100 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_101 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_102 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_103 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_104 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_105 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_106 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_107 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_108 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_109 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_110 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_111 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_112 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_113 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_114 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_115 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_116 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_117 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_118 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_119 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_120 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_121 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_122 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_123 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_124 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_125 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_126 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_127 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_128 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_129 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_130 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_131 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_132 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_133 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_134 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_135 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_136 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_137 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_138 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_139 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_140 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_141 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_142 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_143 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_144 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_145 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_146 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_147 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_148 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_149 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_150 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_151 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_152 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_153 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_154 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_155 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_156 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_157 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_158 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_159 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_160 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_161 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_162 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_163 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_164 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_165 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_166 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_167 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_168 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_169 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_170 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_171 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_172 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_173 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_174 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_175 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_176 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_177 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_178 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_179 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_180 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_181 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_182 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_183 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_184 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_185 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_186 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_187 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_188 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_189 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_190 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_191 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_192 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_193 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_194 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_195 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_196 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_197 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_198 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_199 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_200 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_201 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_202 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_203 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_204 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_205 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_206 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_207 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_208 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_209 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_210 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_211 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_212 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_213 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_214 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_215 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_216 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_217 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_218 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_219 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_220 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_221 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_222 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_223 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_224 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_225 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_226 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_227 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_228 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_229 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_230 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_231 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_232 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_233 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_234 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_235 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_236 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_237 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_238 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_239 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_240 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_241 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_242 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_243 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_244 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_245 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_246 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_247 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_248 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_249 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_250 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_251 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_252 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_253 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_254 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - [96mWaiting for client client_255 (is alive: False)[0m
-04-02-2026 20:02:42 [INFO] - All 256 clients exited (successfully finished 615 out of 5000 conversations)
-04-02-2026 20:02:43 [INFO] - [92mAll clients finished, benchmark runtime: 1018.566 sec (1018565.631 ms), requests per second: 3.785[0m
-04-02-2026 20:02:43 [INFO] - Processing 3855 samples...
-04-02-2026 20:02:43 [INFO] - [92mWriting responses file: sweep_results_20260204_062339/tp2_bs256_offloadoff/responses.json[0m
-Saved plots to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_plots.png
-
-============================================================
-METRICS SUMMARY
-============================================================
-Duration: 860.1s
-Total prompt tokens: 14,515,320
-Total generation tokens: 4,220,531
-Avg generation throughput: 4907.3 tok/s
-Peak KV cache usage: 60.5%
-Peak running requests: 256
-Peak waiting requests: 310
-Total preemptions: 0
-Overall GPU cache hit rate: 84.1%
-  - Cache hits: 12,196,272 tokens
-  - Cache queries: 14,505,844 tokens
-============================================================
-
-Exported server metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_server_metrics.csv
-Exported GPU transfer metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_gpu_transfer.csv
-Exported client metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_client_metrics.csv
-----------------------------------------------------------------------------------------------------
-[93mParameters:[0m
-model=nvidia/Llama-3.3-70B-Instruct-FP4
-num_clients=256
-num_conversations=5000
-active_conversations=None
-seed=0
-----------------------------------------------------------------------------------------------------
-[93mStatistics summary:[0m
-runtime_sec = 913.709
-requests_per_sec = 4.219
-----------------------------------------------------------------------------------------------------
-                    count      mean       std  ...        99%      99.9%        max
-ttft_ms            3855.0  29552.11   8704.75  ...   49488.37   51035.01   51150.44
-tpot_ms            3855.0     51.61      9.42  ...      81.37      87.68     122.55
-latency_ms         3855.0  59670.15  29772.65  ...  154373.07  202370.37  363094.86
-input_num_turns    3855.0      5.36      3.54  ...      15.00      15.00      15.00
-input_num_tokens   3855.0   1882.62   1623.48  ...    7313.20    9556.58   12014.00
-output_num_tokens  3855.0    577.64    489.45  ...    2100.00    3102.82    7734.00
-output_num_chunks  3855.0    574.58    487.59  ...    2096.00    3101.38    7734.00
-
-[7 rows x 11 columns]
-----------------------------------------------------------------------------------------------------
-alive: False)[0m
-04-02-2026 20:02:39 [INFO] - All 256 clients exited (successfully finished 655 out of 5000 conversations)
-04-02-2026 20:02:41 [INFO] - [92mAll clients finished, benchmark runtime: 1016.268 sec (1016268.130 ms), requests per second: 4.029[0m
-04-02-2026 20:02:41 [INFO] - Processing 4095 samples...
-04-02-2026 20:02:41 [INFO] - [92mWriting responses file: sweep_results_20260204_062339/tp2_bs256_offloadoff/responses.json[0m
-Saved plots to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_plots.png
-
-============================================================
-METRICS SUMMARY
-============================================================
-Duration: 907.7s
-Total prompt tokens: 15,248,725
-Total generation tokens: 4,420,999
-Avg generation throughput: 4870.4 tok/s
-Peak KV cache usage: 60.2%
-Peak running requests: 256
-Peak waiting requests: 310
-Total preemptions: 0
-Overall GPU cache hit rate: 84.2%
-  - Cache hits: 12,833,520 tokens
-  - Cache queries: 15,248,725 tokens
-============================================================
-
-Exported server metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_server_metrics.csv
-Exported GPU transfer metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_gpu_transfer.csv
-Exported client metrics to sweep_results_20260204_062339/tp2_bs256_offloadoff/metrics_client_metrics.csv
-----------------------------------------------------------------------------------------------------
-[93mParameters:[0m
-model=nvidia/Llama-3.3-70B-Instruct-FP4
-num_clients=256
-num_conversations=5000
-active_conversations=None
-seed=0
-----------------------------------------------------------------------------------------------------
-[93mStatistics summary:[0m
-runtime_sec = 927.750
-requests_per_sec = 4.414
-----------------------------------------------------------------------------------------------------
-                    count      mean       std  ...        99%      99.9%        max
-ttft_ms            4095.0  28418.80  10173.44  ...   49181.04   50995.55   51292.87
-tpot_ms            4095.0     52.62     14.34  ...      89.07     224.72     227.30
-latency_ms         4095.0  58343.02  29832.08  ...  151926.03  200137.85  359933.94
-input_num_turns    4095.0      5.36      3.54  ...      15.00      15.00      15.00
-input_num_tokens   4095.0   1884.22   1626.52  ...    7305.38    9517.74   12014.00
-output_num_tokens  4095.0    579.41    488.95  ...    2113.18    2978.23    7734.00
-output_num_chunks  4095.0    576.10    486.96  ...    2105.60    2977.23    7734.00
-
-[7 rows x 11 columns]
-----------------------------------------------------------------------------------------------------
