@@ -51,6 +51,7 @@ class ClientArgs(NamedTuple):
     conversation_sampling: ConversationSampling
     request_rate: float
     max_retries: int
+    think_time_lognormal: tuple[float, float] | None  # (mu, sigma) or None
 
 
 class RequestArgs(NamedTuple):
@@ -525,6 +526,14 @@ async def poisson_sleep(request_rate: float, verbose: bool = False) -> None:
     await asyncio.sleep(interval)
 
 
+async def lognormal_sleep(mu: float, sigma: float, verbose: bool = False) -> None:
+    """Sleep for a log-normally distributed duration (models realistic user think-time)."""
+    interval = np.random.lognormal(mean=mu, sigma=sigma)
+    if verbose:
+        logger.info(f"Sleeping for {interval:.3f} seconds (lognormal mu={mu}, sigma={sigma})...")
+    await asyncio.sleep(interval)
+
+
 async def exponential_backoff_sleep(
     attempt_cnt: int,
     base_rate: float = 1.0,
@@ -761,8 +770,11 @@ async def client_main(
                     # Conversation is not finished, insert it at the back of the queue
                     conv_id_queue.appendleft(conv_id)
 
-            # Sleep between requests (if lambda is positive)
-            if args.request_rate > 0:
+            # Sleep between requests (think-time)
+            if args.think_time_lognormal is not None:
+                mu, sigma = args.think_time_lognormal
+                await lognormal_sleep(mu, sigma, args.verbose)
+            elif args.request_rate > 0:
                 await poisson_sleep(args.request_rate, args.verbose)
 
     # Send indication that the client is done
@@ -800,6 +812,25 @@ def worker_function(
             max_global_requests,
         )
     )
+
+
+def _parse_lognormal(value: str | None) -> tuple[float, float] | None:
+    """Parse 'mu,sigma' string into a (mu, sigma) tuple."""
+    if value is None:
+        return None
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise ValueError(f"--think-time-lognormal must be 'mu,sigma', got '{value}'")
+    mu, sigma = float(parts[0]), float(parts[1])
+    if sigma <= 0:
+        raise ValueError(f"sigma must be positive, got {sigma}")
+    median = np.exp(mu)
+    mean = np.exp(mu + sigma**2 / 2)
+    logger.info(
+        f"Think-time: log-normal(mu={mu}, sigma={sigma}) → "
+        f"median={median:.1f}s, mean={mean:.1f}s"
+    )
+    return (mu, sigma)
 
 
 def get_client_config(
@@ -847,6 +878,7 @@ def get_client_config(
         conversation_sampling=args.conversation_sampling,
         request_rate=args.request_rate,
         max_retries=args.max_retries,
+        think_time_lognormal=_parse_lognormal(args.think_time_lognormal),
     )
 
     if args.limit_min_tokens > 0 or args.limit_max_tokens > 0:
@@ -954,8 +986,10 @@ async def main_mp(
         clients.append(client)
         client.start()
 
-    # Submit all the input conversations as tasks for the clients
-    for conv_id, messages in input_conv.items():
+    # Submit all the input conversations as tasks for the clients (shuffled)
+    conv_items = list(input_conv.items())
+    random.shuffle(conv_items)
+    for conv_id, messages in conv_items:
         task_queue.put((conv_id, messages))
 
     # Add termination signals for clients
@@ -1430,8 +1464,17 @@ async def main() -> None:
         "--request-rate",
         type=float,
         default=0,
-        help="Expected request rate (Poisson process) per client in requests/sec."
+        help="Expected request rate (Poisson process) per client in requests/sec. "
         "Set to 0 for no delay between requests.",
+    )
+    parser.add_argument(
+        "--think-time-lognormal",
+        type=str,
+        default=None,
+        help="Log-normal think-time between turns as 'mu,sigma'. "
+        "Median delay = exp(mu) seconds. "
+        "Example: '1.39,1.26' gives median ~4s think-time. "
+        "Overrides --request-rate if both are set.",
     )
     parser.add_argument(
         "--max-retries",
@@ -1765,6 +1808,7 @@ async def main() -> None:
         "num_conversations": len(conversations),
         "active_conversations": args.max_active_conversations,
         "seed": args.seed,
+        "think_time_lognormal": args.think_time_lognormal,
     }
 
     if args.limit_min_tokens > 0:

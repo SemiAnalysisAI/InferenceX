@@ -1,0 +1,872 @@
+05-02-2026 05:14:41 [INFO] - Namespace(input_file='sample_5k.json', output_file=None, responses_file='sweep_results_20260204_062339/tp8_bs64_offloadoff/responses.json', seed=0, model='nvidia/Llama-3.3-70B-Instruct-FP4', served_model_name=None, url='http://localhost:8888', num_clients=64, max_active_conversations=None, max_num_requests=3600, warmup_step=False, max_turns=None, no_early_stop=False, limit_max_tokens=0, limit_min_tokens=0, request_rate=0, max_retries=3, conversation_sampling=<ConversationSampling.ROUND_ROBIN: 'round_robin'>, verify_output=False, request_timeout_sec=3600, no_stream=False, excel_output=False, verbose=False, print_content=False, warmup_percentages='0%', backend='vllm', metrics_poll_interval=1.0, metrics_output='sweep_results_20260204_062339/tp8_bs64_offloadoff/metrics', no_metrics=False, metrics_csv=True)
+05-02-2026 05:14:41 [INFO] - [92mInput parameters:[0m
+05-02-2026 05:14:41 [INFO] - url=http://localhost:8888
+05-02-2026 05:14:41 [INFO] - model=nvidia/Llama-3.3-70B-Instruct-FP4
+05-02-2026 05:14:41 [INFO] - num_clients=64
+05-02-2026 05:14:41 [INFO] - Warmup percentages (percentage of samples): [0.0]
+05-02-2026 05:14:41 [INFO] - Loading tokenizer
+05-02-2026 05:14:43 [INFO] - [94mCollecting information from server: http://localhost:8888[0m
+05-02-2026 05:14:43 [INFO] - [94mServer version: {"version":"0.15.0"}[0m
+05-02-2026 05:14:43 [INFO] - [94mModels:[0m
+05-02-2026 05:14:43 [INFO] - [94m	model_id='nvidia/Llama-3.3-70B-Instruct-FP4', max_model_len=131072[0m
+05-02-2026 05:14:43 [INFO] - Reading input file: sample_5k.json
+05-02-2026 05:14:44 [INFO] - Found 5000 conversations in the input file
+05-02-2026 05:14:45 [INFO] - Loaded 5000 unique conversations
+05-02-2026 05:14:45 [INFO] - [94mMetrics collection enabled (poll interval: 1.0s)[0m
+05-02-2026 05:14:45 [INFO] - [94mStarted metrics collection[0m
+05-02-2026 05:14:45 [INFO] - [96mTotal expected requests: 3600 (estimate, early_stop enabled)[0m
+05-02-2026 05:14:45 [INFO] - [96mGlobal request limit: 3600[0m
+05-02-2026 05:14:45 [INFO] - [92mStarting 64 clients[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 0: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 1: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 2: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 3: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 4: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 5: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 6: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 7: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 8: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 9: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 10: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 11: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 12: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 13: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 14: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 15: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 16: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 17: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 18: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 19: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 20: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 21: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 22: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 23: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 24: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 25: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 26: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 27: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 28: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 29: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 30: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 31: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 32: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 33: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 34: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 35: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 36: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 37: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 38: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 39: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 40: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 41: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 42: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 43: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 44: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 45: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 46: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 47: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 48: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 49: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 50: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 51: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 52: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 53: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 54: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 55: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 56: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 57: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 58: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 59: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 60: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 61: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 62: max_num_requests=3600 (global), max_active_conversations=1[0m
+05-02-2026 05:14:45 [INFO] - [96mStarted client 63: max_num_requests=3600 (global), max_active_conversations=1[0m
+Requests completed:   0%|          | 0/3600 [00:00<?, ?req/s]Requests completed:   0%|          | 1/3600 [00:02<2:58:54,  2.98s/req]Requests completed:   1%|          | 28/3600 [00:06<12:50,  4.63req/s] Requests completed:   2%|▏         | 58/3600 [00:07<05:22, 11.00req/s]Requests completed:   2%|▏         | 63/3600 [00:13<13:51,  4.25req/s]Requests completed:   3%|▎         | 118/3600 [00:15<06:09,  9.42req/s]Requests completed:   4%|▍         | 142/3600 [00:16<04:42, 12.25req/s]Requests completed:   4%|▍         | 146/3600 [00:17<05:43, 10.06req/s]Requests completed:   4%|▍         | 161/3600 [00:17<04:36, 12.46req/s]Requests completed:   5%|▍         | 164/3600 [00:18<05:06, 11.22req/s]Requests completed:   5%|▍         | 167/3600 [00:18<05:07, 11.17req/s]Requests completed:   5%|▍         | 169/3600 [00:20<08:26,  6.77req/s]Requests completed:   5%|▌         | 183/3600 [00:22<07:50,  7.26req/s]Requests completed:   6%|▌         | 198/3600 [00:24<07:48,  7.26req/s]Requests completed:   6%|▌         | 213/3600 [00:25<07:02,  8.01req/s]05-02-2026 05:15:11 [INFO] - [96mFinished 16 out of 5000 conversations (0%), 0 out of 64 clients finished, collected 225 measurements, runtime 26.286 sec[0m
+05-02-2026 05:15:11 [INFO] - [96mEstimated req/sec N/A, estimated runtime left N/A sec[0m
+05-02-2026 05:15:11 [INFO] - --------------------------------------------------
+05-02-2026 05:15:11 [INFO] - [moving_avg_ttft_ms       ] avg:    200.931 (225 samples)
+05-02-2026 05:15:11 [INFO] - [moving_avg_tpot_ms       ] avg:     18.520 (225 samples)
+05-02-2026 05:15:11 [INFO] - [ttft_ms                  ] avg:    200.931, min:     68.451, max:    650.492
+05-02-2026 05:15:11 [INFO] - [tpot_ms                  ] avg:     18.520, min:      9.562, max:     55.721
+05-02-2026 05:15:11 [INFO] - [latency_ms               ] avg:   5687.244, min:    263.141, max:  23199.068
+05-02-2026 05:15:11 [INFO] - [input_num_turns          ] avg:      4.200, min:      1.000, max:     15.000
+05-02-2026 05:15:11 [INFO] - [input_num_tokens         ] avg:    965.591, min:      0.000, max:   3163.000
+05-02-2026 05:15:11 [INFO] - [output_num_tokens        ] avg:    315.293, min:      9.000, max:   1293.000
+05-02-2026 05:15:11 [INFO] - --------------------------------------------------
+Requests completed:   6%|▋         | 226/3600 [00:26<05:19, 10.56req/s]Requests completed:   6%|▋         | 229/3600 [00:28<09:11,  6.11req/s]Requests completed:   7%|▋         | 246/3600 [00:29<05:44,  9.74req/s]Requests completed:   7%|▋         | 249/3600 [00:29<06:32,  8.53req/s]Requests completed:   7%|▋         | 253/3600 [00:32<11:44,  4.75req/s]Requests completed:   8%|▊         | 272/3600 [00:33<06:19,  8.77req/s]Requests completed:   8%|▊         | 275/3600 [00:33<06:10,  8.97req/s]Requests completed:   8%|▊         | 277/3600 [00:33<06:05,  9.10req/s]Requests completed:   8%|▊         | 279/3600 [00:35<10:28,  5.28req/s]Requests completed:   8%|▊         | 288/3600 [00:35<07:50,  7.04req/s]Requests completed:   8%|▊         | 293/3600 [00:37<10:17,  5.36req/s]Requests completed:   8%|▊         | 304/3600 [00:37<06:23,  8.60req/s]Requests completed:   8%|▊         | 306/3600 [00:38<06:53,  7.96req/s]Requests completed:   9%|▊         | 309/3600 [00:39<08:55,  6.15req/s]Requests completed:   9%|▉         | 315/3600 [00:39<07:20,  7.46req/s]Requests completed:   9%|▉         | 318/3600 [00:41<11:20,  4.83req/s]05-02-2026 05:15:26 [INFO] - [96mFinished 32 out of 5000 conversations (1%), 0 out of 64 clients finished, collected 329 measurements, runtime 41.637 sec[0m
+05-02-2026 05:15:26 [INFO] - [96mEstimated req/sec 7.902, estimated runtime left N/A sec[0m
+05-02-2026 05:15:26 [INFO] - --------------------------------------------------
+05-02-2026 05:15:26 [INFO] - [moving_avg_ttft_ms       ] avg:    173.820 (329 samples)
+05-02-2026 05:15:26 [INFO] - [moving_avg_tpot_ms       ] avg:     17.837 (329 samples)
+05-02-2026 05:15:26 [INFO] - [ttft_ms                  ] avg:    173.820, min:     68.451, max:    650.492
+05-02-2026 05:15:26 [INFO] - [tpot_ms                  ] avg:     17.837, min:      9.562, max:     55.721
+05-02-2026 05:15:26 [INFO] - [latency_ms               ] avg:   6423.795, min:    137.838, max:  23199.068
+05-02-2026 05:15:26 [INFO] - [input_num_turns          ] avg:      4.623, min:      1.000, max:     15.000
+05-02-2026 05:15:26 [INFO] - [input_num_tokens         ] avg:   1145.149, min:      0.000, max:   3485.000
+05-02-2026 05:15:26 [INFO] - [output_num_tokens        ] avg:    366.307, min:      5.000, max:   1316.000
+05-02-2026 05:15:26 [INFO] - --------------------------------------------------
+Requests completed:   9%|▉         | 330/3600 [00:41<06:58,  7.81req/s]Requests completed:   9%|▉         | 333/3600 [00:42<06:23,  8.52req/s]Requests completed:   9%|▉         | 335/3600 [00:42<06:24,  8.50req/s]Requests completed:   9%|▉         | 337/3600 [00:43<09:07,  5.96req/s]Requests completed:  10%|▉         | 343/3600 [00:44<09:27,  5.74req/s]Requests completed:  10%|▉         | 351/3600 [00:44<05:56,  9.13req/s]Requests completed:  10%|▉         | 353/3600 [00:44<06:03,  8.93req/s]Requests completed:  10%|▉         | 356/3600 [00:45<07:38,  7.08req/s]Requests completed:  10%|█         | 361/3600 [00:45<05:55,  9.11req/s]Requests completed:  10%|█         | 364/3600 [00:46<05:43,  9.42req/s]Requests completed:  10%|█         | 366/3600 [00:47<11:22,  4.74req/s]Requests completed:  10%|█         | 374/3600 [00:47<06:11,  8.68req/s]Requests completed:  10%|█         | 377/3600 [00:48<09:39,  5.57req/s]Requests completed:  11%|█         | 383/3600 [00:50<10:37,  5.05req/s]Requests completed:  11%|█         | 392/3600 [00:50<07:55,  6.75req/s]05-02-2026 05:15:36 [INFO] - [96mFinished 48 out of 5000 conversations (1%), 0 out of 64 clients finished, collected 396 measurements, runtime 51.396 sec[0m
+05-02-2026 05:15:36 [INFO] - [96mEstimated req/sec 7.705, estimated runtime left N/A sec[0m
+05-02-2026 05:15:36 [INFO] - --------------------------------------------------
+05-02-2026 05:15:36 [INFO] - [moving_avg_ttft_ms       ] avg:    163.385 (396 samples)
+05-02-2026 05:15:36 [INFO] - [moving_avg_tpot_ms       ] avg:     17.651 (396 samples)
+05-02-2026 05:15:36 [INFO] - [ttft_ms                  ] avg:    163.385, min:     68.451, max:    650.492
+05-02-2026 05:15:36 [INFO] - [tpot_ms                  ] avg:     17.651, min:      9.562, max:     55.721
+05-02-2026 05:15:36 [INFO] - [latency_ms               ] avg:   7022.224, min:    137.838, max:  44035.536
+05-02-2026 05:15:36 [INFO] - [input_num_turns          ] avg:      4.833, min:      1.000, max:     15.000
+05-02-2026 05:15:36 [INFO] - [input_num_tokens         ] avg:   1288.250, min:      0.000, max:   4116.000
+05-02-2026 05:15:36 [INFO] - [output_num_tokens        ] avg:    404.083, min:      5.000, max:   2586.000
+05-02-2026 05:15:36 [INFO] - --------------------------------------------------
+Requests completed:  11%|█         | 399/3600 [00:52<10:20,  5.16req/s]Requests completed:  11%|█▏        | 411/3600 [00:55<10:54,  4.87req/s]Requests completed:  12%|█▏        | 429/3600 [00:56<06:20,  8.34req/s]Requests completed:  12%|█▏        | 433/3600 [00:56<06:13,  8.47req/s]Requests completed:  12%|█▏        | 436/3600 [00:56<05:41,  9.28req/s]Requests completed:  12%|█▏        | 438/3600 [00:57<06:07,  8.60req/s]Requests completed:  12%|█▏        | 440/3600 [00:58<10:25,  5.05req/s]Requests completed:  13%|█▎        | 451/3600 [00:59<07:55,  6.62req/s]Requests completed:  13%|█▎        | 457/3600 [01:00<06:39,  7.86req/s]Requests completed:  13%|█▎        | 459/3600 [01:01<10:01,  5.22req/s]Requests completed:  13%|█▎        | 467/3600 [01:01<06:36,  7.90req/s]Requests completed:  13%|█▎        | 469/3600 [01:02<08:17,  6.29req/s]Requests completed:  13%|█▎        | 474/3600 [01:03<09:03,  5.75req/s]05-02-2026 05:15:49 [INFO] - [96mFinished 64 out of 5000 conversations (1%), 0 out of 64 clients finished, collected 483 measurements, runtime 63.915 sec[0m
+05-02-2026 05:15:49 [INFO] - [96mEstimated req/sec 7.557, estimated runtime left N/A sec[0m
+05-02-2026 05:15:49 [INFO] - --------------------------------------------------
+05-02-2026 05:15:49 [INFO] - [moving_avg_ttft_ms       ] avg:    154.743 (483 samples)
+05-02-2026 05:15:49 [INFO] - [moving_avg_tpot_ms       ] avg:     17.433 (483 samples)
+05-02-2026 05:15:49 [INFO] - [ttft_ms                  ] avg:    154.743, min:     68.451, max:    650.492
+05-02-2026 05:15:49 [INFO] - [tpot_ms                  ] avg:     17.433, min:      9.562, max:     55.721
+05-02-2026 05:15:49 [INFO] - [latency_ms               ] avg:   7488.050, min:    137.838, max:  44035.536
+05-02-2026 05:15:49 [INFO] - [input_num_turns          ] avg:      4.971, min:      1.000, max:     15.000
+05-02-2026 05:15:49 [INFO] - [input_num_tokens         ] avg:   1389.762, min:      0.000, max:   5111.000
+05-02-2026 05:15:49 [INFO] - [output_num_tokens        ] avg:    434.702, min:      5.000, max:   2586.000
+05-02-2026 05:15:49 [INFO] - --------------------------------------------------
+Requests completed:  13%|█▎        | 484/3600 [01:05<10:25,  4.98req/s]Requests completed:  14%|█▍        | 502/3600 [01:06<05:55,  8.71req/s]Requests completed:  14%|█▍        | 506/3600 [01:06<05:36,  9.18req/s]Requests completed:  14%|█▍        | 508/3600 [01:07<05:32,  9.31req/s]Requests completed:  14%|█▍        | 510/3600 [01:07<05:18,  9.69req/s]Requests completed:  14%|█▍        | 512/3600 [01:07<05:02, 10.21req/s]Requests completed:  14%|█▍        | 514/3600 [01:07<06:31,  7.88req/s]Requests completed:  14%|█▍        | 517/3600 [01:08<06:25,  8.01req/s]Requests completed:  14%|█▍        | 520/3600 [01:08<05:34,  9.22req/s]Requests completed:  14%|█▍        | 522/3600 [01:08<06:33,  7.81req/s]Requests completed:  15%|█▍        | 524/3600 [01:09<07:10,  7.15req/s]Requests completed:  15%|█▍        | 526/3600 [01:09<07:01,  7.29req/s]Requests completed:  15%|█▍        | 529/3600 [01:11<13:48,  3.71req/s]Requests completed:  15%|█▍        | 536/3600 [01:11<07:25,  6.88req/s]Requests completed:  15%|█▍        | 539/3600 [01:14<17:29,  2.92req/s]Requests completed:  15%|█▌        | 557/3600 [01:15<08:46,  5.78req/s]05-02-2026 05:16:01 [INFO] - [96mFinished 80 out of 5000 conversations (2%), 0 out of 64 clients finished, collected 568 measurements, runtime 76.218 sec[0m
+05-02-2026 05:16:01 [INFO] - [96mEstimated req/sec 7.452, estimated runtime left N/A sec[0m
+05-02-2026 05:16:01 [INFO] - --------------------------------------------------
+05-02-2026 05:16:01 [INFO] - [moving_avg_ttft_ms       ] avg:    136.575 (500 samples)
+05-02-2026 05:16:01 [INFO] - [moving_avg_tpot_ms       ] avg:     16.795 (500 samples)
+05-02-2026 05:16:01 [INFO] - [ttft_ms                  ] avg:    148.302, min:     68.451, max:    650.492
+05-02-2026 05:16:01 [INFO] - [tpot_ms                  ] avg:     17.313, min:      9.562, max:     55.721
+05-02-2026 05:16:01 [INFO] - [latency_ms               ] avg:   7815.384, min:    137.838, max:  44035.536
+05-02-2026 05:16:01 [INFO] - [input_num_turns          ] avg:      5.102, min:      1.000, max:     15.000
+05-02-2026 05:16:01 [INFO] - [input_num_tokens         ] avg:   1481.250, min:      0.000, max:   5111.000
+05-02-2026 05:16:01 [INFO] - [output_num_tokens        ] avg:    455.218, min:      5.000, max:   2586.000
+05-02-2026 05:16:01 [INFO] - --------------------------------------------------
+Requests completed:  16%|█▌        | 569/3600 [01:16<05:58,  8.46req/s]Requests completed:  16%|█▌        | 571/3600 [01:16<05:56,  8.50req/s]Requests completed:  16%|█▌        | 573/3600 [01:19<12:44,  3.96req/s]Requests completed:  16%|█▋        | 591/3600 [01:19<06:21,  7.88req/s]Requests completed:  16%|█▋        | 594/3600 [01:20<07:00,  7.14req/s]Requests completed:  17%|█▋        | 603/3600 [01:20<05:22,  9.29req/s]Requests completed:  17%|█▋        | 605/3600 [01:21<06:26,  7.76req/s]Requests completed:  17%|█▋        | 610/3600 [01:21<05:17,  9.40req/s]Requests completed:  17%|█▋        | 612/3600 [01:22<07:22,  6.76req/s]Requests completed:  17%|█▋        | 618/3600 [01:23<08:01,  6.20req/s]Requests completed:  17%|█▋        | 625/3600 [01:24<05:53,  8.43req/s]Requests completed:  18%|█▊        | 630/3600 [01:24<05:37,  8.81req/s]Requests completed:  18%|█▊        | 632/3600 [01:26<11:03,  4.47req/s]Requests completed:  18%|█▊        | 638/3600 [01:27<10:38,  4.64req/s]05-02-2026 05:16:13 [INFO] - [96mFinished 96 out of 5000 conversations (2%), 0 out of 64 clients finished, collected 644 measurements, runtime 88.088 sec[0m
+05-02-2026 05:16:13 [INFO] - [96mEstimated req/sec 7.311, estimated runtime left N/A sec[0m
+05-02-2026 05:16:13 [INFO] - --------------------------------------------------
+05-02-2026 05:16:13 [INFO] - [moving_avg_ttft_ms       ] avg:    119.199 (500 samples)
+05-02-2026 05:16:13 [INFO] - [moving_avg_tpot_ms       ] avg:     16.626 (500 samples)
+05-02-2026 05:16:13 [INFO] - [ttft_ms                  ] avg:    143.692, min:     68.451, max:    650.492
+05-02-2026 05:16:13 [INFO] - [tpot_ms                  ] avg:     17.213, min:      9.562, max:     55.721
+05-02-2026 05:16:13 [INFO] - [latency_ms               ] avg:   7910.023, min:    137.838, max:  44035.536
+05-02-2026 05:16:13 [INFO] - [input_num_turns          ] avg:      5.152, min:      1.000, max:     15.000
+05-02-2026 05:16:13 [INFO] - [input_num_tokens         ] avg:   1542.076, min:      0.000, max:   5182.000
+05-02-2026 05:16:13 [INFO] - [output_num_tokens        ] avg:    462.646, min:      5.000, max:   2586.000
+05-02-2026 05:16:13 [INFO] - --------------------------------------------------
+Requests completed:  18%|█▊        | 645/3600 [01:28<09:34,  5.14req/s]Requests completed:  18%|█▊        | 653/3600 [01:29<06:48,  7.21req/s]Requests completed:  18%|█▊        | 656/3600 [01:30<09:51,  4.98req/s]Requests completed:  19%|█▊        | 669/3600 [01:31<06:29,  7.53req/s]Requests completed:  19%|█▊        | 674/3600 [01:31<05:17,  9.21req/s]Requests completed:  19%|█▉        | 677/3600 [01:32<06:24,  7.61req/s]Requests completed:  19%|█▉        | 679/3600 [01:32<07:07,  6.83req/s]Requests completed:  19%|█▉        | 684/3600 [01:33<06:53,  7.05req/s]Requests completed:  19%|█▉        | 687/3600 [01:34<07:56,  6.12req/s]Requests completed:  19%|█▉        | 693/3600 [01:34<06:07,  7.90req/s]Requests completed:  19%|█▉        | 695/3600 [01:35<07:22,  6.57req/s]Requests completed:  19%|█▉        | 700/3600 [01:36<07:36,  6.36req/s]Requests completed:  20%|█▉        | 705/3600 [01:36<05:36,  8.61req/s]Requests completed:  20%|█▉        | 707/3600 [01:39<15:30,  3.11req/s]Requests completed:  20%|██        | 722/3600 [01:39<06:41,  7.17req/s]05-02-2026 05:16:25 [INFO] - [96mFinished 112 out of 5000 conversations (2%), 0 out of 64 clients finished, collected 724 measurements, runtime 99.994 sec[0m
+05-02-2026 05:16:25 [INFO] - [96mEstimated req/sec 7.24, estimated runtime left N/A sec[0m
+05-02-2026 05:16:25 [INFO] - --------------------------------------------------
+05-02-2026 05:16:25 [INFO] - [moving_avg_ttft_ms       ] avg:    113.355 (500 samples)
+05-02-2026 05:16:25 [INFO] - [moving_avg_tpot_ms       ] avg:     16.441 (500 samples)
+05-02-2026 05:16:25 [INFO] - [ttft_ms                  ] avg:    140.592, min:     68.451, max:    650.492
+05-02-2026 05:16:25 [INFO] - [tpot_ms                  ] avg:     17.089, min:      9.562, max:     55.721
+05-02-2026 05:16:25 [INFO] - [latency_ms               ] avg:   8182.499, min:    137.838, max:  44035.536
+05-02-2026 05:16:25 [INFO] - [input_num_turns          ] avg:      5.135, min:      1.000, max:     15.000
+05-02-2026 05:16:25 [INFO] - [input_num_tokens         ] avg:   1579.710, min:      0.000, max:   6263.000
+05-02-2026 05:16:25 [INFO] - [output_num_tokens        ] avg:    482.036, min:      5.000, max:   2586.000
+05-02-2026 05:16:25 [INFO] - --------------------------------------------------
+Requests completed:  20%|██        | 725/3600 [01:41<09:53,  4.84req/s]Requests completed:  20%|██        | 737/3600 [01:42<06:33,  7.28req/s]Requests completed:  21%|██        | 740/3600 [01:43<10:05,  4.73req/s]Requests completed:  21%|██        | 754/3600 [01:44<06:42,  7.06req/s]Requests completed:  21%|██        | 760/3600 [01:45<06:03,  7.82req/s]Requests completed:  21%|██        | 763/3600 [01:46<06:46,  6.99req/s]Requests completed:  21%|██▏       | 767/3600 [01:47<08:23,  5.62req/s]Requests completed:  22%|██▏       | 777/3600 [01:47<05:22,  8.75req/s]Requests completed:  22%|██▏       | 779/3600 [01:47<05:23,  8.71req/s]Requests completed:  22%|██▏       | 781/3600 [01:48<07:59,  5.88req/s]Requests completed:  22%|██▏       | 786/3600 [01:49<06:57,  6.74req/s]Requests completed:  22%|██▏       | 787/3600 [01:49<07:40,  6.11req/s]Requests completed:  22%|██▏       | 789/3600 [01:49<06:39,  7.04req/s]Requests completed:  22%|██▏       | 791/3600 [01:50<06:59,  6.69req/s]Requests completed:  22%|██▏       | 794/3600 [01:50<06:05,  7.68req/s]05-02-2026 05:16:36 [INFO] - [96mFinished 128 out of 5000 conversations (3%), 0 out of 64 clients finished, collected 795 measurements, runtime 110.935 sec[0m
+05-02-2026 05:16:36 [INFO] - [96mEstimated req/sec 7.166, estimated runtime left N/A sec[0m
+05-02-2026 05:16:36 [INFO] - --------------------------------------------------
+05-02-2026 05:16:36 [INFO] - [moving_avg_ttft_ms       ] avg:    112.313 (500 samples)
+05-02-2026 05:16:36 [INFO] - [moving_avg_tpot_ms       ] avg:     16.411 (500 samples)
+05-02-2026 05:16:36 [INFO] - [ttft_ms                  ] avg:    137.906, min:     68.451, max:    650.492
+05-02-2026 05:16:36 [INFO] - [tpot_ms                  ] avg:     17.005, min:      9.562, max:     55.721
+05-02-2026 05:16:36 [INFO] - [latency_ms               ] avg:   8253.558, min:    137.838, max:  44035.536
+05-02-2026 05:16:36 [INFO] - [input_num_turns          ] avg:      5.186, min:      1.000, max:     15.000
+05-02-2026 05:16:36 [INFO] - [input_num_tokens         ] avg:   1618.423, min:      0.000, max:   6918.000
+05-02-2026 05:16:36 [INFO] - [output_num_tokens        ] avg:    487.936, min:      5.000, max:   2586.000
+05-02-2026 05:16:36 [INFO] - --------------------------------------------------
+Requests completed:  22%|██▏       | 796/3600 [01:50<06:46,  6.89req/s]Requests completed:  22%|██▏       | 799/3600 [01:51<10:11,  4.58req/s]Requests completed:  22%|██▏       | 808/3600 [01:52<05:04,  9.18req/s]Requests completed:  22%|██▎       | 810/3600 [01:53<07:11,  6.46req/s]Requests completed:  23%|██▎       | 815/3600 [01:53<06:43,  6.90req/s]Requests completed:  23%|██▎       | 820/3600 [01:54<06:48,  6.81req/s]Requests completed:  23%|██▎       | 825/3600 [01:57<13:02,  3.55req/s]Requests completed:  23%|██▎       | 842/3600 [01:57<05:44,  8.01req/s]Requests completed:  24%|██▎       | 847/3600 [01:59<07:57,  5.76req/s]Requests completed:  24%|██▍       | 860/3600 [02:00<05:40,  8.05req/s]Requests completed:  24%|██▍       | 864/3600 [02:01<06:58,  6.53req/s]Requests completed:  24%|██▍       | 874/3600 [02:02<06:15,  7.25req/s]Requests completed:  25%|██▍       | 885/3600 [02:03<05:01,  9.01req/s]Requests completed:  25%|██▍       | 891/3600 [02:03<04:09, 10.84req/s]Requests completed:  25%|██▍       | 893/3600 [02:04<06:53,  6.54req/s]Requests completed:  25%|██▌       | 901/3600 [02:05<04:46,  9.41req/s]05-02-2026 05:16:50 [INFO] - [96mFinished 144 out of 5000 conversations (3%), 0 out of 64 clients finished, collected 901 measurements, runtime 125.538 sec[0m
+05-02-2026 05:16:50 [INFO] - [96mEstimated req/sec 7.177, estimated runtime left N/A sec[0m
+05-02-2026 05:16:50 [INFO] - --------------------------------------------------
+05-02-2026 05:16:50 [INFO] - [moving_avg_ttft_ms       ] avg:    112.366 (500 samples)
+05-02-2026 05:16:50 [INFO] - [moving_avg_tpot_ms       ] avg:     16.385 (500 samples)
+05-02-2026 05:16:50 [INFO] - [ttft_ms                  ] avg:    134.726, min:     68.451, max:    650.492
+05-02-2026 05:16:50 [INFO] - [tpot_ms                  ] avg:     16.942, min:      9.562, max:     55.721
+05-02-2026 05:16:50 [INFO] - [latency_ms               ] avg:   8385.613, min:    137.838, max:  44035.536
+05-02-2026 05:16:50 [INFO] - [input_num_turns          ] avg:      5.173, min:      1.000, max:     15.000
+05-02-2026 05:16:50 [INFO] - [input_num_tokens         ] avg:   1632.604, min:      0.000, max:   7943.000
+05-02-2026 05:16:50 [INFO] - [output_num_tokens        ] avg:    496.382, min:      5.000, max:   2586.000
+05-02-2026 05:16:50 [INFO] - --------------------------------------------------
+Requests completed:  25%|██▌       | 904/3600 [02:09<13:34,  3.31req/s]Requests completed:  26%|██▌       | 924/3600 [02:09<06:10,  7.22req/s]Requests completed:  26%|██▌       | 929/3600 [02:10<05:35,  7.96req/s]Requests completed:  26%|██▌       | 932/3600 [02:11<07:10,  6.19req/s]Requests completed:  26%|██▌       | 942/3600 [02:12<06:08,  7.21req/s]Requests completed:  26%|██▋       | 950/3600 [02:15<09:48,  4.50req/s]Requests completed:  27%|██▋       | 967/3600 [02:15<05:11,  8.45req/s]Requests completed:  27%|██▋       | 973/3600 [02:16<05:54,  7.42req/s]Requests completed:  27%|██▋       | 977/3600 [02:17<05:52,  7.44req/s]Requests completed:  27%|██▋       | 982/3600 [02:18<06:53,  6.33req/s]Requests completed:  28%|██▊       | 990/3600 [02:20<07:19,  5.94req/s]Requests completed:  28%|██▊       | 1000/3600 [02:21<06:02,  7.16req/s]Requests completed:  28%|██▊       | 1004/3600 [02:21<05:32,  7.81req/s]05-02-2026 05:17:06 [INFO] - [96mFinished 160 out of 5000 conversations (3%), 0 out of 64 clients finished, collected 1006 measurements, runtime 141.797 sec[0m
+05-02-2026 05:17:06 [INFO] - [96mEstimated req/sec 7.095, estimated runtime left N/A sec[0m
+05-02-2026 05:17:06 [INFO] - --------------------------------------------------
+05-02-2026 05:17:06 [INFO] - [moving_avg_ttft_ms       ] avg:    111.711 (500 samples)
+05-02-2026 05:17:06 [INFO] - [moving_avg_tpot_ms       ] avg:     16.343 (500 samples)
+05-02-2026 05:17:06 [INFO] - [ttft_ms                  ] avg:    132.419, min:     68.451, max:    650.492
+05-02-2026 05:17:06 [INFO] - [tpot_ms                  ] avg:     16.874, min:      9.562, max:     55.721
+05-02-2026 05:17:06 [INFO] - [latency_ms               ] avg:   8540.442, min:    137.838, max:  48883.414
+05-02-2026 05:17:06 [INFO] - [input_num_turns          ] avg:      5.243, min:      1.000, max:     15.000
+05-02-2026 05:17:06 [INFO] - [input_num_tokens         ] avg:   1683.183, min:      0.000, max:   8065.000
+05-02-2026 05:17:06 [INFO] - [output_num_tokens        ] avg:    506.949, min:      5.000, max:   2985.000
+05-02-2026 05:17:06 [INFO] - --------------------------------------------------
+Requests completed:  28%|██▊       | 1007/3600 [02:21<05:29,  7.86req/s]Requests completed:  28%|██▊       | 1009/3600 [02:22<08:07,  5.31req/s]Requests completed:  28%|██▊       | 1015/3600 [02:23<06:52,  6.27req/s]Requests completed:  28%|██▊       | 1019/3600 [02:25<10:38,  4.04req/s]Requests completed:  29%|██▊       | 1028/3600 [02:25<06:25,  6.68req/s]Requests completed:  29%|██▊       | 1031/3600 [02:26<06:31,  6.57req/s]Requests completed:  29%|██▊       | 1034/3600 [02:26<05:59,  7.13req/s]Requests completed:  29%|██▉       | 1038/3600 [02:26<05:11,  8.23req/s]Requests completed:  29%|██▉       | 1040/3600 [02:27<04:50,  8.80req/s]Requests completed:  29%|██▉       | 1042/3600 [02:28<08:47,  4.85req/s]Requests completed:  29%|██▉       | 1050/3600 [02:28<04:49,  8.81req/s]Requests completed:  29%|██▉       | 1052/3600 [02:32<17:48,  2.39req/s]Requests completed:  30%|██▉       | 1078/3600 [02:33<05:34,  7.55req/s]Requests completed:  30%|███       | 1084/3600 [02:33<04:45,  8.81req/s]05-02-2026 05:17:19 [INFO] - [96mFinished 176 out of 5000 conversations (4%), 0 out of 64 clients finished, collected 1086 measurements, runtime 154.496 sec[0m
+05-02-2026 05:17:19 [INFO] - [96mEstimated req/sec 7.029, estimated runtime left N/A sec[0m
+05-02-2026 05:17:19 [INFO] - --------------------------------------------------
+05-02-2026 05:17:19 [INFO] - [moving_avg_ttft_ms       ] avg:    112.133 (500 samples)
+05-02-2026 05:17:19 [INFO] - [moving_avg_tpot_ms       ] avg:     16.401 (500 samples)
+05-02-2026 05:17:19 [INFO] - [ttft_ms                  ] avg:    131.026, min:     68.451, max:    650.492
+05-02-2026 05:17:19 [INFO] - [tpot_ms                  ] avg:     16.870, min:      9.562, max:     55.721
+05-02-2026 05:17:19 [INFO] - [latency_ms               ] avg:   8612.844, min:    137.838, max:  48883.414
+05-02-2026 05:17:19 [INFO] - [input_num_turns          ] avg:      5.287, min:      1.000, max:     15.000
+05-02-2026 05:17:19 [INFO] - [input_num_tokens         ] avg:   1712.278, min:      0.000, max:   8065.000
+05-02-2026 05:17:19 [INFO] - [output_num_tokens        ] avg:    511.181, min:      5.000, max:   2985.000
+05-02-2026 05:17:19 [INFO] - --------------------------------------------------
+Requests completed:  30%|███       | 1087/3600 [02:35<07:00,  5.97req/s]Requests completed:  30%|███       | 1095/3600 [02:35<05:14,  7.96req/s]Requests completed:  30%|███       | 1097/3600 [02:36<07:05,  5.88req/s]Requests completed:  31%|███       | 1104/3600 [02:37<06:49,  6.09req/s]Requests completed:  31%|███       | 1109/3600 [02:38<07:09,  5.80req/s]Requests completed:  31%|███       | 1114/3600 [02:38<05:32,  7.48req/s]Requests completed:  31%|███       | 1116/3600 [02:40<09:21,  4.43req/s]Requests completed:  31%|███▏      | 1130/3600 [02:40<04:11,  9.84req/s]Requests completed:  32%|███▏      | 1135/3600 [02:42<05:34,  7.38req/s]Requests completed:  32%|███▏      | 1139/3600 [02:43<06:42,  6.12req/s]Requests completed:  32%|███▏      | 1144/3600 [02:45<09:08,  4.47req/s]Requests completed:  32%|███▏      | 1154/3600 [02:45<05:53,  6.92req/s]Requests completed:  32%|███▏      | 1156/3600 [02:45<05:40,  7.18req/s]Requests completed:  32%|███▏      | 1158/3600 [02:47<09:23,  4.33req/s]Requests completed:  32%|███▏      | 1169/3600 [02:47<05:48,  6.98req/s]05-02-2026 05:17:33 [INFO] - [96mFinished 192 out of 5000 conversations (4%), 0 out of 64 clients finished, collected 1170 measurements, runtime 168.359 sec[0m
+05-02-2026 05:17:33 [INFO] - [96mEstimated req/sec 6.949, estimated runtime left N/A sec[0m
+05-02-2026 05:17:33 [INFO] - --------------------------------------------------
+05-02-2026 05:17:33 [INFO] - [moving_avg_ttft_ms       ] avg:    112.391 (500 samples)
+05-02-2026 05:17:33 [INFO] - [moving_avg_tpot_ms       ] avg:     16.383 (500 samples)
+05-02-2026 05:17:33 [INFO] - [ttft_ms                  ] avg:    129.655, min:     68.451, max:    650.492
+05-02-2026 05:17:33 [INFO] - [tpot_ms                  ] avg:     16.829, min:      9.562, max:     55.721
+05-02-2026 05:17:33 [INFO] - [latency_ms               ] avg:   8603.885, min:    118.791, max:  48883.414
+05-02-2026 05:17:33 [INFO] - [input_num_turns          ] avg:      5.332, min:      1.000, max:     15.000
+05-02-2026 05:17:33 [INFO] - [input_num_tokens         ] avg:   1730.770, min:      0.000, max:   8900.000
+05-02-2026 05:17:33 [INFO] - [output_num_tokens        ] avg:    510.510, min:      3.000, max:   2985.000
+05-02-2026 05:17:33 [INFO] - --------------------------------------------------
+Requests completed:  33%|███▎      | 1171/3600 [02:48<06:24,  6.31req/s]Requests completed:  33%|███▎      | 1174/3600 [02:50<11:14,  3.60req/s]Requests completed:  33%|███▎      | 1191/3600 [02:51<05:36,  7.15req/s]Requests completed:  33%|███▎      | 1198/3600 [02:53<06:33,  6.10req/s]Requests completed:  34%|███▎      | 1207/3600 [02:55<06:54,  5.77req/s]Requests completed:  34%|███▍      | 1217/3600 [02:57<07:41,  5.16req/s]Requests completed:  34%|███▍      | 1232/3600 [02:57<04:31,  8.73req/s]Requests completed:  34%|███▍      | 1237/3600 [02:58<05:08,  7.65req/s]Requests completed:  34%|███▍      | 1241/3600 [02:59<05:32,  7.09req/s]Requests completed:  35%|███▍      | 1244/3600 [03:00<07:55,  4.96req/s]Requests completed:  35%|███▍      | 1251/3600 [03:01<06:57,  5.62req/s]Requests completed:  35%|███▍      | 1259/3600 [03:02<04:53,  7.97req/s]Requests completed:  35%|███▌      | 1262/3600 [03:03<07:55,  4.91req/s]Requests completed:  35%|███▌      | 1274/3600 [03:04<05:44,  6.76req/s]05-02-2026 05:17:50 [INFO] - [96mFinished 208 out of 5000 conversations (4%), 0 out of 64 clients finished, collected 1280 measurements, runtime 185.386 sec[0m
+05-02-2026 05:17:50 [INFO] - [96mEstimated req/sec 6.905, estimated runtime left N/A sec[0m
+05-02-2026 05:17:50 [INFO] - --------------------------------------------------
+05-02-2026 05:17:50 [INFO] - [moving_avg_ttft_ms       ] avg:    112.623 (500 samples)
+05-02-2026 05:17:50 [INFO] - [moving_avg_tpot_ms       ] avg:     16.436 (500 samples)
+05-02-2026 05:17:50 [INFO] - [ttft_ms                  ] avg:    128.467, min:     68.451, max:    650.492
+05-02-2026 05:17:50 [INFO] - [tpot_ms                  ] avg:     16.794, min:      9.562, max:     55.721
+05-02-2026 05:17:50 [INFO] - [latency_ms               ] avg:   8826.176, min:    118.791, max:  48883.414
+05-02-2026 05:17:50 [INFO] - [input_num_turns          ] avg:      5.364, min:      1.000, max:     15.000
+05-02-2026 05:17:50 [INFO] - [input_num_tokens         ] avg:   1759.883, min:      0.000, max:   8900.000
+05-02-2026 05:17:50 [INFO] - [output_num_tokens        ] avg:    524.188, min:      3.000, max:   2985.000
+05-02-2026 05:17:50 [INFO] - --------------------------------------------------
+Requests completed:  36%|███▌      | 1281/3600 [03:05<04:22,  8.82req/s]Requests completed:  36%|███▌      | 1284/3600 [03:07<08:05,  4.77req/s]Requests completed:  36%|███▌      | 1301/3600 [03:07<03:58,  9.65req/s]Requests completed:  36%|███▋      | 1305/3600 [03:08<04:03,  9.41req/s]Requests completed:  36%|███▋      | 1308/3600 [03:08<04:03,  9.42req/s]Requests completed:  36%|███▋      | 1310/3600 [03:09<05:14,  7.28req/s]Requests completed:  36%|███▋      | 1314/3600 [03:10<05:46,  6.60req/s]Requests completed:  37%|███▋      | 1317/3600 [03:10<04:58,  7.65req/s]Requests completed:  37%|███▋      | 1319/3600 [03:11<07:32,  5.05req/s]Requests completed:  37%|███▋      | 1327/3600 [03:11<04:39,  8.13req/s]Requests completed:  37%|███▋      | 1329/3600 [03:11<04:33,  8.31req/s]Requests completed:  37%|███▋      | 1331/3600 [03:12<06:43,  5.63req/s]Requests completed:  37%|███▋      | 1336/3600 [03:13<06:33,  5.76req/s]Requests completed:  37%|███▋      | 1341/3600 [03:14<07:37,  4.93req/s]05-02-2026 05:18:00 [INFO] - [96mFinished 224 out of 5000 conversations (4%), 0 out of 64 clients finished, collected 1350 measurements, runtime 195.224 sec[0m
+05-02-2026 05:18:00 [INFO] - [96mEstimated req/sec 6.915, estimated runtime left N/A sec[0m
+05-02-2026 05:18:00 [INFO] - --------------------------------------------------
+05-02-2026 05:18:00 [INFO] - [moving_avg_ttft_ms       ] avg:    113.203 (500 samples)
+05-02-2026 05:18:00 [INFO] - [moving_avg_tpot_ms       ] avg:     16.626 (500 samples)
+05-02-2026 05:18:00 [INFO] - [ttft_ms                  ] avg:    127.610, min:     68.451, max:    650.492
+05-02-2026 05:18:00 [INFO] - [tpot_ms                  ] avg:     16.836, min:      9.562, max:     55.721
+05-02-2026 05:18:00 [INFO] - [latency_ms               ] avg:   8830.596, min:    118.791, max:  48883.414
+05-02-2026 05:18:00 [INFO] - [input_num_turns          ] avg:      5.427, min:      1.000, max:     15.000
+05-02-2026 05:18:00 [INFO] - [input_num_tokens         ] avg:   1777.663, min:      0.000, max:   8900.000
+05-02-2026 05:18:00 [INFO] - [output_num_tokens        ] avg:    523.182, min:      3.000, max:   2985.000
+05-02-2026 05:18:00 [INFO] - --------------------------------------------------
+Requests completed:  38%|███▊      | 1351/3600 [03:16<06:06,  6.14req/s]Requests completed:  38%|███▊      | 1356/3600 [03:16<05:53,  6.35req/s]Requests completed:  38%|███▊      | 1363/3600 [03:17<04:32,  8.21req/s]Requests completed:  38%|███▊      | 1367/3600 [03:17<03:47,  9.82req/s]Requests completed:  38%|███▊      | 1369/3600 [03:17<03:58,  9.35req/s]Requests completed:  38%|███▊      | 1371/3600 [03:18<06:31,  5.69req/s]Requests completed:  38%|███▊      | 1374/3600 [03:19<07:29,  4.95req/s]Requests completed:  38%|███▊      | 1380/3600 [03:19<05:44,  6.45req/s]Requests completed:  38%|███▊      | 1385/3600 [03:21<07:14,  5.10req/s]Requests completed:  39%|███▊      | 1391/3600 [03:22<06:00,  6.13req/s]Requests completed:  39%|███▊      | 1393/3600 [03:23<09:18,  3.95req/s]Requests completed:  39%|███▉      | 1400/3600 [03:24<08:00,  4.58req/s]Requests completed:  39%|███▉      | 1407/3600 [03:27<10:07,  3.61req/s]Requests completed:  40%|███▉      | 1427/3600 [03:28<05:00,  7.23req/s]Requests completed:  40%|███▉      | 1431/3600 [03:29<05:21,  6.74req/s]Requests completed:  40%|███▉      | 1438/3600 [03:29<04:36,  7.82req/s]05-02-2026 05:18:15 [INFO] - [96mFinished 240 out of 5000 conversations (5%), 0 out of 64 clients finished, collected 1440 measurements, runtime 210.080 sec[0m
+05-02-2026 05:18:15 [INFO] - [96mEstimated req/sec 6.855, estimated runtime left N/A sec[0m
+05-02-2026 05:18:15 [INFO] - --------------------------------------------------
+05-02-2026 05:18:15 [INFO] - [moving_avg_ttft_ms       ] avg:    112.776 (500 samples)
+05-02-2026 05:18:15 [INFO] - [moving_avg_tpot_ms       ] avg:     16.584 (500 samples)
+05-02-2026 05:18:15 [INFO] - [ttft_ms                  ] avg:    126.579, min:     68.451, max:    650.492
+05-02-2026 05:18:15 [INFO] - [tpot_ms                  ] avg:     16.794, min:      9.562, max:     55.721
+05-02-2026 05:18:15 [INFO] - [latency_ms               ] avg:   8879.777, min:    118.791, max:  48883.414
+05-02-2026 05:18:15 [INFO] - [input_num_turns          ] avg:      5.424, min:      1.000, max:     15.000
+05-02-2026 05:18:15 [INFO] - [input_num_tokens         ] avg:   1789.326, min:      0.000, max:   8900.000
+05-02-2026 05:18:15 [INFO] - [output_num_tokens        ] avg:    526.434, min:      3.000, max:   2985.000
+05-02-2026 05:18:15 [INFO] - --------------------------------------------------
+Requests completed:  40%|████      | 1441/3600 [03:30<05:55,  6.08req/s]Requests completed:  40%|████      | 1450/3600 [03:31<04:39,  7.68req/s]Requests completed:  40%|████      | 1454/3600 [03:32<04:46,  7.48req/s]Requests completed:  40%|████      | 1457/3600 [03:32<04:40,  7.63req/s]Requests completed:  41%|████      | 1460/3600 [03:34<07:29,  4.76req/s]Requests completed:  41%|████      | 1469/3600 [03:34<04:38,  7.66req/s]Requests completed:  41%|████      | 1472/3600 [03:35<05:32,  6.41req/s]Requests completed:  41%|████      | 1476/3600 [03:36<08:12,  4.31req/s]Requests completed:  41%|████▏     | 1490/3600 [03:40<08:39,  4.06req/s]Requests completed:  42%|████▏     | 1508/3600 [03:40<04:32,  7.69req/s]Requests completed:  42%|████▏     | 1511/3600 [03:42<05:36,  6.22req/s]Requests completed:  42%|████▏     | 1518/3600 [03:43<05:22,  6.46req/s]Requests completed:  42%|████▏     | 1523/3600 [03:43<04:59,  6.93req/s]Requests completed:  42%|████▏     | 1525/3600 [03:43<04:48,  7.19req/s]Requests completed:  42%|████▏     | 1528/3600 [03:44<05:00,  6.90req/s]Requests completed:  43%|████▎     | 1533/3600 [03:45<05:07,  6.71req/s]05-02-2026 05:18:30 [INFO] - [96mFinished 256 out of 5000 conversations (5%), 0 out of 64 clients finished, collected 1536 measurements, runtime 225.556 sec[0m
+05-02-2026 05:18:30 [INFO] - [96mEstimated req/sec 6.81, estimated runtime left 4179.83 sec[0m
+05-02-2026 05:18:30 [INFO] - --------------------------------------------------
+05-02-2026 05:18:30 [INFO] - [moving_avg_ttft_ms       ] avg:    113.847 (500 samples)
+05-02-2026 05:18:30 [INFO] - [moving_avg_tpot_ms       ] avg:     16.623 (500 samples)
+05-02-2026 05:18:30 [INFO] - [ttft_ms                  ] avg:    125.904, min:     68.451, max:    650.492
+05-02-2026 05:18:30 [INFO] - [tpot_ms                  ] avg:     16.785, min:      9.562, max:     55.721
+05-02-2026 05:18:30 [INFO] - [latency_ms               ] avg:   9007.046, min:    118.791, max:  81024.213
+05-02-2026 05:18:30 [INFO] - [input_num_turns          ] avg:      5.431, min:      1.000, max:     15.000
+05-02-2026 05:18:30 [INFO] - [input_num_tokens         ] avg:   1803.221, min:      0.000, max:   9016.000
+05-02-2026 05:18:30 [INFO] - [output_num_tokens        ] avg:    534.150, min:      3.000, max:   4819.000
+05-02-2026 05:18:30 [INFO] - --------------------------------------------------
+Requests completed:  43%|████▎     | 1537/3600 [03:45<04:52,  7.06req/s]Requests completed:  43%|████▎     | 1541/3600 [03:45<04:00,  8.55req/s]Requests completed:  43%|████▎     | 1543/3600 [03:46<06:36,  5.19req/s]Requests completed:  43%|████▎     | 1550/3600 [03:47<04:37,  7.39req/s]Requests completed:  43%|████▎     | 1554/3600 [03:48<04:48,  7.09req/s]Requests completed:  43%|████▎     | 1559/3600 [03:49<07:01,  4.84req/s]Requests completed:  44%|████▎     | 1569/3600 [03:50<05:10,  6.54req/s]Requests completed:  44%|████▎     | 1573/3600 [03:51<04:40,  7.22req/s]Requests completed:  44%|████▍     | 1575/3600 [03:51<05:34,  6.06req/s]Requests completed:  44%|████▍     | 1577/3600 [03:52<06:08,  5.50req/s]Requests completed:  44%|████▍     | 1580/3600 [03:53<08:56,  3.77req/s]Requests completed:  44%|████▍     | 1588/3600 [03:53<04:50,  6.94req/s]Requests completed:  44%|████▍     | 1590/3600 [03:54<05:28,  6.12req/s]Requests completed:  44%|████▍     | 1592/3600 [03:55<08:31,  3.93req/s]Requests completed:  44%|████▍     | 1600/3600 [03:56<05:36,  5.94req/s]05-02-2026 05:18:42 [INFO] - [96mFinished 272 out of 5000 conversations (5%), 0 out of 64 clients finished, collected 1603 measurements, runtime 236.968 sec[0m
+05-02-2026 05:18:42 [INFO] - [96mEstimated req/sec 6.765, estimated runtime left 4119.068 sec[0m
+05-02-2026 05:18:42 [INFO] - --------------------------------------------------
+05-02-2026 05:18:42 [INFO] - [moving_avg_ttft_ms       ] avg:    114.902 (500 samples)
+05-02-2026 05:18:42 [INFO] - [moving_avg_tpot_ms       ] avg:     16.648 (500 samples)
+05-02-2026 05:18:42 [INFO] - [ttft_ms                  ] avg:    125.758, min:     68.451, max:    650.492
+05-02-2026 05:18:42 [INFO] - [tpot_ms                  ] avg:     16.799, min:      9.562, max:     55.721
+05-02-2026 05:18:42 [INFO] - [latency_ms               ] avg:   9077.478, min:    118.791, max:  81024.213
+05-02-2026 05:18:42 [INFO] - [input_num_turns          ] avg:      5.477, min:      1.000, max:     15.000
+05-02-2026 05:18:42 [INFO] - [input_num_tokens         ] avg:   1819.731, min:      0.000, max:   9016.000
+05-02-2026 05:18:42 [INFO] - [output_num_tokens        ] avg:    537.740, min:      3.000, max:   4819.000
+05-02-2026 05:18:42 [INFO] - --------------------------------------------------
+Requests completed:  45%|████▍     | 1605/3600 [03:57<06:12,  5.36req/s]Requests completed:  45%|████▍     | 1611/3600 [03:59<07:19,  4.52req/s]Requests completed:  45%|████▌     | 1622/3600 [03:59<04:24,  7.47req/s]Requests completed:  45%|████▌     | 1624/3600 [04:00<04:59,  6.59req/s]Requests completed:  45%|████▌     | 1627/3600 [04:00<04:34,  7.19req/s]Requests completed:  45%|████▌     | 1629/3600 [04:00<04:27,  7.36req/s]Requests completed:  45%|████▌     | 1630/3600 [04:01<06:58,  4.70req/s]Requests completed:  45%|████▌     | 1633/3600 [04:02<06:47,  4.83req/s]Requests completed:  45%|████▌     | 1637/3600 [04:03<06:38,  4.92req/s]Requests completed:  46%|████▌     | 1642/3600 [04:03<05:04,  6.43req/s]Requests completed:  46%|████▌     | 1643/3600 [04:06<12:53,  2.53req/s]Requests completed:  46%|████▌     | 1656/3600 [04:06<04:43,  6.85req/s]Requests completed:  46%|████▌     | 1659/3600 [04:07<05:41,  5.68req/s]Requests completed:  46%|████▌     | 1664/3600 [04:08<07:03,  4.57req/s]Requests completed:  47%|████▋     | 1675/3600 [04:08<03:50,  8.37req/s]05-02-2026 05:18:54 [INFO] - [96mFinished 288 out of 5000 conversations (6%), 0 out of 64 clients finished, collected 1675 measurements, runtime 249.399 sec[0m
+05-02-2026 05:18:54 [INFO] - [96mEstimated req/sec 6.716, estimated runtime left 4080.449 sec[0m
+05-02-2026 05:18:54 [INFO] - --------------------------------------------------
+05-02-2026 05:18:54 [INFO] - [moving_avg_ttft_ms       ] avg:    115.467 (500 samples)
+05-02-2026 05:18:54 [INFO] - [moving_avg_tpot_ms       ] avg:     16.649 (500 samples)
+05-02-2026 05:18:54 [INFO] - [ttft_ms                  ] avg:    125.365, min:     68.451, max:    650.492
+05-02-2026 05:18:54 [INFO] - [tpot_ms                  ] avg:     16.774, min:      9.562, max:     55.721
+05-02-2026 05:18:54 [INFO] - [latency_ms               ] avg:   9148.513, min:    118.791, max:  81024.213
+05-02-2026 05:18:54 [INFO] - [input_num_turns          ] avg:      5.464, min:      1.000, max:     15.000
+05-02-2026 05:18:54 [INFO] - [input_num_tokens         ] avg:   1827.457, min:      0.000, max:  10254.000
+05-02-2026 05:18:54 [INFO] - [output_num_tokens        ] avg:    542.427, min:      3.000, max:   4819.000
+05-02-2026 05:18:54 [INFO] - --------------------------------------------------
+Requests completed:  47%|████▋     | 1679/3600 [04:11<06:35,  4.85req/s]Requests completed:  47%|████▋     | 1689/3600 [04:15<09:50,  3.24req/s]Requests completed:  48%|████▊     | 1713/3600 [04:16<04:26,  7.09req/s]Requests completed:  48%|████▊     | 1717/3600 [04:16<04:29,  6.98req/s]Requests completed:  48%|████▊     | 1720/3600 [04:18<05:18,  5.91req/s]Requests completed:  48%|████▊     | 1729/3600 [04:19<04:59,  6.25req/s]Requests completed:  48%|████▊     | 1734/3600 [04:19<04:50,  6.42req/s]Requests completed:  48%|████▊     | 1738/3600 [04:20<05:23,  5.76req/s]Requests completed:  49%|████▊     | 1747/3600 [04:22<05:43,  5.40req/s]Requests completed:  49%|████▉     | 1757/3600 [04:23<03:52,  7.92req/s]Requests completed:  49%|████▉     | 1759/3600 [04:24<05:26,  5.64req/s]Requests completed:  49%|████▉     | 1768/3600 [04:25<04:25,  6.91req/s]Requests completed:  49%|████▉     | 1776/3600 [04:25<03:50,  7.91req/s]Requests completed:  49%|████▉     | 1781/3600 [04:26<03:15,  9.32req/s]Requests completed:  50%|████▉     | 1784/3600 [04:26<03:53,  7.76req/s]Requests completed:  50%|████▉     | 1789/3600 [04:28<05:32,  5.44req/s]05-02-2026 05:19:14 [INFO] - [96mFinished 304 out of 5000 conversations (6%), 0 out of 64 clients finished, collected 1796 measurements, runtime 268.933 sec[0m
+05-02-2026 05:19:14 [INFO] - [96mEstimated req/sec 6.678, estimated runtime left 4154.306 sec[0m
+05-02-2026 05:19:14 [INFO] - --------------------------------------------------
+05-02-2026 05:19:14 [INFO] - [moving_avg_ttft_ms       ] avg:    115.084 (500 samples)
+05-02-2026 05:19:14 [INFO] - [moving_avg_tpot_ms       ] avg:     16.647 (500 samples)
+05-02-2026 05:19:14 [INFO] - [ttft_ms                  ] avg:    124.610, min:     68.451, max:    650.492
+05-02-2026 05:19:14 [INFO] - [tpot_ms                  ] avg:     16.766, min:      9.562, max:     55.721
+05-02-2026 05:19:14 [INFO] - [latency_ms               ] avg:   9242.836, min:    109.475, max:  81024.213
+05-02-2026 05:19:14 [INFO] - [input_num_turns          ] avg:      5.484, min:      1.000, max:     15.000
+05-02-2026 05:19:14 [INFO] - [input_num_tokens         ] avg:   1837.982, min:      0.000, max:  10254.000
+05-02-2026 05:19:14 [INFO] - [output_num_tokens        ] avg:    548.493, min:      2.000, max:   4819.000
+05-02-2026 05:19:14 [INFO] - --------------------------------------------------
+Requests completed:  50%|████▉     | 1797/3600 [04:29<04:26,  6.77req/s]Requests completed:  50%|█████     | 1800/3600 [04:29<03:59,  7.52req/s]Requests completed:  50%|█████     | 1802/3600 [04:30<06:08,  4.88req/s]Requests completed:  50%|█████     | 1809/3600 [04:31<05:12,  5.73req/s]Requests completed:  50%|█████     | 1812/3600 [04:32<05:28,  5.45req/s]Requests completed:  50%|█████     | 1816/3600 [04:34<08:02,  3.70req/s]Requests completed:  51%|█████     | 1823/3600 [04:35<06:51,  4.31req/s]Requests completed:  51%|█████     | 1833/3600 [04:35<04:10,  7.06req/s]Requests completed:  51%|█████     | 1835/3600 [04:36<04:43,  6.23req/s]Requests completed:  51%|█████     | 1837/3600 [04:39<11:16,  2.61req/s]Requests completed:  52%|█████▏    | 1855/3600 [04:40<04:55,  5.91req/s]Requests completed:  52%|█████▏    | 1862/3600 [04:41<04:46,  6.08req/s]Requests completed:  52%|█████▏    | 1866/3600 [04:42<04:26,  6.51req/s]Requests completed:  52%|█████▏    | 1868/3600 [04:42<04:45,  6.07req/s]Requests completed:  52%|█████▏    | 1870/3600 [04:43<05:42,  5.05req/s]Requests completed:  52%|█████▏    | 1875/3600 [04:44<04:57,  5.81req/s]05-02-2026 05:19:29 [INFO] - [96mFinished 320 out of 5000 conversations (6%), 0 out of 64 clients finished, collected 1880 measurements, runtime 284.670 sec[0m
+05-02-2026 05:19:29 [INFO] - [96mEstimated req/sec 6.604, estimated runtime left 4163.306 sec[0m
+05-02-2026 05:19:29 [INFO] - --------------------------------------------------
+05-02-2026 05:19:29 [INFO] - [moving_avg_ttft_ms       ] avg:    115.788 (500 samples)
+05-02-2026 05:19:29 [INFO] - [moving_avg_tpot_ms       ] avg:     16.442 (500 samples)
+05-02-2026 05:19:29 [INFO] - [ttft_ms                  ] avg:    124.197, min:     68.451, max:    650.492
+05-02-2026 05:19:29 [INFO] - [tpot_ms                  ] avg:     16.734, min:      9.562, max:     55.721
+05-02-2026 05:19:29 [INFO] - [latency_ms               ] avg:   9376.852, min:    109.475, max:  81024.213
+05-02-2026 05:19:29 [INFO] - [input_num_turns          ] avg:      5.497, min:      1.000, max:     15.000
+05-02-2026 05:19:29 [INFO] - [input_num_tokens         ] avg:   1864.969, min:      0.000, max:  12007.000
+05-02-2026 05:19:29 [INFO] - [output_num_tokens        ] avg:    557.547, min:      2.000, max:   4819.000
+05-02-2026 05:19:29 [INFO] - --------------------------------------------------
+Requests completed:  52%|█████▏    | 1881/3600 [04:44<03:56,  7.28req/s]Requests completed:  52%|█████▏    | 1884/3600 [04:47<09:10,  3.12req/s]Requests completed:  53%|█████▎    | 1905/3600 [04:48<03:36,  7.82req/s]Requests completed:  53%|█████▎    | 1907/3600 [04:49<04:55,  5.73req/s]Requests completed:  53%|█████▎    | 1916/3600 [04:50<03:46,  7.45req/s]Requests completed:  53%|█████▎    | 1921/3600 [04:51<04:40,  6.00req/s]Requests completed:  54%|█████▎    | 1927/3600 [04:52<04:40,  5.97req/s]Requests completed:  54%|█████▍    | 1935/3600 [04:53<04:11,  6.63req/s]Requests completed:  54%|█████▍    | 1938/3600 [04:55<06:26,  4.30req/s]Requests completed:  54%|█████▍    | 1951/3600 [04:56<04:02,  6.79req/s]Requests completed:  54%|█████▍    | 1955/3600 [04:59<06:32,  4.19req/s]Requests completed:  55%|█████▍    | 1969/3600 [05:01<05:19,  5.11req/s]Requests completed:  55%|█████▌    | 1980/3600 [05:01<03:56,  6.84req/s]Requests completed:  55%|█████▌    | 1985/3600 [05:03<04:27,  6.04req/s]Requests completed:  55%|█████▌    | 1993/3600 [05:04<04:02,  6.64req/s]05-02-2026 05:19:49 [INFO] - [96mFinished 336 out of 5000 conversations (7%), 0 out of 64 clients finished, collected 1995 measurements, runtime 304.487 sec[0m
+05-02-2026 05:19:49 [INFO] - [96mEstimated req/sec 6.552, estimated runtime left 4226.563 sec[0m
+05-02-2026 05:19:49 [INFO] - --------------------------------------------------
+05-02-2026 05:19:49 [INFO] - [moving_avg_ttft_ms       ] avg:    116.157 (500 samples)
+05-02-2026 05:19:49 [INFO] - [moving_avg_tpot_ms       ] avg:     16.425 (500 samples)
+05-02-2026 05:19:49 [INFO] - [ttft_ms                  ] avg:    123.638, min:     68.451, max:    650.492
+05-02-2026 05:19:49 [INFO] - [tpot_ms                  ] avg:     16.695, min:      9.562, max:     55.721
+05-02-2026 05:19:49 [INFO] - [latency_ms               ] avg:   9440.528, min:    109.475, max:  81024.213
+05-02-2026 05:19:49 [INFO] - [input_num_turns          ] avg:      5.530, min:      1.000, max:     15.000
+05-02-2026 05:19:49 [INFO] - [input_num_tokens         ] avg:   1893.327, min:      0.000, max:  12007.000
+05-02-2026 05:19:49 [INFO] - [output_num_tokens        ] avg:    562.434, min:      2.000, max:   4819.000
+05-02-2026 05:19:49 [INFO] - --------------------------------------------------
+Requests completed:  55%|█████▌    | 1996/3600 [05:04<03:57,  6.76req/s]Requests completed:  56%|█████▌    | 2000/3600 [05:05<05:06,  5.22req/s]Requests completed:  56%|█████▌    | 2011/3600 [05:07<04:41,  5.63req/s]Requests completed:  56%|█████▌    | 2022/3600 [05:07<03:07,  8.40req/s]Requests completed:  56%|█████▌    | 2024/3600 [05:08<03:28,  7.56req/s]Requests completed:  56%|█████▋    | 2027/3600 [05:08<03:03,  8.58req/s]Requests completed:  56%|█████▋    | 2029/3600 [05:08<03:03,  8.57req/s]Requests completed:  56%|█████▋    | 2031/3600 [05:09<03:51,  6.78req/s]Requests completed:  56%|█████▋    | 2033/3600 [05:10<06:08,  4.25req/s]Requests completed:  57%|█████▋    | 2038/3600 [05:11<04:53,  5.33req/s]Requests completed:  57%|█████▋    | 2040/3600 [05:11<04:42,  5.52req/s]Requests completed:  57%|█████▋    | 2042/3600 [05:13<08:51,  2.93req/s]Requests completed:  57%|█████▋    | 2053/3600 [05:14<05:31,  4.67req/s]Requests completed:  57%|█████▋    | 2064/3600 [05:15<04:01,  6.35req/s]Requests completed:  58%|█████▊    | 2071/3600 [05:16<03:20,  7.61req/s]Requests completed:  58%|█████▊    | 2074/3600 [05:16<03:03,  8.30req/s]05-02-2026 05:20:02 [INFO] - [96mFinished 352 out of 5000 conversations (7%), 0 out of 64 clients finished, collected 2074 measurements, runtime 317.085 sec[0m
+05-02-2026 05:20:02 [INFO] - [96mEstimated req/sec 6.541, estimated runtime left 4186.958 sec[0m
+05-02-2026 05:20:02 [INFO] - --------------------------------------------------
+05-02-2026 05:20:02 [INFO] - [moving_avg_ttft_ms       ] avg:    115.388 (500 samples)
+05-02-2026 05:20:02 [INFO] - [moving_avg_tpot_ms       ] avg:     16.332 (500 samples)
+05-02-2026 05:20:02 [INFO] - [ttft_ms                  ] avg:    123.378, min:     68.451, max:    650.492
+05-02-2026 05:20:02 [INFO] - [tpot_ms                  ] avg:     16.690, min:      9.562, max:     55.721
+05-02-2026 05:20:02 [INFO] - [latency_ms               ] avg:   9518.505, min:    109.475, max:  81024.213
+05-02-2026 05:20:02 [INFO] - [input_num_turns          ] avg:      5.554, min:      1.000, max:     15.000
+05-02-2026 05:20:02 [INFO] - [input_num_tokens         ] avg:   1912.652, min:      0.000, max:  12007.000
+05-02-2026 05:20:02 [INFO] - [output_num_tokens        ] avg:    567.336, min:      2.000, max:   4819.000
+05-02-2026 05:20:02 [INFO] - --------------------------------------------------
+Requests completed:  58%|█████▊    | 2076/3600 [05:16<03:06,  8.16req/s]Requests completed:  58%|█████▊    | 2078/3600 [05:17<03:08,  8.08req/s]Requests completed:  58%|█████▊    | 2080/3600 [05:17<04:08,  6.12req/s]Requests completed:  58%|█████▊    | 2083/3600 [05:18<05:28,  4.62req/s]Requests completed:  58%|█████▊    | 2089/3600 [05:19<03:25,  7.36req/s]Requests completed:  58%|█████▊    | 2091/3600 [05:20<04:50,  5.19req/s]Requests completed:  58%|█████▊    | 2096/3600 [05:20<03:15,  7.68req/s]Requests completed:  58%|█████▊    | 2098/3600 [05:22<06:45,  3.70req/s]Requests completed:  59%|█████▊    | 2108/3600 [05:23<05:25,  4.58req/s]Requests completed:  59%|█████▉    | 2123/3600 [05:24<03:23,  7.24req/s]Requests completed:  59%|█████▉    | 2130/3600 [05:25<02:44,  8.92req/s]Requests completed:  59%|█████▉    | 2132/3600 [05:25<02:44,  8.90req/s]Requests completed:  59%|█████▉    | 2134/3600 [05:25<02:44,  8.89req/s]Requests completed:  59%|█████▉    | 2136/3600 [05:25<02:32,  9.60req/s]Requests completed:  59%|█████▉    | 2138/3600 [05:26<03:43,  6.54req/s]Requests completed:  59%|█████▉    | 2140/3600 [05:27<04:17,  5.67req/s]05-02-2026 05:20:12 [INFO] - [96mFinished 368 out of 5000 conversations (7%), 0 out of 64 clients finished, collected 2143 measurements, runtime 327.469 sec[0m
+05-02-2026 05:20:12 [INFO] - [96mEstimated req/sec 6.544, estimated runtime left 4121.834 sec[0m
+05-02-2026 05:20:12 [INFO] - --------------------------------------------------
+05-02-2026 05:20:12 [INFO] - [moving_avg_ttft_ms       ] avg:    115.472 (500 samples)
+05-02-2026 05:20:12 [INFO] - [moving_avg_tpot_ms       ] avg:     16.431 (500 samples)
+05-02-2026 05:20:12 [INFO] - [ttft_ms                  ] avg:    123.175, min:     68.451, max:    650.492
+05-02-2026 05:20:12 [INFO] - [tpot_ms                  ] avg:     16.703, min:      9.562, max:     55.721
+05-02-2026 05:20:12 [INFO] - [latency_ms               ] avg:   9487.787, min:    109.475, max:  81024.213
+05-02-2026 05:20:12 [INFO] - [input_num_turns          ] avg:      5.586, min:      1.000, max:     15.000
+05-02-2026 05:20:12 [INFO] - [input_num_tokens         ] avg:   1921.561, min:      0.000, max:  12007.000
+05-02-2026 05:20:12 [INFO] - [output_num_tokens        ] avg:    564.919, min:      2.000, max:   4819.000
+05-02-2026 05:20:12 [INFO] - --------------------------------------------------
+Requests completed:  60%|█████▉    | 2144/3600 [05:27<03:19,  7.30req/s]Requests completed:  60%|█████▉    | 2146/3600 [05:27<04:04,  5.95req/s]Requests completed:  60%|█████▉    | 2149/3600 [05:28<03:09,  7.66req/s]Requests completed:  60%|█████▉    | 2151/3600 [05:29<05:08,  4.69req/s]Requests completed:  60%|█████▉    | 2156/3600 [05:29<04:18,  5.58req/s]Requests completed:  60%|██████    | 2161/3600 [05:30<04:07,  5.82req/s]Requests completed:  60%|██████    | 2166/3600 [05:31<03:40,  6.49req/s]Requests completed:  60%|██████    | 2167/3600 [05:31<04:12,  5.68req/s]Requests completed:  60%|██████    | 2168/3600 [05:31<04:26,  5.38req/s]Requests completed:  60%|██████    | 2172/3600 [05:32<03:15,  7.29req/s]Requests completed:  60%|██████    | 2176/3600 [05:33<05:04,  4.68req/s]Requests completed:  61%|██████    | 2186/3600 [05:34<02:58,  7.93req/s]Requests completed:  61%|██████    | 2190/3600 [05:34<02:26,  9.60req/s]Requests completed:  61%|██████    | 2192/3600 [05:34<02:49,  8.32req/s]Requests completed:  61%|██████    | 2194/3600 [05:35<04:51,  4.82req/s]05-02-2026 05:20:21 [INFO] - [96mFinished 384 out of 5000 conversations (8%), 0 out of 64 clients finished, collected 2202 measurements, runtime 336.239 sec[0m
+05-02-2026 05:20:21 [INFO] - [96mEstimated req/sec 6.549, estimated runtime left 4041.871 sec[0m
+05-02-2026 05:20:21 [INFO] - --------------------------------------------------
+05-02-2026 05:20:21 [INFO] - [moving_avg_ttft_ms       ] avg:    115.769 (500 samples)
+05-02-2026 05:20:21 [INFO] - [moving_avg_tpot_ms       ] avg:     16.503 (500 samples)
+05-02-2026 05:20:21 [INFO] - [ttft_ms                  ] avg:    123.011, min:     68.451, max:    650.492
+05-02-2026 05:20:21 [INFO] - [tpot_ms                  ] avg:     16.708, min:      9.562, max:     55.721
+05-02-2026 05:20:21 [INFO] - [latency_ms               ] avg:   9497.874, min:    109.475, max:  81024.213
+05-02-2026 05:20:21 [INFO] - [input_num_turns          ] avg:      5.618, min:      1.000, max:     15.000
+05-02-2026 05:20:21 [INFO] - [input_num_tokens         ] avg:   1938.985, min:      0.000, max:  12007.000
+05-02-2026 05:20:21 [INFO] - [output_num_tokens        ] avg:    565.072, min:      2.000, max:   4819.000
+05-02-2026 05:20:21 [INFO] - --------------------------------------------------
+Requests completed:  61%|██████    | 2203/3600 [05:38<05:16,  4.41req/s]Requests completed:  62%|██████▏   | 2216/3600 [05:38<03:24,  6.75req/s]Requests completed:  62%|██████▏   | 2220/3600 [05:39<03:43,  6.17req/s]Requests completed:  62%|██████▏   | 2225/3600 [05:40<02:56,  7.77req/s]Requests completed:  62%|██████▏   | 2227/3600 [05:41<05:19,  4.29req/s]Requests completed:  62%|██████▏   | 2237/3600 [05:42<03:24,  6.66req/s]Requests completed:  62%|██████▏   | 2240/3600 [05:42<03:11,  7.11req/s]Requests completed:  62%|██████▏   | 2242/3600 [05:43<03:37,  6.24req/s]Requests completed:  62%|██████▏   | 2245/3600 [05:44<04:02,  5.58req/s]Requests completed:  62%|██████▎   | 2250/3600 [05:44<03:16,  6.86req/s]Requests completed:  63%|██████▎   | 2251/3600 [05:46<06:16,  3.58req/s]Requests completed:  63%|██████▎   | 2262/3600 [05:48<04:53,  4.56req/s]Requests completed:  63%|██████▎   | 2277/3600 [05:48<02:46,  7.92req/s]Requests completed:  63%|██████▎   | 2280/3600 [05:50<03:40,  5.98req/s]Requests completed:  64%|██████▎   | 2292/3600 [05:54<05:19,  4.09req/s]Requests completed:  64%|██████▍   | 2311/3600 [05:56<03:48,  5.64req/s]05-02-2026 05:20:41 [INFO] - [96mFinished 400 out of 5000 conversations (8%), 0 out of 64 clients finished, collected 2321 measurements, runtime 356.707 sec[0m
+05-02-2026 05:20:41 [INFO] - [96mEstimated req/sec 6.507, estimated runtime left 4102.135 sec[0m
+05-02-2026 05:20:41 [INFO] - --------------------------------------------------
+05-02-2026 05:20:41 [INFO] - [moving_avg_ttft_ms       ] avg:    116.625 (500 samples)
+05-02-2026 05:20:41 [INFO] - [moving_avg_tpot_ms       ] avg:     16.376 (500 samples)
+05-02-2026 05:20:41 [INFO] - [ttft_ms                  ] avg:    122.831, min:     68.451, max:    650.492
+05-02-2026 05:20:41 [INFO] - [tpot_ms                  ] avg:     16.678, min:      9.562, max:     55.721
+05-02-2026 05:20:41 [INFO] - [latency_ms               ] avg:   9612.565, min:    109.475, max:  81024.213
+05-02-2026 05:20:41 [INFO] - [input_num_turns          ] avg:      5.587, min:      1.000, max:     15.000
+05-02-2026 05:20:41 [INFO] - [input_num_tokens         ] avg:   1950.380, min:      0.000, max:  12007.000
+05-02-2026 05:20:41 [INFO] - [output_num_tokens        ] avg:    572.677, min:      2.000, max:   4819.000
+05-02-2026 05:20:41 [INFO] - --------------------------------------------------
+Requests completed:  64%|██████▍   | 2322/3600 [05:56<02:59,  7.11req/s]Requests completed:  65%|██████▍   | 2327/3600 [05:57<02:43,  7.78req/s]Requests completed:  65%|██████▍   | 2329/3600 [05:57<02:52,  7.36req/s]Requests completed:  65%|██████▍   | 2333/3600 [05:58<02:58,  7.11req/s]Requests completed:  65%|██████▍   | 2339/3600 [05:58<02:28,  8.51req/s]Requests completed:  65%|██████▌   | 2341/3600 [06:00<05:03,  4.15req/s]Requests completed:  65%|██████▌   | 2355/3600 [06:01<02:25,  8.59req/s]Requests completed:  66%|██████▌   | 2358/3600 [06:02<03:42,  5.58req/s]Requests completed:  66%|██████▌   | 2367/3600 [06:02<02:28,  8.31req/s]Requests completed:  66%|██████▌   | 2370/3600 [06:03<02:37,  7.81req/s]Requests completed:  66%|██████▌   | 2374/3600 [06:04<03:45,  5.43req/s]Requests completed:  66%|██████▌   | 2381/3600 [06:05<03:24,  5.96req/s]Requests completed:  66%|██████▋   | 2386/3600 [06:06<02:45,  7.35req/s]05-02-2026 05:20:51 [INFO] - [96mFinished 416 out of 5000 conversations (8%), 0 out of 64 clients finished, collected 2388 measurements, runtime 366.613 sec[0m
+05-02-2026 05:20:51 [INFO] - [96mEstimated req/sec 6.514, estimated runtime left 4039.793 sec[0m
+05-02-2026 05:20:51 [INFO] - --------------------------------------------------
+05-02-2026 05:20:51 [INFO] - [moving_avg_ttft_ms       ] avg:    116.672 (500 samples)
+05-02-2026 05:20:51 [INFO] - [moving_avg_tpot_ms       ] avg:     16.554 (500 samples)
+05-02-2026 05:20:51 [INFO] - [ttft_ms                  ] avg:    122.614, min:     68.451, max:    650.492
+05-02-2026 05:20:51 [INFO] - [tpot_ms                  ] avg:     16.693, min:      9.562, max:     55.721
+05-02-2026 05:20:51 [INFO] - [latency_ms               ] avg:   9572.018, min:    109.475, max:  81024.213
+05-02-2026 05:20:51 [INFO] - [input_num_turns          ] avg:      5.585, min:      1.000, max:     15.000
+05-02-2026 05:20:51 [INFO] - [input_num_tokens         ] avg:   1948.810, min:      0.000, max:  12007.000
+05-02-2026 05:20:51 [INFO] - [output_num_tokens        ] avg:    570.066, min:      2.000, max:   4819.000
+05-02-2026 05:20:51 [INFO] - --------------------------------------------------
+Requests completed:  66%|██████▋   | 2389/3600 [06:06<02:25,  8.33req/s]Requests completed:  66%|██████▋   | 2391/3600 [06:07<03:59,  5.04req/s]Requests completed:  67%|██████▋   | 2396/3600 [06:08<04:05,  4.90req/s]Requests completed:  67%|██████▋   | 2403/3600 [06:09<03:06,  6.41req/s]Requests completed:  67%|██████▋   | 2406/3600 [06:09<02:45,  7.23req/s]Requests completed:  67%|██████▋   | 2408/3600 [06:11<05:54,  3.37req/s]Requests completed:  67%|██████▋   | 2423/3600 [06:11<02:17,  8.55req/s]Requests completed:  67%|██████▋   | 2427/3600 [06:14<04:38,  4.21req/s]Requests completed:  68%|██████▊   | 2443/3600 [06:15<02:19,  8.27req/s]Requests completed:  68%|██████▊   | 2447/3600 [06:15<02:04,  9.25req/s]Requests completed:  68%|██████▊   | 2451/3600 [06:16<02:40,  7.15req/s]Requests completed:  68%|██████▊   | 2454/3600 [06:17<03:01,  6.33req/s]Requests completed:  68%|██████▊   | 2457/3600 [06:18<04:18,  4.42req/s]05-02-2026 05:21:04 [INFO] - [96mFinished 432 out of 5000 conversations (9%), 0 out of 64 clients finished, collected 2465 measurements, runtime 379.167 sec[0m
+05-02-2026 05:21:04 [INFO] - [96mEstimated req/sec 6.501, estimated runtime left 4009.345 sec[0m
+05-02-2026 05:21:04 [INFO] - --------------------------------------------------
+05-02-2026 05:21:04 [INFO] - [moving_avg_ttft_ms       ] avg:    118.547 (500 samples)
+05-02-2026 05:21:04 [INFO] - [moving_avg_tpot_ms       ] avg:     16.669 (500 samples)
+05-02-2026 05:21:04 [INFO] - [ttft_ms                  ] avg:    122.676, min:     68.451, max:    650.492
+05-02-2026 05:21:04 [INFO] - [tpot_ms                  ] avg:     16.697, min:      9.562, max:     55.721
+05-02-2026 05:21:04 [INFO] - [latency_ms               ] avg:   9619.326, min:    109.475, max:  81024.213
+05-02-2026 05:21:04 [INFO] - [input_num_turns          ] avg:      5.586, min:      1.000, max:     15.000
+05-02-2026 05:21:04 [INFO] - [input_num_tokens         ] avg:   1958.590, min:      0.000, max:  12007.000
+05-02-2026 05:21:04 [INFO] - [output_num_tokens        ] avg:    572.477, min:      2.000, max:   4819.000
+05-02-2026 05:21:04 [INFO] - --------------------------------------------------
+Requests completed:  68%|██████▊   | 2466/3600 [06:18<02:32,  7.46req/s]Requests completed:  69%|██████▊   | 2469/3600 [06:19<02:55,  6.43req/s]Requests completed:  69%|██████▊   | 2471/3600 [06:21<05:05,  3.70req/s]Requests completed:  69%|██████▉   | 2487/3600 [06:24<04:02,  4.58req/s]Requests completed:  70%|██████▉   | 2502/3600 [06:28<04:27,  4.10req/s]Requests completed:  70%|███████   | 2525/3600 [06:29<02:34,  6.96req/s]Requests completed:  70%|███████   | 2532/3600 [06:32<03:10,  5.61req/s]Requests completed:  71%|███████   | 2542/3600 [06:34<03:31,  5.01req/s]Requests completed:  71%|███████   | 2555/3600 [06:35<02:42,  6.45req/s]Requests completed:  71%|███████   | 2563/3600 [06:35<02:13,  7.79req/s]Requests completed:  71%|███████▏  | 2566/3600 [06:36<02:23,  7.20req/s]Requests completed:  72%|███████▏  | 2574/3600 [06:38<03:04,  5.55req/s]Requests completed:  72%|███████▏  | 2585/3600 [06:39<02:31,  6.71req/s]05-02-2026 05:21:25 [INFO] - [96mFinished 448 out of 5000 conversations (9%), 0 out of 64 clients finished, collected 2588 measurements, runtime 400.159 sec[0m
+05-02-2026 05:21:25 [INFO] - [96mEstimated req/sec 6.467, estimated runtime left 4065.905 sec[0m
+05-02-2026 05:21:25 [INFO] - --------------------------------------------------
+05-02-2026 05:21:25 [INFO] - [moving_avg_ttft_ms       ] avg:    118.991 (500 samples)
+05-02-2026 05:21:25 [INFO] - [moving_avg_tpot_ms       ] avg:     16.571 (500 samples)
+05-02-2026 05:21:25 [INFO] - [ttft_ms                  ] avg:    122.474, min:     68.451, max:    650.492
+05-02-2026 05:21:25 [INFO] - [tpot_ms                  ] avg:     16.666, min:      9.562, max:     55.721
+05-02-2026 05:21:25 [INFO] - [latency_ms               ] avg:   9655.474, min:    109.475, max:  81024.213
+05-02-2026 05:21:25 [INFO] - [input_num_turns          ] avg:      5.581, min:      1.000, max:     15.000
+05-02-2026 05:21:25 [INFO] - [input_num_tokens         ] avg:   1963.450, min:      0.000, max:  12007.000
+05-02-2026 05:21:25 [INFO] - [output_num_tokens        ] avg:    575.348, min:      2.000, max:   4819.000
+05-02-2026 05:21:25 [INFO] - --------------------------------------------------
+Requests completed:  72%|███████▏  | 2589/3600 [06:40<02:19,  7.25req/s]Requests completed:  72%|███████▏  | 2591/3600 [06:40<02:23,  7.02req/s]Requests completed:  72%|███████▏  | 2593/3600 [06:43<05:00,  3.35req/s]Requests completed:  72%|███████▏  | 2601/3600 [06:43<03:21,  4.96req/s]Requests completed:  72%|███████▏  | 2604/3600 [06:44<03:55,  4.23req/s]Requests completed:  72%|███████▎  | 2610/3600 [06:45<03:01,  5.45req/s]Requests completed:  73%|███████▎  | 2612/3600 [06:45<03:18,  4.98req/s]Requests completed:  73%|███████▎  | 2616/3600 [06:46<03:07,  5.25req/s]Requests completed:  73%|███████▎  | 2621/3600 [06:48<04:28,  3.65req/s]Requests completed:  73%|███████▎  | 2635/3600 [06:49<02:34,  6.24req/s]Requests completed:  73%|███████▎  | 2643/3600 [06:51<02:38,  6.04req/s]Requests completed:  74%|███████▎  | 2654/3600 [06:52<02:24,  6.57req/s]Requests completed:  74%|███████▍  | 2659/3600 [06:53<02:25,  6.45req/s]Requests completed:  74%|███████▍  | 2662/3600 [06:54<02:35,  6.02req/s]Requests completed:  74%|███████▍  | 2665/3600 [06:54<02:20,  6.64req/s]Requests completed:  74%|███████▍  | 2667/3600 [06:55<02:53,  5.39req/s]05-02-2026 05:21:40 [INFO] - [96mFinished 464 out of 5000 conversations (9%), 0 out of 64 clients finished, collected 2671 measurements, runtime 415.726 sec[0m
+05-02-2026 05:21:40 [INFO] - [96mEstimated req/sec 6.425, estimated runtime left 4064.08 sec[0m
+05-02-2026 05:21:40 [INFO] - --------------------------------------------------
+05-02-2026 05:21:40 [INFO] - [moving_avg_ttft_ms       ] avg:    118.938 (500 samples)
+05-02-2026 05:21:40 [INFO] - [moving_avg_tpot_ms       ] avg:     16.356 (500 samples)
+05-02-2026 05:21:40 [INFO] - [ttft_ms                  ] avg:    122.307, min:     68.451, max:    650.492
+05-02-2026 05:21:40 [INFO] - [tpot_ms                  ] avg:     16.640, min:      9.562, max:     55.721
+05-02-2026 05:21:40 [INFO] - [latency_ms               ] avg:   9740.095, min:    109.475, max:  81024.213
+05-02-2026 05:21:40 [INFO] - [input_num_turns          ] avg:      5.606, min:      1.000, max:     15.000
+05-02-2026 05:21:40 [INFO] - [input_num_tokens         ] avg:   1981.679, min:      0.000, max:  12007.000
+05-02-2026 05:21:40 [INFO] - [output_num_tokens        ] avg:    581.334, min:      2.000, max:   4819.000
+05-02-2026 05:21:40 [INFO] - --------------------------------------------------
+Requests completed:  74%|███████▍  | 2672/3600 [06:56<02:49,  5.47req/s]Requests completed:  74%|███████▍  | 2679/3600 [06:57<03:14,  4.73req/s]Requests completed:  75%|███████▍  | 2692/3600 [06:58<02:08,  7.05req/s]Requests completed:  75%|███████▌  | 2701/3600 [06:59<01:29, 10.00req/s]Requests completed:  75%|███████▌  | 2704/3600 [07:00<02:15,  6.63req/s]Requests completed:  75%|███████▌  | 2707/3600 [07:00<02:04,  7.18req/s]Requests completed:  75%|███████▌  | 2710/3600 [07:00<01:46,  8.34req/s]Requests completed:  75%|███████▌  | 2712/3600 [07:01<01:45,  8.43req/s]Requests completed:  75%|███████▌  | 2714/3600 [07:01<01:53,  7.79req/s]Requests completed:  75%|███████▌  | 2716/3600 [07:01<02:03,  7.17req/s]Requests completed:  76%|███████▌  | 2718/3600 [07:03<04:02,  3.64req/s]Requests completed:  76%|███████▌  | 2726/3600 [07:03<02:17,  6.35req/s]Requests completed:  76%|███████▌  | 2728/3600 [07:04<02:56,  4.93req/s]05-02-2026 05:21:50 [INFO] - [96mFinished 480 out of 5000 conversations (10%), 0 out of 64 clients finished, collected 2733 measurements, runtime 425.101 sec[0m
+05-02-2026 05:21:50 [INFO] - [96mEstimated req/sec 6.429, estimated runtime left 4003.031 sec[0m
+05-02-2026 05:21:50 [INFO] - --------------------------------------------------
+05-02-2026 05:21:50 [INFO] - [moving_avg_ttft_ms       ] avg:    119.105 (500 samples)
+05-02-2026 05:21:50 [INFO] - [moving_avg_tpot_ms       ] avg:     16.347 (500 samples)
+05-02-2026 05:21:50 [INFO] - [ttft_ms                  ] avg:    122.218, min:     68.451, max:    650.492
+05-02-2026 05:21:50 [INFO] - [tpot_ms                  ] avg:     16.638, min:      9.562, max:     55.721
+05-02-2026 05:21:50 [INFO] - [latency_ms               ] avg:   9767.314, min:    109.475, max:  81024.213
+05-02-2026 05:21:50 [INFO] - [input_num_turns          ] avg:      5.624, min:      1.000, max:     15.000
+05-02-2026 05:21:50 [INFO] - [input_num_tokens         ] avg:   1993.601, min:      0.000, max:  12007.000
+05-02-2026 05:21:50 [INFO] - [output_num_tokens        ] avg:    583.072, min:      2.000, max:   4819.000
+05-02-2026 05:21:50 [INFO] - --------------------------------------------------
+Requests completed:  76%|███████▌  | 2734/3600 [07:04<01:57,  7.38req/s]Requests completed:  76%|███████▌  | 2736/3600 [07:05<01:49,  7.91req/s]Requests completed:  76%|███████▌  | 2738/3600 [07:05<02:27,  5.83req/s]Requests completed:  76%|███████▌  | 2742/3600 [07:05<01:43,  8.32req/s]Requests completed:  76%|███████▌  | 2744/3600 [07:06<02:22,  6.01req/s]Requests completed:  76%|███████▋  | 2746/3600 [07:06<02:25,  5.87req/s]Requests completed:  76%|███████▋  | 2749/3600 [07:07<02:27,  5.78req/s]Requests completed:  76%|███████▋  | 2751/3600 [07:07<02:39,  5.31req/s]Requests completed:  76%|███████▋  | 2754/3600 [07:08<03:14,  4.35req/s]Requests completed:  77%|███████▋  | 2761/3600 [07:10<03:18,  4.22req/s]Requests completed:  77%|███████▋  | 2771/3600 [07:11<02:29,  5.55req/s]Requests completed:  77%|███████▋  | 2780/3600 [07:12<01:55,  7.09req/s]Requests completed:  77%|███████▋  | 2783/3600 [07:12<01:41,  8.06req/s]Requests completed:  77%|███████▋  | 2785/3600 [07:13<02:33,  5.30req/s]Requests completed:  78%|███████▊  | 2790/3600 [07:14<01:50,  7.33req/s]05-02-2026 05:21:59 [INFO] - [96mFinished 496 out of 5000 conversations (10%), 0 out of 64 clients finished, collected 2790 measurements, runtime 434.533 sec[0m
+05-02-2026 05:21:59 [INFO] - [96mEstimated req/sec 6.421, estimated runtime left 3945.837 sec[0m
+05-02-2026 05:21:59 [INFO] - --------------------------------------------------
+05-02-2026 05:21:59 [INFO] - [moving_avg_ttft_ms       ] avg:    118.011 (500 samples)
+05-02-2026 05:21:59 [INFO] - [moving_avg_tpot_ms       ] avg:     16.346 (500 samples)
+05-02-2026 05:21:59 [INFO] - [ttft_ms                  ] avg:    122.023, min:     68.451, max:    650.492
+05-02-2026 05:21:59 [INFO] - [tpot_ms                  ] avg:     16.630, min:      9.562, max:     55.721
+05-02-2026 05:21:59 [INFO] - [latency_ms               ] avg:   9760.601, min:    109.475, max:  81024.213
+05-02-2026 05:21:59 [INFO] - [input_num_turns          ] avg:      5.616, min:      1.000, max:     15.000
+05-02-2026 05:21:59 [INFO] - [input_num_tokens         ] avg:   1991.788, min:      0.000, max:  12007.000
+05-02-2026 05:21:59 [INFO] - [output_num_tokens        ] avg:    582.853, min:      2.000, max:   4819.000
+05-02-2026 05:21:59 [INFO] - --------------------------------------------------
+Requests completed:  78%|███████▊  | 2792/3600 [07:18<05:56,  2.27req/s]Requests completed:  78%|███████▊  | 2825/3600 [07:21<02:07,  6.07req/s]Requests completed:  79%|███████▉  | 2841/3600 [07:22<01:36,  7.85req/s]Requests completed:  79%|███████▉  | 2848/3600 [07:22<01:32,  8.14req/s]Requests completed:  79%|███████▉  | 2852/3600 [07:23<01:32,  8.10req/s]Requests completed:  79%|███████▉  | 2856/3600 [07:23<01:22,  8.97req/s]Requests completed:  79%|███████▉  | 2858/3600 [07:23<01:28,  8.39req/s]Requests completed:  79%|███████▉  | 2860/3600 [07:26<03:24,  3.62req/s]Requests completed:  80%|███████▉  | 2876/3600 [07:27<01:47,  6.71req/s]Requests completed:  80%|████████  | 2885/3600 [07:28<01:37,  7.35req/s]Requests completed:  80%|████████  | 2889/3600 [07:29<01:36,  7.33req/s]Requests completed:  80%|████████  | 2891/3600 [07:30<02:01,  5.82req/s]Requests completed:  80%|████████  | 2898/3600 [07:30<01:42,  6.82req/s]Requests completed:  81%|████████  | 2903/3600 [07:32<02:00,  5.77req/s]Requests completed:  81%|████████  | 2911/3600 [07:32<01:28,  7.83req/s]05-02-2026 05:22:18 [INFO] - [96mFinished 512 out of 5000 conversations (10%), 0 out of 64 clients finished, collected 2913 measurements, runtime 452.937 sec[0m
+05-02-2026 05:22:18 [INFO] - [96mEstimated req/sec 6.431, estimated runtime left 3970.272 sec[0m
+05-02-2026 05:22:18 [INFO] - --------------------------------------------------
+05-02-2026 05:22:18 [INFO] - [moving_avg_ttft_ms       ] avg:    116.382 (500 samples)
+05-02-2026 05:22:18 [INFO] - [moving_avg_tpot_ms       ] avg:     16.219 (500 samples)
+05-02-2026 05:22:18 [INFO] - [ttft_ms                  ] avg:    121.519, min:     68.451, max:    650.492
+05-02-2026 05:22:18 [INFO] - [tpot_ms                  ] avg:     16.617, min:      9.562, max:     55.721
+05-02-2026 05:22:18 [INFO] - [latency_ms               ] avg:   9733.294, min:    109.475, max:  81024.213
+05-02-2026 05:22:18 [INFO] - [input_num_turns          ] avg:      5.610, min:      1.000, max:     15.000
+05-02-2026 05:22:18 [INFO] - [input_num_tokens         ] avg:   1983.110, min:      0.000, max:  12007.000
+05-02-2026 05:22:18 [INFO] - [output_num_tokens        ] avg:    581.473, min:      2.000, max:   4819.000
+05-02-2026 05:22:18 [INFO] - --------------------------------------------------
+Requests completed:  81%|████████  | 2914/3600 [07:32<01:20,  8.56req/s]Requests completed:  81%|████████  | 2916/3600 [07:32<01:19,  8.63req/s]Requests completed:  81%|████████  | 2918/3600 [07:34<02:16,  5.00req/s]Requests completed:  81%|████████▏ | 2927/3600 [07:34<01:23,  8.01req/s]Requests completed:  81%|████████▏ | 2931/3600 [07:35<01:22,  8.13req/s]Requests completed:  82%|████████▏ | 2934/3600 [07:35<01:09,  9.52req/s]Requests completed:  82%|████████▏ | 2936/3600 [07:35<01:34,  7.02req/s]Requests completed:  82%|████████▏ | 2939/3600 [07:36<02:11,  5.01req/s]Requests completed:  82%|████████▏ | 2945/3600 [07:37<02:01,  5.37req/s]Requests completed:  82%|████████▏ | 2951/3600 [07:38<01:44,  6.21req/s]Requests completed:  82%|████████▏ | 2956/3600 [07:39<01:25,  7.50req/s]Requests completed:  82%|████████▏ | 2959/3600 [07:40<02:15,  4.73req/s]Requests completed:  82%|████████▏ | 2969/3600 [07:45<03:41,  2.85req/s]Requests completed:  83%|████████▎ | 2995/3600 [07:45<01:20,  7.54req/s]Requests completed:  83%|████████▎ | 2998/3600 [07:46<01:29,  6.70req/s]Requests completed:  84%|████████▎ | 3006/3600 [07:48<01:40,  5.89req/s]05-02-2026 05:22:34 [INFO] - [96mFinished 528 out of 5000 conversations (11%), 0 out of 64 clients finished, collected 3020 measurements, runtime 469.016 sec[0m
+05-02-2026 05:22:34 [INFO] - [96mEstimated req/sec 6.439, estimated runtime left 3972.426 sec[0m
+05-02-2026 05:22:34 [INFO] - --------------------------------------------------
+05-02-2026 05:22:34 [INFO] - [moving_avg_ttft_ms       ] avg:    113.761 (500 samples)
+05-02-2026 05:22:34 [INFO] - [moving_avg_tpot_ms       ] avg:     16.281 (500 samples)
+05-02-2026 05:22:34 [INFO] - [ttft_ms                  ] avg:    121.051, min:     68.451, max:    650.492
+05-02-2026 05:22:34 [INFO] - [tpot_ms                  ] avg:     16.619, min:      9.562, max:     55.721
+05-02-2026 05:22:34 [INFO] - [latency_ms               ] avg:   9750.261, min:    109.475, max:  81024.213
+05-02-2026 05:22:34 [INFO] - [input_num_turns          ] avg:      5.619, min:      1.000, max:     15.000
+05-02-2026 05:22:34 [INFO] - [input_num_tokens         ] avg:   1987.157, min:      0.000, max:  12007.000
+05-02-2026 05:22:34 [INFO] - [output_num_tokens        ] avg:    582.450, min:      2.000, max:   4819.000
+05-02-2026 05:22:34 [INFO] - --------------------------------------------------
+Requests completed:  84%|████████▍ | 3021/3600 [07:50<01:29,  6.46req/s]Requests completed:  84%|████████▍ | 3029/3600 [07:52<01:35,  5.96req/s]Requests completed:  84%|████████▍ | 3041/3600 [07:52<01:10,  7.89req/s]Requests completed:  85%|████████▍ | 3043/3600 [07:53<01:26,  6.45req/s]Requests completed:  85%|████████▍ | 3048/3600 [07:54<01:24,  6.56req/s]Requests completed:  85%|████████▍ | 3051/3600 [07:55<01:36,  5.67req/s]Requests completed:  85%|████████▍ | 3055/3600 [07:55<01:28,  6.13req/s]Requests completed:  85%|████████▍ | 3059/3600 [07:57<02:08,  4.20req/s]Requests completed:  85%|████████▌ | 3072/3600 [07:58<01:10,  7.46req/s]Requests completed:  85%|████████▌ | 3075/3600 [07:58<01:13,  7.16req/s]Requests completed:  86%|████████▌ | 3078/3600 [07:59<01:07,  7.79req/s]Requests completed:  86%|████████▌ | 3080/3600 [07:59<01:11,  7.31req/s]Requests completed:  86%|████████▌ | 3082/3600 [08:01<02:23,  3.62req/s]Requests completed:  86%|████████▌ | 3097/3600 [08:01<00:52,  9.60req/s]Requests completed:  86%|████████▌ | 3101/3600 [08:02<01:03,  7.81req/s]05-02-2026 05:22:48 [INFO] - [96mFinished 544 out of 5000 conversations (11%), 0 out of 64 clients finished, collected 3103 measurements, runtime 483.089 sec[0m
+05-02-2026 05:22:48 [INFO] - [96mEstimated req/sec 6.423, estimated runtime left 3957.07 sec[0m
+05-02-2026 05:22:48 [INFO] - --------------------------------------------------
+05-02-2026 05:22:48 [INFO] - [moving_avg_ttft_ms       ] avg:    112.523 (500 samples)
+05-02-2026 05:22:48 [INFO] - [moving_avg_tpot_ms       ] avg:     16.373 (500 samples)
+05-02-2026 05:22:48 [INFO] - [ttft_ms                  ] avg:    120.890, min:     68.451, max:    650.492
+05-02-2026 05:22:48 [INFO] - [tpot_ms                  ] avg:     16.615, min:      9.562, max:     55.721
+05-02-2026 05:22:48 [INFO] - [latency_ms               ] avg:   9760.583, min:    109.475, max:  81024.213
+05-02-2026 05:22:48 [INFO] - [input_num_turns          ] avg:      5.640, min:      1.000, max:     15.000
+05-02-2026 05:22:48 [INFO] - [input_num_tokens         ] avg:   2002.951, min:      0.000, max:  12007.000
+05-02-2026 05:22:48 [INFO] - [output_num_tokens        ] avg:    583.198, min:      2.000, max:   4819.000
+05-02-2026 05:22:48 [INFO] - --------------------------------------------------
+Requests completed:  86%|████████▌ | 3104/3600 [08:02<00:59,  8.38req/s]Requests completed:  86%|████████▋ | 3107/3600 [08:04<01:35,  5.15req/s]Requests completed:  86%|████████▋ | 3109/3600 [08:05<02:13,  3.68req/s]Requests completed:  87%|████████▋ | 3122/3600 [08:06<01:17,  6.14req/s]Requests completed:  87%|████████▋ | 3130/3600 [08:06<00:54,  8.63req/s]Requests completed:  87%|████████▋ | 3132/3600 [08:07<00:54,  8.57req/s]Requests completed:  87%|████████▋ | 3134/3600 [08:08<01:15,  6.21req/s]Requests completed:  87%|████████▋ | 3136/3600 [08:10<02:17,  3.36req/s]Requests completed:  87%|████████▋ | 3146/3600 [08:10<01:12,  6.22req/s]Requests completed:  88%|████████▊ | 3151/3600 [08:11<01:20,  5.60req/s]Requests completed:  88%|████████▊ | 3156/3600 [08:12<01:23,  5.32req/s]Requests completed:  88%|████████▊ | 3165/3600 [08:12<00:51,  8.50req/s]Requests completed:  88%|████████▊ | 3168/3600 [08:13<00:55,  7.74req/s]Requests completed:  88%|████████▊ | 3171/3600 [08:14<01:26,  4.94req/s]Requests completed:  88%|████████▊ | 3180/3600 [08:15<00:55,  7.58req/s]05-02-2026 05:23:00 [INFO] - [96mFinished 560 out of 5000 conversations (11%), 0 out of 64 clients finished, collected 3183 measurements, runtime 495.785 sec[0m
+05-02-2026 05:23:00 [INFO] - [96mEstimated req/sec 6.42, estimated runtime left 3930.866 sec[0m
+05-02-2026 05:23:00 [INFO] - --------------------------------------------------
+05-02-2026 05:23:00 [INFO] - [moving_avg_ttft_ms       ] avg:    112.869 (500 samples)
+05-02-2026 05:23:00 [INFO] - [moving_avg_tpot_ms       ] avg:     16.443 (500 samples)
+05-02-2026 05:23:00 [INFO] - [ttft_ms                  ] avg:    120.817, min:     44.357, max:    650.492
+05-02-2026 05:23:00 [INFO] - [tpot_ms                  ] avg:     16.608, min:      9.562, max:     55.721
+05-02-2026 05:23:00 [INFO] - [latency_ms               ] avg:   9782.106, min:    109.475, max:  87714.658
+05-02-2026 05:23:00 [INFO] - [input_num_turns          ] avg:      5.651, min:      1.000, max:     15.000
+05-02-2026 05:23:00 [INFO] - [input_num_tokens         ] avg:   2005.685, min:      0.000, max:  12007.000
+05-02-2026 05:23:00 [INFO] - [output_num_tokens        ] avg:    584.554, min:      2.000, max:   5285.000
+05-02-2026 05:23:00 [INFO] - --------------------------------------------------
+Requests completed:  88%|████████▊ | 3184/3600 [08:15<00:55,  7.46req/s]Requests completed:  89%|████████▊ | 3188/3600 [08:16<00:56,  7.32req/s]Requests completed:  89%|████████▊ | 3191/3600 [08:17<01:08,  5.99req/s]Requests completed:  89%|████████▉ | 3198/3600 [08:17<00:53,  7.46req/s]Requests completed:  89%|████████▉ | 3203/3600 [08:18<00:55,  7.11req/s]Requests completed:  89%|████████▉ | 3207/3600 [08:19<00:51,  7.68req/s]Requests completed:  89%|████████▉ | 3210/3600 [08:19<00:48,  7.96req/s]Requests completed:  89%|████████▉ | 3213/3600 [08:19<00:51,  7.58req/s]Requests completed:  89%|████████▉ | 3214/3600 [08:24<04:00,  1.60req/s]Requests completed:  90%|█████████ | 3241/3600 [08:26<01:00,  5.93req/s]Requests completed:  90%|█████████ | 3251/3600 [08:30<01:24,  4.13req/s]Requests completed:  91%|█████████ | 3278/3600 [08:30<00:38,  8.40req/s]05-02-2026 05:23:16 [INFO] - [96mFinished 576 out of 5000 conversations (12%), 0 out of 64 clients finished, collected 3281 measurements, runtime 511.634 sec[0m
+05-02-2026 05:23:16 [INFO] - [96mEstimated req/sec 6.413, estimated runtime left 3929.632 sec[0m
+05-02-2026 05:23:16 [INFO] - --------------------------------------------------
+05-02-2026 05:23:16 [INFO] - [moving_avg_ttft_ms       ] avg:    112.070 (500 samples)
+05-02-2026 05:23:16 [INFO] - [moving_avg_tpot_ms       ] avg:     16.413 (500 samples)
+05-02-2026 05:23:16 [INFO] - [ttft_ms                  ] avg:    120.566, min:     44.357, max:    650.492
+05-02-2026 05:23:16 [INFO] - [tpot_ms                  ] avg:     16.598, min:      9.562, max:     55.721
+05-02-2026 05:23:16 [INFO] - [latency_ms               ] avg:   9795.379, min:    109.475, max:  87714.658
+05-02-2026 05:23:16 [INFO] - [input_num_turns          ] avg:      5.656, min:      1.000, max:     15.000
+05-02-2026 05:23:16 [INFO] - [input_num_tokens         ] avg:   2004.916, min:      0.000, max:  12007.000
+05-02-2026 05:23:16 [INFO] - [output_num_tokens        ] avg:    585.530, min:      2.000, max:   5285.000
+05-02-2026 05:23:16 [INFO] - --------------------------------------------------
+Requests completed:  91%|█████████ | 3282/3600 [08:31<00:38,  8.25req/s]Requests completed:  91%|█████████▏| 3285/3600 [08:32<00:40,  7.69req/s]Requests completed:  91%|█████████▏| 3289/3600 [08:33<00:48,  6.44req/s]Requests completed:  92%|█████████▏| 3298/3600 [08:33<00:36,  8.23req/s]Requests completed:  92%|█████████▏| 3300/3600 [08:34<00:51,  5.81req/s]Requests completed:  92%|█████████▏| 3312/3600 [08:35<00:33,  8.68req/s]Requests completed:  92%|█████████▏| 3314/3600 [08:36<00:46,  6.18req/s]Requests completed:  92%|█████████▏| 3317/3600 [08:37<00:49,  5.67req/s]Requests completed:  92%|█████████▏| 3323/3600 [08:38<00:46,  5.96req/s]Requests completed:  92%|█████████▏| 3329/3600 [08:38<00:37,  7.17req/s]Requests completed:  93%|█████████▎| 3331/3600 [08:41<01:25,  3.13req/s]Requests completed:  93%|█████████▎| 3348/3600 [08:42<00:34,  7.39req/s]Requests completed:  93%|█████████▎| 3351/3600 [08:42<00:33,  7.51req/s]Requests completed:  93%|█████████▎| 3354/3600 [08:42<00:32,  7.46req/s]Requests completed:  93%|█████████▎| 3358/3600 [08:43<00:27,  8.87req/s]Requests completed:  93%|█████████▎| 3360/3600 [08:43<00:35,  6.75req/s]05-02-2026 05:23:29 [INFO] - [96mFinished 592 out of 5000 conversations (12%), 0 out of 64 clients finished, collected 3362 measurements, runtime 524.262 sec[0m
+05-02-2026 05:23:29 [INFO] - [96mEstimated req/sec 6.413, estimated runtime left 3903.624 sec[0m
+05-02-2026 05:23:29 [INFO] - --------------------------------------------------
+05-02-2026 05:23:29 [INFO] - [moving_avg_ttft_ms       ] avg:    113.416 (500 samples)
+05-02-2026 05:23:29 [INFO] - [moving_avg_tpot_ms       ] avg:     16.410 (500 samples)
+05-02-2026 05:23:29 [INFO] - [ttft_ms                  ] avg:    120.472, min:     44.357, max:    650.492
+05-02-2026 05:23:29 [INFO] - [tpot_ms                  ] avg:     16.593, min:      9.562, max:     55.721
+05-02-2026 05:23:29 [INFO] - [latency_ms               ] avg:   9809.240, min:    109.475, max:  87714.658
+05-02-2026 05:23:29 [INFO] - [input_num_turns          ] avg:      5.663, min:      1.000, max:     15.000
+05-02-2026 05:23:29 [INFO] - [input_num_tokens         ] avg:   2014.185, min:      0.000, max:  12007.000
+05-02-2026 05:23:29 [INFO] - [output_num_tokens        ] avg:    586.402, min:      2.000, max:   5285.000
+05-02-2026 05:23:29 [INFO] - --------------------------------------------------
+Requests completed:  93%|█████████▎| 3363/3600 [08:45<00:59,  3.95req/s]Requests completed:  94%|█████████▍| 3375/3600 [08:46<00:37,  6.07req/s]Requests completed:  94%|█████████▍| 3383/3600 [08:47<00:26,  8.16req/s]Requests completed:  94%|█████████▍| 3386/3600 [08:47<00:26,  7.96req/s]Requests completed:  94%|█████████▍| 3390/3600 [08:48<00:25,  8.17req/s]Requests completed:  94%|█████████▍| 3392/3600 [08:48<00:30,  6.84req/s]Requests completed:  94%|█████████▍| 3396/3600 [08:49<00:29,  6.97req/s]Requests completed:  94%|█████████▍| 3399/3600 [08:49<00:28,  6.94req/s]Requests completed:  95%|█████████▍| 3403/3600 [08:50<00:32,  6.12req/s]Requests completed:  95%|█████████▍| 3407/3600 [08:50<00:23,  8.24req/s]Requests completed:  95%|█████████▍| 3409/3600 [08:52<00:50,  3.76req/s]Requests completed:  95%|█████████▌| 3423/3600 [08:52<00:19,  9.11req/s]Requests completed:  95%|█████████▌| 3426/3600 [08:53<00:20,  8.66req/s]Requests completed:  95%|█████████▌| 3428/3600 [08:53<00:25,  6.76req/s]Requests completed:  95%|█████████▌| 3431/3600 [08:54<00:22,  7.40req/s]05-02-2026 05:23:39 [INFO] - [96mFinished 608 out of 5000 conversations (12%), 0 out of 64 clients finished, collected 3433 measurements, runtime 534.552 sec[0m
+05-02-2026 05:23:39 [INFO] - [96mEstimated req/sec 6.422, estimated runtime left 3861.437 sec[0m
+05-02-2026 05:23:39 [INFO] - --------------------------------------------------
+05-02-2026 05:23:39 [INFO] - [moving_avg_ttft_ms       ] avg:    113.755 (500 samples)
+05-02-2026 05:23:39 [INFO] - [moving_avg_tpot_ms       ] avg:     16.491 (500 samples)
+05-02-2026 05:23:39 [INFO] - [ttft_ms                  ] avg:    120.293, min:     44.357, max:    650.492
+05-02-2026 05:23:39 [INFO] - [tpot_ms                  ] avg:     16.601, min:      9.562, max:     55.721
+05-02-2026 05:23:39 [INFO] - [latency_ms               ] avg:   9792.439, min:    109.475, max:  87714.658
+05-02-2026 05:23:39 [INFO] - [input_num_turns          ] avg:      5.659, min:      1.000, max:     15.000
+05-02-2026 05:23:39 [INFO] - [input_num_tokens         ] avg:   2010.717, min:      0.000, max:  12007.000
+05-02-2026 05:23:39 [INFO] - [output_num_tokens        ] avg:    585.091, min:      2.000, max:   5285.000
+05-02-2026 05:23:39 [INFO] - --------------------------------------------------
+Requests completed:  95%|█████████▌| 3434/3600 [08:55<00:35,  4.65req/s]Requests completed:  96%|█████████▌| 3444/3600 [08:57<00:28,  5.56req/s]Requests completed:  96%|█████████▌| 3452/3600 [08:58<00:23,  6.30req/s]Requests completed:  96%|█████████▌| 3460/3600 [08:59<00:22,  6.33req/s]Requests completed:  96%|█████████▋| 3467/3600 [08:59<00:15,  8.58req/s]Requests completed:  96%|█████████▋| 3469/3600 [09:00<00:21,  6.23req/s]Requests completed:  97%|█████████▋| 3479/3600 [09:01<00:16,  7.15req/s]Requests completed:  97%|█████████▋| 3484/3600 [09:01<00:13,  8.37req/s]Requests completed:  97%|█████████▋| 3486/3600 [09:04<00:31,  3.56req/s]Requests completed:  97%|█████████▋| 3503/3600 [09:05<00:12,  7.49req/s]Requests completed:  97%|█████████▋| 3508/3600 [09:06<00:15,  6.00req/s]Requests completed:  98%|█████████▊| 3516/3600 [09:08<00:15,  5.54req/s]Requests completed:  98%|█████████▊| 3525/3600 [09:08<00:10,  7.28req/s]Requests completed:  98%|█████████▊| 3529/3600 [09:09<00:08,  8.39req/s]05-02-2026 05:23:54 [INFO] - [96mFinished 624 out of 5000 conversations (12%), 0 out of 64 clients finished, collected 3529 measurements, runtime 549.541 sec[0m
+05-02-2026 05:23:54 [INFO] - [96mEstimated req/sec 6.422, estimated runtime left 3853.83 sec[0m
+05-02-2026 05:23:54 [INFO] - --------------------------------------------------
+05-02-2026 05:23:54 [INFO] - [moving_avg_ttft_ms       ] avg:    114.860 (500 samples)
+05-02-2026 05:23:54 [INFO] - [moving_avg_tpot_ms       ] avg:     16.584 (500 samples)
+05-02-2026 05:23:54 [INFO] - [ttft_ms                  ] avg:    120.143, min:     44.357, max:    650.492
+05-02-2026 05:23:54 [INFO] - [tpot_ms                  ] avg:     16.614, min:      9.562, max:     55.721
+05-02-2026 05:23:54 [INFO] - [latency_ms               ] avg:   9796.031, min:    109.475, max:  87714.658
+05-02-2026 05:23:54 [INFO] - [input_num_turns          ] avg:      5.645, min:      1.000, max:     15.000
+05-02-2026 05:23:54 [INFO] - [input_num_tokens         ] avg:   2005.017, min:      0.000, max:  12926.000
+05-02-2026 05:23:54 [INFO] - [output_num_tokens        ] avg:    584.736, min:      2.000, max:   5285.000
+05-02-2026 05:23:54 [INFO] - --------------------------------------------------
+Requests completed:  98%|█████████▊| 3531/3600 [09:09<00:08,  7.69req/s]Requests completed:  98%|█████████▊| 3533/3600 [09:14<00:28,  2.38req/s]Requests completed:  99%|█████████▉| 3563/3600 [09:15<00:05,  7.10req/s]Requests completed:  99%|█████████▉| 3573/3600 [09:15<00:03,  8.89req/s]Requests completed:  99%|█████████▉| 3575/3600 [09:15<00:02,  8.80req/s]Requests completed:  99%|█████████▉| 3578/3600 [09:16<00:02,  8.04req/s]Requests completed:  99%|█████████▉| 3580/3600 [09:16<00:02,  7.78req/s]Requests completed: 100%|█████████▉| 3583/3600 [09:17<00:02,  7.81req/s]Requests completed: 100%|█████████▉| 3586/3600 [09:17<00:02,  6.89req/s]Requests completed: 100%|█████████▉| 3590/3600 [09:18<00:01,  8.49req/s]Requests completed: 100%|█████████▉| 3592/3600 [09:18<00:01,  6.59req/s]05-02-2026 05:24:05 [INFO] - [93mClient 62: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 62 is done (num_successes=48, num_failures=0)[0m
+Requests completed: 100%|█████████▉| 3598/3600 [09:19<00:00,  6.06req/s]05-02-2026 05:24:05 [INFO] - [96m1 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [93mSending termination signal to clients[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 12: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 12 is done (num_successes=54, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 9: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 9 is done (num_successes=71, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 57: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 57 is done (num_successes=54, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 63: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 63 is done (num_successes=54, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 35: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 35 is done (num_successes=63, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 18: global request limit reached (3600)[0m
+05-02-2026 05:24:05 [INFO] - [96mClient 18 is done (num_successes=56, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [94mStopped metrics collection (early stop)[0m
+Requests completed: 3601req [09:20,  6.58req/s]                         05-02-2026 05:24:05 [INFO] - [96m2 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [96m3 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [96m4 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [96m5 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [96m6 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [96m7 out of 64 clients finished[0m
+05-02-2026 05:24:05 [INFO] - [93mClient 39: global request limit reached (3600)[0m
+Requests completed: 3607req [09:20,  9.26req/s]05-02-2026 05:24:05 [INFO] - [96mClient 39 is done (num_successes=38, num_failures=0)[0m
+05-02-2026 05:24:05 [INFO] - [96m8 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 7: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 7 is done (num_successes=96, num_failures=0)[0m
+05-02-2026 05:24:06 [INFO] - [96m9 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 41: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 41 is done (num_successes=38, num_failures=0)[0m
+Requests completed: 3609req [09:20,  8.91req/s]05-02-2026 05:24:06 [INFO] - [96m10 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 36: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 23: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 36 is done (num_successes=79, num_failures=0)[0m
+05-02-2026 05:24:06 [INFO] - [96m11 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 23 is done (num_successes=77, num_failures=0)[0m
+05-02-2026 05:24:06 [INFO] - [96m12 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 5: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 5 is done (num_successes=83, num_failures=0)[0m
+Requests completed: 3612req [09:20,  9.61req/s]05-02-2026 05:24:06 [INFO] - [96m13 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 3: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 3 is done (num_successes=65, num_failures=0)[0m
+05-02-2026 05:24:06 [INFO] - [96m14 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 26: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 26 is done (num_successes=65, num_failures=0)[0m
+Requests completed: 3614req [09:21, 10.02req/s]05-02-2026 05:24:06 [INFO] - [96m15 out of 64 clients finished[0m
+05-02-2026 05:24:06 [INFO] - [93mClient 60: global request limit reached (3600)[0m
+05-02-2026 05:24:06 [INFO] - [96mClient 60 is done (num_successes=51, num_failures=0)[0m
+05-02-2026 05:24:06 [INFO] - [96m16 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 25: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 25 is done (num_successes=53, num_failures=0)[0m
+Requests completed: 3616req [09:21,  8.00req/s]05-02-2026 05:24:07 [INFO] - [96m17 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 61: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 61 is done (num_successes=72, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m18 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 4: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 4 is done (num_successes=46, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m19 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 24: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 46: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 24 is done (num_successes=51, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m20 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 46 is done (num_successes=51, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m21 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 33: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 33 is done (num_successes=67, num_failures=0)[0m
+Requests completed: 3621req [09:21, 12.41req/s]05-02-2026 05:24:07 [INFO] - [96m22 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 1: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 1 is done (num_successes=65, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m23 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 21: global request limit reached (3600)[0m
+Requests completed: 3623req [09:21, 11.90req/s]05-02-2026 05:24:07 [INFO] - [96mClient 21 is done (num_successes=49, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96mFinished 640 out of 5000 conversations (13%), 23 out of 64 clients finished, collected 3623 measurements, runtime 562.263 sec[0m
+05-02-2026 05:24:07 [INFO] - [96mEstimated req/sec 6.444, estimated runtime left 3830.416 sec[0m
+05-02-2026 05:24:07 [INFO] - --------------------------------------------------
+05-02-2026 05:24:07 [INFO] - [moving_avg_ttft_ms       ] avg:    115.022 (500 samples)
+05-02-2026 05:24:07 [INFO] - [moving_avg_tpot_ms       ] avg:     16.570 (500 samples)
+05-02-2026 05:24:07 [INFO] - [ttft_ms                  ] avg:    120.093, min:     44.357, max:    650.492
+05-02-2026 05:24:07 [INFO] - [tpot_ms                  ] avg:     16.606, min:      9.562, max:     55.721
+05-02-2026 05:24:07 [INFO] - [latency_ms               ] avg:   9798.242, min:    109.475, max:  87714.658
+05-02-2026 05:24:07 [INFO] - [input_num_turns          ] avg:      5.651, min:      1.000, max:     15.000
+05-02-2026 05:24:07 [INFO] - [input_num_tokens         ] avg:   2004.347, min:      0.000, max:  12926.000
+05-02-2026 05:24:07 [INFO] - [output_num_tokens        ] avg:    584.919, min:      2.000, max:   5285.000
+05-02-2026 05:24:07 [INFO] - --------------------------------------------------
+05-02-2026 05:24:07 [INFO] - [96m24 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 38: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 38 is done (num_successes=36, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m25 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 27: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 27 is done (num_successes=47, num_failures=0)[0m
+Requests completed: 3625req [09:21, 12.72req/s]05-02-2026 05:24:07 [INFO] - [93mClient 11: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96m26 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 11 is done (num_successes=62, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m27 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 40: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 40 is done (num_successes=46, num_failures=0)[0m
+05-02-2026 05:24:07 [INFO] - [96m28 out of 64 clients finished[0m
+05-02-2026 05:24:07 [INFO] - [93mClient 52: global request limit reached (3600)[0m
+05-02-2026 05:24:07 [INFO] - [96mClient 52 is done (num_successes=52, num_failures=0)[0m
+Requests completed: 3628req [09:22, 13.20req/s]05-02-2026 05:24:07 [INFO] - [96m29 out of 64 clients finished[0m
+05-02-2026 05:24:08 [INFO] - [93mClient 15: global request limit reached (3600)[0m
+05-02-2026 05:24:08 [INFO] - [96mClient 15 is done (num_successes=50, num_failures=0)[0m
+05-02-2026 05:24:08 [INFO] - [96m30 out of 64 clients finished[0m
+05-02-2026 05:24:08 [INFO] - [93mClient 10: global request limit reached (3600)[0m
+05-02-2026 05:24:08 [INFO] - [96mClient 10 is done (num_successes=53, num_failures=0)[0m
+Requests completed: 3630req [09:22,  6.56req/s]05-02-2026 05:24:08 [INFO] - [96m31 out of 64 clients finished[0m
+05-02-2026 05:24:08 [INFO] - [93mClient 34: global request limit reached (3600)[0m
+05-02-2026 05:24:08 [INFO] - [96mClient 34 is done (num_successes=54, num_failures=0)[0m
+05-02-2026 05:24:08 [INFO] - [96m32 out of 64 clients finished[0m
+05-02-2026 05:24:08 [INFO] - [93mClient 48: global request limit reached (3600)[0m
+05-02-2026 05:24:08 [INFO] - [96mClient 48 is done (num_successes=67, num_failures=0)[0m
+05-02-2026 05:24:08 [INFO] - [96m33 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 29: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 29 is done (num_successes=54, num_failures=0)[0m
+Requests completed: 3633req [09:23,  6.06req/s]05-02-2026 05:24:09 [INFO] - [96m34 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 16: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 16 is done (num_successes=47, num_failures=0)[0m
+05-02-2026 05:24:09 [INFO] - [96m35 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 49: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 49 is done (num_successes=50, num_failures=0)[0m
+Requests completed: 3635req [09:23,  5.80req/s]05-02-2026 05:24:09 [INFO] - [96m36 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 28: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 28 is done (num_successes=79, num_failures=0)[0m
+05-02-2026 05:24:09 [INFO] - [96m37 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 55: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 55 is done (num_successes=36, num_failures=0)[0m
+Requests completed: 3637req [09:24,  6.94req/s]05-02-2026 05:24:09 [INFO] - [96m38 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 51: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 51 is done (num_successes=64, num_failures=0)[0m
+05-02-2026 05:24:09 [INFO] - [96m39 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 47: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 47 is done (num_successes=52, num_failures=0)[0m
+Requests completed: 3639req [09:24,  7.18req/s]05-02-2026 05:24:09 [INFO] - [96m40 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 54: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 54 is done (num_successes=55, num_failures=0)[0m
+05-02-2026 05:24:09 [INFO] - [96m41 out of 64 clients finished[0m
+05-02-2026 05:24:09 [INFO] - [93mClient 37: global request limit reached (3600)[0m
+05-02-2026 05:24:09 [INFO] - [96mClient 37 is done (num_successes=59, num_failures=0)[0m
+05-02-2026 05:24:09 [INFO] - [96m42 out of 64 clients finished[0m
+05-02-2026 05:24:10 [INFO] - [93mClient 44: global request limit reached (3600)[0m
+05-02-2026 05:24:10 [INFO] - [96mClient 44 is done (num_successes=37, num_failures=0)[0m
+Requests completed: 3642req [09:25,  4.89req/s]05-02-2026 05:24:10 [INFO] - [96m43 out of 64 clients finished[0m
+05-02-2026 05:24:11 [INFO] - [93mClient 22: global request limit reached (3600)[0m
+05-02-2026 05:24:11 [INFO] - [96mClient 22 is done (num_successes=53, num_failures=0)[0m
+Requests completed: 3643req [09:25,  4.62req/s]05-02-2026 05:24:11 [INFO] - [96m44 out of 64 clients finished[0m
+05-02-2026 05:24:11 [INFO] - [93mClient 14: global request limit reached (3600)[0m
+Requests completed: 3644req [09:25,  4.82req/s]05-02-2026 05:24:11 [INFO] - [96mClient 14 is done (num_successes=56, num_failures=0)[0m
+05-02-2026 05:24:11 [INFO] - [96m45 out of 64 clients finished[0m
+05-02-2026 05:24:11 [INFO] - [93mClient 58: global request limit reached (3600)[0m
+05-02-2026 05:24:11 [INFO] - [96mClient 58 is done (num_successes=62, num_failures=0)[0m
+Requests completed: 3645req [09:26,  3.98req/s]05-02-2026 05:24:11 [INFO] - [96m46 out of 64 clients finished[0m
+05-02-2026 05:24:11 [INFO] - [93mClient 19: global request limit reached (3600)[0m
+05-02-2026 05:24:11 [INFO] - [96mClient 19 is done (num_successes=58, num_failures=0)[0m
+05-02-2026 05:24:11 [INFO] - [96m47 out of 64 clients finished[0m
+05-02-2026 05:24:12 [INFO] - [93mClient 45: global request limit reached (3600)[0m
+05-02-2026 05:24:12 [INFO] - [96mClient 45 is done (num_successes=71, num_failures=0)[0m
+Requests completed: 3647req [09:26,  4.36req/s]05-02-2026 05:24:12 [INFO] - [96m48 out of 64 clients finished[0m
+05-02-2026 05:24:12 [INFO] - [93mClient 20: global request limit reached (3600)[0m
+05-02-2026 05:24:12 [INFO] - [96mClient 20 is done (num_successes=52, num_failures=0)[0m
+Requests completed: 3648req [09:26,  4.28req/s]05-02-2026 05:24:12 [INFO] - [96m49 out of 64 clients finished[0m
+05-02-2026 05:24:13 [INFO] - [93mClient 13: global request limit reached (3600)[0m
+05-02-2026 05:24:13 [INFO] - [96mClient 13 is done (num_successes=43, num_failures=0)[0m
+Requests completed: 3649req [09:27,  2.18req/s]05-02-2026 05:24:13 [INFO] - [96m50 out of 64 clients finished[0m
+05-02-2026 05:24:13 [INFO] - [93mClient 32: global request limit reached (3600)[0m
+05-02-2026 05:24:13 [INFO] - [96mClient 32 is done (num_successes=49, num_failures=0)[0m
+05-02-2026 05:24:13 [INFO] - [96m51 out of 64 clients finished[0m
+05-02-2026 05:24:14 [INFO] - [93mClient 8: global request limit reached (3600)[0m
+05-02-2026 05:24:14 [INFO] - [96mClient 8 is done (num_successes=68, num_failures=0)[0m
+Requests completed: 3651req [09:28,  2.65req/s]05-02-2026 05:24:14 [INFO] - [96m52 out of 64 clients finished[0m
+05-02-2026 05:24:14 [INFO] - [93mClient 17: global request limit reached (3600)[0m
+05-02-2026 05:24:14 [INFO] - [96mClient 17 is done (num_successes=58, num_failures=0)[0m
+05-02-2026 05:24:14 [INFO] - [96m53 out of 64 clients finished[0m
+05-02-2026 05:24:14 [INFO] - [93mClient 43: global request limit reached (3600)[0m
+05-02-2026 05:24:14 [INFO] - [96mClient 43 is done (num_successes=44, num_failures=0)[0m
+Requests completed: 3653req [09:28,  3.02req/s]05-02-2026 05:24:14 [INFO] - [96m54 out of 64 clients finished[0m
+05-02-2026 05:24:14 [INFO] - [93mClient 31: global request limit reached (3600)[0m
+Requests completed: 3654req [09:29,  3.32req/s]05-02-2026 05:24:14 [INFO] - [96mClient 31 is done (num_successes=67, num_failures=0)[0m
+05-02-2026 05:24:14 [INFO] - [96m55 out of 64 clients finished[0m
+05-02-2026 05:24:15 [INFO] - [93mClient 30: global request limit reached (3600)[0m
+Requests completed: 3655req [09:30,  2.08req/s]05-02-2026 05:24:15 [INFO] - [96mClient 30 is done (num_successes=47, num_failures=0)[0m
+05-02-2026 05:24:15 [INFO] - [96m56 out of 64 clients finished[0m
+05-02-2026 05:24:17 [INFO] - [93mClient 59: global request limit reached (3600)[0m
+05-02-2026 05:24:17 [INFO] - [96mClient 59 is done (num_successes=57, num_failures=0)[0m
+Requests completed: 3656req [09:32,  1.18req/s]05-02-2026 05:24:17 [INFO] - [96m57 out of 64 clients finished[0m
+05-02-2026 05:24:18 [INFO] - [93mClient 6: global request limit reached (3600)[0m
+Requests completed: 3657req [09:33,  1.19req/s]05-02-2026 05:24:18 [INFO] - [96mClient 6 is done (num_successes=92, num_failures=0)[0m
+05-02-2026 05:24:18 [INFO] - [96m58 out of 64 clients finished[0m
+05-02-2026 05:24:20 [INFO] - [93mClient 0: global request limit reached (3600)[0m
+Requests completed: 3658req [09:34,  1.03s/req]05-02-2026 05:24:20 [INFO] - [96mClient 0 is done (num_successes=51, num_failures=0)[0m
+05-02-2026 05:24:20 [INFO] - [96m59 out of 64 clients finished[0m
+05-02-2026 05:24:21 [INFO] - [93mClient 2: global request limit reached (3600)[0m
+05-02-2026 05:24:21 [INFO] - [96mClient 2 is done (num_successes=87, num_failures=0)[0m
+Requests completed: 3659req [09:36,  1.13s/req]05-02-2026 05:24:21 [INFO] - [96m60 out of 64 clients finished[0m
+05-02-2026 05:24:22 [INFO] - [93mClient 53: global request limit reached (3600)[0m
+05-02-2026 05:24:22 [INFO] - [96mClient 53 is done (num_successes=48, num_failures=0)[0m
+Requests completed: 3660req [09:36,  1.04s/req]05-02-2026 05:24:22 [INFO] - [96m61 out of 64 clients finished[0m
+05-02-2026 05:24:22 [INFO] - [93mClient 56: global request limit reached (3600)[0m
+05-02-2026 05:24:22 [INFO] - [96mClient 56 is done (num_successes=47, num_failures=0)[0m
+Requests completed: 3661req [09:37,  1.10req/s]05-02-2026 05:24:22 [INFO] - [96m62 out of 64 clients finished[0m
+05-02-2026 05:24:23 [INFO] - [93mClient 50: global request limit reached (3600)[0m
+05-02-2026 05:24:23 [INFO] - [96mClient 50 is done (num_successes=53, num_failures=0)[0m
+Requests completed: 3662req [09:37,  1.46req/s]05-02-2026 05:24:23 [INFO] - [96m63 out of 64 clients finished[0m
+05-02-2026 05:24:35 [INFO] - [93mClient 42: global request limit reached (3600)[0m
+05-02-2026 05:24:35 [INFO] - [96mClient 42 is done (num_successes=54, num_failures=0)[0m
+Requests completed: 3663req [09:50,  4.24s/req]05-02-2026 05:24:35 [INFO] - [96m64 out of 64 clients finished[0m
+05-02-2026 05:24:35 [INFO] - [96mAll 64 clients finished[0m
+Requests completed: 3663req [09:50,  6.21req/s]
+05-02-2026 05:24:35 [INFO] - Collected 3663 samples from all the clients
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_0 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_1 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_2 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_3 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_4 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_5 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_6 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_7 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_8 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_9 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_10 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_11 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_12 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_13 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_14 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_15 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_16 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_17 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_18 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_19 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_20 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_21 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_22 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_23 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_24 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_25 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_26 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_27 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_28 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_29 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_30 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_31 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_32 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_33 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_34 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_35 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_36 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_37 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_38 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_39 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_40 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_41 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_42 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_43 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_44 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_45 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_46 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_47 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_48 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_49 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_50 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_51 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_52 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_53 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_54 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_55 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_56 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_57 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_58 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_59 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_60 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_61 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_62 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - [96mWaiting for client client_63 (is alive: False)[0m
+05-02-2026 05:24:35 [INFO] - All 64 clients exited (successfully finished 646 out of 5000 conversations)
+05-02-2026 05:24:37 [INFO] - [92mAll clients finished, benchmark runtime: 590.872 sec (590872.191 ms), requests per second: 6.199[0m
+05-02-2026 05:24:37 [INFO] - Processing 3663 samples...
+05-02-2026 05:24:37 [INFO] - [92mWriting responses file: sweep_results_20260204_062339/tp8_bs64_offloadoff/responses.json[0m
+Saved plots to sweep_results_20260204_062339/tp8_bs64_offloadoff/metrics_plots.png
+
+============================================================
+METRICS SUMMARY
+============================================================
+Duration: 559.4s
+Total prompt tokens: 7,597,305
+Total generation tokens: 2,134,795
+Avg generation throughput: 3816.0 tok/s
+Peak KV cache usage: 3.3%
+Peak running requests: 64
+Peak waiting requests: 0
+Total preemptions: 0
+Overall GPU cache hit rate: 87.6%
+  - Cache hits: 6,651,568 tokens
+  - Cache queries: 7,597,305 tokens
+============================================================
+
+Exported server metrics to sweep_results_20260204_062339/tp8_bs64_offloadoff/metrics_server_metrics.csv
+Exported GPU transfer metrics to sweep_results_20260204_062339/tp8_bs64_offloadoff/metrics_gpu_transfer.csv
+Exported client metrics to sweep_results_20260204_062339/tp8_bs64_offloadoff/metrics_client_metrics.csv
+----------------------------------------------------------------------------------------------------
+[93mParameters:[0m
+model=nvidia/Llama-3.3-70B-Instruct-FP4
+num_clients=64
+num_conversations=5000
+active_conversations=None
+seed=0
+----------------------------------------------------------------------------------------------------
+[93mStatistics summary:[0m
+runtime_sec = 563.943
+requests_per_sec = 6.495
+----------------------------------------------------------------------------------------------------
+                    count     mean      std  ...       99%     99.9%       max
+ttft_ms            3663.0   120.04    52.14  ...    328.19    612.36    650.49
+tpot_ms            3663.0    16.55     2.05  ...     21.45     45.68     55.72
+latency_ms         3663.0  9863.27  8152.98  ...  34557.16  53576.58  96361.55
+input_num_turns    3663.0     5.65     3.63  ...     15.00     15.00     15.00
+input_num_tokens   3663.0  2016.88  1719.65  ...   7686.96  10241.42  12926.00
+output_num_tokens  3663.0   593.05   502.87  ...   2121.38   3257.77   7735.00
+output_num_chunks  3663.0   589.55   498.35  ...   2115.38   3253.40   7422.00
+
+[7 rows x 11 columns]
+----------------------------------------------------------------------------------------------------

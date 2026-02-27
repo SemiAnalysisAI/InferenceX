@@ -1,0 +1,5496 @@
+========================================
+Starting sweep experiment at Wed Feb  4 06:23:39 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs16_offloadon
+  TP=1, BS=16, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 06:23:39 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 727306
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs16_offloadon finished at Wed Feb  4 07:24:54 UTC 2026
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs16_offloadoff
+  TP=1, BS=16, Offload=off
+  Started at Wed Feb  4 07:24:59 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 765047
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs16_offloadoff finished at Wed Feb  4 08:22:42 UTC 2026
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs32_offloadon
+  TP=1, BS=32, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 08:22:47 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 800698
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs32_offloadon finished at Wed Feb  4 09:07:24 UTC 2026
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs32_offloadoff
+  TP=1, BS=32, Offload=off
+  Started at Wed Feb  4 09:07:29 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 831821
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs32_offloadoff finished at Wed Feb  4 09:49:06 UTC 2026
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs64_offloadon
+  TP=1, BS=64, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 09:49:11 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 861250
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs64_offloadon finished at Wed Feb  4 10:26:38 UTC 2026
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs64_offloadoff
+  TP=1, BS=64, Offload=off
+  Started at Wed Feb  4 10:26:43 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 893659
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs64_offloadoff finished at Wed Feb  4 11:01:20 UTC 2026
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs128_offloadon
+  TP=1, BS=128, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 11:01:25 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 924411
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs128_offloadon finished at Wed Feb  4 11:27:08 UTC 2026
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs128_offloadoff
+  TP=1, BS=128, Offload=off
+  Started at Wed Feb  4 11:27:13 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 960769
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs128_offloadoff finished at Wed Feb  4 11:50:02 UTC 2026
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs256_offloadon
+  TP=1, BS=256, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 11:50:07 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 995517
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs256_offloadon finished at Wed Feb  4 12:14:14 UTC 2026
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs256_offloadoff
+  TP=1, BS=256, Offload=off
+  Started at Wed Feb  4 12:14:19 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1052137
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs256_offloadoff finished at Wed Feb  4 12:39:43 UTC 2026
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs512_offloadon
+  TP=1, BS=512, Offload=on
+  CPU offload size per GPU: 300GB
+  Started at Wed Feb  4 12:39:48 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1109420
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs512_offloadon finished at Wed Feb  4 13:03:59 UTC 2026
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+Running experiment: tp1_bs512_offloadoff
+  TP=1, BS=512, Offload=off
+  Started at Wed Feb  4 13:04:04 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1208313
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp1_bs512_offloadoff finished at Wed Feb  4 13:30:52 UTC 2026
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 13:30:57 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1308603
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+  ...waited 325s
+  ...waited 330s
+  ...waited 335s
+  ...waited 340s
+  ...waited 345s
+  ...waited 350s
+  ...waited 355s
+  ...waited 360s
+  ...waited 365s
+  ...waited 370s
+  ...waited 375s
+  ...waited 380s
+  ...waited 385s
+  ...waited 390s
+  ...waited 395s
+  ...waited 400s
+  ...waited 405s
+  ...waited 410s
+  ...waited 415s
+  ...waited 420s
+  ...waited 425s
+  ...waited 430s
+  ...waited 435s
+  ...waited 440s
+  ...waited 445s
+  ...waited 450s
+  ...waited 455s
+  ...waited 460s
+  ...waited 465s
+  ...waited 470s
+  ...waited 475s
+  ...waited 480s
+  ...waited 485s
+  ...waited 490s
+  ...waited 495s
+  ...waited 500s
+  ...waited 505s
+  ...waited 510s
+  ...waited 515s
+  ...waited 520s
+  ...waited 525s
+  ...waited 530s
+  ...waited 535s
+  ...waited 540s
+  ...waited 545s
+  ...waited 550s
+  ...waited 555s
+  ...waited 560s
+  ...waited 565s
+  ...waited 570s
+  ...waited 575s
+  ...waited 580s
+  ...waited 585s
+  ...waited 590s
+  ...waited 595s
+ERROR: Server did not start within 600s
+ERROR: Server failed to start for tp2_bs16_offloadon
+Stopping vllm server...
+========================================
+Starting sweep experiment at Wed Feb  4 15:02:17 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 15:03:17 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1362494
+Waiting for server to be ready...
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Experiment tp2_bs16_offloadon finished at Wed Feb  4 15:59:56 UTC 2026
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadoff
+  TP=2, BS=16, Offload=off
+  Started at Wed Feb  4 16:00:01 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1397553
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+  ...waited 325s
+  ...waited 330s
+  ...waited 335s
+  ...waited 340s
+  ...waited 345s
+  ...waited 350s
+  ...waited 355s
+  ...waited 360s
+  ...waited 365s
+  ...waited 370s
+  ...waited 375s
+  ...waited 380s
+  ...waited 385s
+  ...waited 390s
+========================================
+Starting sweep experiment at Wed Feb  4 16:08:32 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 16:08:33 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1402970
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+  ...waited 325s
+  ...waited 330s
+  ...waited 335s
+  ...waited 340s
+  ...waited 345s
+  ...waited 350s
+  ...waited 355s
+  ...waited 360s
+  ...waited 365s
+  ...waited 370s
+  ...waited 375s
+  ...waited 380s
+  ...waited 385s
+  ...waited 390s
+  ...waited 395s
+  ...waited 400s
+  ...waited 405s
+  ...waited 410s
+  ...waited 415s
+  ...waited 420s
+  ...waited 425s
+========================================
+Starting sweep experiment at Wed Feb  4 16:16:29 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon (attempt 1/3)
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 16:16:29 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1408088
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+  ...waited 325s
+  ...waited 330s
+  ...waited 335s
+  ...waited 340s
+  ...waited 345s
+  ...waited 350s
+  ...waited 355s
+  ...waited 360s
+  ...waited 365s
+  ...waited 370s
+  ...waited 375s
+  ...waited 380s
+  ...waited 385s
+  ...waited 390s
+========================================
+Starting sweep experiment at Wed Feb  4 16:24:13 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon (attempt 1/3)
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 16:24:14 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1413044
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+========================================
+Starting sweep experiment at Wed Feb  4 16:45:28 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadon (attempt 1/3)
+  TP=2, BS=16, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 16:45:28 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1430627
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+  ...waited 325s
+  ...waited 330s
+  ...waited 335s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1430627 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Killing GPU process: 1431498
+Killing GPU process: 1431497
+Killing GPU process: 1431498
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs16_offloadon finished at Wed Feb  4 17:22:16 UTC 2026
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs16_offloadoff (attempt 1/3)
+  TP=2, BS=16, Offload=off
+  Started at Wed Feb  4 17:22:16 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1455445
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs16_offloadoff finished at Wed Feb  4 17:54:37 UTC 2026
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs32_offloadon (attempt 1/3)
+  TP=2, BS=32, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 17:54:37 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1477043
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+Server is ready!
+Running benchmark...
+========================================
+Starting sweep experiment at Wed Feb  4 17:58:14 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs32_offloadon (attempt 1/3)
+  TP=2, BS=32, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 17:58:14 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1485740
+Waiting for server to be ready...
+Server is ready!
+Running benchmark...
+========================================
+Starting sweep experiment at Wed Feb  4 18:11:23 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs32_offloadon (attempt 1/3)
+  TP=2, BS=32, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 18:11:23 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1499001
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+Server is ready!
+Running benchmark (bs=32, multiplier=19, num_requests=608)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1499001 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+./sweep_experiment.sh: line 132: 1477043 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+Killing GPU process: 1499631
+Killing GPU process: 1499631
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs32_offloadon finished at Wed Feb  4 18:17:53 UTC 2026
+
+========================================
+Experiment 16 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs32_offloadoff (attempt 1/3)
+  TP=2, BS=32, Offload=off
+  Started at Wed Feb  4 18:17:53 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1508922
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp2_bs32_offloadon finished at Wed Feb  4 18:18:04 UTC 2026
+
+========================================
+Experiment 16 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs32_offloadoff (attempt 1/3)
+  TP=2, BS=32, Offload=off
+  Started at Wed Feb  4 18:18:04 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1509225
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+Server is ready!
+  ...waited 75s
+Server is ready!
+Running benchmark (bs=32, multiplier=19, num_requests=608)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1508922 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs32_offloadoff finished at Wed Feb  4 18:25:55 UTC 2026
+
+========================================
+Experiment 17 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs64_offloadon (attempt 1/3)
+  TP=2, BS=64, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 18:25:55 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1525487
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp2_bs32_offloadoff finished at Wed Feb  4 18:26:10 UTC 2026
+
+========================================
+Experiment 17 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs64_offloadon (attempt 1/3)
+  TP=2, BS=64, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 18:26:10 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1525828
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+  ...waited 75s
+  ...waited 90s
+  ...waited 80s
+  ...waited 95s
+  ...waited 85s
+  ...waited 100s
+  ...waited 90s
+  ...waited 105s
+  ...waited 95s
+  ...waited 110s
+  ...waited 100s
+  ...waited 115s
+  ...waited 105s
+  ...waited 120s
+  ...waited 110s
+  ...waited 125s
+  ...waited 115s
+  ...waited 130s
+  ...waited 120s
+Server is ready!
+  ...waited 135s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=64, multiplier=18, num_requests=1152)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1525487 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+Killing GPU process: 1526306
+Killing GPU process: 1526306
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs64_offloadon finished at Wed Feb  4 18:38:21 UTC 2026
+
+========================================
+Experiment 18 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs64_offloadoff (attempt 1/3)
+  TP=2, BS=64, Offload=off
+  Started at Wed Feb  4 18:38:21 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1555093
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp2_bs64_offloadon finished at Wed Feb  4 18:38:32 UTC 2026
+
+========================================
+Experiment 18 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs64_offloadoff (attempt 1/3)
+  TP=2, BS=64, Offload=off
+  Started at Wed Feb  4 18:38:32 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1555390
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+Server is ready!
+  ...waited 75s
+Server is ready!
+Running benchmark (bs=64, multiplier=18, num_requests=1152)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1555093 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs64_offloadoff finished at Wed Feb  4 18:50:11 UTC 2026
+
+========================================
+Experiment 19 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs128_offloadon (attempt 1/3)
+  TP=2, BS=128, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 18:50:11 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1584332
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp2_bs64_offloadoff finished at Wed Feb  4 18:50:25 UTC 2026
+
+========================================
+Experiment 19 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs128_offloadon (attempt 1/3)
+  TP=2, BS=128, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 18:50:25 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1584676
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+  ...waited 75s
+  ...waited 90s
+  ...waited 80s
+  ...waited 95s
+  ...waited 85s
+  ...waited 100s
+  ...waited 90s
+  ...waited 105s
+  ...waited 95s
+  ...waited 110s
+  ...waited 100s
+  ...waited 115s
+  ...waited 105s
+  ...waited 120s
+  ...waited 110s
+  ...waited 125s
+  ...waited 115s
+  ...waited 130s
+  ...waited 120s
+  ...waited 135s
+Server is ready!
+  ...waited 125s
+Server is ready!
+Running benchmark (bs=128, multiplier=17, num_requests=2176)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1584332 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+Killing GPU process: 1585160
+Killing GPU process: 1585160
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs128_offloadon finished at Wed Feb  4 19:07:25 UTC 2026
+
+========================================
+Experiment 20 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs128_offloadoff (attempt 1/3)
+  TP=2, BS=128, Offload=off
+  Started at Wed Feb  4 19:07:25 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1637702
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp2_bs128_offloadon finished at Wed Feb  4 19:07:36 UTC 2026
+
+========================================
+Experiment 20 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs128_offloadoff (attempt 1/3)
+  TP=2, BS=128, Offload=off
+  Started at Wed Feb  4 19:07:36 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1638053
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+Server is ready!
+  ...waited 75s
+Server is ready!
+Running benchmark (bs=128, multiplier=17, num_requests=2176)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1637702 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs128_offloadoff finished at Wed Feb  4 19:23:38 UTC 2026
+
+========================================
+Experiment 21 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs256_offloadon (attempt 1/3)
+  TP=2, BS=256, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 19:23:38 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1690566
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+Experiment tp2_bs128_offloadoff finished at Wed Feb  4 19:23:55 UTC 2026
+
+========================================
+Experiment 21 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs256_offloadon (attempt 1/3)
+  TP=2, BS=256, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 19:23:55 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1690925
+Waiting for server to be ready...
+  ...waited 20s
+  ...waited 5s
+  ...waited 25s
+  ...waited 10s
+  ...waited 30s
+  ...waited 15s
+  ...waited 35s
+  ...waited 20s
+  ...waited 40s
+  ...waited 25s
+  ...waited 45s
+  ...waited 30s
+  ...waited 50s
+  ...waited 35s
+  ...waited 55s
+  ...waited 40s
+  ...waited 60s
+  ...waited 45s
+  ...waited 65s
+  ...waited 50s
+  ...waited 70s
+  ...waited 55s
+  ...waited 75s
+  ...waited 60s
+  ...waited 80s
+  ...waited 65s
+  ...waited 85s
+  ...waited 70s
+  ...waited 90s
+  ...waited 75s
+  ...waited 95s
+  ...waited 80s
+  ...waited 100s
+  ...waited 85s
+  ...waited 105s
+  ...waited 90s
+  ...waited 110s
+  ...waited 95s
+  ...waited 115s
+  ...waited 100s
+  ...waited 120s
+  ...waited 105s
+  ...waited 125s
+  ...waited 110s
+  ...waited 130s
+  ...waited 115s
+  ...waited 135s
+  ...waited 120s
+  ...waited 140s
+Server is ready!
+  ...waited 125s
+Server is ready!
+Running benchmark (bs=256, multiplier=15, num_requests=3840)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1690566 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Killing GPU process: 1691251
+Killing GPU process: 1691251
+Killing GPU process: 1691251
+Killing GPU process: 1691251
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs256_offloadon finished at Wed Feb  4 19:44:02 UTC 2026
+
+========================================
+Experiment 22 / 48
+========================================
+Experiment tp2_bs256_offloadon finished at Wed Feb  4 19:44:02 UTC 2026
+
+========================================
+Experiment 22 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs256_offloadoff (attempt 1/3)
+  TP=2, BS=256, Offload=off
+  Started at Wed Feb  4 19:44:02 UTC 2026
+========================================
+
+========================================
+Running experiment: tp2_bs256_offloadoff (attempt 1/3)
+  TP=2, BS=256, Offload=off
+  Started at Wed Feb  4 19:44:02 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1787974
+Waiting for server to be ready...
+Starting vllm server...
+Server PID: 1787976
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 5s
+  ...waited 10s
+  ...waited 10s
+  ...waited 15s
+  ...waited 15s
+  ...waited 20s
+  ...waited 20s
+  ...waited 25s
+  ...waited 25s
+  ...waited 30s
+  ...waited 30s
+  ...waited 35s
+  ...waited 35s
+  ...waited 40s
+  ...waited 40s
+  ...waited 45s
+  ...waited 45s
+  ...waited 50s
+  ...waited 50s
+  ...waited 55s
+  ...waited 55s
+  ...waited 60s
+  ...waited 60s
+  ...waited 65s
+  ...waited 65s
+  ...waited 70s
+  ...waited 70s
+  ...waited 75s
+  ...waited 75s
+  ...waited 80s
+  ...waited 80s
+  ...waited 85s
+  ...waited 85s
+  ...waited 90s
+  ...waited 90s
+Server is ready!
+Server is ready!
+Running benchmark (bs=256, multiplier=15, num_requests=3840)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs256_offloadoff finished at Wed Feb  4 20:03:33 UTC 2026
+
+========================================
+Experiment 23 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs512_offloadon (attempt 1/3)
+  TP=2, BS=512, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 20:03:33 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1884918
+Waiting for server to be ready...
+Experiment tp2_bs256_offloadoff finished at Wed Feb  4 20:03:35 UTC 2026
+
+========================================
+Experiment 23 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs512_offloadon (attempt 1/3)
+  TP=2, BS=512, Offload=on
+  CPU offload size per GPU: 150GB
+  Started at Wed Feb  4 20:03:35 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1885022
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 5s
+  ...waited 10s
+  ...waited 10s
+  ...waited 15s
+  ...waited 15s
+  ...waited 20s
+  ...waited 20s
+  ...waited 25s
+  ...waited 25s
+  ...waited 30s
+  ...waited 30s
+  ...waited 35s
+  ...waited 35s
+  ...waited 40s
+  ...waited 40s
+  ...waited 45s
+  ...waited 45s
+  ...waited 50s
+  ...waited 50s
+  ...waited 55s
+  ...waited 55s
+  ...waited 60s
+  ...waited 60s
+  ...waited 65s
+  ...waited 65s
+  ...waited 70s
+  ...waited 70s
+  ...waited 75s
+  ...waited 75s
+  ...waited 80s
+  ...waited 80s
+  ...waited 85s
+  ...waited 85s
+  ...waited 90s
+  ...waited 90s
+  ...waited 95s
+  ...waited 95s
+  ...waited 100s
+  ...waited 100s
+  ...waited 105s
+  ...waited 105s
+  ...waited 110s
+  ...waited 110s
+  ...waited 115s
+  ...waited 115s
+  ...waited 120s
+  ...waited 120s
+  ...waited 125s
+  ...waited 125s
+  ...waited 130s
+  ...waited 130s
+  ...waited 135s
+  ...waited 135s
+  ...waited 140s
+  ...waited 140s
+Server is ready!
+  ...waited 145s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=512, multiplier=10, num_requests=5120)...
+Benchmark completed successfully
+Stopping vllm server...
+Killing GPU process: 1885962
+Killing GPU process: 1885962
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs512_offloadon finished at Wed Feb  4 20:13:27 UTC 2026
+
+========================================
+Experiment 24 / 48
+========================================
+
+========================================
+Running experiment: tp2_bs512_offloadoff (attempt 1/3)
+  TP=2, BS=512, Offload=off
+  Started at Wed Feb  4 20:13:27 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 1977016
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 1977016 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp2_bs512_offloadoff finished at Wed Feb  4 20:21:43 UTC 2026
+
+========================================
+Experiment 25 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs16_offloadon (attempt 1/3)
+  TP=4, BS=16, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 20:21:43 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2067049
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2067049 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs16_offloadon finished at Wed Feb  4 20:51:17 UTC 2026
+
+========================================
+Experiment 26 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs16_offloadoff (attempt 1/3)
+  TP=4, BS=16, Offload=off
+  Started at Wed Feb  4 20:51:17 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2088570
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2088570 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs16_offloadoff finished at Wed Feb  4 21:17:26 UTC 2026
+
+========================================
+Experiment 27 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs32_offloadon (attempt 1/3)
+  TP=4, BS=32, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 21:17:26 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2106809
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2106809 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+========================================
+Starting sweep experiment at Wed Feb  4 21:35:13 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 16 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 17 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 18 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 19 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 20 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 21 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 22 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 23 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 24 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 25 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 26 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 27 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 28 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs32_offloadoff (attempt 1/3)
+  TP=4, BS=32, Offload=off
+  Started at Wed Feb  4 21:35:13 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2123065
+Waiting for server to be ready...
+  ...waited 5s
+Experiment tp4_bs32_offloadon finished at Wed Feb  4 21:35:20 UTC 2026
+
+========================================
+Experiment 28 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs32_offloadoff (attempt 1/3)
+  TP=4, BS=32, Offload=off
+  Started at Wed Feb  4 21:35:20 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2123334
+Waiting for server to be ready...
+  ...waited 10s
+  ...waited 5s
+  ...waited 15s
+  ...waited 10s
+  ...waited 20s
+  ...waited 15s
+  ...waited 25s
+  ...waited 20s
+  ...waited 30s
+  ...waited 25s
+  ...waited 35s
+  ...waited 30s
+  ...waited 40s
+  ...waited 35s
+  ...waited 45s
+  ...waited 40s
+  ...waited 50s
+  ...waited 45s
+  ...waited 55s
+  ...waited 50s
+  ...waited 60s
+  ...waited 55s
+  ...waited 65s
+  ...waited 60s
+  ...waited 70s
+  ...waited 65s
+  ...waited 75s
+  ...waited 70s
+  ...waited 80s
+  ...waited 75s
+  ...waited 85s
+  ...waited 80s
+  ...waited 90s
+  ...waited 85s
+Server is ready!
+  ...waited 95s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=32, multiplier=19, num_requests=608)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2123065 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+./sweep_experiment.sh: line 132: 2123334 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs32_offloadoff finished at Wed Feb  4 22:11:18 UTC 2026
+
+========================================
+Experiment 29 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs64_offloadon (attempt 1/3)
+  TP=4, BS=64, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 22:11:18 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2155825
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp4_bs32_offloadoff finished at Wed Feb  4 22:11:33 UTC 2026
+
+========================================
+Experiment 29 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs64_offloadon (attempt 1/3)
+  TP=4, BS=64, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 22:11:33 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2156201
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+  ...waited 75s
+  ...waited 90s
+  ...waited 80s
+  ...waited 95s
+  ...waited 85s
+  ...waited 100s
+  ...waited 90s
+Server is ready!
+  ...waited 105s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=64, multiplier=18, num_requests=1152)...
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs64_offloadon finished at Wed Feb  4 23:15:27 UTC 2026
+
+========================================
+Experiment 30 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs64_offloadoff (attempt 1/3)
+  TP=4, BS=64, Offload=off
+  Started at Wed Feb  4 23:15:27 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2220280
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+========================================
+Starting sweep experiment at Wed Feb  4 23:16:23 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 16 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 17 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 18 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 19 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 20 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 21 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 22 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 23 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 24 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 25 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 26 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 27 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 28 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 29 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 30 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs64_offloadoff (attempt 1/3)
+  TP=4, BS=64, Offload=off
+  Started at Wed Feb  4 23:16:23 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2221588
+Waiting for server to be ready...
+  ...waited 60s
+  ...waited 5s
+  ...waited 65s
+  ...waited 10s
+  ...waited 70s
+  ...waited 15s
+  ...waited 75s
+  ...waited 20s
+  ...waited 80s
+  ...waited 25s
+  ...waited 85s
+Server is ready!
+  ...waited 30s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=64, multiplier=18, num_requests=1152)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2247826 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2247829 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+./sweep_experiment.sh: line 132: 2220280 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+Server stopped
+Experiment tp4_bs64_offloadoff finished at Wed Feb  4 23:23:56 UTC 2026
+
+========================================
+Experiment 31 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs128_offloadon (attempt 1/3)
+  TP=4, BS=128, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 23:23:56 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2248038
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+Experiment tp4_bs64_offloadoff finished at Wed Feb  4 23:24:39 UTC 2026
+
+========================================
+Experiment 31 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs128_offloadon (attempt 1/3)
+  TP=4, BS=128, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 23:24:39 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2249123
+Waiting for server to be ready...
+  ...waited 45s
+  ...waited 5s
+  ...waited 50s
+  ...waited 10s
+  ...waited 15s
+./sweep_experiment.sh: line 44: 2249123 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+========================================
+Starting sweep experiment at Wed Feb  4 23:25:33 UTC 2026
+Results directory: sweep_results_20260204_062339
+========================================
+
+========================================
+Experiment 1 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 2 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 3 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 4 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 5 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 6 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 7 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 8 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 9 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 10 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 11 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 12 / 48
+========================================
+
+========================================
+SKIPPING tp1_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 13 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 14 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 15 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 16 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 17 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 18 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 19 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 20 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs128_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 21 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 22 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs256_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 23 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 24 / 48
+========================================
+
+========================================
+SKIPPING tp2_bs512_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 25 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 26 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs16_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 27 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs32_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 28 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs32_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 29 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs64_offloadon (already completed successfully)
+========================================
+
+========================================
+Experiment 30 / 48
+========================================
+
+========================================
+SKIPPING tp4_bs64_offloadoff (already completed successfully)
+========================================
+
+========================================
+Experiment 31 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs128_offloadon (attempt 1/3)
+  TP=4, BS=128, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 23:25:33 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2250424
+Waiting for server to be ready...
+  ...waited 55s
+  ...waited 5s
+  ...waited 60s
+  ...waited 10s
+  ...waited 65s
+  ...waited 15s
+  ...waited 70s
+  ...waited 20s
+  ...waited 75s
+  ...waited 25s
+  ...waited 80s
+  ...waited 30s
+  ...waited 85s
+  ...waited 35s
+  ...waited 90s
+  ...waited 40s
+  ...waited 95s
+  ...waited 45s
+  ...waited 100s
+  ...waited 50s
+  ...waited 105s
+  ...waited 55s
+  ...waited 110s
+  ...waited 60s
+  ...waited 115s
+  ...waited 65s
+  ...waited 120s
+  ...waited 70s
+  ...waited 125s
+  ...waited 75s
+  ...waited 130s
+  ...waited 80s
+  ...waited 135s
+  ...waited 85s
+  ...waited 140s
+  ...waited 90s
+  ...waited 145s
+  ...waited 95s
+  ...waited 150s
+  ...waited 100s
+  ...waited 155s
+  ...waited 105s
+  ...waited 160s
+  ...waited 110s
+  ...waited 165s
+  ...waited 115s
+  ...waited 170s
+  ...waited 120s
+  ...waited 175s
+  ...waited 125s
+  ...waited 180s
+  ...waited 130s
+  ...waited 185s
+  ...waited 135s
+  ...waited 190s
+  ...waited 140s
+  ...waited 195s
+  ...waited 145s
+  ...waited 200s
+  ...waited 150s
+  ...waited 205s
+  ...waited 155s
+  ...waited 210s
+  ...waited 160s
+  ...waited 215s
+  ...waited 165s
+  ...waited 220s
+  ...waited 170s
+  ...waited 225s
+  ...waited 175s
+  ...waited 230s
+  ...waited 180s
+  ...waited 235s
+  ...waited 185s
+  ...waited 240s
+  ...waited 190s
+  ...waited 245s
+  ...waited 195s
+  ...waited 250s
+  ...waited 200s
+  ...waited 255s
+  ...waited 205s
+  ...waited 260s
+  ...waited 210s
+  ...waited 265s
+  ...waited 215s
+  ...waited 270s
+  ...waited 220s
+  ...waited 275s
+  ...waited 225s
+  ...waited 280s
+  ...waited 230s
+  ...waited 285s
+  ...waited 235s
+  ...waited 290s
+  ...waited 240s
+  ...waited 295s
+  ...waited 245s
+  ...waited 300s
+  ...waited 250s
+  ...waited 305s
+  ...waited 255s
+  ...waited 310s
+  ...waited 260s
+  ...waited 315s
+  ...waited 265s
+  ...waited 320s
+  ...waited 270s
+  ...waited 325s
+  ...waited 275s
+  ...waited 330s
+  ...waited 280s
+  ...waited 335s
+  ...waited 285s
+  ...waited 340s
+  ...waited 290s
+  ...waited 345s
+  ...waited 295s
+  ...waited 350s
+  ...waited 300s
+  ...waited 355s
+  ...waited 305s
+  ...waited 360s
+  ...waited 310s
+  ...waited 365s
+  ...waited 315s
+  ...waited 370s
+  ...waited 320s
+  ...waited 375s
+  ...waited 325s
+  ...waited 380s
+  ...waited 330s
+  ...waited 385s
+  ...waited 335s
+  ...waited 390s
+  ...waited 340s
+  ...waited 395s
+  ...waited 345s
+  ...waited 400s
+  ...waited 350s
+  ...waited 405s
+  ...waited 355s
+  ...waited 410s
+  ...waited 360s
+  ...waited 415s
+  ...waited 365s
+  ...waited 420s
+  ...waited 370s
+  ...waited 425s
+  ...waited 375s
+  ...waited 430s
+  ...waited 380s
+  ...waited 435s
+  ...waited 385s
+  ...waited 440s
+  ...waited 390s
+  ...waited 445s
+  ...waited 395s
+  ...waited 450s
+  ...waited 400s
+  ...waited 455s
+  ...waited 405s
+  ...waited 460s
+  ...waited 410s
+  ...waited 465s
+  ...waited 415s
+  ...waited 470s
+  ...waited 420s
+  ...waited 475s
+  ...waited 425s
+  ...waited 480s
+  ...waited 430s
+  ...waited 485s
+  ...waited 435s
+  ...waited 490s
+  ...waited 440s
+  ...waited 495s
+  ...waited 445s
+  ...waited 500s
+  ...waited 450s
+  ...waited 505s
+  ...waited 455s
+  ...waited 510s
+  ...waited 460s
+  ...waited 515s
+  ...waited 465s
+  ...waited 520s
+  ...waited 470s
+  ...waited 525s
+  ...waited 475s
+  ...waited 530s
+  ...waited 480s
+  ...waited 535s
+  ...waited 485s
+  ...waited 540s
+  ...waited 490s
+  ...waited 545s
+  ...waited 495s
+  ...waited 550s
+  ...waited 500s
+  ...waited 555s
+  ...waited 505s
+  ...waited 560s
+  ...waited 510s
+  ...waited 565s
+  ...waited 515s
+  ...waited 570s
+  ...waited 520s
+  ...waited 575s
+  ...waited 525s
+  ...waited 580s
+  ...waited 530s
+  ...waited 585s
+  ...waited 535s
+  ...waited 590s
+  ...waited 540s
+  ...waited 595s
+  ...waited 545s
+ERROR: Server did not start within 600s
+ERROR: Server failed to start for tp4_bs128_offloadon (attempt 1/3)
+Stopping vllm server...
+  ...waited 550s
+  ...waited 555s
+Killing GPU process: 2249709
+Killing GPU process: 2249710
+Killing GPU process: 2249711
+Killing GPU process: 2249712
+  ...waited 560s
+  ...waited 565s
+  ...waited 570s
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+  ...waited 575s
+  ...waited 580s
+  ...waited 585s
+  ...waited 590s
+  ...waited 595s
+ERROR: Server did not start within 600s
+ERROR: Server failed to start for tp4_bs128_offloadon (attempt 1/3)
+Stopping vllm server...
+Retrying in 30 seconds...
+./sweep_experiment.sh: line 62: 2257287 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2257290 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+Server stopped
+Retrying in 30 seconds...
+
+========================================
+Running experiment: tp4_bs128_offloadon (attempt 2/3)
+  TP=4, BS=128, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 23:36:06 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2257508
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+
+========================================
+Running experiment: tp4_bs128_offloadon (attempt 2/3)
+  TP=4, BS=128, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Wed Feb  4 23:36:27 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2257967
+Waiting for server to be ready...
+  ...waited 25s
+  ...waited 5s
+  ...waited 30s
+  ...waited 10s
+  ...waited 35s
+  ...waited 15s
+  ...waited 40s
+  ...waited 20s
+  ...waited 45s
+  ...waited 25s
+  ...waited 50s
+  ...waited 30s
+  ...waited 55s
+  ...waited 35s
+  ...waited 60s
+  ...waited 40s
+  ...waited 65s
+  ...waited 45s
+  ...waited 70s
+  ...waited 50s
+  ...waited 75s
+  ...waited 55s
+  ...waited 80s
+  ...waited 60s
+  ...waited 85s
+  ...waited 65s
+  ...waited 90s
+  ...waited 70s
+  ...waited 95s
+  ...waited 75s
+  ...waited 100s
+  ...waited 80s
+  ...waited 105s
+Server is ready!
+  ...waited 85s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=128, multiplier=17, num_requests=2176)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2257967 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2313851 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2313854 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+Server stopped
+Experiment tp4_bs128_offloadon finished at Wed Feb  4 23:57:15 UTC 2026
+
+========================================
+Experiment 32 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs128_offloadoff (attempt 1/3)
+  TP=4, BS=128, Offload=off
+  Started at Wed Feb  4 23:57:15 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2313993
+Waiting for server to be ready...
+  ...waited 5s
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+Experiment tp4_bs128_offloadon finished at Wed Feb  4 23:57:50 UTC 2026
+
+========================================
+Experiment 32 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs128_offloadoff (attempt 1/3)
+  TP=4, BS=128, Offload=off
+  Started at Wed Feb  4 23:57:50 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2314921
+Waiting for server to be ready...
+  ...waited 40s
+  ...waited 5s
+  ...waited 45s
+  ...waited 10s
+  ...waited 50s
+  ...waited 15s
+  ...waited 55s
+  ...waited 20s
+  ...waited 60s
+  ...waited 25s
+  ...waited 65s
+  ...waited 30s
+  ...waited 70s
+  ...waited 35s
+  ...waited 75s
+  ...waited 40s
+  ...waited 80s
+  ...waited 45s
+  ...waited 85s
+  ...waited 50s
+  ...waited 90s
+Server is ready!
+  ...waited 55s
+Server is ready!
+Running benchmark (bs=128, multiplier=17, num_requests=2176)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2313993 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+./sweep_experiment.sh: line 62: 2364836 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2364839 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+./sweep_experiment.sh: line 132: 2314921 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+Server stopped
+Experiment tp4_bs128_offloadoff finished at Thu Feb  5 00:09:30 UTC 2026
+
+========================================
+Experiment 33 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs256_offloadon (attempt 1/3)
+  TP=4, BS=256, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Thu Feb  5 00:09:30 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2365143
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+Experiment tp4_bs128_offloadoff finished at Thu Feb  5 00:10:14 UTC 2026
+
+========================================
+Experiment 33 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs256_offloadon (attempt 1/3)
+  TP=4, BS=256, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Thu Feb  5 00:10:14 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2366250
+Waiting for server to be ready...
+  ...waited 45s
+  ...waited 5s
+  ...waited 50s
+  ...waited 10s
+  ...waited 55s
+  ...waited 15s
+  ...waited 60s
+  ...waited 20s
+  ...waited 65s
+  ...waited 25s
+  ...waited 70s
+  ...waited 30s
+  ...waited 75s
+  ...waited 35s
+  ...waited 80s
+  ...waited 40s
+  ...waited 85s
+  ...waited 45s
+  ...waited 90s
+  ...waited 50s
+  ...waited 95s
+  ...waited 55s
+  ...waited 100s
+  ...waited 60s
+  ...waited 105s
+Server is ready!
+  ...waited 65s
+Server is ready!
+Running benchmark (bs=256, multiplier=15, num_requests=3840)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2365143 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+./sweep_experiment.sh: line 62: 2495513 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2495516 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Server stopped
+Experiment tp4_bs256_offloadon finished at Thu Feb  5 01:28:53 UTC 2026
+
+========================================
+Experiment 34 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs256_offloadoff (attempt 1/3)
+  TP=4, BS=256, Offload=off
+  Started at Thu Feb  5 01:28:53 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2495659
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+Experiment tp4_bs256_offloadon finished at Thu Feb  5 01:29:17 UTC 2026
+
+========================================
+Experiment 34 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs256_offloadoff (attempt 1/3)
+  TP=4, BS=256, Offload=off
+  Started at Thu Feb  5 01:29:17 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2496294
+Waiting for server to be ready...
+  ...waited 25s
+  ...waited 5s
+  ...waited 30s
+  ...waited 10s
+  ...waited 35s
+  ...waited 15s
+  ...waited 40s
+  ...waited 20s
+  ...waited 45s
+  ...waited 25s
+  ...waited 50s
+  ...waited 30s
+  ...waited 55s
+  ...waited 35s
+  ...waited 60s
+  ...waited 40s
+  ...waited 65s
+  ...waited 45s
+  ...waited 70s
+  ...waited 50s
+  ...waited 75s
+  ...waited 55s
+  ...waited 80s
+  ...waited 60s
+  ...waited 85s
+  ...waited 65s
+  ...waited 90s
+  ...waited 70s
+Server is ready!
+  ...waited 95s
+Server is ready!
+Running benchmark...
+Running benchmark (bs=256, multiplier=15, num_requests=3840)...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2496294 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+./sweep_experiment.sh: line 145: 2495659 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+./sweep_experiment.sh: line 62: 2621108 Killed                  sudo pkill -9 -f "vllm" 2> /dev/null
+./sweep_experiment.sh: line 62: 2621111 Killed                  sudo pkill -9 -f "multiproc_executor" 2> /dev/null
+Server stopped
+Experiment tp4_bs256_offloadoff finished at Thu Feb  5 02:39:13 UTC 2026
+
+========================================
+Experiment 35 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs512_offloadon (attempt 1/3)
+  TP=4, BS=512, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Thu Feb  5 02:39:13 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2621241
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+Experiment tp4_bs256_offloadoff finished at Thu Feb  5 02:39:25 UTC 2026
+
+========================================
+Experiment 35 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs512_offloadon (attempt 1/3)
+  TP=4, BS=512, Offload=on
+  CPU offload size per GPU: 75GB
+  Started at Thu Feb  5 02:39:25 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2621558
+Waiting for server to be ready...
+  ...waited 15s
+  ...waited 5s
+  ...waited 20s
+  ...waited 10s
+  ...waited 25s
+  ...waited 15s
+  ...waited 30s
+  ...waited 20s
+  ...waited 35s
+  ...waited 25s
+  ...waited 40s
+  ...waited 30s
+  ...waited 45s
+  ...waited 35s
+  ...waited 50s
+  ...waited 40s
+  ...waited 55s
+  ...waited 45s
+  ...waited 60s
+  ...waited 50s
+  ...waited 65s
+  ...waited 55s
+  ...waited 70s
+  ...waited 60s
+  ...waited 75s
+  ...waited 65s
+  ...waited 80s
+  ...waited 70s
+  ...waited 85s
+  ...waited 75s
+  ...waited 90s
+  ...waited 80s
+  ...waited 95s
+  ...waited 85s
+  ...waited 100s
+  ...waited 90s
+  ...waited 105s
+  ...waited 95s
+  ...waited 110s
+  ...waited 100s
+  ...waited 115s
+  ...waited 105s
+  ...waited 120s
+  ...waited 110s
+  ...waited 125s
+Server is ready!
+  ...waited 115s
+Server is ready!
+Running benchmark (bs=512, multiplier=10, num_requests=5120)...
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs512_offloadon finished at Thu Feb  5 03:25:04 UTC 2026
+
+========================================
+Experiment 36 / 48
+========================================
+
+========================================
+Running experiment: tp4_bs512_offloadoff (attempt 1/3)
+  TP=4, BS=512, Offload=off
+  Started at Thu Feb  5 03:25:04 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2733710
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2733710 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp4_bs512_offloadoff finished at Thu Feb  5 03:32:14 UTC 2026
+
+========================================
+Experiment 37 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs16_offloadon (attempt 1/3)
+  TP=8, BS=16, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 03:32:14 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2823232
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+  ...waited 135s
+  ...waited 140s
+  ...waited 145s
+  ...waited 150s
+  ...waited 155s
+  ...waited 160s
+  ...waited 165s
+  ...waited 170s
+  ...waited 175s
+  ...waited 180s
+  ...waited 185s
+  ...waited 190s
+  ...waited 195s
+  ...waited 200s
+  ...waited 205s
+  ...waited 210s
+  ...waited 215s
+  ...waited 220s
+  ...waited 225s
+  ...waited 230s
+  ...waited 235s
+  ...waited 240s
+  ...waited 245s
+  ...waited 250s
+  ...waited 255s
+  ...waited 260s
+  ...waited 265s
+  ...waited 270s
+  ...waited 275s
+  ...waited 280s
+  ...waited 285s
+  ...waited 290s
+  ...waited 295s
+  ...waited 300s
+  ...waited 305s
+  ...waited 310s
+  ...waited 315s
+  ...waited 320s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2823232 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs16_offloadon finished at Thu Feb  5 04:00:19 UTC 2026
+
+========================================
+Experiment 38 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs16_offloadoff (attempt 1/3)
+  TP=8, BS=16, Offload=off
+  Started at Thu Feb  5 04:00:19 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2845015
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2845015 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs16_offloadoff finished at Thu Feb  5 04:24:47 UTC 2026
+
+========================================
+Experiment 39 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs32_offloadon (attempt 1/3)
+  TP=8, BS=32, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 04:24:47 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2862585
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2862585 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs32_offloadon finished at Thu Feb  5 04:42:14 UTC 2026
+
+========================================
+Experiment 40 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs32_offloadoff (attempt 1/3)
+  TP=8, BS=32, Offload=off
+  Started at Thu Feb  5 04:42:14 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2878913
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2878913 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs32_offloadoff finished at Thu Feb  5 04:59:22 UTC 2026
+
+========================================
+Experiment 41 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs64_offloadon (attempt 1/3)
+  TP=8, BS=64, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 04:59:22 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2895037
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2895037 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs64_offloadon finished at Thu Feb  5 05:12:38 UTC 2026
+
+========================================
+Experiment 42 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs64_offloadoff (attempt 1/3)
+  TP=8, BS=64, Offload=off
+  Started at Thu Feb  5 05:12:38 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2914371
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2914371 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs64_offloadoff finished at Thu Feb  5 05:25:29 UTC 2026
+
+========================================
+Experiment 43 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs128_offloadon (attempt 1/3)
+  TP=8, BS=128, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 05:25:29 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2933431
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2933431 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs128_offloadon finished at Thu Feb  5 05:36:46 UTC 2026
+
+========================================
+Experiment 44 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs128_offloadoff (attempt 1/3)
+  TP=8, BS=128, Offload=off
+  Started at Thu Feb  5 05:36:46 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2962190
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2962190 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs128_offloadoff finished at Thu Feb  5 05:46:50 UTC 2026
+
+========================================
+Experiment 45 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs256_offloadon (attempt 1/3)
+  TP=8, BS=256, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 05:46:50 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 2990283
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 2990283 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs256_offloadon finished at Thu Feb  5 06:38:01 UTC 2026
+
+========================================
+Experiment 46 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs256_offloadoff (attempt 1/3)
+  TP=8, BS=256, Offload=off
+  Started at Thu Feb  5 06:38:01 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 3062348
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+Server is ready!
+Running benchmark...
+Benchmark completed successfully
+Stopping vllm server...
+./sweep_experiment.sh: line 62: 3062348 Killed                  $vllm_cmd > "$exp_dir/server_attempt${attempt}.log" 2>&1
+The following GPUs could not be reset:
+  GPU 00000000:DB:00.0: Not Supported
+  GPU 00000000:E0:00.0: Not Supported
+  GPU 00000000:E5:00.0: Not Supported
+  GPU 00000000:EA:00.0: Not Supported
+  GPU 00000000:EF:00.0: Not Supported
+  GPU 00000000:F4:00.0: Not Supported
+  GPU 00000000:F9:00.0: Not Supported
+  GPU 00000000:FE:00.0: Not Supported
+Server stopped, waiting for cleanup...
+Experiment tp8_bs256_offloadoff finished at Thu Feb  5 06:46:31 UTC 2026
+
+========================================
+Experiment 47 / 48
+========================================
+
+========================================
+Running experiment: tp8_bs512_offloadon (attempt 1/3)
+  TP=8, BS=512, Offload=on
+  CPU offload size per GPU: 37GB
+  Started at Thu Feb  5 06:46:31 UTC 2026
+========================================
+Starting vllm server...
+Server PID: 3110673
+Waiting for server to be ready...
+  ...waited 5s
+  ...waited 10s
+  ...waited 15s
+  ...waited 20s
+  ...waited 25s
+  ...waited 30s
+  ...waited 35s
+  ...waited 40s
+  ...waited 45s
+  ...waited 50s
+  ...waited 55s
+  ...waited 60s
+  ...waited 65s
+  ...waited 70s
+  ...waited 75s
+  ...waited 80s
+  ...waited 85s
+  ...waited 90s
+  ...waited 95s
+  ...waited 100s
+  ...waited 105s
+  ...waited 110s
+  ...waited 115s
+  ...waited 120s
+  ...waited 125s
+  ...waited 130s
+Server is ready!
+Running benchmark...

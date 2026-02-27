@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # Sweep experiment for multi-turn benchmark
-# Sweeps: TP (1,2,4,8) x BS (8-2048) x CPU offload (on/off)
-#   - on: prefix caching ON + KV offload to CPU ON
-#   - off: prefix caching ON + KV offload to CPU OFF
+# Sweeps: TP (1,2,4,8) x BS (8-2048) x mode (on/off/noprefix)
+#   - on:       prefix caching ON + KV offload to CPU ON
+#   - off:      prefix caching ON + KV offload to CPU OFF
+#   - noprefix: prefix caching OFF (no prefix caching at all)
 #
 # Usage:
 #   ./sweep_experiment.sh                    # Start fresh
@@ -39,8 +40,8 @@ echo "========================================"
 # Arrays for sweep
 TP_VALUES=(1 2 4 8)
 BS_VALUES=(8 16 32 64 128 256 512 1024 2048)
-# on=prefix caching + CPU offload, off=prefix caching only (no CPU offload)
-OFFLOAD_VALUES=(on off)
+# on=prefix caching + CPU offload, off=prefix caching only (no CPU offload), noprefix=no prefix caching
+OFFLOAD_VALUES=(on off noprefix)
 
 # Function to wait for server to be ready
 wait_for_server() {
@@ -151,8 +152,10 @@ run_experiment() {
         echo "  TP=$tp, BS=$bs, Mode=$offload"
         if [ "$offload" = "on" ]; then
             echo "  Prefix caching: ON, CPU offload: ON (${offload_size}GB per GPU)"
-        else
+        elif [ "$offload" = "off" ]; then
             echo "  Prefix caching: ON, CPU offload: OFF"
+        else
+            echo "  Prefix caching: OFF, CPU offload: OFF"
         fi
         echo "  Started at $(date)"
         echo "========================================"
@@ -179,6 +182,9 @@ EOF
             vllm_cmd+=" --kv_offloading_backend native"
             vllm_cmd+=" --kv_offloading_size $offload_size"
             vllm_cmd+=" --disable-hybrid-kv-cache-manager"
+        elif [ "$offload" = "noprefix" ]; then
+            # Prefix caching OFF entirely
+            vllm_cmd+=" --no-enable-prefix-caching"
         fi
         # offload=off: prefix caching ON, no CPU offload (default behavior)
 
