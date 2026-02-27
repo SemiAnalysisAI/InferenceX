@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Change to the vllm_benchmark directory (required for bench module imports)
+cd "$(dirname "$0")/.."
+
 # Sweep experiment for multi-turn benchmark
 # Sweeps: TP (1,2,4,8) x BS (8-2048) x mode (on/off/noprefix)
 #   - on:       prefix caching ON + KV offload to CPU ON

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Change to the vllm_benchmark directory (required for bench module imports)
+cd "$(dirname "$0")/.."
+
 # Realistic sweep experiment for multi-turn benchmark
 # Uses the 20k realistic dataset with log-normal think-time between turns.
 #
