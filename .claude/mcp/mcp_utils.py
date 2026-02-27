@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def get_config_paths() -> List[str]:
-    """Get paths to InferenceMAX config files."""
+    """Get paths to InferenceX config files."""
     root = Path(os.getenv('INFERENCEMAX_ROOT', Path.cwd()))
     return [
         str(root / '.github/configs/amd-master.yaml'),
@@ -163,20 +163,25 @@ def initialize_repo(name: str, url: str, path: Path) -> git.Repo:
         GitPython Repo object
     """
     if path.exists():
-        # Repository exists, update it
+        # Repository exists, try to open and update it
         logger.info(f"Updating {name} repository at {path}")
-        repo = git.Repo(path)
         try:
-            origin = repo.remotes.origin
-            origin.fetch()
-        except Exception as e:
-            logger.warning(f"Failed to fetch updates for {name}: {e}")
-    else:
-        # Clone repository
-        logger.info(f"Cloning {name} from {url}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        repo = git.Repo.clone_from(url, path)
+            repo = git.Repo(path)
+            try:
+                origin = repo.remotes.origin
+                origin.fetch()
+            except Exception as e:
+                logger.warning(f"Failed to fetch updates for {name}: {e}")
+            return repo
+        except git.exc.InvalidGitRepositoryError:
+            logger.warning(f"Corrupt/invalid git repo at {path}, removing and re-cloning")
+            import shutil
+            shutil.rmtree(path)
 
+    # Clone repository
+    logger.info(f"Cloning {name} from {url}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    repo = git.Repo.clone_from(url, path)
     return repo
 
 

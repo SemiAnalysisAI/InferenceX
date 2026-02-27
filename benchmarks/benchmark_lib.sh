@@ -77,6 +77,15 @@ wait_for_server_ready() {
         return 1
     fi
 
+    # Wait for server log file to be created (container startup may delay this)
+    while [ ! -f "$server_log" ]; do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "Server died before creating log file. Exiting."
+            exit 1
+        fi
+        sleep 1
+    done
+
     # Show logs until server is ready
     tail -f -n +1 "$server_log" &
     local TAIL_PID=$!
@@ -92,7 +101,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --use-chat-template
+# All parameters are required except --use-chat-template and --trust-remote-code
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -105,6 +114,7 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     set +x
@@ -120,6 +130,7 @@ run_benchmark_serving() {
     local result_dir=""
     local workspace_dir=""
     local use_chat_template=false
+    local trust_remote_code=false
     local server_pid=""
 
     while [[ $# -gt 0 ]]; do
@@ -170,6 +181,10 @@ run_benchmark_serving() {
                 ;;
             --use-chat-template)
                 use_chat_template=true
+                shift
+                ;;
+            --trust-remote-code)
+                trust_remote_code=true
                 shift
                 ;;
             --server-pid)
@@ -229,6 +244,18 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
+    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
+    # and cap num_prompts to keep traces small.
+    local profile_flag=()
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
+        if [[ -n "$_prof_dir" ]]; then
+            mkdir -p "$_prof_dir"
+        fi
+        profile_flag+=(--profile)
+        num_prompts="$max_concurrency"
+    fi
+
     # Build benchmark command
     local benchmark_cmd=(
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
@@ -243,6 +270,7 @@ run_benchmark_serving() {
         --max-concurrency "$max_concurrency"
         --request-rate inf
         --ignore-eos
+        "${profile_flag[@]}"
         --save-result
         --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
@@ -253,6 +281,11 @@ run_benchmark_serving() {
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Add --trust-remote-code if requested
+    if [[ "$trust_remote_code" == true ]]; then
+        benchmark_cmd+=(--trust-remote-code)
     fi
 
     # Run benchmark with optional server monitoring
@@ -284,7 +317,110 @@ run_benchmark_serving() {
     fi
     set +x
 
+    # If profiling, move trace to relay-upload location
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        move_profile_trace_for_relay
+    fi
+
     return $benchmark_exit_code
+}
+
+
+# --------------------------------
+# Profiling trace helpers
+# --------------------------------
+
+_find_latest_profile_trace() {
+    local latest=""
+    local dir="" candidate="" base=""
+    local -a search_roots=()
+
+    for dir in "$@"; do
+        search_roots=()
+        if [[ -d "$dir" ]]; then
+            search_roots+=("$dir")
+        fi
+        if [[ -d "$dir/profiles" ]]; then
+            search_roots+=("$dir/profiles")
+        fi
+        if [[ ${#search_roots[@]} -eq 0 ]]; then
+            continue
+        fi
+
+        while IFS= read -r -d '' candidate; do
+            base="$(basename "$candidate")"
+            if [[ "$base" == profile_*.trace.json.gz ]]; then
+                continue
+            fi
+            if [[ -z "$latest" || "$candidate" -nt "$latest" ]]; then
+                latest="$candidate"
+            fi
+        done < <(
+            find "${search_roots[@]}" -maxdepth 1 -type f \
+                \( -name "*.trace.json" -o -name "*.trace.json.gz" -o -name "*trace*.json" -o -name "*trace*.json.gz" -o -name "*profile*.json" -o -name "*profile*.json.gz" \) \
+                -print0 2>/dev/null
+        )
+    done
+
+    printf '%s' "$latest"
+}
+
+# Move profiler trace into a stable workspace path for workflow relay/upload.
+move_profile_trace_for_relay() {
+    if [[ "${PROFILE:-}" != "1" ]]; then
+        return 0
+    fi
+
+    if [[ -z "${RESULT_FILENAME:-}" ]]; then
+        echo "[PROFILE] RESULT_FILENAME is not set; skipping relay trace staging." >&2
+        return 0
+    fi
+
+    local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
+    local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    local -a search_dirs=()
+    local dir="" existing=""
+    local seen=0
+
+    for dir in "$sglang_dir" "$vllm_dir" "/workspace"; do
+        if [[ -z "$dir" ]]; then
+            continue
+        fi
+        seen=0
+        for existing in "${search_dirs[@]}"; do
+            if [[ "$existing" == "$dir" ]]; then
+                seen=1
+                break
+            fi
+        done
+        if [[ "$seen" -eq 0 ]]; then
+            search_dirs+=("$dir")
+        fi
+    done
+
+    local trace_file=""
+    local wait_attempts=10
+    for (( i=1; i<=wait_attempts; i++ )); do
+        trace_file="$(_find_latest_profile_trace "${search_dirs[@]}")"
+        if [[ -n "$trace_file" ]]; then
+            break
+        fi
+        sleep 10
+    done
+
+    if [[ -z "$trace_file" ]]; then
+        echo "[PROFILE] No trace found for relay under: ${search_dirs[*]}" >&2
+        return 0
+    fi
+
+    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    if [[ "$trace_file" == *.gz ]]; then
+        cp -f "$trace_file" "$dest_trace"
+    else
+        gzip -c "$trace_file" > "$dest_trace"
+    fi
+
+    echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
 }
 
 
@@ -293,9 +429,18 @@ run_benchmark_serving() {
 # ------------------------------
 
 _install_lm_eval_deps() {
-    python3 -m pip install -q --no-cache-dir "lm-eval[api]" || true
-    python3 -m pip install -q --no-cache-dir --no-deps \
-        "git+https://github.com/EleutherAI/lm-evaluation-harness.git@b315ef3b05176acc9732bb7fdec116abe1ecc476" || true
+    python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
+    local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
+    if command -v git >/dev/null 2>&1; then
+        if ! python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            "git+https://github.com/EleutherAI/lm-evaluation-harness.git@${lm_eval_ref}"; then
+            python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+                "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
+        fi
+    else
+        python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
+    fi
 }
 
 # Patch lm-eval filters to be robust to empty strings via sitecustomize
@@ -406,14 +551,14 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
-
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "utils/evals/${task}.yaml" \
       --num_fewshot "${num_fewshot}" \
-      --output_path "${results_dir}" --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=300,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
+      --output_path "${results_dir}" \
+      --log_samples \
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
+      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -421,7 +566,6 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
-    local task="${EVAL_TASK:-gsm8k}"
     local out_dir="${results_dir}"
     mkdir -p "$out_dir" || true
 
@@ -462,6 +606,7 @@ append_lm_eval_summary() {
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
   "hw": "${RUNNER_TYPE:-unknown}",
   "isl": "${ISL:-0}",
   "osl": "${OSL:-0}"

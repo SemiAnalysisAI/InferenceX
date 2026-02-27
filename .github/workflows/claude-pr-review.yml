@@ -49,9 +49,11 @@ jobs:
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
+          settings: |
+            {"fastMode": true}
 
           claude_args: |
-            --model 'claude-opus-4-5-20251101'
+            --model 'claude-opus-4-6'
             --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax-repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -123,7 +125,58 @@ jobs:
             - The perf-changelog entry should document what changed in the config and include the PR link
             - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
 
+            ## Terminology:
+            - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
+            - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
+
             Remember: Silence is golden. No comment is better than a low-value comment.
+
+            ## Container Image Accessibility Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL `image:` values are publicly accessible:
+
+            **Valid image formats (publicly accessible):**
+            - Docker Hub: `organization/image:tag` (e.g., `lmsysorg/sglang:v0.5.7-rocm700-mi35x`)
+            - NGC: `nvcr.io/nvidia/...` or `nvcr.io#nvidia/...` (e.g., `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1` or `nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2`)
+            - Other public registries: `ghcr.io/...`, `quay.io/...`, `rocm/...`
+
+            **Invalid image formats (NOT publicly accessible):** 
+            - generally these images are not best practices to have in:
+            - Local file paths: `/scratch/...`, `/home/...`, `/data/...`, or any path starting with `/`
+            - `.sqsh` files (squashfs containers stored locally)
+            - Internal/private registry paths that are not publicly resolvable
+
+            If any `image:` field contains a local path or non-public image:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Image must be publicly accessible on NGC, Docker Hub, or another public registry. Local paths like `/scratch/...` or `.sqsh` files are generally not accepted. Please push the container to a public registry (e.g., `nvcr.io/nvidia/...` for NGC) and update the config with the public image reference."
+            - Link to the specific line with the invalid image path
+
+            ## Enroot Import Validation for Launch Scripts:
+            When reviewing changes to `runners/launch_*.sh` files, verify that the script properly transforms public Docker images to enroot local images for reproducibility.
+
+            **Expected pattern:**
+            The script should include an enroot import command like:
+            ```bash
+            srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+            ```
+            or similar variations such as:
+            ```bash
+            srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+            ```
+
+            **Why this matters:**
+            - Ensures the exact same public NGC/Docker Hub image is used
+            - Makes benchmarks reproducible by anyone with access to the public image
+            - Prevents reliance on pre-existing local container images that others cannot access
+
+            **Validation Steps:**
+            1. Look for `enroot import` commands that convert `docker://` images to local `.sqsh` files
+            2. The image source should be a public registry (NGC, Docker Hub, etc.), not a local path
+            3. If the script uses containers but does NOT have an `enroot import docker://` pattern:
+               - This is a 🟡 **WARNING** issue
+               - Comment: "This launch script uses container images but does not appear to transform a public Docker image to an enroot local image using `enroot import -o $SQUASH_FILE docker://$IMAGE`. For reproducibility, please either:
+                 1. Add the enroot import pattern to pull from a public registry, OR
+                 2. Explain why this script has a different workflow (e.g., uses a different container runtime, pre-built images are acceptable for this use case, etc.)"
+               - Ask the developer to provide a reasonable explanation if the pattern is intentionally omitted
 
             ## vLLM and SGLang Source Code Access:
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
@@ -157,3 +210,86 @@ jobs:
                - **Base Lines:** [base count]
                - **Change:** [+/-][difference] lines
             5. Use 📈 for additions, 📉 for removals, ➡️ for no change
+
+            ## Benchmark Script Code Style Guidelines:
+            When reviewing changes to `benchmarks/*.sh` files, verify the following code style requirements:
+
+            ### 1. Server Launch Command Formatting:
+            All `sglang.launch_server` and `vllm serve` commands MUST have their arguments formatted on separate lines for readability.
+
+            **Invalid format (all arguments on one line):**
+            ```bash
+            python -m sglang.launch_server --model $MODEL_PATH --tp 8 --ep 1 --port $PORT --quantization fp8 --kv-cache-dtype fp8_e4m3
+            ```
+
+            **Valid format (arguments on separate lines):**
+            ```bash
+            python -m sglang.launch_server \
+                --model $MODEL_PATH \
+                --tp 8 \
+                --ep 1 \
+                --port $PORT \
+                --quantization fp8 \
+                --kv-cache-dtype fp8_e4m3
+            ```
+
+            The same applies to `vllm serve` commands:
+            ```bash
+            vllm serve $MODEL_PATH \
+                --tensor-parallel-size 8 \
+                --port $PORT \
+                --quantization fp8
+            ```
+
+            If a benchmark script has server launch commands on a single line:
+            - This is a 🟡 **WARNING** issue
+            - Comment: "Server launch commands (`sglang.launch_server` or `vllm serve`) should have each argument on a separate line for better readability and easier code review. Please reformat using line continuations (`\`)."
+
+            ### 2. MTP (Multi-Token Prediction) Benchmark Requirements:
+            When reviewing MTP benchmark scripts (files containing `mtp` in the name or using EAGLE speculative decoding):
+
+            **Required: `--use-chat-template` flag**
+            MTP benchmarks MUST include the `--use-chat-template` flag in the benchmark client configuration.
+
+            **Why it matters:**
+            - Chat templates ensure proper tokenization for speculative decoding
+            - Without this flag, MTP performance may be incorrect or suboptimal
+            - Ensures consistent behavior across different model configurations
+
+            **Validation:**
+            Check that any benchmark script with MTP/EAGLE speculative decoding includes `--use-chat-template`:
+            ```bash
+            benchmark_client ... --use-chat-template
+            ```
+
+            If an MTP benchmark script is missing `--use-chat-template`:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
+
+            ## Model Prefix Validation:
+            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
+
+            **Valid model prefixes:**
+            - `dsr1` - DeepSeek R1 models
+            - `gptoss` - GPT-OSS models
+
+            **Invalid model prefixes (will break frontend):**
+            - `dsr1-fp8` - INVALID: precision should NOT be part of the model prefix
+            - `dsr1-fp4` - INVALID: precision should NOT be part of the model prefix
+            - Any other prefix not in the valid list above
+
+            **Config key format:**
+            Config keys follow the pattern: `{model-prefix}-{precision}-{hardware}-{framework}`
+            Example valid keys:
+            - `dsr1-fp8-gb200-vllm` (model-prefix=dsr1, precision=fp8)
+            - `gptoss-fp4-h200-sglang` (model-prefix=gptoss, precision=fp4)
+
+            **Why this matters:**
+            The frontend expects specific model prefixes (`dsr1` or `gptoss`) to display benchmark results correctly. Using invalid prefixes like `dsr1-fp8` will cause the frontend to fail to display results, breaking the user experience.
+
+            **Validation:**
+            When reviewing config additions or changes, check that the first segment of config keys (before the first `-`) is either `dsr1` or `gptoss`.
+
+            If a config key uses an invalid model prefix:
+            - This is a 🔴 **BLOCKING** issue
+            - Comment: "Invalid model prefix detected. The frontend only supports `dsr1` and `gptoss` as model prefixes. Using other prefixes like `dsr1-fp8` will break the frontend and prevent benchmark results from being displayed. Please use the format `{valid-prefix}-{precision}-{hardware}-{framework}` where valid-prefix is either `dsr1` or `gptoss`."
