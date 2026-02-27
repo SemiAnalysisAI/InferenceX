@@ -30,14 +30,7 @@ PORT=${PORT:-8888}
 CONTEXT_LENGTH=$((ISL + OSL + 20))
 CUDA_GRAPH_MAX_BS=$CONC
 MAX_RUNNING_REQUESTS=$((CONC > 128 ? CONC : 128))
-EXTRA_ARGS=""
-
-if [[ $CONC -gt 4 ]]; then
-  MEM_FRAC_STATIC=0.85
-  EXTRA_ARGS="--kv-cache-dtype fp8_e4m3 --enable-symm-mem"
-else
-  MEM_FRAC_STATIC=0.82
-fi
+MEM_FRAC_STATIC=0.85
 
 echo "Config: ISL=$ISL, OSL=$OSL, CONC=$CONC, EP=$EP_SIZE, MEM=$MEM_FRAC_STATIC, CUDA_BS=$CUDA_GRAPH_MAX_BS, MAX_RR=$MAX_RUNNING_REQUESTS"
 
@@ -51,7 +44,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval 30 \
 --stream-interval 30 --quantization modelopt_fp4 \
-$EXTRA_ARGS > $SERVER_LOG 2>&1 &
+--kv-cache-dtype fp8_e4m3 --fp4-gemm-backend flashinfer_cutlass > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
