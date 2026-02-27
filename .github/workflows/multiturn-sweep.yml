@@ -2,6 +2,11 @@ name: Multi-Turn Benchmark Sweep
 run-name: "Multi-Turn Sweep - tp=${{ inputs.tp_values }} users=${{ inputs.user_values }} offload=${{ inputs.offload_values }}"
 
 on:
+  push:
+    branches:
+      - experimental/multi-turn-benchmark
+    paths:
+      - .github/workflows/multiturn-sweep.yml
   workflow_dispatch:
     inputs:
       tp_values:
