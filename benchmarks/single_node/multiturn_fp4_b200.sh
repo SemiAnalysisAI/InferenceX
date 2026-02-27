@@ -88,7 +88,7 @@ wait_for_server_ready \
     --server-pid "$SERVER_PID"
 
 # ---- Install benchmark deps -------------------------------------------------
-pip install -q pandas aiohttp
+pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
 # ---- Run benchmark -----------------------------------------------------------
 cd "$MULTITURN_DIR"
