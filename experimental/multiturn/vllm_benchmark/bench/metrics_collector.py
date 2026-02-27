@@ -25,7 +25,12 @@ class GpuTransferSnapshot:
 
 
 class GpuTransferCollector:
-    """Collects GPU transfer stats using nvidia-smi dmon."""
+    """DEPRECATED: Collects GPU transfer stats using nvidia-smi dmon.
+
+    Replaced by vLLM's native kv_offload metrics (vllm:kv_offload_total_bytes_total,
+    vllm:kv_offload_total_time_total) which are more precise and don't require
+    spawning a subprocess.
+    """
 
     def __init__(self, gpu_id: int = 0, poll_interval: int = 1):
         self.gpu_id = gpu_id
@@ -129,6 +134,18 @@ class MetricsSnapshot:
     generation_tokens: int = 0
     num_preemptions: int = 0
     request_success: int = 0
+    # KV offload transfer metrics (cumulative)
+    kv_offload_bytes_gpu_to_cpu: float = 0.0
+    kv_offload_bytes_cpu_to_gpu: float = 0.0
+    kv_offload_time_gpu_to_cpu: float = 0.0
+    kv_offload_time_cpu_to_gpu: float = 0.0
+    # Prompt tokens by source (cumulative)
+    prompt_tokens_local_compute: int = 0
+    prompt_tokens_local_cache_hit: int = 0
+    prompt_tokens_external_kv_transfer: int = 0
+    # Prefill KV computed tokens (cumulative sum from histogram)
+    prefill_kv_computed_tokens_sum: int = 0
+    prefill_kv_computed_tokens_count: int = 0
 
 
 @dataclass
@@ -211,6 +228,41 @@ class MetricsCollector:
         ):
             snapshot.request_success += int(float(match.group(1)))
 
+        # KV offload bytes transferred (cumulative counters by direction)
+        snapshot.kv_offload_bytes_gpu_to_cpu = get_value(
+            r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)'
+        )
+        snapshot.kv_offload_bytes_cpu_to_gpu = get_value(
+            r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)'
+        )
+
+        # KV offload time (cumulative, seconds)
+        snapshot.kv_offload_time_gpu_to_cpu = get_value(
+            r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)'
+        )
+        snapshot.kv_offload_time_cpu_to_gpu = get_value(
+            r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)'
+        )
+
+        # Prompt tokens by source (cumulative)
+        snapshot.prompt_tokens_local_compute = int(get_value(
+            r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_compute"[^}]*\}\s+([\d.e+-]+)'
+        ))
+        snapshot.prompt_tokens_local_cache_hit = int(get_value(
+            r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_cache_hit"[^}]*\}\s+([\d.e+-]+)'
+        ))
+        snapshot.prompt_tokens_external_kv_transfer = int(get_value(
+            r'vllm:prompt_tokens_by_source_total\{[^}]*source="external_kv_transfer"[^}]*\}\s+([\d.e+-]+)'
+        ))
+
+        # Prefill KV computed tokens (histogram sum and count)
+        snapshot.prefill_kv_computed_tokens_sum = int(get_value(
+            r'vllm:request_prefill_kv_computed_tokens_sum\{[^}]*\}\s+([\d.e+-]+)'
+        ))
+        snapshot.prefill_kv_computed_tokens_count = int(get_value(
+            r'vllm:request_prefill_kv_computed_tokens_count\{[^}]*\}\s+([\d.e+-]+)'
+        ))
+
         return snapshot
 
     async def _poll_loop(self) -> None:
@@ -237,13 +289,6 @@ class MetricsCollector:
         self.snapshots = []
         self._task = asyncio.create_task(self._poll_loop())
 
-        # Start GPU transfer monitoring
-        self.gpu_transfer_collector = GpuTransferCollector(
-            gpu_id=self.gpu_id,
-            poll_interval=max(1, int(self.poll_interval)),
-        )
-        self.gpu_transfer_collector.start()
-
     async def stop(self) -> None:
         """Stop metrics collection."""
         self._running = False
@@ -253,10 +298,6 @@ class MetricsCollector:
                 await self._task
             except asyncio.CancelledError:
                 pass
-
-        # Stop GPU transfer monitoring
-        if self.gpu_transfer_collector:
-            self.gpu_transfer_collector.stop()
 
     def generate_plots(
         self,
@@ -395,59 +436,55 @@ class MetricsCollector:
         ax.set_title("Generation Throughput")
         ax.grid(True, alpha=0.3)
 
-        # 5. GPU Transfer TX over Time (line plot to show spikes + cumulative)
+        # 5. KV Offload Transfer Rate (from vLLM metrics)
         ax = axes[2, 0]
-        gpu_times = None
-        if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
-            gpu_snaps = self.gpu_transfer_collector.snapshots
-            gpu_start = gpu_snaps[0].timestamp
-            gpu_times = [(s.timestamp - gpu_start) for s in gpu_snaps]
-            tx_pci = [s.tx_pci for s in gpu_snaps]  # Already in MB/s
-
-            ax.plot(gpu_times, tx_pci, 'b-', linewidth=1, alpha=0.8, label='TX rate')
-            ax.set_ylabel("TX Bandwidth (MB/s)", color='blue')
-            ax.tick_params(axis='y', labelcolor='blue')
-
-            # Cumulative TX on secondary y-axis
-            cumulative_tx = []
-            total = 0.0
-            for i in range(len(gpu_snaps)):
-                if i > 0:
-                    dt = gpu_snaps[i].timestamp - gpu_snaps[i-1].timestamp
-                    total += tx_pci[i] * dt  # MB/s * s = MB
-                cumulative_tx.append(total / 1024)  # Convert to GB
-            ax2 = ax.twinx()
-            ax2.plot(gpu_times, cumulative_tx, 'r-', linewidth=1.5, alpha=0.7, label='Cumulative')
-            ax2.set_ylabel("Cumulative TX (GB)", color='red')
-            ax2.tick_params(axis='y', labelcolor='red')
+        gpu_to_cpu_rates = []
+        cpu_to_gpu_rates = []
+        for i in range(1, len(self.snapshots)):
+            dt = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp
+            if dt > 0:
+                delta_g2c = self.snapshots[i].kv_offload_bytes_gpu_to_cpu - self.snapshots[i-1].kv_offload_bytes_gpu_to_cpu
+                delta_c2g = self.snapshots[i].kv_offload_bytes_cpu_to_gpu - self.snapshots[i-1].kv_offload_bytes_cpu_to_gpu
+                gpu_to_cpu_rates.append(delta_g2c / dt / 1e6)  # MB/s
+                cpu_to_gpu_rates.append(delta_c2g / dt / 1e6)  # MB/s
+            else:
+                gpu_to_cpu_rates.append(0)
+                cpu_to_gpu_rates.append(0)
+        if any(r > 0 for r in gpu_to_cpu_rates) or any(r > 0 for r in cpu_to_gpu_rates):
+            ax.plot(times[1:], gpu_to_cpu_rates, 'b-', linewidth=1, alpha=0.8, label='GPU→CPU')
+            ax.plot(times[1:], cpu_to_gpu_rates, 'r-', linewidth=1, alpha=0.8, label='CPU→GPU')
+            ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
-        ax.set_title("GPU PCIe TX Over Time (GPU → Host)")
+        ax.set_ylabel("Transfer Rate (MB/s)")
+        ax.set_title("KV Offload Transfer Rate")
         ax.grid(True, alpha=0.3)
 
-        # 6. GPU Transfer RX over Time (line plot to show spikes + cumulative)
+        # 6. Prompt Token Sources Over Time (stacked area)
         ax = axes[2, 1]
-        if self.gpu_transfer_collector and len(self.gpu_transfer_collector.snapshots) > 1:
-            gpu_snaps = self.gpu_transfer_collector.snapshots
-            rx_pci = [s.rx_pci for s in gpu_snaps]  # Already in MB/s
-
-            ax.plot(gpu_times, rx_pci, 'b-', linewidth=1, alpha=0.8, label='RX rate')
-            ax.set_ylabel("RX Bandwidth (MB/s)", color='blue')
-            ax.tick_params(axis='y', labelcolor='blue')
-
-            # Cumulative RX on secondary y-axis
-            cumulative_rx = []
-            total = 0.0
-            for i in range(len(gpu_snaps)):
-                if i > 0:
-                    dt = gpu_snaps[i].timestamp - gpu_snaps[i-1].timestamp
-                    total += rx_pci[i] * dt  # MB/s * s = MB
-                cumulative_rx.append(total / 1024)  # Convert to GB
-            ax2 = ax.twinx()
-            ax2.plot(gpu_times, cumulative_rx, 'r-', linewidth=1.5, alpha=0.7, label='Cumulative')
-            ax2.set_ylabel("Cumulative RX (GB)", color='red')
-            ax2.tick_params(axis='y', labelcolor='red')
+        compute_rates = []
+        cache_hit_rates_src = []
+        ext_transfer_rates = []
+        for i in range(1, len(self.snapshots)):
+            dt = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp
+            if dt > 0:
+                delta_compute = self.snapshots[i].prompt_tokens_local_compute - self.snapshots[i-1].prompt_tokens_local_compute
+                delta_cache = self.snapshots[i].prompt_tokens_local_cache_hit - self.snapshots[i-1].prompt_tokens_local_cache_hit
+                delta_ext = self.snapshots[i].prompt_tokens_external_kv_transfer - self.snapshots[i-1].prompt_tokens_external_kv_transfer
+                compute_rates.append(delta_compute / dt)
+                cache_hit_rates_src.append(delta_cache / dt)
+                ext_transfer_rates.append(delta_ext / dt)
+            else:
+                compute_rates.append(0)
+                cache_hit_rates_src.append(0)
+                ext_transfer_rates.append(0)
+        if any(r > 0 for r in compute_rates):
+            ax.stackplot(times[1:], compute_rates, cache_hit_rates_src, ext_transfer_rates,
+                        labels=['Local Compute', 'Local Cache Hit', 'External KV Transfer'],
+                        colors=['coral', 'steelblue', 'mediumseagreen'], alpha=0.8)
+            ax.legend(fontsize=8, loc='upper left')
         ax.set_xlabel("Time (s)")
-        ax.set_title("GPU PCIe RX Over Time (Host → GPU)")
+        ax.set_ylabel("Tokens/sec")
+        ax.set_title("Prefill Token Sources Over Time")
         ax.grid(True, alpha=0.3)
 
         # 7 & 8. Client metrics plots (TTFT and Latency vs Time)
@@ -564,6 +601,35 @@ class MetricsCollector:
             print(f"  - Cache hits: {cpu_delta_hits:,} tokens")
             print(f"  - Cache queries: {cpu_delta_queries:,} tokens")
 
+        # Prompt tokens by source
+        total_compute = final.prompt_tokens_local_compute - initial.prompt_tokens_local_compute
+        total_cache_hit = final.prompt_tokens_local_cache_hit - initial.prompt_tokens_local_cache_hit
+        total_ext = final.prompt_tokens_external_kv_transfer - initial.prompt_tokens_external_kv_transfer
+        total_by_source = total_compute + total_cache_hit + total_ext
+        if total_by_source > 0:
+            print(f"Prompt token sources:")
+            print(f"  - Local compute:      {total_compute:>12,} ({100*total_compute/total_by_source:.1f}%)")
+            print(f"  - Local cache hit:    {total_cache_hit:>12,} ({100*total_cache_hit/total_by_source:.1f}%)")
+            print(f"  - External KV xfer:   {total_ext:>12,} ({100*total_ext/total_by_source:.1f}%)")
+
+        # KV offload transfer stats
+        g2c_bytes = final.kv_offload_bytes_gpu_to_cpu - initial.kv_offload_bytes_gpu_to_cpu
+        c2g_bytes = final.kv_offload_bytes_cpu_to_gpu - initial.kv_offload_bytes_cpu_to_gpu
+        g2c_time = final.kv_offload_time_gpu_to_cpu - initial.kv_offload_time_gpu_to_cpu
+        c2g_time = final.kv_offload_time_cpu_to_gpu - initial.kv_offload_time_cpu_to_gpu
+        if g2c_bytes > 0 or c2g_bytes > 0:
+            print(f"KV offload transfers:")
+            print(f"  GPU→CPU: {g2c_bytes/1e9:.2f} GB in {g2c_time:.2f}s ({g2c_bytes/g2c_time/1e9:.1f} GB/s)" if g2c_time > 0 else f"  GPU→CPU: {g2c_bytes/1e9:.2f} GB")
+            print(f"  CPU→GPU: {c2g_bytes/1e9:.2f} GB in {c2g_time:.2f}s ({c2g_bytes/c2g_time/1e9:.1f} GB/s)" if c2g_time > 0 else f"  CPU→GPU: {c2g_bytes/1e9:.2f} GB")
+
+        # Prefill KV computed tokens
+        delta_kv_sum = final.prefill_kv_computed_tokens_sum - initial.prefill_kv_computed_tokens_sum
+        delta_kv_count = final.prefill_kv_computed_tokens_count - initial.prefill_kv_computed_tokens_count
+        if delta_kv_count > 0:
+            print(f"Prefill KV computed tokens (excluding cached):")
+            print(f"  Total: {delta_kv_sum:,} tokens across {delta_kv_count:,} requests")
+            print(f"  Avg per request: {delta_kv_sum/delta_kv_count:.0f} tokens")
+
         print("="*60 + "\n")
 
     def export_csv(
@@ -609,6 +675,18 @@ class MetricsCollector:
                     'generation_tokens_total',
                     'num_preemptions_total',
                     'request_success_total',
+                    # KV offload metrics
+                    'kv_offload_bytes_gpu_to_cpu',
+                    'kv_offload_bytes_cpu_to_gpu',
+                    'kv_offload_time_gpu_to_cpu',
+                    'kv_offload_time_cpu_to_gpu',
+                    # Prompt tokens by source
+                    'prompt_tokens_local_compute',
+                    'prompt_tokens_local_cache_hit',
+                    'prompt_tokens_external_kv_transfer',
+                    # Prefill KV computed
+                    'prefill_kv_computed_tokens_sum',
+                    'prefill_kv_computed_tokens_count',
                     # Computed per-interval metrics
                     'interval_cache_hit_rate_pct',
                     'interval_throughput_tok_per_sec',
@@ -647,13 +725,22 @@ class MetricsCollector:
                         s.generation_tokens,
                         s.num_preemptions,
                         s.request_success,
+                        f"{s.kv_offload_bytes_gpu_to_cpu:.0f}",
+                        f"{s.kv_offload_bytes_cpu_to_gpu:.0f}",
+                        f"{s.kv_offload_time_gpu_to_cpu:.6f}",
+                        f"{s.kv_offload_time_cpu_to_gpu:.6f}",
+                        s.prompt_tokens_local_compute,
+                        s.prompt_tokens_local_cache_hit,
+                        s.prompt_tokens_external_kv_transfer,
+                        s.prefill_kv_computed_tokens_sum,
+                        s.prefill_kv_computed_tokens_count,
                         f"{cache_hit_rate:.2f}",
                         f"{throughput:.2f}",
                     ])
 
             print(f"Exported server metrics to {server_csv}")
 
-        # 2. Export GPU transfer stats
+        # 2. Export GPU transfer stats (DEPRECATED - kept for backward compat)
         if self.gpu_transfer_collector and self.gpu_transfer_collector.snapshots:
             gpu_csv = f"{output_prefix}_gpu_transfer.csv"
             gpu_snaps = self.gpu_transfer_collector.snapshots
