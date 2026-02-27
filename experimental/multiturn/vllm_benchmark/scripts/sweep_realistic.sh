@@ -55,7 +55,7 @@ echo "========================================"
 TP_VALUES=(1 2 4 8)
 # Number of concurrent users (not constant batch size — actual in-flight
 # concurrency fluctuates due to think-time)
-USER_VALUES=(8 16 32 64 128 256 512 1024 2048)
+USER_VALUES=(2048 1024 512 256 128 64 32 16 8)
 # on=prefix caching + CPU offload, off=prefix caching only, noprefix=no prefix caching
 OFFLOAD_VALUES=(on off noprefix)
 
