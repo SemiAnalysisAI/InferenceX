@@ -40,12 +40,10 @@ nvidia-smi
 MULTITURN_DIR=/workspace/experimental/multiturn/vllm_benchmark
 INPUT_FILE="$MULTITURN_DIR/sample_20k_realistic.json"
 
-# Download dataset from HuggingFace if not present
-if [ ! -f "$INPUT_FILE" ]; then
-    echo "Downloading sample_20k_realistic.json from HuggingFace..."
-    hf download inferencemax/multiturn-benchmark-data sample_20k_realistic.json \
-        --repo-type dataset --local-dir "$MULTITURN_DIR"
-fi
+# Download dataset from HuggingFace
+echo "Downloading sample_20k_realistic.json from HuggingFace..."
+hf download inferencemax/multiturn-benchmark-data sample_20k_realistic.json \
+    --repo-type dataset --local-dir "$MULTITURN_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 
 mkdir -p "$RESULT_DIR"
