@@ -11,7 +11,7 @@ set -euo pipefail
 # Optional:
 #   PORT (default 8888), MAX_RETRIES (default 3), REQUEST_TIMEOUT (default 3600)
 
-source "$(dirname "$0")/benchmark_lib.sh"
+source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
