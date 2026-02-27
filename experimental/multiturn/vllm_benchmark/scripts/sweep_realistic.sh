@@ -187,11 +187,7 @@ max-num-batched-tokens: 8192
 EOF
 
         # Build vllm command
-        # max-num-seqs set higher than users to handle burst arrivals
-        local max_seqs=$((users * 2))
-        if [ $max_seqs -gt 2048 ]; then
-            max_seqs=2048
-        fi
+        local max_seqs=$users
 
         local vllm_cmd="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
         vllm_cmd+=" --config $exp_dir/config.yaml"
