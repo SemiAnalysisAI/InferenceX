@@ -187,11 +187,6 @@ EOF
 
         # Build vllm command
         local max_seqs=$users
-        # Cap cudagraph capture size to avoid OOM during graph capture
-        local cudagraph_cap=$max_seqs
-        if [ $cudagraph_cap -gt 512 ]; then
-            cudagraph_cap=512
-        fi
 
         local vllm_cmd="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
         vllm_cmd+=" --config $exp_dir/config.yaml"
