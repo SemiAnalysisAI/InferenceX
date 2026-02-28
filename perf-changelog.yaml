@@ -733,4 +733,16 @@
     - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
     - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Add more sweep configs for MI355X FP8/FP4 Disagg"
+    - "Add TP/DP/EP size < 8 support "
+    - "Support DSR1-0528 MTP Disagg"
+    - "Bump SGL mori image to Feb 27"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/823
   
