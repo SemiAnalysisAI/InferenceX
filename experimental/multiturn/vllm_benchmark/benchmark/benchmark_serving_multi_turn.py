@@ -1003,6 +1003,12 @@ async def main_mp(
             for c in clients:
                 if c.is_alive():
                     c.kill()
+            # Unblock any conv_queue.get() calls waiting in executor threads
+            for _ in range(bench_args.num_clients + 2):
+                try:
+                    conv_queue.put_nowait((TERM_SIGNAL, TERM_SIGNAL))
+                except Exception:
+                    break
         duration_timer = threading.Timer(bench_args.duration_sec, _duration_expired)
         duration_timer.daemon = True
         duration_timer.start()

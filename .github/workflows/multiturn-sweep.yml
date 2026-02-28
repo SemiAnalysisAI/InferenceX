@@ -37,7 +37,7 @@ on:
       total_cpu_dram_gb:
         description: 'Total CPU DRAM for KV offload (GB)'
         required: true
-        default: '300'
+        default: '100'
         type: string
       image:
         description: 'Container image'
