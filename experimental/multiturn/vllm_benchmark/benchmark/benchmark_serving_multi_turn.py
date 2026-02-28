@@ -999,10 +999,10 @@ async def main_mp(
             )
             stop_event.set()
             duration_hard_stop.set()
-            # Terminate all client processes immediately
+            # Kill all client processes immediately (SIGKILL — no graceful shutdown)
             for c in clients:
                 if c.is_alive():
-                    c.terminate()
+                    c.kill()
         duration_timer = threading.Timer(bench_args.duration_sec, _duration_expired)
         duration_timer.daemon = True
         duration_timer.start()
@@ -1139,7 +1139,7 @@ async def main_mp(
     logger.info(f"Collected {len(client_metrics)} samples from all the clients")
 
     # Wait for all clients to finish
-    join_timeout = 5 if duration_hard_stop.is_set() else req_args.timeout_sec + 1
+    join_timeout = 2 if duration_hard_stop.is_set() else req_args.timeout_sec + 1
     for client in clients:
         logger.info(
             f"{Color.CYAN}Waiting for client {client.name} "
@@ -1150,10 +1150,10 @@ async def main_mp(
 
         if client.is_alive():
             logger.warning(
-                f"{Color.YELLOW}Client {client.name} will be terminated{Color.RESET}"
+                f"{Color.YELLOW}Client {client.name} will be killed{Color.RESET}"
             )
-            client.terminate()
-            client.join(timeout=5)
+            client.kill()
+            client.join(timeout=2)
 
         exitcode = client.exitcode
         if exitcode is not None and exitcode != 0 and not duration_hard_stop.is_set():
@@ -1171,8 +1171,12 @@ async def main_mp(
         f"finished {len(output_conv)} out of {total_convs} conversations)"
     )
 
-    # Queues should be closed, required to avoid hang at interpreter shutdown
-    # Drain all queues before closing to prevent join_thread() from hanging
+    # Cancel join threads first to prevent hangs from killed processes
+    task_queue.cancel_join_thread()
+    result_queue.cancel_join_thread()
+    conv_queue.cancel_join_thread()
+
+    # Drain all queues before closing
     unfinished_tasks = 0
     while not task_queue.empty():
         try:
