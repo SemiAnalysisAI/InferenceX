@@ -281,6 +281,13 @@ async def send_request(
                     timestamp: int = time.perf_counter_ns()
                     data = json.loads(chunk)
 
+                    # Check for error responses from overloaded server
+                    if "choices" not in data:
+                        if "error" in data:
+                            raise RuntimeError(f"Server error: {data['error']}")
+                        # Skip non-data SSE messages (e.g. usage stats)
+                        continue
+
                     # Delta is the new content/text/data
                     delta = data["choices"][0]["delta"]
                     if delta.get("content", None):

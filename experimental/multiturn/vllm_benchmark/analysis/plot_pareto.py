@@ -744,6 +744,113 @@ def generate_pareto_overlay_figure_p999(df: pd.DataFrame, results_dir: Path):
     plt.close()
 
 
+def generate_combined_pareto_figure(df: pd.DataFrame, results_dir: Path,
+                                    percentile: str = "p50"):
+    """Generate a combined Pareto frontier across ALL offload modes.
+
+    Points are colored by TP and edge-styled by offload mode so the viewer
+    can see both the overall optimal frontier and which config each point
+    comes from.
+
+    percentile: one of "p50", "p90", "p99", "p999"
+    """
+    from matplotlib.lines import Line2D
+
+    pct = percentile  # e.g. "p50"
+    pct_label = {"p50": "Median", "p90": "P90", "p99": "P99", "p999": "P99.9"}[pct]
+    suffix = "" if pct == "p50" else f"_{pct}"
+
+    df = df.copy()
+    interactivity_col = f"interactivity{suffix}"
+    df[interactivity_col] = 1000.0 / df[f"{pct}_tpot_ms"]
+
+    fig, axes = plt.subplots(4, 1, figsize=(10, 20))
+    fig.suptitle(f"Combined Pareto Frontier — {pct_label} SLA (All Configs)", fontsize=14)
+
+    tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
+    tp_markers = {1: "o", 2: "s", 4: "^", 8: "D"}
+
+    mode_edge = {
+        "on":       {"edgecolors": "black",  "linewidths": 1.8},
+        "off":      {"edgecolors": "gray",   "linewidths": 1.2},
+        "noprefix": {"edgecolors": "#cc0000", "linewidths": 1.2},
+    }
+    mode_short = {"on": "P+O", "off": "P", "noprefix": "NP"}
+
+    metrics_configs = [
+        (0, f"{pct}_ttft_ms",     "input_tps_per_gpu", "TTFT",          f"{pct_label} TTFT (ms)",                       "Input Throughput/GPU (tok/s)", False),
+        (1, interactivity_col,    "total_tps_per_gpu", "Interactivity", f"Interactivity (1000/{pct_label} TPOT)",       "Total Throughput/GPU (tok/s)", True),
+        (2, f"{pct}_latency_ms",  "total_tps_per_gpu", "E2E Latency",   f"{pct_label} E2E Latency (ms)",               "Total Throughput/GPU (tok/s)", False),
+        (3, f"{pct}_prefill_tps", "total_tps_per_gpu", "Prefill Speed",  f"{pct_label} Prefill Speed (ISL/TTFT tok/s)", "Total Throughput/GPU (tok/s)", True),
+    ]
+
+    for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
+        ax = axes[row]
+
+        # All-data scatter (faded background)
+        for tp in sorted(df["tp"].unique()):
+            tp_data = df[df["tp"] == tp]
+            ax.scatter(tp_data[x_col], tp_data[y_col],
+                       c=tp_colors.get(tp, "purple"),
+                       marker=tp_markers.get(tp, "x"),
+                       s=40, alpha=0.15, linewidths=0.3,
+                       edgecolors="gray")
+
+        # Combined Pareto frontier
+        frontier_df = compute_pareto_frontier_with_metadata(df, x_col, y_col, maximize_x)
+
+        if len(frontier_df) > 0:
+            ax.plot(frontier_df[x_col], frontier_df[y_col],
+                    linestyle='-', linewidth=2, alpha=0.5, color="black",
+                    label="Pareto Frontier", zorder=4)
+
+            for _, pt in frontier_df.iterrows():
+                tp = pt["tp"]
+                mode = pt["offload"]
+                edge_kw = mode_edge.get(mode, {"edgecolors": "black", "linewidths": 1})
+                ax.scatter(pt[x_col], pt[y_col],
+                           c=tp_colors.get(tp, "purple"),
+                           marker=tp_markers.get(tp, "x"),
+                           s=160, alpha=0.9, zorder=5,
+                           **edge_kw)
+
+            for _, pt in frontier_df.iterrows():
+                ax.annotate(
+                    f"conc={int(pt['bs'])} {mode_short.get(pt['offload'], '')}",
+                    (pt[x_col], pt[y_col]),
+                    textcoords="offset points", xytext=(5, 5),
+                    fontsize=7, alpha=0.85)
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_title(f"{metric_name} — All Configs Combined")
+        ax.grid(True, alpha=0.3)
+
+        handles = [Line2D([0], [0], color="black", lw=2, label="Pareto Frontier")]
+        for tp in sorted(df["tp"].unique()):
+            handles.append(Line2D([0], [0], marker=tp_markers[tp], color="w",
+                                  markerfacecolor=tp_colors[tp], markersize=8,
+                                  markeredgecolor="black", label=f"TP={tp}"))
+        handles.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="w",
+                              markersize=8, markeredgecolor="black", markeredgewidth=1.8,
+                              label="Edge: P+Offload"))
+        handles.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="w",
+                              markersize=8, markeredgecolor="gray", markeredgewidth=1.2,
+                              label="Edge: Prefix Only"))
+        handles.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="w",
+                              markersize=8, markeredgecolor="#cc0000", markeredgewidth=1.2,
+                              label="Edge: No Prefix"))
+        ax.legend(handles=handles, fontsize=7,
+                  loc="lower right" if not maximize_x else "upper right")
+
+    plt.tight_layout()
+    fname = f"pareto_frontiers_combined{suffix}.png"
+    output_file = results_dir / fname
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"Saved combined {pct_label} Pareto plot to {output_file}")
+    plt.close()
+
+
 def generate_pareto_overlay_figure(df: pd.DataFrame, results_dir: Path):
     """Generate a figure with all prefix cache modes overlaid for direct comparison."""
 
@@ -923,6 +1030,10 @@ def main(results_dir: Path):
 
     # Generate clean Pareto-only figure
     generate_pareto_only_figure(df, results_dir)
+
+    # Generate combined Pareto frontier (all configs pooled) for each SLA percentile
+    for pct in ("p50", "p90", "p99", "p999"):
+        generate_combined_pareto_figure(df, results_dir, percentile=pct)
 
     # Generate overlay figure (on vs off comparison)
     generate_pareto_overlay_figure(df, results_dir)
