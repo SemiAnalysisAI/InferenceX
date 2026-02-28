@@ -987,16 +987,22 @@ async def main_mp(
         clients.append(client)
         client.start()
 
-    # Duration timer — sets stop_event after the specified time
+    # Duration timer — when time is up, terminate all clients immediately
     duration_timer = None
+    duration_hard_stop = mp.Event()
     if bench_args.duration_sec is not None:
         import threading
         def _duration_expired():
             logger.info(
                 f"{Color.YELLOW}Duration limit reached ({bench_args.duration_sec}s). "
-                f"Stopping all clients...{Color.RESET}"
+                f"Terminating all clients immediately...{Color.RESET}"
             )
             stop_event.set()
+            duration_hard_stop.set()
+            # Terminate all client processes immediately
+            for c in clients:
+                if c.is_alive():
+                    c.terminate()
         duration_timer = threading.Timer(bench_args.duration_sec, _duration_expired)
         duration_timer.daemon = True
         duration_timer.start()
@@ -1031,8 +1037,29 @@ async def main_mp(
     loop = asyncio.get_event_loop()
 
     while num_clients_finished < bench_args.num_clients:
+        # Check if duration hard stop was triggered
+        if duration_hard_stop.is_set():
+            logger.info(
+                f"{Color.YELLOW}Duration hard stop — collecting final results{Color.RESET}"
+            )
+            # Stop metrics collection immediately
+            if metrics_collector is not None:
+                await metrics_collector.stop()
+                logger.info(f"{Color.BLUE}Stopped metrics collection (duration expired){Color.RESET}")
+            break
+
         # Collect updated conversation (run in executor to not block event loop)
-        conv_id, messages = await loop.run_in_executor(None, conv_queue.get)
+        try:
+            conv_id, messages = await asyncio.wait_for(
+                loop.run_in_executor(None, conv_queue.get),
+                timeout=1.0,
+            )
+        except asyncio.TimeoutError:
+            # Periodically drain result_queue even if no conv_queue items
+            while not result_queue.empty():
+                client_metrics.append(result_queue.get())
+                pbar.update(1)
+            continue
 
         # Collect results (measurements)
         while not result_queue.empty():
@@ -1112,22 +1139,24 @@ async def main_mp(
     logger.info(f"Collected {len(client_metrics)} samples from all the clients")
 
     # Wait for all clients to finish
+    join_timeout = 5 if duration_hard_stop.is_set() else req_args.timeout_sec + 1
     for client in clients:
         logger.info(
             f"{Color.CYAN}Waiting for client {client.name} "
             f"(is alive: {client.is_alive()}){Color.RESET}"
         )
 
-        client.join(timeout=req_args.timeout_sec + 1)
+        client.join(timeout=join_timeout)
 
         if client.is_alive():
             logger.warning(
                 f"{Color.YELLOW}Client {client.name} will be terminated{Color.RESET}"
             )
             client.terminate()
+            client.join(timeout=5)
 
         exitcode = client.exitcode
-        if exitcode != 0:
+        if exitcode is not None and exitcode != 0 and not duration_hard_stop.is_set():
             logger.error(
                 f"{Color.RED}Client {client.name} exited "
                 f"with exit code {exitcode}{Color.RESET}"
