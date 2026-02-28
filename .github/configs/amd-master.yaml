@@ -445,7 +445,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -464,7 +464,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     - spec-decoding: "none"
-      conc-list: [ 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 2, 1 ]
       prefill:
         num-worker: 1
         tp: 4
@@ -507,7 +507,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
     # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -526,7 +526,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     - spec-decoding: "none"
-      conc-list: [ 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 128, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 4
@@ -600,7 +600,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
     # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -619,7 +619,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=2"
 
     - spec-decoding: "mtp"
-      conc-list: [ 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 2, 1 ]
       prefill:
         num-worker: 1
         tp: 4
@@ -681,7 +681,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=2"
 
     - spec-decoding: "mtp"
-      conc-list: [ 128, 64, 32, 16, 8, 4, 2, 1 ]
+      conc-list: [ 4, 2, 1 ]
       prefill:
         num-worker: 1
         tp: 4
@@ -990,7 +990,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
     # 1P2D TP8
     - spec-decoding: "mtp" 
-      conc-list: [ 2, 4, 8, 16, 32, 64, 128, 256 ]
+      conc-list: [ 2, 4, 8, 16, 32 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -1007,24 +1007,44 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=3"
 
-    # 1P2D DEP8+TEP8
+    # 1P2D TP8
     - spec-decoding: "mtp" 
-      conc-list: [ 256, 512, 1024 ]
+      conc-list: [ 64, 128, 256 ]
       prefill:
         num-worker: 1
         tp: 8
-        ep: 8
-        dp-attn: true
+        ep: 1
+        dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
       decode:
         num-worker: 2
         tp: 8
-        ep: 8
+        ep: 1
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=1"
+
+    # 1P2D TP4
+    - spec-decoding: "mtp" 
+      conc-list: [ 64, 128, 256 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=1"
+
 
   - isl: 8192
     osl: 1024
@@ -1049,9 +1069,10 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=3"
 
+
     # 1P2D TP8
     - spec-decoding: "mtp"
-      conc-list: [ 2, 4, 8, 16, 32, 64, 128, 256 ]
+      conc-list: [ 2, 4, 8, 16, 32 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -1068,23 +1089,42 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=3"
 
-    # 2P1D DEP8+TEP8
+    # 1P2D TP8
     - spec-decoding: "mtp"
-      conc-list: [ 256, 512, 1024 ]
+      conc-list: [ 64, 128, 256 ]
       prefill:
-        num-worker: 2
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=2"
-      decode:
         num-worker: 1
         tp: 8
-        ep: 8
+        ep: 1
         dp-attn: false
         additional-settings:
-        - "DECODE_NODES=1"
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=1"
+
+    # 1P2D TP4
+    - spec-decoding: "mtp"
+      conc-list: [ 64, 128, 256 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=1"
 
 
