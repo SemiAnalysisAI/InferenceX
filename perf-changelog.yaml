@@ -735,6 +735,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
 
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD GPT-OSS vLLM images to v0.16.0 (MI300X/MI325X from v0.15.1, MI355X from custom v0.10.1)"
+    - "MI355X: Fix env vars (VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION), add VLLM_ROCM_USE_AITER=1, remove deprecated flags"
+    - "MI355X: Simplify compilation config to cudagraph_mode FULL_AND_PIECEWISE, add HIP_VISIBLE_DEVICES Ray fix"
+    - "Gains: fused add+rmsnorm+pad for GPT-OSS (automatic via PassManager), AITER attention block size fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/806
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.8 to v0.5.9 for AMD single-node DeepSeek R1 configs"
+    - "Key changes: AITER v0.1.10.post3 with FP8 Prefill/Decode/KV Cache, FP8 prefill attention kernel, MORI EP two-batch overlapping, OOM fix for DeepSeek weight loading"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
+
+- config-keys:
     - dsr1-fp8-mi355x-sglang-disagg
     - dsr1-fp8-mi355x-sglang-disagg-mtp
     - dsr1-fp4-mi355x-sglang-disagg
@@ -745,4 +766,3 @@
     - "Support DSR1-0528 MTP Disagg"
     - "Bump SGL mori image to Feb 27"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/823
-  
