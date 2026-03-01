@@ -71,6 +71,7 @@ JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $ISL $OSL "${CONC_LIST// /x}" inf \
     ${PREFILL_ENABLE_EP} ${PREFILL_ENABLE_DP} \
     ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP} \
+    ${PREFILL_TP} ${DECODE_TP} \
     ${RANDOM_RANGE_RATIO})
 
 if [[ $? -ne 0 ]]; then
