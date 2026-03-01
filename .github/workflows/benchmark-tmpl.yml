@@ -172,6 +172,14 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
+      - name: Upload GPU power CSV (if collected)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: gpu_power_${{ env.RESULT_FILENAME }}
+          path: gpu_power.csv
+          if-no-files-found: ignore
+
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
