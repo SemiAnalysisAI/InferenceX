@@ -205,7 +205,7 @@ kimik2.5-int4-mi355x-vllm:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.15.1
+  image: vllm/vllm-openai-rocm:v0.16
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
