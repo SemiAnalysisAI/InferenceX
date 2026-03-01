@@ -120,7 +120,7 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
+             if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
               echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
               scancel --name="${{ runner.name }}" || true
               while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
@@ -150,6 +150,9 @@ jobs:
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
+          # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
@@ -187,6 +190,14 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: multinode_server_logs_${{ env.RESULT_FILENAME }}
+          path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
 
       - name: Slurm cleanup (post-run)
         if: always()

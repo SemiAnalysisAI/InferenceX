@@ -695,6 +695,14 @@
   description:
     - "Add more configs for MI355X FP8 Disagg"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/770
+  
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.14.0 to v0.15.1 for MI300X and MI325X GPT-OSS"
+    - "Gains: ROCm skinny GEMM dispatch fix, MoRI EP all2all backend, KV cache shuffle + paged attention for AITER"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/781
 
 - config-keys:
     - kimik2.5-int4-b200-vllm
@@ -704,42 +712,59 @@
     - "Image: vllm/vllm-openai:v0.15.1"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/735
-  
+
 - config-keys:
-    # NVIDIA single-node
-    - dsr1-fp4-b200-sglang
-    - dsr1-fp4-b200-trt
-    - dsr1-fp4-b200-trt-mtp
-    - dsr1-fp8-b200-sglang
-    - dsr1-fp8-b200-sglang-mtp
-    - dsr1-fp8-b200-trt
-    - dsr1-fp8-b200-trt-mtp
-    - dsr1-fp8-h200-sglang
-    - dsr1-fp8-h200-trt
-    - dsr1-fp8-h200-trt-mtp
-    - gptoss-fp4-b200-trt
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
-    - gptoss-fp4-h200-trt
     - gptoss-fp4-h200-vllm
-    - qwen3.5-bf16-b200-sglang
-    # AMD single-node
-    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update vLLM image from v0.13.0 to v0.15.1 for NVIDIA GPT-OSS configs"
+    - "Remove deprecated async-scheduling flag (now enabled by default since v0.14.0)"
+    - "Gains: CUTLASS MoE optimizations (~8% throughput), FP4 kernel improvements (~4% E2E on B200), torch.compile cold-start fix"
+    - "v0.15.1 includes fix for prefix cache hit rate of 0% on GPT-OSS hybrid attention models"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/789
+  
+- config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
-    - dsr1-fp8-mi300x-sglang
-    - dsr1-fp8-mi325x-sglang
-    - dsr1-fp8-mi355x-sglang
-    - dsr1-fp8-mi355x-atom
-    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update search-space configurations for DSR1 FP4 MI355X ATOM and ATOM-MTP"
+    - "Comment out TP=4 configs, consolidate to TP=8 only"
+    - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
+    - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
+
+- config-keys:
     - gptoss-fp4-mi300x-vllm
     - gptoss-fp4-mi325x-vllm
     - gptoss-fp4-mi355x-vllm
-    - gptoss-fp4-mi355x-atom
-    - kimik2.5-int4-mi355x-vllm
-    - minimaxm2.5-fp8-mi355x-vllm
-    - qwen3.5-bf16-mi355x-sglang
   description:
-    - Rerun GSM8k eval results to all single-node scenarios
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/763
+    - "Update AMD GPT-OSS vLLM images to v0.16.0 (MI300X/MI325X from v0.15.1, MI355X from custom v0.10.1)"
+    - "MI355X: Fix env vars (VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION), add VLLM_ROCM_USE_AITER=1, remove deprecated flags"
+    - "MI355X: Simplify compilation config to cudagraph_mode FULL_AND_PIECEWISE, add HIP_VISIBLE_DEVICES Ray fix"
+    - "Gains: fused add+rmsnorm+pad for GPT-OSS (automatic via PassManager), AITER attention block size fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/806
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.8 to v0.5.9 for AMD single-node DeepSeek R1 configs"
+    - "Key changes: AITER v0.1.10.post3 with FP8 Prefill/Decode/KV Cache, FP8 prefill attention kernel, MORI EP two-batch overlapping, OOM fix for DeepSeek weight loading"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Add MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP4)"
+    - "New benchmark script with --trust-remote-code for MiniMaxAI/MiniMax-M2.5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - GSM8k eval results for minimax h200
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/838
   evals-only: true

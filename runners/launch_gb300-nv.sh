@@ -1,35 +1,12 @@
 #!/usr/bin/bash
 
+# This script sets up the environment and launches multi-node benchmarks
+
 set -x
-
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
-
-git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR"
-git checkout sa-submission-q1-2026
-
-echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
-uv venv
-source .venv/bin/activate
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
-
-echo "Configs available at: $SRT_REPO_DIR/"
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
+export ENROOT_ROOTFS_WRITABLE=1
 
 export MODEL_PATH=$MODEL
 
@@ -46,31 +23,62 @@ else
     exit 1
 fi
 
-export ENROOT_ROOTFS_WRITABLE=1
-
-export ISL="$ISL"
-export OSL="$OSL"
+NGINX_IMAGE="nginx:1.27.4"
 
 SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_IMAGE="nginx:1.27.4"
 NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
 
-# Create srtslurm.yaml for srtctl
+export ISL="$ISL"
+export OSL="$OSL"
+
+echo "Cloning srt-slurm repository..."
+SRT_REPO_DIR="srt-slurm"
+if [ -d "$SRT_REPO_DIR" ]; then
+    echo "Removing existing $SRT_REPO_DIR..."
+    rm -rf "$SRT_REPO_DIR"
+fi
+
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
+git checkout sa-submission-q1-2026
+
+echo "Installing srtctl..."
+export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$UV_INSTALL_DIR:$PATH"
+
+uv venv "$GITHUB_WORKSPACE/.venv"
+source "$GITHUB_WORKSPACE/.venv/bin/activate"
+uv pip install -e .
+
+if ! command -v srtctl &> /dev/null; then
+    echo "Error: Failed to install srtctl"
+    exit 1
+fi
+
+echo "Configs available at: $SRT_REPO_DIR/"
+
+# Create srtslurm.yaml for srtctl (used by both frameworks)
+SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
+
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
+
 # Resource defaults
 gpus_per_node: 4
 network_interface: ""
+
 # Path to srtctl repo root (where the configs live)
-srtctl_root: "${GITHUB_WORKSPACE}/srt-slurm"
+srtctl_root: "${SRTCTL_ROOT}"
+
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
@@ -89,12 +97,15 @@ make setup ARCH=aarch64
 
 echo "Submitting job with srtctl..."
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+# Override the job name in the config file with the runner name
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
-# Extract JOB_ID from srtctl output
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
+
+set +x
 
 if [ -z "$JOB_ID" ]; then
     echo "Error: Failed to extract JOB_ID from srtctl output"
@@ -103,20 +114,41 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
-# Wait for this specific job to complete
-echo "Waiting for job $JOB_ID to complete..."
-while [ -n "$(squeue -j $JOB_ID --noheader 2>/dev/null)" ]; do
-    echo "Job $JOB_ID still running..."
-    squeue -j $JOB_ID
-    sleep 30
-done
-echo "Job $JOB_ID completed!"
-
-echo "Collecting results..."
-
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
+LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+
+# Wait for log file to appear (also check job is still alive)
+while ! ls "$LOG_FILE" &>/dev/null; do
+    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+        echo "ERROR: Job $JOB_ID failed before creating log file"
+        scontrol show job "$JOB_ID"
+        exit 1
+    fi
+    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
+    sleep 5
+done
+
+# Poll for job completion in background
+(
+    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+        sleep 10
+    done
+) &
+POLL_PID=$!
+
+echo "Tailing LOG_FILE: $LOG_FILE"
+
+# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+
+wait $POLL_PID
+
+set -x
+
+echo "Job $JOB_ID completed!"
+echo "Collecting results..."
 
 if [ ! -d "$LOGS_DIR" ]; then
     echo "Warning: Logs directory not found at $LOGS_DIR"
@@ -125,13 +157,8 @@ fi
 
 echo "Found logs directory: $LOGS_DIR"
 
-cat $LOGS_DIR/sweep_${JOB_ID}.log
-
-for file in $LOGS_DIR/*; do
-    if [ -f "$file" ]; then
-        tail -n 500 $file
-    fi
-done
+cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
 # Find all result subdirectories
 RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
@@ -172,8 +199,12 @@ fi
 
 echo "All result files processed"
 
-# Cleanup
-echo "Cleaning up..."
-deactivate 2>/dev/null || true
-rm -rf .venv
-echo "Cleanup complete"
+# Clean up srt-slurm outputs to prevent NFS silly-rename lock files
+# from blocking the next job's checkout on this runner
+echo "Cleaning up srt-slurm outputs..."
+for i in 1 2 3 4 5; do
+    rm -rf outputs 2>/dev/null && break
+    echo "Retry $i/5: Waiting for NFS locks to release..."
+    sleep 10
+done
+find . -name '.nfs*' -delete 2>/dev/null || true

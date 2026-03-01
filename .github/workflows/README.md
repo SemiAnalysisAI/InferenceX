@@ -3,12 +3,12 @@
 In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,runner-model-sweep} ...
+usage: generate_sweep_configs.py [-h] {full-sweep,runner-model-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
 positional arguments:
-  {full-sweep,runner-model-sweep}
+  {full-sweep,runner-model-sweep,test-config}
                         Available commands
     full-sweep          Generate full sweep configurations with optional
                         filtering by model, precision, framework, runner type,
@@ -20,6 +20,9 @@ positional arguments:
                         configurations for a runner type. For instance, to
                         validate that all configs that specify an h200 runner
                         successfully run across all h200 runner nodes.
+    test-config         Generate full sweep for specific config keys.
+                        Supports wildcard patterns (* and ?) for matching
+                        multiple keys at once.
 
 options:
   -h, --help            show this help message and exit
@@ -27,7 +30,7 @@ options:
 
 ## `full-sweep` Command
 
-The `full-sweep` command generates benchmark configurations with optional filtering. It requires specifying either `--single-node` or `--multi-node`.
+The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
 usage: generate_sweep_configs.py full-sweep
@@ -42,10 +45,17 @@ usage: generate_sweep_configs.py full-sweep
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
     [--max-ep MAX_EP]
-    (--single-node | --multi-node)
+    [--single-node] [--multi-node]
 ```
 
+If neither `--single-node` nor `--multi-node` is specified, both types are generated.
+
 ### Examples
+
+**Generate all single-node and multi-node configurations (default):**
+```
+full-sweep --config-files .github/configs/nvidia-master.yaml
+```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
@@ -79,7 +89,7 @@ full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
 
 ## `runner-model-sweep` Command
 
-The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. It requires specifying either `--single-node` or `--multi-node`.
+The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
 usage: generate_sweep_configs.py runner-model-sweep
@@ -87,7 +97,7 @@ usage: generate_sweep_configs.py runner-model-sweep
     [--runner-config RUNNER_CONFIG]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
-    (--single-node | --multi-node)
+    [--single-node] [--multi-node]
 ```
 
 ### Scenario: Validating Runner Infrastructure
@@ -116,6 +126,57 @@ runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300
 ```
 
 This will only include runner nodes whose names contain "mi300x-amd"
+
+## `test-config` Command
+
+The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
+
+```
+usage: generate_sweep_configs.py test-config
+    --config-files CONFIG_FILES [CONFIG_FILES ...]
+    [--runner-config RUNNER_CONFIG]
+    --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
+    [--conc CONC [CONC ...]]
+```
+
+Config keys support **wildcard patterns** using `*` (matches any characters) and `?` (matches a single character). Patterns that match no keys will raise an error.
+
+### Examples
+
+**Test a single config by exact name:**
+```
+test-config --config-keys dsr1-fp4-b200-sglang --config-files .github/configs/nvidia-master.yaml
+```
+
+**Test multiple exact configs:**
+```
+test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files .github/configs/nvidia-master.yaml
+```
+
+**Use wildcard to test all B200 configs:**
+```
+test-config --config-keys *-b200-* --config-files .github/configs/nvidia-master.yaml
+```
+
+**Use wildcard to test all sglang configs:**
+```
+test-config --config-keys *-sglang --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+```
+
+**Use wildcard to test all dsr1 model configs:**
+```
+test-config --config-keys dsr1* --config-files .github/configs/nvidia-master.yaml
+```
+
+**Mix exact keys and patterns:**
+```
+test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/configs/nvidia-master.yaml
+```
+
+**Override concurrency for targeted testing:**
+```
+test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
+```
 
 ## Validation Architecture
 

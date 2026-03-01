@@ -161,6 +161,50 @@ jobs:
             - If jobs cannot be run, say exactly what you could not run and why
             - **Important** Modify perf-changelog.yaml for any config changes affecting performance
 
+            ## Profiling (SGLang only)
+            When asked to profile a config, dispatch the `profile.yml` workflow. **Only SGLang configs can be profiled** — the profiler uses SGLang's `/start_profile` and `/stop_profile` HTTP endpoints. Reject profiling requests for vLLM, TRT, or other frameworks.
+
+            **Syntax:**
+            ```
+            mcp__github__run_workflow(
+                owner="SemiAnalysisAI",
+                repo="InferenceX",
+                workflow_id="profile.yml",
+                ref="main",
+                inputs={
+                    "config-key": "<config-key-ending-in-sglang>",
+                    "config-file": "<.github/configs/nvidia-master.yaml or amd-master.yaml>",
+                    "conc": "<concurrency>"
+                }
+            )
+            ```
+
+            **How to map a natural-language request to inputs:**
+            The user will say something like "profile sglang b200 deepseek fp4 conc=4". Parse it as:
+            - Model: "deepseek" / "dsr1" → model-prefix `dsr1`; "gptoss" → `gptoss`; "qwen" → `qwen3.5`
+            - Precision: "fp4" / "fp8" / "bf16"
+            - Runner/hardware: "b200", "h200", "h100", "mi300x", "mi325x", "mi355x", etc.
+            - Framework: must be "sglang" (reject if not)
+            - Concurrency: "conc=N" → `"conc": "N"`. Default to `"64"` if not specified.
+
+            Construct the config-key as: `{model-prefix}-{precision}-{runner}-sglang`
+            Choose config-file: NVIDIA runners (b200, h200, h100, gb200, gb300) → `nvidia-master.yaml`; AMD runners (mi300x, mi325x, mi355x) → `amd-master.yaml`
+
+            **Available SGLang config keys:**
+            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-bf16-b200-sglang`
+            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-bf16-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
+
+            **Examples:**
+            - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: .github/configs/nvidia-master.yaml`, `conc: 4`
+            - "profile sglang mi355x dsr1 fp8" → `config-key: dsr1-fp8-mi355x-sglang`, `config-file: .github/configs/amd-master.yaml`, `conc: 64`
+
+            **After dispatch:**
+            Monitor with `mcp__github__get_workflow_run`. The profile workflow takes ~15-30 minutes. When complete, the **Perfetto relay link** is in the workflow run's step summary. Retrieve it with:
+            ```bash
+            gh run view <RUN_ID> --repo SemiAnalysisAI/InferenceX --log | grep "Perfetto Relay URL:"
+            ```
+            Post the Perfetto relay link back to the user in the comment.
+
             ## vLLM and SGLang Source Code Access
 
             You have access to vLLM and SGLang source code via the inferencemax-repos MCP server:
