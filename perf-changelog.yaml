@@ -754,3 +754,10 @@
     - "Update SGLang image from v0.5.8 to v0.5.9 for AMD single-node DeepSeek R1 configs"
     - "Key changes: AITER v0.1.10.post3 with FP8 Prefill/Decode/KV Cache, FP8 prefill attention kernel, MORI EP two-batch overlapping, OOM fix for DeepSeek weight loading"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Add MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP4)"
+    - "New benchmark script with --trust-remote-code for MiniMaxAI/MiniMax-M2.5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
