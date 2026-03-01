@@ -759,7 +759,7 @@
     - minimaxm2.5-fp8-h100-vllm
   description:
     - "Add MiniMax-M2.5 FP8 vLLM benchmark for H100"
-    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
+    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code --enable-expert-parallel"
     - "Image: vllm/vllm-openai:v0.16.0"
-    - "TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "TP=8 with expert parallel (EP=8), concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/832

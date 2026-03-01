@@ -28,6 +28,7 @@ PORT=${PORT:-8888}
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size=$TP \
+--enable-expert-parallel \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --disable-log-requests \
