@@ -23,6 +23,8 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+# following AMD andy's recipe 
+# https://www.linkedin.com/posts/andyluo77_day-0-support-of-minimax-25-on-amd-gpu-activity-7428151527309025280-hXR8/
 export VLLM_ROCM_USE_AITER=1
 
 SERVER_LOG=/workspace/server.log
