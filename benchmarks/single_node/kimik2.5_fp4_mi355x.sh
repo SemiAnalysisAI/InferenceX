@@ -26,6 +26,9 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+# Enable AMD AIter kernels for ROCm
+export VLLM_ROCM_USE_AITER=1
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
