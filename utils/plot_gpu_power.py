@@ -27,15 +27,14 @@ def load_power_csv(path: str) -> pd.DataFrame:
     # nvidia-smi columns have trailing units like " [W]", " [%]", " [MiB]"
     df.columns = [c.strip() for c in df.columns]
 
-    # Parse numeric columns (strip units)
+    # Parse numeric columns (strip units like " W", " %", " MiB")
     for col in df.columns:
         if col in ("timestamp", "name"):
             continue
-        if df[col].dtype == object:
-            df[col] = pd.to_numeric(
-                df[col].astype(str).str.replace(r"[^\d.\-]", "", regex=True),
-                errors="coerce",
-            )
+        df[col] = pd.to_numeric(
+            df[col].astype(str).str.replace(r"[^\d.\-]", "", regex=True),
+            errors="coerce",
+        )
 
     df["timestamp"] = pd.to_datetime(df["timestamp"].str.strip(), format="mixed")
     df["index"] = df["index"].astype(int)
@@ -64,7 +63,7 @@ def plot_power_per_gpu(df: pd.DataFrame, title: str, out: Path):
 
     # Power limit reference line (use first non-NaN value)
     plimit = df["power.limit [W]"].dropna().iloc[0] if "power.limit [W]" in df.columns else None
-    if plimit and plimit > 0:
+    if plimit is not None and not pd.isna(plimit) and float(plimit) > 0:
         ax.axhline(plimit, color="red", linestyle="--", alpha=0.5, label=f"Power limit ({plimit:.0f} W)")
 
     ax.set_xlabel("Elapsed Time (seconds)", fontsize=11)
