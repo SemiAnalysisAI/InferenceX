@@ -4,4 +4,4 @@
 .github/configs/amd-master.yaml @billishyahao @chunfangamd
 
 # NVIDIA master config
-.github/configs/nvidia-master.yaml @ankursingh-nv @yunzhoul-nv @kedarpotdar-nv @csahithi @jgangani
+.github/configs/nvidia-master.yaml @ankursingh-nv @kedarpotdar-nv
