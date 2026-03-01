@@ -29,10 +29,12 @@ set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size=$TP \
 --enable-expert-parallel \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
+--max-num-seqs 256 \
 --disable-log-requests \
---trust-remote-code > $SERVER_LOG 2>&1 &
+--trust-remote-code \
+--compilation-config '{"cudagraph_mode":"PIECEWISE"}' > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
