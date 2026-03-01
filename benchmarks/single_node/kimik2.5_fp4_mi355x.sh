@@ -19,6 +19,8 @@ fi
 hf download "$MODEL"
 
 # Install amd-quark for MXFP4 quantization support
+# need to manually install due to ROCm vLLM bug
+# https://github.com/vllm-project/vllm/issues/35633
 pip install amd-quark
 
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
@@ -29,6 +31,12 @@ fi
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# do not enable aiter due to Aiter MLA not currently supporting num_heads=8
+# https://github.com/vllm-project/vllm/issues/35641
+# export VLLM_ROCM_USE_AITER=1
+
+# following AMD andy luo's recipe
+# https://x.com/linluo77/status/2017024513595301985
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
