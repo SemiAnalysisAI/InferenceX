@@ -876,7 +876,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     # 1P2D TP8
-    - spec-decoding: "mtp" 
+    - spec-decoding: "none" 
       conc-list: [ 64, 128, 256 ]
       prefill:
         num-worker: 1
@@ -895,7 +895,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     # 1P2D TP4
-    - spec-decoding: "mtp" 
+    - spec-decoding: "none" 
       conc-list: [ 64, 128, 256 ]
       prefill:
         num-worker: 1
@@ -937,7 +937,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     # 1P2D TP8
-    - spec-decoding: "mtp"
+    - spec-decoding: "none"
       conc-list: [ 2, 4, 8, 16, 32 ]
       prefill:
         num-worker: 1
@@ -956,7 +956,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     # 1P2D TP8
-    - spec-decoding: "mtp"
+    - spec-decoding: "none"
       conc-list: [ 64, 128, 256 ]
       prefill:
         num-worker: 1
@@ -975,7 +975,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
     # 1P2D TP4
-    - spec-decoding: "mtp"
+    - spec-decoding: "none"
       conc-list: [ 64, 128, 256 ]
       prefill:
         num-worker: 1
