@@ -762,5 +762,6 @@
     - "Model: amd/MiniMax-M2.1-MXFP4 with --trust-remote-code and --block-size=32"
     - "Image: vllm/vllm-openai-rocm:v0.16.0"
     - "Environment: VLLM_ROCM_USE_AITER=1"
-    - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "TP=2 only (TP=4 disabled due to vLLM bug https://github.com/vllm-project/vllm/issues/35637)"
+    - "Concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
