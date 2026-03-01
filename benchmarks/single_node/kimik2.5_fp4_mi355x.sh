@@ -18,6 +18,9 @@ fi
 
 hf download "$MODEL"
 
+# Install amd-quark for MXFP4 quantization support
+pip install amd-quark
+
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
