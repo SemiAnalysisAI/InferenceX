@@ -800,3 +800,13 @@
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
     - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
+
+- config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang benchmark for H200 single node"
+    - "Model: zai-org/GLM-5-FP8, Image: lmsysorg/sglang:glm5-hopper"
+    - "TP=8, DP=8, --enable-dp-attention for MoE-optimized attention"
+    - "EAGLE speculative decoding (num-steps=3, draft-tokens=4, topk=1)"
+    - "Following official SGLang cookbook: https://cookbook.sglang.io/autoregressive/GLM/GLM-5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
