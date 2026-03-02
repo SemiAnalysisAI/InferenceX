@@ -167,14 +167,14 @@ jobs:
           python3 utils/process_result.py
 
       - name: Upload result
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload server logs
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: server_logs_${{ env.RESULT_FILENAME }}
           path: server.log
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload eval results (if any)
         if: ${{ env.RUN_EVAL == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
           path: |
