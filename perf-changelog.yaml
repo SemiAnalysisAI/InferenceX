@@ -769,6 +769,6 @@
     - "Add MiniMax-M2.5 FP8 vLLM benchmark for H100"
     - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
     - "Image: vllm/vllm-openai:v0.16.0"
-    - "TP=8, EP=8 (config-driven), concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Switch from TP=8/EP=8 to TP=4/EP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k"
     - "Script uses conditional --enable-expert-parallel based on EP_SIZE env var"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/832
