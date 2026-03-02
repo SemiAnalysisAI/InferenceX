@@ -743,3 +743,84 @@
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD GPT-OSS vLLM images to v0.16.0 (MI300X/MI325X from v0.15.1, MI355X from custom v0.10.1)"
+    - "MI355X: Fix env vars (VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION), add VLLM_ROCM_USE_AITER=1, remove deprecated flags"
+    - "MI355X: Simplify compilation config to cudagraph_mode FULL_AND_PIECEWISE, add HIP_VISIBLE_DEVICES Ray fix"
+    - "Gains: fused add+rmsnorm+pad for GPT-OSS (automatic via PassManager), AITER attention block size fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/806
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update SGLang image from v0.5.8 to v0.5.9 for AMD single-node DeepSeek R1 configs"
+    - "Key changes: AITER v0.1.10.post3 with FP8 Prefill/Decode/KV Cache, FP8 prefill attention kernel, MORI EP two-batch overlapping, OOM fix for DeepSeek weight loading"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Add MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP4)"
+    - "New benchmark script with --trust-remote-code for MiniMaxAI/MiniMax-M2.5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM benchmark for MI325X"
+    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
+    - "Image: vllm/vllm-openai-rocm:v0.16.0"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/836
+
+- config-keys:
+    - minimaxm2.5-fp8-mi300x-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM benchmark for MI300X"
+    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
+    - "Image: vllm/vllm-openai-rocm:v0.16.0"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/837
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Add Kimi-K2.5 MXFP4 vLLM benchmark for MI355X"
+    - "Model: amd/Kimi-K2.5-MXFP4 with --mm-encoder-tp-mode data and --trust-remote-code"
+    - "Image: vllm/vllm-openai-rocm:v0.15.1"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/825
+
+- config-keys:
+    - qwen3.5-bf16-mi325x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 SGLang benchmark for MI325X"
+    - "Image: lmsysorg/sglang:v0.5.9-rocm720-mi30x"
+    - "Uses triton attention backend, TP=8, concurrency 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - qwen3.5-bf16-mi300x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 SGLang benchmark for MI300X"
+    - "Image: lmsysorg/sglang:v0.5.9-rocm720-mi30x"
+    - "Uses triton attention backend, TP=8, concurrency 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/843
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark for MI325X"
+    - "Image: lmsysorg/sglang:v0.5.9-rocm720-mi30x"
+    - "Following AMD Andy Luo's recipe with triton attention backend"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
