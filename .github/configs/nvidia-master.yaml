@@ -1826,28 +1826,6 @@ kimik2.5-int4-b200-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
-kimik2.5-int4-h200-vllm:
-  image: vllm/vllm-openai:v0.16.0
-  model: moonshotai/Kimi-K2.5
-  model-prefix: kimik2.5
-  runner: h200
-  precision: int4
-  framework: vllm
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
-  - isl: 1024
-    osl: 8192
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
-
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.8-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528

@@ -790,13 +790,3 @@
     - "Image: vllm/vllm-openai-rocm:v0.15.1"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/825
-
-- config-keys:
-    - kimik2.5-int4-h200-vllm
-  description:
-    - "Add Kimi-K2.5 INT4 vLLM benchmark for H200"
-    - "Model: moonshotai/Kimi-K2.5 with --reasoning-parser kimi_k2 and --trust-remote-code"
-    - "Image: vllm/vllm-openai:v0.16.0"
-    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
-    - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
