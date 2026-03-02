@@ -21,8 +21,8 @@ nvidia-smi
 hf download "$MODEL"
 
 export NCCL_NVLS_ENABLE=1
-export SGL_ENABLE_JIT_DEEPGEMM=true
-export SGLANG_ENABLE_FLASHINFER_GEMM=false
+export SGL_ENABLE_JIT_DEEPGEMM=false
+export SGLANG_ENABLE_FLASHINFER_GEMM=true
 export PYTHONUNBUFFERED=1
 
 SERVER_LOG=/workspace/server.log
