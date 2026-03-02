@@ -46,7 +46,7 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---served-model-name "Qwen/Qwen3.5-397B-A17B-FP8" --trust-remote-code \
+--trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
 --quantization fp8 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
