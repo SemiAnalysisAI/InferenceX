@@ -470,6 +470,8 @@ def _le_parse_generations(outputs, **kwargs):
                   tmp[idx] = content
           except Exception:
               tmp = [""]
+          if not tmp:
+              tmp = [""]
           res.extend(tmp)
       return res
 
