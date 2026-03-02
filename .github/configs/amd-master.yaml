@@ -492,7 +492,7 @@ dsr1-fp8-mi355x-sglang-disagg:
         ep: 16
         dp-attn: true
         additional-settings:
-        - "DECODE_NODES=2"
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
     # "Middle of curve" (1 prefill workers each at TP8 and 2 decode workers at DEP8)
@@ -647,7 +647,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         ep: 16
         dp-attn: true
         additional-settings:
-        - "DECODE_NODES=2"
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=1"
 
     # "Middle of curve" (1 prefill worker at TP8 and 2 decode workers each at DEP8)
