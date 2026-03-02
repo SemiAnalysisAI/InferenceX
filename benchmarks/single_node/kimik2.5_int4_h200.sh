@@ -25,6 +25,8 @@ export PYTHONNOUSERSITE=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html recipe
+
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.95 \
