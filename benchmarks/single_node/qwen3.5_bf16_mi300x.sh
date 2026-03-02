@@ -20,6 +20,7 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# following Andy Luo linkedin's recipe https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
 python3 -m sglang.launch_server \
     --attention-backend triton \
     --model-path $MODEL \
