@@ -20,8 +20,8 @@ h100-multinode:
 - 'h100-dgxc-slurm_10'
 - 'h100-dgxc-slurm_11'
 h200:
-- 'h200-cw_0'
-- 'h200-cw_1'
+- 'h200-cw_2'
+- 'h200-cw_3'
 - 'h200-nb_0'
 - 'h200-nb_1'
 - 'h200-dgxc-slurm_0'
@@ -71,7 +71,6 @@ mi300x:
 - 'mi300x-amd_2'
 - 'mi300x-amd_3'
 - 'mi300x-amd_4'
-- 'mi300x-cr_0'
 - 'mi300x-amds_0'
 - 'mi300x-amds_1'
 - 'mi300x-amds_2'
