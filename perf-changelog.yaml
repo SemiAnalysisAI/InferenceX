@@ -824,3 +824,12 @@
     - "Uses triton attention backend, TP=8, concurrency 4-64"
     - "Following AMD Andy Luo's recipe"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/850
+  
+- config-keys:
+    - gptoss-fp4-h200-trt
+  description:
+    - "Upgrade TensorRT-LLM container from release:gpt-oss-dev to release:v1.3.0rc5"
+    - "Remove sed hack for TensorRT bug (fixed upstream in v1.3.0rc5)"
+    - "Remove enable_block_reuse: false from kv_cache_config (default true is now recommended)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/854
+  
