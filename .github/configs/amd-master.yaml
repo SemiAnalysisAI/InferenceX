@@ -652,7 +652,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
     # "Middle of curve" (1 prefill worker at TP8 and 2 decode workers each at DEP8)
     - spec-decoding: "mtp"
-      conc-list: [ 1536, 1024, 512, 256 ]
+      conc-list: [ 1536, 1024, 512 ]
       prefill:
         num-worker: 1
         tp: 8
