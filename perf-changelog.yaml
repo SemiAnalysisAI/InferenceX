@@ -824,3 +824,12 @@
     - "Uses triton attention backend, TP=8, concurrency 4-64"
     - "Following AMD Andy Luo's recipe"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/850
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B200 SGLang benchmark config and launch script"
+    - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Configs: 1k1k (conc 4-64 ep1, conc 128 ep8), 1k8k (conc 4-128 ep1), 8k1k (conc 4-128 ep1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
