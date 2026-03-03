@@ -835,7 +835,7 @@
     - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
   
- - config-keys: 
+- config-keys: 
     - qwen3.5-fp8-h200-sglang
   description:
     - "Add Qwen 3.5 FP8 H200 SGLang configuration"
