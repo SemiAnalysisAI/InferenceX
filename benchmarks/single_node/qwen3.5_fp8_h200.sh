@@ -10,8 +10,7 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE \
-    MAX_SEQ_LEN 
+    EP_SIZE 
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -23,7 +22,7 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
-MAX_SEQ_LEN=${MAX_MODEL_LEN:-$((ISL + OSL + 128))}
+MAX_SEQ_LEN=$((ISL + OSL + 20))
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 
