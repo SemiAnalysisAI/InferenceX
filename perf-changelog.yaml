@@ -844,3 +844,13 @@
     - "Switch from TP=8/EP=8 to TP=4/EP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k"
     - "Script uses conditional --enable-expert-parallel based on EP_SIZE env var"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/832
+
+- config-keys:
+    - kimik2.5-int4-mi300x-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 vLLM benchmark for MI300X"
+    - "Model: moonshotai/Kimi-K2.5 with --mm-encoder-tp-mode data and --trust-remote-code"
+    - "Image: vllm/vllm-openai-rocm:v0.16.0"
+    - "Following AMD Andy Luo's recipe: https://x.com/linluo77/status/2017024513595301985"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
