@@ -1,4 +1,13 @@
 - config-keys:
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Add Qwen 3.5 FP8 H200 SGLang configuration"
+    - "Model: Qwen/Qwen3.5-397B-A17B-FP8, runner: h200, image: lmsysorg/sglang:v0.5.8-cu130-amd64"
+    - "Benchmark script: benchmarks/single_node/qwen3.5_fp8_h200.sh"
+    - "Server: reasoning-parser qwen3, tool-call-parser qwen3_coder, enable-flashinfer-allreduce-fusion, mem-fraction-static 0.8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
