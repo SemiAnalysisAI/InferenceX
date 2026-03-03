@@ -10,7 +10,8 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE
+    EP_SIZE \
+    MAX_SEQ_LEN 
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -22,8 +23,9 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+MAX_SEQ_LEN=${MAX_MODEL_LEN:-$((ISL + OSL + 128))}
 
-echo "CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 
 set -x
 python3 -m sglang.launch_server \
@@ -34,7 +36,21 @@ python3 -m sglang.launch_server \
   --reasoning-parser qwen3 \
   --tool-call-parser qwen3_coder \
   --enable-flashinfer-allreduce-fusion \
+  --max-running-requests 128 \
+  --chunked-prefill-size 16384 \
+  --decode-log-interval 1 \
   --mem-fraction-static 0.8 \
+  --cuda-graph-max-bs "$CONC" \
+  --context-length "$MAX_SEQ_LEN" \
+  --max-prefill-tokens 16384 \
+  --kv-cache-dtype fp8_e4m3 \
+  --quantization fp8 \
+  --attention-backend flashinfer \
+  --stream-interval 50 \
+  --moe-runner-backend auto \
+  --tokenizer-worker-num 6 \
+  --mamba-ssm-dtype bfloat16 \
+  --disable-radix-cache \
   --trust-remote-code \
   > "$SERVER_LOG" 2>&1 &
 
