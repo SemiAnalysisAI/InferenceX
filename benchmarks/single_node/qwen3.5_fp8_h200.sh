@@ -5,7 +5,6 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    EP \
     CONC \
     ISL \
     OSL \
