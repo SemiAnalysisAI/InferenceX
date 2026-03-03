@@ -20,16 +20,23 @@ import sys
 from collections import defaultdict
 
 
-# Column name mappings for different tool outputs
+# Column name mappings for different tool outputs (nvidia-smi, amd-smi, rocm-smi)
 COLUMN_ALIASES = {
     'gpu_id': ['index', 'gpu', 'device'],
-    'power': ['power.draw [W]', 'power', 'power_socket_power', 'socket_power', 'average_socket_power'],
-    'power_limit': ['power.limit [W]', 'power_cap', 'power_limit', 'slowdown_power_cap'],
-    'temp_edge': ['temperature.gpu', 'temperature_edge', 'temp_edge', 'temperature_hotspot_current'],
-    'temp_junction': ['temperature.junction', 'temperature_hotspot', 'temp_junction', 'temperature_mem_current'],
-    'gpu_util': ['utilization.gpu [%]', 'gfx_activity', 'gpu_util', 'gfx_activity_acc'],
-    'mem_used': ['memory.used [MiB]', 'fb_used', 'vram_used', 'mem_used'],
-    'mem_total': ['memory.total [MiB]', 'fb_total', 'vram_total', 'mem_total'],
+    'power': ['power.draw [W]', 'power', 'power_socket_power', 'socket_power',
+              'average_socket_power', 'Average Graphics Package Power (W)'],
+    'power_limit': ['power.limit [W]', 'power_cap', 'power_limit', 'slowdown_power_cap',
+                    'Max Graphics Package Power (W)'],
+    'temp_edge': ['temperature.gpu', 'temperature_edge', 'temp_edge',
+                  'temperature_hotspot_current', 'Temperature (Sensor edge) (C)'],
+    'temp_junction': ['temperature.junction', 'temperature_hotspot', 'temp_junction',
+                      'temperature_mem_current', 'Temperature (Sensor junction) (C)'],
+    'gpu_util': ['utilization.gpu [%]', 'gfx_activity', 'gpu_util', 'gfx_activity_acc',
+                 'GPU use (%)'],
+    'mem_used': ['memory.used [MiB]', 'fb_used', 'vram_used', 'mem_used',
+                 'VRAM Total Used Memory (B)'],
+    'mem_total': ['memory.total [MiB]', 'fb_total', 'vram_total', 'mem_total',
+                  'VRAM Total Memory (B)'],
 }
 
 
@@ -93,10 +100,14 @@ def parse_csv(filepath):
                 d['util'].append(parse_float(row.get(col_util, '0')))
             if col_mem_used:
                 val = parse_float(row.get(col_mem_used, '0'))
-                # amd-smi reports memory in MB, nvidia-smi in MiB
+                # rocm-smi reports memory in bytes; convert to MiB
+                if '(B)' in (col_mem_used or ''):
+                    val = val / (1024 * 1024)
                 d['mem_used'].append(val)
             if col_mem_total:
                 val = parse_float(row.get(col_mem_total, '0'))
+                if '(B)' in (col_mem_total or ''):
+                    val = val / (1024 * 1024)
                 d['mem_total'].append(val)
 
     return data

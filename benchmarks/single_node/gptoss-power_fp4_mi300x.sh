@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Experimental: gptoss fp4 mi300x benchmark with GPU power monitoring
-# Uses amd-smi metric --csv for native CSV power/temp/utilization logging
+# Uses amd-smi or rocm-smi --csv for native CSV power/temp/utilization logging
 #
 
 source "$(dirname "$0")/../benchmark_lib.sh"
@@ -42,11 +42,29 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# --- GPU Power Monitoring (amd-smi native CSV, 1-second intervals) ---
+# --- GPU Power Monitoring (CSV, 1-second intervals) ---
 GPU_POWER_CSV="/workspace/gpu_power_${RESULT_FILENAME}.csv"
 echo "Starting GPU power monitoring -> $GPU_POWER_CSV"
-amd-smi metric -p -t -u -b --csv -w 1 > "$GPU_POWER_CSV" 2>/dev/null &
-POWER_MONITOR_PID=$!
+
+if command -v amd-smi &>/dev/null; then
+    echo "Using amd-smi for power monitoring"
+    amd-smi metric -p -t -u -b --csv -w 1 > "$GPU_POWER_CSV" 2>/dev/null &
+    POWER_MONITOR_PID=$!
+elif command -v rocm-smi &>/dev/null; then
+    echo "Using rocm-smi for power monitoring (amd-smi not found)"
+    (
+        # Write header once, then append data rows every second
+        rocm-smi --showpower --showtemp --showuse --showmeminfo vram --csv | head -1 > "$GPU_POWER_CSV"
+        while true; do
+            rocm-smi --showpower --showtemp --showuse --showmeminfo vram --csv | tail -n +2 >> "$GPU_POWER_CSV"
+            sleep 1
+        done
+    ) &
+    POWER_MONITOR_PID=$!
+else
+    echo "WARNING: Neither amd-smi nor rocm-smi found. Skipping GPU power monitoring."
+    POWER_MONITOR_PID=""
+fi
 echo "Power monitor PID: $POWER_MONITOR_PID"
 
 set -x
@@ -78,8 +96,10 @@ run_benchmark_serving \
 set +x
 
 # Stop power monitoring
-kill $POWER_MONITOR_PID 2>/dev/null
-wait $POWER_MONITOR_PID 2>/dev/null
+if [ -n "$POWER_MONITOR_PID" ]; then
+    kill $POWER_MONITOR_PID 2>/dev/null
+    wait $POWER_MONITOR_PID 2>/dev/null
+fi
 
 # Print power summary
 if [ -f "$GPU_POWER_CSV" ]; then
