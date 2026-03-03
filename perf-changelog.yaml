@@ -880,7 +880,5 @@
   description:
     - "Add Kimi K2.5 NVFP4 vLLM benchmark configuration for B200"
     - "Model: nvidia/Kimi-K2.5-NVFP4 with --reasoning-parser kimi_k2 and --trust-remote-code"
-    - "Image: vllm/vllm-openai:v0.15.1"
-    - "TP=8/EP=1 (conc 4-128) and TP=4/EP=4 (conc 4-64) for 1k1k, 1k8k, and 8k1k"
-    - "Enables fuse_allreduce_rms compilation pass"
+    - "Image: vllm/vllm-openai:v0.16.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/862
