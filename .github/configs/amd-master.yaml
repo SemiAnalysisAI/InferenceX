@@ -160,11 +160,99 @@ qwen3.5-bf16-mi355x-sglang:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+qwen3.5-bf16-mi300x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  runner: mi300x
+  precision: bf16
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+qwen3.5-bf16-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  runner: mi325x
+  precision: bf16
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+qwen3.5-fp8-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
 qwen3.5-fp8-mi355x-sglang:
   image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260218
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
+qwen3.5-fp8-mi300x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: mi300x
   precision: fp8
   framework: sglang
   multinode: false
@@ -204,30 +292,27 @@ kimik2.5-int4-mi355x-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
-minimaxm2.5-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.15.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
+kimik2.5-fp4-mi355x-vllm:
+  image: vllm/vllm-openai-rocm:v0.16.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
   runner: mi355x
-  precision: fp8
+  precision: fp4
   framework: vllm
   multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
 
 minimaxm2.1-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
@@ -256,6 +341,81 @@ minimaxm2.1-fp4-mi355x-vllm:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     # TP=4 disabled due to vLLM bug: https://github.com/vllm-project/vllm/issues/35637
     # - { tp: 4, conc-start: 4, conc-end: 64 }
+
+minimaxm2.5-fp8-mi355x-vllm:
+  image: vllm/vllm-openai-rocm:v0.15.1
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+
+minimaxm2.5-fp8-mi300x-vllm:
+  image: vllm/vllm-openai-rocm:v0.16.0
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+
+minimaxm2.5-fp8-mi325x-vllm:
+  image: vllm/vllm-openai-rocm:v0.16.0
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
