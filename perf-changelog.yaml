@@ -826,12 +826,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/850
 
 - config-keys:
+    - kimik2.5-int4-h200-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 vLLM benchmark for H200"
+    - "Model: moonshotai/Kimi-K2.5 with --reasoning-parser kimi_k2 and --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.16.0"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
+  
+- config-keys:
     - qwen3.5-fp8-b200-sglang
   description:
     - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark configuration for B200"
     - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
     - "Uses trtllm_mha attention backend and flashinfer_trtllm MOE runner"
     - "Enable SGLANG_ENABLE_FLASHINFER_GEMM=true, NCCL_NVLS_ENABLE=1"
-    - "Add --mamba-ssm-dtype bfloat16 and --quantization fp8 --kv-cache-dtype fp8_e4m3"
-    - "1k1k: TP=4/EP=4 (conc 4-16, 64), 1k8k: TP=8/EP=1 (conc 4-8) + TP=4/EP=4 (conc 8-64), 8k1k: TP=8/EP=1 (conc 4) + TP=4/EP=4 (conc 8-64)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/804
