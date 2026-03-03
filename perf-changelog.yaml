@@ -806,7 +806,7 @@
     - "Add Qwen3.5-397B-A17B BF16 SGLang benchmark for MI325X"
     - "Image: lmsysorg/sglang:v0.5.9-rocm720-mi30x"
     - "Uses triton attention backend, TP=8, concurrency 4-64"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/762
 
 - config-keys:
     - qwen3.5-bf16-mi300x-sglang
@@ -824,3 +824,32 @@
     - "Following AMD Andy Luo's recipe with triton attention backend"
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark for MI300X"
+    - "Image: lmsysorg/sglang:v0.5.9-rocm720-mi30x"
+    - "Uses triton attention backend, TP=8, concurrency 4-64"
+    - "Following AMD Andy Luo's recipe"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/850
+
+- config-keys:
+    - kimik2.5-int4-h200-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 vLLM benchmark for H200"
+    - "Model: moonshotai/Kimi-K2.5 with --reasoning-parser kimi_k2 and --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.16.0"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
+
+- config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM benchmark for H100"
+    - "Model: MiniMaxAI/MiniMax-M2.5 with --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.16.0"
+    - "Switch from TP=8/EP=8 to TP=4/EP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k"
+    - "Script uses conditional --enable-expert-parallel based on EP_SIZE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/832
