@@ -64,7 +64,7 @@ on:
         type: string
 
 env:
-  RANDOM_RANGE_RATIO: 0.8
+  RANDOM_RANGE_RATIO: 1
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
