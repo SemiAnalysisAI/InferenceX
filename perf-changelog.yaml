@@ -829,8 +829,9 @@
     - qwen3.5-fp8-b200-sglang
   description:
     - "Add Qwen3.5-397B-A17B-FP8 SGLang benchmark configuration for B200"
-    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
-    - "Enable DeepGEMM JIT backend (SGL_ENABLE_JIT_DEEPGEMM=true)"
+    - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
     - "Uses trtllm_mha attention backend and flashinfer_trtllm MOE runner"
-    - "TP=4/EP=4 for 1k1k, TP=8/EP=1 for 1k8k, TP=4/EP=1 for 8k1k, concurrency 4-64"
+    - "Enable SGLANG_ENABLE_FLASHINFER_GEMM=true, NCCL_NVLS_ENABLE=1"
+    - "Add --mamba-ssm-dtype bfloat16 and --quantization fp8 --kv-cache-dtype fp8_e4m3"
+    - "1k1k: TP=4/EP=4 (conc 4-16, 64), 1k8k: TP=8/EP=1 (conc 4-8) + TP=4/EP=4 (conc 8-64), 8k1k: TP=8/EP=1 (conc 4) + TP=4/EP=4 (conc 8-64)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/804
