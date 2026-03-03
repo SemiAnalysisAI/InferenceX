@@ -3109,6 +3109,31 @@ gptoss-fp4-h100-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
+minimaxm2.5-fp8-h100-vllm:
+  image: vllm/vllm-openai:v0.16.0
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: h100
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
   model: deepseek-ai/DeepSeek-R1-0528
