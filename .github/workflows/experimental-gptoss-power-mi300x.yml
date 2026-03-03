@@ -1,0 +1,79 @@
+name: "[Experimental] gptoss MI300X GPU Power"
+run-name: "gptoss MI300X Power - ${{ inputs.isl_osl }} TP${{ inputs.tp }} conc${{ inputs.conc }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      isl_osl:
+        description: "ISL/OSL config"
+        required: true
+        type: choice
+        options:
+          - "1k8k"
+          - "1k1k"
+          - "8k1k"
+        default: "1k8k"
+      tp:
+        description: "Tensor parallelism"
+        required: true
+        type: choice
+        options:
+          - "4"
+          - "2"
+          - "8"
+        default: "4"
+      conc:
+        description: "Concurrency"
+        required: true
+        type: choice
+        options:
+          - "4"
+          - "8"
+          - "16"
+          - "32"
+          - "64"
+        default: "4"
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
+
+jobs:
+  resolve-params:
+    runs-on: ubuntu-latest
+    outputs:
+      isl: ${{ steps.params.outputs.isl }}
+      osl: ${{ steps.params.outputs.osl }}
+      max-model-len: ${{ steps.params.outputs.max-model-len }}
+    steps:
+      - id: params
+        run: |
+          case "${{ inputs.isl_osl }}" in
+            1k1k) echo "isl=1024" >> $GITHUB_OUTPUT; echo "osl=1024" >> $GITHUB_OUTPUT; echo "max-model-len=4096" >> $GITHUB_OUTPUT ;;
+            1k8k) echo "isl=1024" >> $GITHUB_OUTPUT; echo "osl=8192" >> $GITHUB_OUTPUT; echo "max-model-len=16384" >> $GITHUB_OUTPUT ;;
+            8k1k) echo "isl=8192" >> $GITHUB_OUTPUT; echo "osl=1024" >> $GITHUB_OUTPUT; echo "max-model-len=16384" >> $GITHUB_OUTPUT ;;
+          esac
+
+  benchmark:
+    needs: resolve-params
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      exp-name: "gptoss-power_${{ inputs.isl_osl }}"
+      isl: ${{ needs.resolve-params.outputs.isl }}
+      osl: ${{ needs.resolve-params.outputs.osl }}
+      max-model-len: ${{ needs.resolve-params.outputs.max-model-len }}
+      runner: mi300x
+      image: "vllm/vllm-openai-rocm:v0.16.0"
+      model: "openai/gpt-oss-120b"
+      model-prefix: "gptoss-power"
+      framework: vllm
+      precision: fp4
+      tp: ${{ inputs.tp }}
+      ep: "1"
+      dp-attn: false
+      conc: ${{ inputs.conc }}
+      spec-decoding: "none"
+      disagg: "false"
+      run-eval: false
+      ref: ${{ github.ref }}
