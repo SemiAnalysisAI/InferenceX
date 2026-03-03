@@ -46,20 +46,10 @@ PORT=${PORT:-8888}
 GPU_POWER_CSV="/workspace/gpu_power_${RESULT_FILENAME}.csv"
 echo "Starting GPU power monitoring -> $GPU_POWER_CSV"
 
-# Use amd-smi --csv if available, else rocm-smi --csv.
-# Note: amd-smi -w (watch mode) is broken in some versions, so we use a loop.
-if command -v amd-smi &>/dev/null && amd-smi metric -p --csv 2>&1 | head -2 | grep -q ','; then
-    echo "Using amd-smi for power monitoring"
-    (
-        amd-smi metric -p -t -u -b --csv 2>/dev/null | head -1 > "$GPU_POWER_CSV"
-        while true; do
-            amd-smi metric -p -t -u -b --csv 2>/dev/null | tail -n +2 >> "$GPU_POWER_CSV"
-            sleep 1
-        done
-    ) &
-    POWER_MONITOR_PID=$!
-elif command -v rocm-smi &>/dev/null; then
-    echo "Using rocm-smi for power monitoring"
+# rocm-smi --csv is reliable across Docker/enroot containers.
+# amd-smi --csv has issues in container environments (broken watch mode, silent failures).
+if command -v rocm-smi &>/dev/null; then
+    echo "Using rocm-smi --csv for power monitoring (1s intervals)"
     (
         rocm-smi --showpower --showtemp --showuse --showmeminfo vram --csv | head -1 > "$GPU_POWER_CSV"
         while true; do
@@ -69,7 +59,7 @@ elif command -v rocm-smi &>/dev/null; then
     ) &
     POWER_MONITOR_PID=$!
 else
-    echo "WARNING: Neither amd-smi nor rocm-smi found. Skipping GPU power monitoring."
+    echo "WARNING: rocm-smi not found. Skipping GPU power monitoring."
     POWER_MONITOR_PID=""
 fi
 echo "Power monitor PID: $POWER_MONITOR_PID"
