@@ -24,6 +24,14 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+if [ "$TP" -ge 4 ]; then
+    # AITER CK fused MoE kernels lack compiled tiles for N=intermediate_size/TP
+    # when TP>=4 (TP=4, N=384). Disable AITER MoE to fall back to triton, but keep
+    # AITER attention. See: https://github.com/vllm-project/vllm/issues/35637
+    export VLLM_ROCM_USE_AITER_MOE=0
+    export VLLM_ATTENTION_BACKEND="ROCM_AITER_UNIFIED_ATTN"
+    pip install amd-quark 2>/dev/null || true
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
