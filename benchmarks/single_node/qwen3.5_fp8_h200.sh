@@ -32,6 +32,7 @@ python3 -m sglang.launch_server \
   --host 0.0.0.0 \
   --port "$PORT" \
   --tp "$TP" \
+  --expert-parallel-size "$EP" \
   --reasoning-parser qwen3 \
   --tool-call-parser qwen3_coder \
   --enable-flashinfer-allreduce-fusion \
