@@ -46,15 +46,21 @@ PORT=${PORT:-8888}
 GPU_POWER_CSV="/workspace/gpu_power_${RESULT_FILENAME}.csv"
 echo "Starting GPU power monitoring -> $GPU_POWER_CSV"
 
-# Validate that amd-smi produces real CSV output (binary may exist but be non-functional)
+# Use amd-smi --csv if available, else rocm-smi --csv.
+# Note: amd-smi -w (watch mode) is broken in some versions, so we use a loop.
 if command -v amd-smi &>/dev/null && amd-smi metric -p --csv 2>&1 | head -2 | grep -q ','; then
     echo "Using amd-smi for power monitoring"
-    amd-smi metric -p -t -u -b --csv -w 1 > "$GPU_POWER_CSV" 2>/dev/null &
+    (
+        amd-smi metric -p -t -u -b --csv 2>/dev/null | head -1 > "$GPU_POWER_CSV"
+        while true; do
+            amd-smi metric -p -t -u -b --csv 2>/dev/null | tail -n +2 >> "$GPU_POWER_CSV"
+            sleep 1
+        done
+    ) &
     POWER_MONITOR_PID=$!
 elif command -v rocm-smi &>/dev/null; then
     echo "Using rocm-smi for power monitoring"
     (
-        # Write header once, then append data rows every second
         rocm-smi --showpower --showtemp --showuse --showmeminfo vram --csv | head -1 > "$GPU_POWER_CSV"
         while true; do
             rocm-smi --showpower --showtemp --showuse --showmeminfo vram --csv | tail -n +2 >> "$GPU_POWER_CSV"
