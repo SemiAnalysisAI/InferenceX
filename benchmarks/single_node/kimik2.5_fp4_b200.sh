@@ -5,7 +5,6 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -29,8 +28,7 @@ PORT=${PORT:-8888}
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---tensor-parallel-size $TP \
---expert-parallel-size $EP_SIZE \
+--tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
