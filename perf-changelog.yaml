@@ -875,3 +875,10 @@
     - "Server: reasoning-parser qwen3, tool-call-parser qwen3_coder, enable-flashinfer-allreduce-fusion, mem-fraction-static 0.8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/855
 
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Add Kimi K2.5 NVFP4 vLLM benchmark configuration for B200"
+    - "Model: nvidia/Kimi-K2.5-NVFP4 with --reasoning-parser kimi_k2 and --trust-remote-code"
+    - "Image: vllm/vllm-openai:v0.16.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/862
