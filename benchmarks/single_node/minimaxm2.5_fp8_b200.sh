@@ -23,6 +23,8 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+export VLLM_USE_FLASHINFER_MOE_FP8=0
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
