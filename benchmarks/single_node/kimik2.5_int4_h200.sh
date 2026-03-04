@@ -18,42 +18,33 @@ fi
 
 hf download "$MODEL"
 
-# If the machine runs a MEC FW older than 177, RCCL
-# cannot reclaim some memory.
-# Disable that features to avoid crashes.
-# This is related to the changes in the driver at:
-# https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
-version=`rocm-smi --showfw | grep MEC | head -n 1 |  awk '{print $NF}'`
-if [[ "$version" == "" || $version -lt 177 ]]; then
-  export HSA_NO_SCRATCH_RECLAIM=1
-fi
+nvidia-smi
 
-# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
-if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1
-export VLLM_ROCM_USE_AITER_MHA=0
+export PYTHONNOUSERSITE=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html recipe
+
 set -x
-vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
+vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.95 \
+--tensor-parallel-size $TP \
 --max-model-len $MAX_MODEL_LEN \
---compilation-config  '{"cudagraph_mode": "FULL_AND_PIECEWISE"}' \
---block-size=64 \
---no-enable-prefix-caching \
+--max-num-seqs $CONC \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
+--trust-remote-code \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -62,10 +53,11 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

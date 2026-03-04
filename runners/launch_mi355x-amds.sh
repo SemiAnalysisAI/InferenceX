@@ -34,7 +34,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
-    export MODEL_NAME="DeepSeek-R1"
+    export MODEL_NAME=${MODEL##*/}
     export MODEL_PATH="/it-share/data"
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104
