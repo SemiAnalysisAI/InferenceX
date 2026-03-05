@@ -1913,6 +1913,20 @@ async def main() -> None:
         warmup_runtime_sec=warmup_runtime_sec,
     )
 
+    # Write benchmark metadata (timing, params, summary stats)
+    metadata = {
+        "benchmark_runtime_sec": benchmark_runtime_sec,
+        "warmup_runtime_sec": warmup_runtime_sec,
+        "num_requests": len(client_metrics),
+        "requests_per_sec": requests_per_sec,
+        "params": params,
+    }
+    metrics_dir = Path(args.metrics_output).parent
+    metadata_path = metrics_dir / "benchmark_metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    logger.info(f"{Color.GREEN}Wrote benchmark metadata to {metadata_path}{Color.RESET}")
+
     if args.output_file is not None:
         # Write a JSON file with the updated conversations
         # The "assistant" content will contain the answers from the tested LLM

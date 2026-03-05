@@ -9,6 +9,7 @@ Usage:
     python plot_pareto.py ~/sweep_results_20260204_062339
 """
 
+import json
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -57,7 +58,22 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
         offload = parts[2].replace("offload", "")
 
         # Calculate metrics
-        total_time_sec = df["relative_time_sec"].max() - df["relative_time_sec"].min()
+        # Prefer benchmark_metadata.json for precise wall-clock duration
+        metadata_file = exp_dir / "benchmark_metadata.json"
+        total_time_sec = None
+        if metadata_file.exists():
+            try:
+                with open(metadata_file) as f:
+                    metadata = json.load(f)
+                total_time_sec = metadata.get("benchmark_runtime_sec")
+            except Exception:
+                pass
+
+        # Fallback: derive from per-request data (first start to last finish)
+        if not total_time_sec or total_time_sec <= 0:
+            first_start_ms = df["start_time_ms"].min()
+            last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
+            total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
         if total_time_sec <= 0:
             total_time_sec = df["latency_ms"].sum() / 1000  # fallback
 
@@ -787,14 +803,14 @@ def generate_combined_pareto_figure(df: pd.DataFrame, results_dir: Path,
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
         ax = axes[row]
 
-        # All-data scatter (faded background)
-        for tp in sorted(df["tp"].unique()):
-            tp_data = df[df["tp"] == tp]
-            ax.scatter(tp_data[x_col], tp_data[y_col],
-                       c=tp_colors.get(tp, "purple"),
-                       marker=tp_markers.get(tp, "x"),
-                       s=40, alpha=0.15, linewidths=0.3,
-                       edgecolors="gray")
+        # # All-data scatter (faded background)
+        # for tp in sorted(df["tp"].unique()):
+        #     tp_data = df[df["tp"] == tp]
+        #     ax.scatter(tp_data[x_col], tp_data[y_col],
+        #                c=tp_colors.get(tp, "purple"),
+        #                marker=tp_markers.get(tp, "x"),
+        #                s=40, alpha=0.15, linewidths=0.3,
+        #                edgecolors="gray")
 
         # Combined Pareto frontier
         frontier_df = compute_pareto_frontier_with_metadata(df, x_col, y_col, maximize_x)

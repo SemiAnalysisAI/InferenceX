@@ -15,6 +15,7 @@ Usage:
     python collect_sweep_results.py <artifacts_dir> <output_dir>
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -44,7 +45,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
     try:
         parts = name.split("_")
         tp = int(parts[0].replace("tp", ""))
-        users = int(parts[1].replace("users", ""))
+        users = int(parts[1].replace("users", "").replace("bs", ""))
         offload = parts[2].replace("offload", "")
     except (IndexError, ValueError):
         print(f"Warning: cannot parse experiment name '{exp_dir.name}', skipping")
@@ -66,7 +67,22 @@ def load_experiment(exp_dir: Path) -> dict | None:
         if len(df) == 0:
             return result
 
-        total_time_sec = df["relative_time_sec"].max() - df["relative_time_sec"].min()
+        # Prefer benchmark_metadata.json for precise wall-clock duration
+        metadata_file = exp_dir / "benchmark_metadata.json"
+        total_time_sec = None
+        if metadata_file.exists():
+            try:
+                with open(metadata_file) as f:
+                    metadata = json.load(f)
+                total_time_sec = metadata.get("benchmark_runtime_sec")
+            except Exception:
+                pass
+
+        # Fallback: derive from per-request data (first start to last finish)
+        if not total_time_sec or total_time_sec <= 0:
+            first_start_ms = df["start_time_ms"].min()
+            last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
+            total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
         if total_time_sec <= 0:
             total_time_sec = df["latency_ms"].sum() / 1000
 
