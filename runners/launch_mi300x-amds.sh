@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/nfsdata/sa/hf_hub_cache-${USER: -1}/"
-export PORT=$(( 8888 + ${USER: -1} ))
+export HF_HUB_CACHE_MOUNT="/nvme_home/gharunner/gharunners/hf_hub_cache/"
+export PORT=8888
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/nvme_home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-set -x
-salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell
-JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
-srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+if [ -z "$JOB_ID" ]; then
+    echo "ERROR: salloc failed to allocate a job"
+    exit 1
+fi
+
+srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
 if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
     echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
     srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
