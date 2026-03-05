@@ -1,0 +1,174 @@
+name: "Experiment: GPU Monitor - DeepSeek SGLang H200"
+
+on:
+  workflow_dispatch:
+    inputs:
+      conc:
+        description: "Concurrency level"
+        required: false
+        default: "4"
+        type: string
+      isl:
+        description: "Input sequence length"
+        required: false
+        default: "1024"
+        type: string
+      osl:
+        description: "Output sequence length"
+        required: false
+        default: "1024"
+        type: string
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_HUB_CACHE: "/mnt/hf_hub_cache/"
+  MODEL: deepseek-ai/DeepSeek-R1-0528
+  IMAGE: lmsysorg/sglang:v0.5.7-cu129-amd64
+  TP: "8"
+  EP_SIZE: "1"
+  FRAMEWORK: sglang
+  PRECISION: fp8
+  RANDOM_RANGE_RATIO: "0.8"
+
+permissions:
+  contents: read
+
+jobs:
+  gpu-monitor-benchmark:
+    runs-on: h200
+    timeout-minutes: 300
+    name: "dsr1 fp8 h200 sglang | gpu-monitor | conc=${{ inputs.conc }} isl=${{ inputs.isl }} osl=${{ inputs.osl }}"
+    steps:
+      - name: Resource cleanup (pre-run)
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
+          fi
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up jobs for user: $USER ..."
+            scancel -u "$USER" || true
+            while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+              squeue -u "$USER"
+              sleep 5
+            done
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Run benchmark with GPU monitoring
+        env:
+          CONC: ${{ inputs.conc }}
+          ISL: ${{ inputs.isl }}
+          OSL: ${{ inputs.osl }}
+          RESULT_FILENAME: "gpu_monitor_dsr1_${{ inputs.isl }}x${{ inputs.osl }}_fp8_sglang_tp8_conc${{ inputs.conc }}_h200"
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+
+          export HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache_${USER: -1}/"
+          export PORT=8888
+
+          PARTITION="dgx-h200"
+          SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+          salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
+          JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+
+          set -x
+          srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+          if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
+              echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
+              srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+              srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+          fi
+          srun --jobid=$JOB_ID \
+            --container-image=$SQUASH_FILE \
+            --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+            --container-writable \
+            --container-remap-root \
+            --container-mount-home \
+            --container-workdir=/workspace/ \
+            --no-container-entrypoint --export=ALL \
+            bash benchmarks/experimental/dsr1_fp8_h200_gpu_monitor.sh
+
+          scancel $JOB_ID
+
+          # Verify result files
+          FOUND_RESULT_FILE=
+          for i in {1..10}; do
+            if [ -f "$RESULT_FILENAME.json" ]; then
+              FOUND_RESULT_FILE=true
+              break
+            fi
+            echo "Waiting for result file... (attempt $i)"
+            sleep 1
+          done
+
+          if [ -z "$FOUND_RESULT_FILE" ]; then
+            echo "Warning: Benchmark result $RESULT_FILENAME.json not found." >&2
+          fi
+
+      - name: Process result
+        if: always()
+        env:
+          RUNNER_TYPE: h200
+        run: |
+          if [ -f "${RESULT_FILENAME}.json" ]; then
+            python3 utils/process_result.py
+          else
+            echo "No benchmark result to process"
+          fi
+
+      - name: Upload GPU metrics CSV
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: gpu_metrics_${{ env.RESULT_FILENAME }}
+          path: gpu_metrics.csv
+          if-no-files-found: warn
+
+      - name: Upload benchmark result
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: bmk_${{ env.RESULT_FILENAME }}
+          path: agg_${{ env.RESULT_FILENAME }}.json
+          if-no-files-found: ignore
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: server_logs_${{ env.RESULT_FILENAME }}
+          path: server.log
+          if-no-files-found: ignore
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
+          fi
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up jobs for user: $USER ..."
+            scancel -u "$USER" || true
+            while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+              squeue -u "$USER"
+              sleep 5
+            done
+          fi
