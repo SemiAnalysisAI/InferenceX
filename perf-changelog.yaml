@@ -880,6 +880,4 @@
   description:
     - "Expanding TP search space"
     - "Adding kv-cache-fp8"
-    - "Reducing chunked-prefill-size and max-prefill-tokens"
-    - "Fixing cuda-graph-max-bs hardcode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
