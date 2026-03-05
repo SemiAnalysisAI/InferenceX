@@ -94,6 +94,20 @@ dsr1-fp8-mi300x-sglang:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+dsr1-power-fp8-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1-power
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
