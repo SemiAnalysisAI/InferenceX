@@ -72,6 +72,20 @@ dsr1-fp4-mi355x-atom-mtp:
     #- { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
+dsr1-power-fp8-mi300x-sglang:
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1-power
+  runner: mi300x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+
 dsr1-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
