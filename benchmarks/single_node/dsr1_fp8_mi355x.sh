@@ -34,11 +34,12 @@ python3 -m sglang.launch_server \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
+    --chunked-prefill-size 16384 \
+    --mem-fraction-static 0.95 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --cuda-graph-max-bs $CONC > $SERVER_LOG 2>&1 &
+    --max-prefill-tokens 16384 \
+    --kv-cache-dtype fp8_e4m3 \
+    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
