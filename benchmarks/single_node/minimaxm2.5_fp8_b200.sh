@@ -24,6 +24,7 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 export VLLM_USE_FLASHINFER_MOE_FP8=0
+export VLLM_MOE_USE_DEEP_GEMM=0
 
 set -x
 vllm serve $MODEL --port $PORT \
