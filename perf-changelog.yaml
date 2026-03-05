@@ -875,3 +875,11 @@
     - "Server: reasoning-parser qwen3, tool-call-parser qwen3_coder, enable-flashinfer-allreduce-fusion, mem-fraction-static 0.8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/855
 
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Expanding TP search space"
+    - "Adding kv-cache-fp8"
+    - "Reducing chunked-prefill-size and max-prefill-tokens"
+    - "Fixing cuda-graph-max-bs hardcode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
