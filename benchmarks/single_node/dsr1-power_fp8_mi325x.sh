@@ -28,70 +28,59 @@ export SGLANG_AITER_MLA_PERSIST=1
 
 # --- GPU Power Monitoring via amd-smi ---
 GPU_POWER_CSV="/workspace/gpu_power_${RESULT_FILENAME}.csv"
-GPU_POWER_LOG="/workspace/gpu_power_debug.log"
-
-# Diagnostic: check amd-smi availability and output format
-echo "=== amd-smi diagnostics ===" | tee "$GPU_POWER_LOG"
-echo "which amd-smi: $(which amd-smi 2>&1)" | tee -a "$GPU_POWER_LOG"
-echo "amd-smi version: $(amd-smi version 2>&1)" | tee -a "$GPU_POWER_LOG"
-echo "--- amd-smi metric --csv sample ---" | tee -a "$GPU_POWER_LOG"
-amd-smi metric --csv 2>&1 | head -5 | tee -a "$GPU_POWER_LOG"
-echo "--- amd-smi metric --power --csv sample ---" | tee -a "$GPU_POWER_LOG"
-amd-smi metric --power --csv 2>&1 | head -5 | tee -a "$GPU_POWER_LOG"
-echo "--- amd-smi monitor sample ---" | tee -a "$GPU_POWER_LOG"
-amd-smi monitor -ptcug 2>&1 | head -5 | tee -a "$GPU_POWER_LOG"
-echo "--- amd-smi static --csv sample ---" | tee -a "$GPU_POWER_LOG"
-amd-smi static --csv 2>&1 | head -3 | tee -a "$GPU_POWER_LOG"
-echo "=== end diagnostics ===" | tee -a "$GPU_POWER_LOG"
 
 # Write CSV header
-echo "timestamp,gpu,power_w,power_limit_w,temp_junction_c,temp_edge_c,temp_mem_c,gfx_clock_mhz,mem_clock_mhz,gpu_util_pct,vram_used_mib,vram_total_mib" > "$GPU_POWER_CSV"
+echo "timestamp,gpu,socket_power_w,gfx_clock_mhz,mem_clock_mhz,temp_edge_c,temp_hotspot_c,temp_mem_c,gfx_activity_pct,umc_activity_pct,vram_used_mib,vram_total_mib" > "$GPU_POWER_CSV"
 
 # Start background amd-smi polling loop (1-second intervals)
-# We use a Python script for robust CSV parsing since amd-smi output format varies
+# Uses separate amd-smi metric calls to avoid embedded-list CSV parsing issues
 (
-  first_iter=true
   while true; do
     ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    # Use Python to query amd-smi for each metric category separately and merge
+    python3 -c "
+import subprocess, csv, io, sys
 
-    # Try amd-smi metric with --csv
-    csv_output=$(amd-smi metric --power --clock --temperature --usage --vram --csv 2>/tmp/amdsmi_err.log)
-    rc=$?
+def parse_csv(cmd):
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    if result.returncode != 0 or not result.stdout.strip():
+        return {}
+    reader = csv.DictReader(io.StringIO(result.stdout))
+    rows = {}
+    for row in reader:
+        gpu = row.get('gpu', '')
+        rows[gpu] = row
+    return rows
 
-    if [ "$first_iter" = true ]; then
-      echo "[power-monitor] amd-smi metric --csv rc=$rc" >> "$GPU_POWER_LOG"
-      echo "[power-monitor] stderr: $(cat /tmp/amdsmi_err.log 2>/dev/null)" >> "$GPU_POWER_LOG"
-      echo "[power-monitor] stdout lines: $(echo "$csv_output" | wc -l)" >> "$GPU_POWER_LOG"
-      echo "[power-monitor] stdout head:" >> "$GPU_POWER_LOG"
-      echo "$csv_output" | head -3 >> "$GPU_POWER_LOG"
-      first_iter=false
-    fi
+try:
+    power = parse_csv(['amd-smi', 'metric', '--power', '--csv'])
+    clock = parse_csv(['amd-smi', 'metric', '--clock', '--csv'])
+    temp = parse_csv(['amd-smi', 'metric', '--temperature', '--csv'])
+    usage = parse_csv(['amd-smi', 'metric', '--usage', '--csv'])
+    vram = parse_csv(['amd-smi', 'metric', '--vram', '--csv'])
 
-    if [ $rc -eq 0 ] && [ -n "$csv_output" ] && [ "$(echo "$csv_output" | wc -l)" -gt 1 ]; then
-      # Parse using Python for robustness — handles varying column counts
-      python3 -c "
-import sys, csv, io
-reader = csv.DictReader(io.StringIO(sys.argv[1]))
-for row in reader:
-    gpu = row.get('gpu', row.get('GPU', ''))
-    # Power fields
-    power = row.get('power_socket_power', row.get('SOCKET_POWER', row.get('power', '')))
-    power_limit = row.get('power_socket_power_cap', row.get('POWER_CAP', row.get('power_cap', '')))
-    # Temperature fields
-    temp_junction = row.get('temperature_hotspot', row.get('TEMPERATURE_HOTSPOT', row.get('temperature_junction', '')))
-    temp_edge = row.get('temperature_edge', row.get('TEMPERATURE_EDGE', ''))
-    temp_mem = row.get('temperature_mem', row.get('TEMPERATURE_MEM', row.get('temperature_vram', '')))
-    # Clock fields
-    gfx_clk = row.get('clock_gfx', row.get('GFX_SCLK', row.get('sclk', '')))
-    mem_clk = row.get('clock_mem', row.get('MEM_MCLK', row.get('mclk', '')))
-    # Usage fields
-    gpu_busy = row.get('usage_gfx_activity', row.get('GFX_ACTIVITY', row.get('gpu_busy_percent', '')))
-    # VRAM fields
-    vram_used = row.get('vram_used', row.get('VRAM_USED', ''))
-    vram_total = row.get('vram_total', row.get('VRAM_TOTAL', ''))
-    print(f'${ts},{gpu},{power},{power_limit},{temp_junction},{temp_edge},{temp_mem},{gfx_clk},{mem_clk},{gpu_busy},{vram_used},{vram_total}')
-" "$csv_output" >> "$GPU_POWER_CSV" 2>/dev/null
-    fi
+    for gpu_id in sorted(power.keys()):
+        p = power.get(gpu_id, {})
+        c = clock.get(gpu_id, {})
+        t = temp.get(gpu_id, {})
+        u = usage.get(gpu_id, {})
+        v = vram.get(gpu_id, {})
+
+        socket_power = p.get('socket_power', '')
+        gfx_clk = c.get('gfx_0_clk', '')
+        mem_clk = c.get('mem_0_clk', '')
+        temp_edge = t.get('edge', '')
+        temp_hotspot = t.get('hotspot', '')
+        temp_mem = t.get('mem', '')
+        gfx_activity = u.get('gfx_activity', '')
+        umc_activity = u.get('umc_activity', '')
+        vram_used = v.get('used_vram', '')
+        vram_total = v.get('total_vram', '')
+
+        print(f'$ts,{gpu_id},{socket_power},{gfx_clk},{mem_clk},{temp_edge},{temp_hotspot},{temp_mem},{gfx_activity},{umc_activity},{vram_used},{vram_total}')
+except Exception as e:
+    pass
+" >> "$GPU_POWER_CSV" 2>/dev/null
     sleep 1
   done
 ) &
@@ -136,11 +125,6 @@ echo "GPU power monitor stopped"
 
 POWER_LINE_COUNT=$(wc -l < "$GPU_POWER_CSV")
 echo "GPU power CSV: $POWER_LINE_COUNT lines written to $GPU_POWER_CSV"
-
-# Print debug log
-echo "=== Power monitor debug log ==="
-cat "$GPU_POWER_LOG" 2>/dev/null || true
-echo "=== End debug log ==="
 
 # Copy power CSV to workspace root for artifact upload
 cp "$GPU_POWER_CSV" /workspace/ 2>/dev/null || true
