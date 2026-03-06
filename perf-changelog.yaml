@@ -843,7 +843,7 @@
     - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
     - "following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/839
-
+  
 - config-keys:
     - dsr1-fp8-mi355x-sglang-disagg
     - dsr1-fp8-mi355x-sglang-disagg-mtp
@@ -874,3 +874,19 @@
     - "Uses trtllm_mha attention backend and flashinfer_trtllm MOE runner"
     - "Enable SGLANG_ENABLE_FLASHINFER_GEMM=true, NCCL_NVLS_ENABLE=1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/804
+
+- config-keys: 
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Add Qwen 3.5 FP8 H200 SGLang configuration"
+    - "Model: Qwen/Qwen3.5-397B-A17B-FP8, runner: h200, image: lmsysorg/sglang:v0.5.8-cu130-amd64"
+    - "Benchmark script: benchmarks/single_node/qwen3.5_fp8_h200.sh"
+    - "Server: reasoning-parser qwen3, tool-call-parser qwen3_coder, enable-flashinfer-allreduce-fusion, mem-fraction-static 0.8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/855
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Expanding TP search space"
+    - "Adding kv-cache-fp8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
