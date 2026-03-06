@@ -22,7 +22,7 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-if [ "$EP_SIZE" -gt 1 ]; then
+if [ "$EP_SIZE" -ge 1 ]; then
   EP=" --enable-expert-parallel"
 else
   EP=" "
