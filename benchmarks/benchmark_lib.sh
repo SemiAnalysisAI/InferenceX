@@ -7,7 +7,7 @@
 # --------------------------------
 
 GPU_MONITOR_PID=""
-GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+GPU_METRICS_CSV="/workspace/gpu_metrics_${RESULT_FILENAME:-default}.csv"
 
 # Start background nvidia-smi monitoring that logs GPU metrics every second to CSV.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
