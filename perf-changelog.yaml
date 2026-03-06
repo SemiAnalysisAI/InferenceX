@@ -756,6 +756,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/816
 
 - config-keys:
+    - minimaxm2.1-fp4-mi355x-vllm
+  description:
+    - "Add MiniMax M2.1 MXFP4 vLLM benchmark for MI355X"
+    - "Model: amd/MiniMax-M2.1-MXFP4 with --trust-remote-code and --block-size=32"
+    - "Image: vllm/vllm-openai-rocm:v0.16.0"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "TP=2 only (TP=4 disabled due to vLLM bug https://github.com/vllm-project/vllm/issues/35637)"
+    - "Concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
+
+- config-keys:
     - minimaxm2.5-fp8-h200-vllm
   description:
     - "Add MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP4)"
