@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/configs/amd-master.yaml'
       - '.github/configs/nvidia-master.yaml'
+      - 'benchmarks/**'
+      - 'perf-changelog.yaml'
 
 permissions:
   pull-requests: write
