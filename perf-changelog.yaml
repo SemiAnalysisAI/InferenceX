@@ -881,3 +881,9 @@
     - "Expanding TP search space"
     - "Adding kv-cache-fp8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "test"
+  pr-link: test
