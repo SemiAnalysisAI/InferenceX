@@ -25,6 +25,9 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 # Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $TP -eq 8 ]]; then
   if [[ $CONC -ge 16 ]]; then
@@ -95,4 +98,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
