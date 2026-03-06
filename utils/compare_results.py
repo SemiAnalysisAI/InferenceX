@@ -102,11 +102,15 @@ def main():
     results_dir = Path(sys.argv[1])
     database_url = os.environ["DATABASE_URL"]
 
-    # Load all benchmark result JSONs
+    # Load all benchmark result JSONs (files may contain a single dict or a list of dicts)
     results = []
     for path in results_dir.rglob("*.json"):
         with open(path) as f:
-            results.append(json.load(f))
+            data = json.load(f)
+        if isinstance(data, list):
+            results.extend(data)
+        else:
+            results.append(data)
 
     if not results:
         print("No benchmark results found to compare.")

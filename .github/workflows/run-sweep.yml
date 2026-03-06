@@ -278,7 +278,7 @@ jobs:
         runs-on: ubuntu-latest
 
         env:
-            DATABASE_URL: postgresql://neondb_owner:npg_W6SeFBUbTi4z@ep-late-voice-ailrin30-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require
+            DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }}
 
         steps:
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
