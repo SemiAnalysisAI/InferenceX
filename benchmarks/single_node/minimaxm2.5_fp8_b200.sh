@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -26,13 +27,19 @@ PORT=${PORT:-8888}
 export VLLM_USE_FLASHINFER_MOE_FP8=0
 export VLLM_MOE_USE_DEEP_GEMM=0
 
+if [ "$EP_SIZE" -ge 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
---enable-expert-parallel \
 --disable-log-requests \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
