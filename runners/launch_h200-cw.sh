@@ -8,7 +8,7 @@ FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="h200"
-SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER: -1}.sqsh"
+SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER}.sqsh"
 
 SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
 

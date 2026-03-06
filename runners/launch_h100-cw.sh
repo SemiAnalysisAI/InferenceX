@@ -2,7 +2,7 @@
 
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 PARTITION="h100"
-SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER: -1}.sqsh"
+SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER}.sqsh"
 
 salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
