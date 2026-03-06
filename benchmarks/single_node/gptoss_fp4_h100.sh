@@ -15,6 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+curl -LsSf https://hf.co/cli/install.sh | bash
 hf download "$MODEL"
 
 cat > config.yaml << EOF
