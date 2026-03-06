@@ -14,3 +14,38 @@ lit review
 python3 benchmark/hicache/bench_multiturn.py --model-path $MODEL_PATH --disable-random-sample \
 --output-length 1 --request-length 2048 \ # simulate P-D disaggregation
 ```
+
+## Cam Experimentation
+
+On B200 Nebius cluster. To reproduce:
+
+```
+cam@login-1:~$ sudo su - gharunner0
+
+gharunner0@login-1:~$ salloc --partition=main --gres=gpu:8 --exclusive --time=360
+salloc: Granted job allocation 5186
+salloc: Nodes worker-1 are ready for job
+
+srun --jobid=5186 --container-image=$IMAGE   --container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER: -1}   --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE   --no-container-mount-home   --container-remap-root   --container-writable   --container-workdir=/workspace/   --no-container-entrypoint   --export=ALL,PORT=$(( 8888 + ${USER: -1} )),UCX_NET_DEVICES=eth0   --pty bash
+```
+
+Then, sample from the dataset:
+```
+python3 sample_wildchat.py --num-convs 100 --min-turns 4 --max-turns 8 --min-tokens 800 --max-tokens 2000 --output sample.json
+```
+
+First, start the server (with something like this):
+```
+
+```
+
+Then, run the benchmark:
+```
+python3 benchmark_serving_multi_turn.py -i sample_5k.json -m $MODEL --responses-file responses.json -u http://localhost:$PORT -p 
+512 --max-retries 3 --metrics-output benchmark_run1 
+```
+
+## Possible Datasets
+
+- DeepSeek R1 coding with reasoning for programming competition https://huggingface.co/datasets/open-r1/codeforces-cots
+- 

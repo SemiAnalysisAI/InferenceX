@@ -1,0 +1,4 @@
+*.png
+*.json
+*.parquet
+results/
