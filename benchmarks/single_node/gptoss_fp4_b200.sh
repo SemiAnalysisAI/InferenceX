@@ -16,7 +16,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-curl -LsSf https://hf.co/cli/install.sh | bash
 hf download "$MODEL"
 
 nvidia-smi
@@ -52,7 +51,6 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.9 \
 --tensor-parallel-size $TP \
 --max-num-seqs 512 \
---stream-interval 20 \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

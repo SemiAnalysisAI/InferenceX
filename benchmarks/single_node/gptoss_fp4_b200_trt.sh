@@ -24,7 +24,6 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
-curl -LsSf https://hf.co/cli/install.sh | bash
 hf download $MODEL
 SERVER_LOG=/workspace/server.log
 
