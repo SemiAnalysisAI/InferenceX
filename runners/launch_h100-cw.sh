@@ -3,7 +3,7 @@
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 PARTITION="h100"
 SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-LOCK_FILE="${SQUASH_FILE}.lock"
+LOCK_FILE="/mnt/vast/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh.lock"
 
 salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
 JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
@@ -13,6 +13,7 @@ SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
 set -x
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid=$JOB_ID bash -c "
+    (umask 0000 && touch \"$LOCK_FILE\" && chmod 666 \"$LOCK_FILE\") 2>/dev/null || true
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
     if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then

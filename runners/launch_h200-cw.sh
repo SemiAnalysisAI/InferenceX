@@ -9,7 +9,7 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="h200"
 SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-LOCK_FILE="${SQUASH_FILE}.lock"
+LOCK_FILE="/mnt/vast/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh.lock"
 
 SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
 
@@ -31,6 +31,7 @@ if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
 else
     # Use flock to serialize concurrent imports to the same squash file
     srun --jobid=$JOB_ID bash -c "
+        (umask 0000 && touch \"$LOCK_FILE\" && chmod 666 \"$LOCK_FILE\") 2>/dev/null || true
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
