@@ -13,11 +13,11 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
-if ! srun --jobid=$JOB_ID bash -c "sudo unsquashfs -l $SQUASH_FILE > /dev/null"; then
+srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
     echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-    srun --jobid=$JOB_ID bash -c "sudo rm -f $SQUASH_FILE"
-    srun --jobid=$JOB_ID bash -c "sudo enroot import -o $SQUASH_FILE docker://$IMAGE"
+    srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
+    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 fi
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
