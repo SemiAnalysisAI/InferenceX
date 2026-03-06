@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/nvme_home/gharunner/gharunners/hf_hub_cache/"
+export HF_HUB_CACHE_MOUNT="/nvme_home/gharunner/gharunners/hf-hub-cache/"
 export PORT=8888
 
 PARTITION="compute"
