@@ -2,20 +2,17 @@
 
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 PARTITION="h100"
-SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
+salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
+JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
+
+SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
+
 set -x
-
-JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
-
-if [ -z "$JOB_ID" ]; then
-    echo "ERROR: salloc failed to allocate a job"
-    exit 1
-fi
-
 # Use flock to serialize concurrent imports to the same squash file
-srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
+srun --jobid=$JOB_ID bash -c "
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
     if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then

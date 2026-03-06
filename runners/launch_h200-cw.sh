@@ -8,8 +8,13 @@ FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="h200"
-SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/mnt/vast/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
+
+SAGEMAKER_SHM_PATH=$(mktemp -d /mnt/vast/shm-XXXXXX)
+
+salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
+JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 set -x
 
@@ -25,7 +30,7 @@ if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
     # Use flock to serialize concurrent imports to the same squash file
-    srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
+    srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
