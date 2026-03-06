@@ -1,4 +1,11 @@
 - config-keys:
+    - kimik2.5-int4-mi325x-vllm
+  description:
+    - "Add Kimi K2.5 INT4 single-node MI325X vLLM benchmark (TP8)"
+    - "Uses vLLM ROCm v0.16.0 image following AMD Andy Luo's recipe"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/857
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
