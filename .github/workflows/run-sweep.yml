@@ -306,5 +306,5 @@ jobs:
                   curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
             - name: Revalidate Vercel cache
               run: |
-                  curl -s -X POST "https://inferencex.semianalysis.com/api/v1/revalidate" \
+                  curl -s -X POST "https://inferencex.semianalysis.com/api/v1/invalidate" \
                     -H "Authorization: Bearer ${{ secrets.VERCEL_REVALIDATE_URL }}" || true
