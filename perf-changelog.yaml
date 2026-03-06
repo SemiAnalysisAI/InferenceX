@@ -884,6 +884,8 @@
 
 - config-keys:
     - gptoss-fp4-b200-vllm
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp4-mi355x-sglang-disagg
   description:
     - "test"
   pr-link: test
