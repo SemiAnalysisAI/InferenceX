@@ -62,6 +62,9 @@ run_benchmark_serving \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
+if [ "$EP_SIZE" -gt 1 ]; then
+    EVAL_SERVER_EXTRA_ARGS="--enable-expert-parallel"
+fi
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary

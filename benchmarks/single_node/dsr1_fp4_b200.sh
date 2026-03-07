@@ -59,6 +59,7 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
+EVAL_SERVER_EXTRA_ARGS="--quantization modelopt_fp4 --kv-cache-dtype fp8_e4m3 --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm"
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary

@@ -58,6 +58,7 @@ run_benchmark_serving \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
+EVAL_SERVER_EXTRA_ARGS="--reasoning-parser kimi_k2 --tool-call-parser kimi_k2"
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary

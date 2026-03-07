@@ -566,12 +566,76 @@ PY
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
 
+get_native_max_context_length() {
+    local model_path="$1"
+    python3 -c "
+from transformers import AutoConfig
+config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
+for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+    if hasattr(config, attr):
+        print(getattr(config, attr))
+        break
+"
+}
+
+_start_eval_server() {
+    local native_max
+    native_max=$(get_native_max_context_length "$MODEL")
+    export EVAL_MAX_MODEL_LEN="$native_max"
+
+    local eval_server_log="/workspace/eval_server.log"
+    local port="${PORT:-8888}"
+    local tp="${TP:-1}"
+    local ep="${EP_SIZE:-1}"
+
+    echo "Starting eval server with native max context length: $native_max (framework=$FRAMEWORK)"
+
+    case "${FRAMEWORK}" in
+        sglang)
+            python3 -m sglang.launch_server \
+                --model-path "$MODEL" --host 0.0.0.0 --port "$port" \
+                --tensor-parallel-size "$tp" --ep-size "$ep" \
+                --context-length "$native_max" \
+                --trust-remote-code \
+                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
+            ;;
+        vllm)
+            vllm serve "$MODEL" --port "$port" \
+                --tensor-parallel-size "$tp" \
+                --max-model-len "$native_max" \
+                --trust-remote-code \
+                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
+            ;;
+        trtllm)
+            mpirun -n 1 --oversubscribe --allow-run-as-root \
+                trtllm-serve "$MODEL" --port="$port" \
+                --backend=pytorch \
+                --tp_size="$tp" --ep_size="$ep" \
+                --max_seq_len="$native_max" \
+                --trust_remote_code \
+                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
+            ;;
+        atom)
+            python3 -m atom.entrypoints.openai_server \
+                --model "$MODEL" --server-port "$port" \
+                -tp "$tp" \
+                --max-model-len "$native_max" \
+                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
+            ;;
+        *)
+            echo "Unknown FRAMEWORK '${FRAMEWORK}' for eval server"; return 1 ;;
+    esac
+
+    EVAL_SERVER_PID=$!
+    wait_for_server_ready --port "$port" --server-log "$eval_server_log" --server-pid "$EVAL_SERVER_PID"
+}
+
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
     local num_fewshot="${NUM_FEWSHOT:-2}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens=16384
+    local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
     local concurrent_requests=32
@@ -607,7 +671,7 @@ run_lm_eval() {
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
+      --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -698,8 +762,21 @@ run_eval() {
         esac
     done
 
+    # Kill benchmark server and restart with native max context for eval
+    echo "Stopping benchmark server (PID=$SERVER_PID) for eval restart..."
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+    _start_eval_server
+
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" ;;
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
+    local eval_exit=$?
+
+    # Clean up eval server
+    kill "$EVAL_SERVER_PID" 2>/dev/null || true
+    wait "$EVAL_SERVER_PID" 2>/dev/null || true
+
+    return $eval_exit
 }
