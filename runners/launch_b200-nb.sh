@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-HF_HUB_CACHE_MOUNT="/mnt/data/hf-hub-cache-${USER: -1}/"
+HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
@@ -11,13 +11,13 @@ UCX_NET_DEVICES=eth0
 find /var/cache/enroot-container-images/$UID -type f -name "*.lock" | xargs rm
 
 set -x
-srun --partition=$PARTITION --gres=gpu:$TP --exclusive \
+srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
---container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER: -1} \
+--container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER} \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --no-container-mount-home \
 --container-remap-root \
 --container-writable \
 --container-workdir=/workspace/ \
---no-container-entrypoint --export=ALL,PORT=$(( 8888 + ${USER: -1} )),UCX_NET_DEVICES=$UCX_NET_DEVICES \
+--no-container-entrypoint --export=ALL,PORT=8888,UCX_NET_DEVICES=$UCX_NET_DEVICES \
 bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
