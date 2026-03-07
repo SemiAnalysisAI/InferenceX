@@ -662,11 +662,9 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # max_gen_tokens: cap generation tokens to leave room for the prompt within max_length
-    local max_gen_tokens=$((gen_max_tokens - 4096))
-    if [[ $max_gen_tokens -lt 8192 ]]; then
-        max_gen_tokens=8192
-    fi
+    # Reserve 30% of context for the prompt, use remaining 70% for generation
+    local max_gen_tokens=$((gen_max_tokens * 70 / 100))
+    echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens} (70% of context)"
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
