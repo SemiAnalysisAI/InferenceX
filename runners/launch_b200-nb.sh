@@ -7,9 +7,6 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 UCX_NET_DEVICES=eth0
 
-# Cleanup any stale enroot locks from previous runs
-find /var/cache/enroot-container-images/$UID -type f -name "*.lock" | xargs rm
-
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
