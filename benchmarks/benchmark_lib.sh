@@ -662,6 +662,12 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
+    # max_gen_tokens: cap generation tokens to leave room for the prompt within max_length
+    local max_gen_tokens=$((gen_max_tokens - 4096))
+    if [[ $max_gen_tokens -lt 8192 ]]; then
+        max_gen_tokens=8192
+    fi
+
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
@@ -671,7 +677,7 @@ run_lm_eval() {
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${gen_max_tokens},temperature=${temperature},top_p=${top_p}"
+      --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
