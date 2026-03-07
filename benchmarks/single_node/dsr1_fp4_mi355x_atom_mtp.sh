@@ -68,6 +68,7 @@ run_benchmark_serving \
     --use-chat-template 
 
 # After throughput, run evaluation only if RUN_EVAL is true
+EVAL_SERVER_EXTRA_ARGS="--kv_cache_dtype fp8 --method mtp"
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary

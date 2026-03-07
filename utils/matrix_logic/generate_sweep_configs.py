@@ -35,7 +35,7 @@ def seq_len_to_str(isl: int, osl: int) -> str:
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy (single-node only):
-    - Only consider 1k8k (isl=1024, osl=8192).
+    - Only consider 8k1k (isl=8192, osl=1024).
     - For each unique (model, runner, framework, precision, isl, osl, spec-decoding):
         - Mark highest TP with highest conc
         - Mark lowest TP with highest conc
@@ -45,8 +45,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """
     from collections import defaultdict
 
-    # Only run evals on 1k8k
-    target_isl, target_osl = seq_len_stoi["1k8k"]
+    # Only run evals on 8k1k
+    target_isl, target_osl = seq_len_stoi["8k1k"]
     # Group entries by (model, runner, framework, precision, isl, osl)
     # Only include entries that have a top-level TP (i.e., single-node schema).
     # This avoids relying on structural hints like prefill/decode which may be

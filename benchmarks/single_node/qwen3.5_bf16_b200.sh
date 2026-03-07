@@ -75,6 +75,7 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
+EVAL_SERVER_EXTRA_ARGS="--attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm"
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary

@@ -307,7 +307,7 @@ Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run for two 
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
-**Note**: Evals only run on `1k8k` sequence length.
+**Note**: Evals only run on `8k1k` sequence length.
 
 ### Eval Framework: lm-eval
 
