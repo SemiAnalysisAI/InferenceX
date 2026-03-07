@@ -267,6 +267,12 @@
     - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/558
   evals-only: true
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update H200 DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.9"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   
 - config-keys:
   - dsr1-fp4-b300-dynamo-trt
