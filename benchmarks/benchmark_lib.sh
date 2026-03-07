@@ -9,7 +9,8 @@
 GPU_MONITOR_PID=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
 
-# Start background nvidia-smi monitoring that logs GPU metrics every second to CSV.
+# Start background GPU monitoring that logs metrics every second to CSV.
+# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
 start_gpu_monitor() {
     local output="$GPU_METRICS_CSV"
@@ -25,15 +26,45 @@ start_gpu_monitor() {
 
     GPU_METRICS_CSV="$output"
 
-    if ! command -v nvidia-smi &>/dev/null; then
-        echo "[GPU Monitor] nvidia-smi not found, skipping GPU monitoring"
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+            --format=csv -l "$interval" > "$output" 2>/dev/null &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    elif command -v amd-smi &>/dev/null; then
+        _start_amd_gpu_monitor "$output" "$interval" &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    else
+        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
+}
 
-    nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
-        --format=csv -l "$interval" > "$output" 2>/dev/null &
-    GPU_MONITOR_PID=$!
-    echo "[GPU Monitor] Started (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+# Internal: AMD GPU monitoring loop using amd-smi metric.
+# Collects power, clocks (multiple GFX domains + memory), temperature, and utilization.
+# Writes a unified CSV with one header row followed by data rows.
+_start_amd_gpu_monitor() {
+    local output="$1"
+    local interval="$2"
+    local header_written=false
+
+    while true; do
+        local csv_output
+        csv_output=$(amd-smi metric -p -c -t -u --csv 2>/dev/null)
+        if [[ -n "$csv_output" ]]; then
+            if [[ "$header_written" == false ]]; then
+                # Write full CSV including header with timestamp prepended
+                echo "$csv_output" | head -1 | sed 's/^/timestamp,/' > "$output"
+                header_written=true
+            fi
+            # Append data rows (skip header) with timestamp
+            local ts
+            ts=$(date '+%Y-%m-%d %H:%M:%S')
+            echo "$csv_output" | tail -n +2 | sed "s/^/${ts},/" >> "$output"
+        fi
+        sleep "$interval"
+    done
 }
 
 # Stop the background GPU monitor and report file size.

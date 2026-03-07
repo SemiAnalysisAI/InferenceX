@@ -21,6 +21,9 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 # following Andy Luo linkedin's recipe https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 python3 -m sglang.launch_server \
     --attention-backend triton \
     --model-path $MODEL \
@@ -52,4 +55,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

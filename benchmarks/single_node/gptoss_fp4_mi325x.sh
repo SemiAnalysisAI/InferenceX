@@ -40,6 +40,9 @@ export VLLM_ROCM_USE_AITER_MHA=0
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
@@ -72,4 +75,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
