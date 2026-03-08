@@ -33,9 +33,9 @@ start_gpu_monitor() {
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
         # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # Pipe through awk to deduplicate CSV headers (only keep the first one).
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
         amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk 'NR==1 || !/^timestamp,/' > "$output" &
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
