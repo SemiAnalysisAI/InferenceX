@@ -903,5 +903,5 @@
     - qwen3.5-fp8-mi355x-sglang
   description:
     - "Redo qwen eval"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/891
   evals-only: true
