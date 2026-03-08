@@ -896,3 +896,18 @@
     - "Expanding TP search space"
     - "Adding kv-cache-fp8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang
+    - qwen3.5-bf16-mi300x-sglang
+    - qwen3.5-bf16-mi325x-sglang
+    - qwen3.5-bf16-mi355x-sglang
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Redo qwen eval"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/892
+  evals-only: true
