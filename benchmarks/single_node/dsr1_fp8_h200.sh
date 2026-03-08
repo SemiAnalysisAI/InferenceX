@@ -21,6 +21,9 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 export TORCH_CUDA_ARCH_LIST="9.0"
 
 set -x
@@ -66,4 +69,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

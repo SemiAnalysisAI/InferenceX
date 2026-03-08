@@ -20,8 +20,8 @@ h100-multinode:
 - 'h100-dgxc-slurm_10'
 - 'h100-dgxc-slurm_11'
 h200:
-- 'h200-cw_0'
-- 'h200-cw_1'
+- 'h200-cw_2'
+- 'h200-cw_3'
 - 'h200-nb_0'
 - 'h200-nb_1'
 - 'h200-dgxc-slurm_0'

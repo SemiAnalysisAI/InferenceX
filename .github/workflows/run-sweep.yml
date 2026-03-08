@@ -292,7 +292,7 @@ jobs:
             - name: Trigger database ingest
               run: |
                   curl -sf -X POST \
-                    -H "Authorization: Bearer ${{ secrets.INFX-FRONTEND-PAT }}" \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/inferencemax-app/dispatches \
                     -d '{

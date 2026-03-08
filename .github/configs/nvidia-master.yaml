@@ -1953,7 +1953,7 @@ dsr1-fp8-b200-trt-mtp:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.7-cu129-amd64
+  image: lmsysorg/sglang:v0.5.9-cu129-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
