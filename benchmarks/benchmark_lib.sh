@@ -9,7 +9,8 @@
 GPU_MONITOR_PID=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
 
-# Start background nvidia-smi monitoring that logs GPU metrics every second to CSV.
+# Start background GPU monitoring that logs metrics every second to CSV.
+# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
 start_gpu_monitor() {
     local output="$GPU_METRICS_CSV"
@@ -25,15 +26,47 @@ start_gpu_monitor() {
 
     GPU_METRICS_CSV="$output"
 
-    if ! command -v nvidia-smi &>/dev/null; then
-        echo "[GPU Monitor] nvidia-smi not found, skipping GPU monitoring"
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+            --format=csv -l "$interval" > "$output" 2>/dev/null &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    elif command -v amd-smi &>/dev/null; then
+        _start_amd_gpu_monitor "$output" "$interval" &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    else
+        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
+}
 
-    nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
-        --format=csv -l "$interval" > "$output" 2>/dev/null &
-    GPU_MONITOR_PID=$!
-    echo "[GPU Monitor] Started (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+# Internal: AMD GPU monitoring using amd-smi metric with built-in watch interval.
+# Collects power, clocks (multiple GFX domains + memory), temperature, and utilization.
+# Uses -w flag for native polling (like nvidia-smi -l) instead of a shell loop.
+# Strips duplicate headers from repeated watch output and prepends timestamps.
+_start_amd_gpu_monitor() {
+    local output="$1"
+    local interval="$2"
+
+    # amd-smi metric -w reprints the header on every iteration, so we
+    # stream through awk to keep only the first header and prepend timestamps.
+    amd-smi metric -p -c -t -u --csv -w "$interval" 2>/dev/null | awk -F, '
+        NR == 1 {
+            print "timestamp," $0
+            fflush()
+            header = $0
+            next
+        }
+        $0 == header { next }
+        {
+            cmd = "date +\"%Y-%m-%d %H:%M:%S\""
+            cmd | getline ts
+            close(cmd)
+            print ts "," $0
+            fflush()
+        }
+    ' > "$output"
 }
 
 # Stop the background GPU monitor and report file size.
