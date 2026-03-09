@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 # Multi-turn benchmark script for FP4 models on B200.
 # Runs a single experiment (one TP x users x offload combination) inside
@@ -47,8 +48,8 @@ pip install --quiet urllib3 requests 2>/dev/null || true
 
 # Patch vLLM bug: local_cache_hit counter can go negative under high load
 # (causes "Counters can only be incremented by non-negative amounts" crash)
-STATS_FILE=$(find / -path "*/vllm/v1/metrics/stats.py" 2>/dev/null | head -1)
-if [ -n "$STATS_FILE" ] && grep -q 'self.local_cache_hit += (' "$STATS_FILE"; then
+STATS_FILE=$(python3 -c "import vllm; import os; print(os.path.join(os.path.dirname(vllm.__file__), 'v1', 'metrics', 'stats.py'))" 2>/dev/null || echo "")
+if [ -n "$STATS_FILE" ] && [ -f "$STATS_FILE" ] && grep -q 'self.local_cache_hit += (' "$STATS_FILE"; then
     echo "Patching vLLM stats.py: $STATS_FILE"
     sed -i '/self\.local_cache_hit += (/,/)/{
         s/self\.local_cache_hit += (/self.local_cache_hit += max(0,/
