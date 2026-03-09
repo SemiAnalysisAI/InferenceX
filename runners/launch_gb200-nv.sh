@@ -129,6 +129,13 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
+# Copy custom recipes from InferenceX into srt-slurm (allows PP and other custom configs)
+CUSTOM_RECIPES_DIR="${GITHUB_WORKSPACE}/.github/configs/srt-recipes"
+if [ -d "$CUSTOM_RECIPES_DIR" ]; then
+    echo "Copying custom recipes from $CUSTOM_RECIPES_DIR into srt-slurm..."
+    cp -r "$CUSTOM_RECIPES_DIR"/* .
+fi
+
 echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)

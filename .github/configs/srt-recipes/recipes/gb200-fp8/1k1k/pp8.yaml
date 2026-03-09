@@ -1,0 +1,127 @@
+name: "gb200-fp8-1k1k-pp8"
+
+dynamo:
+  version: 0.8.1
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 9
+  nginx_container: nginx
+
+model:
+  path: "dsr1-fp8"
+  container: "dynamo-sglang"
+  precision: "fp8"
+
+resources:
+  gpu_type: "gb200"
+  prefill_nodes: 2
+  prefill_workers: 1
+  decode_nodes: 16
+  decode_workers: 1
+  gpus_per_node: 4
+
+backend:
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    MC_TE_METRIC: "true"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    PYTHONUNBUFFERED: "1"
+
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "768"
+    MC_TE_METRIC: "true"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    PYTHONUNBUFFERED: "1"
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      skip-tokenizer-init: true
+      trust-remote-code: true
+      pp-size: 8
+      tp-size: 1
+      dp-size: 1
+      ep-size: 1
+      enable-dp-attention: false
+      attention-backend: "trtllm_mla"
+      kv-cache-dtype: "fp8_e4m3"
+      disable-radix-cache: true
+      stream-interval: 50
+      max-running-requests: 30000
+      context-length: 2200
+      watchdog-timeout: 1000000
+      disable-shared-experts-fusion: true
+      disaggregation-bootstrap-port: 30001
+      disaggregation-mode: "prefill"
+      mem-fraction-static: 0.75
+      max-total-tokens: 524288
+      chunked-prefill-size: 131072
+      load-balance-method: "round_robin"
+      disable-cuda-graph: true
+      moe-dense-tp-size: 1
+      disaggregation-transfer-backend: nixl
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      skip-tokenizer-init: true
+      trust-remote-code: true
+      tp-size: 64
+      dp-size: 64
+      ep-size: 64
+      enable-dp-attention: true
+      attention-backend: "trtllm_mla"
+      kv-cache-dtype: "fp8_e4m3"
+      disable-radix-cache: true
+      stream-interval: 50
+      decode-log-interval: 1000
+      max-running-requests: 45000
+      context-length: 2200
+      watchdog-timeout: 1000000
+      disable-shared-experts-fusion: true
+      eplb-algorithm: "deepseek"
+      disaggregation-bootstrap-port: 30001
+      disaggregation-mode: "decode"
+      mem-fraction-static: 0.82
+      chunked-prefill-size: 36864
+      moe-a2a-backend: "deepep"
+      deepep-mode: "low_latency"
+      ep-dispatch-algorithm: "static"
+      moe-dense-tp-size: 1
+      enable-dp-lm-head: true
+      prefill-round-robin-balance: true
+      ep-num-redundant-experts: 32
+      deepep-config: "/configs/deepep_config.json"
+      cuda-graph-bs: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768]
+      cuda-graph-max-bs: 768
+      disaggregation-transfer-backend: nixl
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "1024x2048x4096"
+  req_rate: "inf"
