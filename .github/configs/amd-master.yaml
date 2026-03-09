@@ -315,6 +315,28 @@ kimik2.5-int4-mi355x-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+kimik2.5-int4-mi325x-vllm:
+  image: vllm/vllm-openai-rocm:v0.16.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: mi325x
+  precision: int4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
 kimik2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
   model: amd/Kimi-K2.5-MXFP4
