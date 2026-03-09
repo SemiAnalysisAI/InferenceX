@@ -8,6 +8,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -17,29 +18,16 @@ fi
 
 hf download "$MODEL"
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
-
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-python3 -m sglang.launch_server \
-    --attention-backend aiter \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
+set -x
+vllm serve $MODEL --port $PORT \
+--tensor-parallel-size=$TP \
+--gpu-memory-utilization 0.95 \
+--max-model-len $MAX_MODEL_LEN \
+--disable-log-requests \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -56,7 +44,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
