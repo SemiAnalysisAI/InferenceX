@@ -29,10 +29,10 @@ on:
         required: true
         default: '300'
         type: string
-      think_time:
-        description: 'Log-normal think-time params (mu,sigma)'
-        required: true
-        default: '1.39,1.26'
+      request_rate:
+        description: 'Request rate per client (Poisson, req/s). 0 = no delay.'
+        required: false
+        default: '0'
         type: string
       total_cpu_dram_gb:
         description: 'Total CPU DRAM for KV offload (GB)'
@@ -77,7 +77,7 @@ jobs:
       users: "${{ matrix.users }}"
       offload-mode: ${{ matrix.offload }}
       duration: ${{ inputs.duration }}
-      think-time: ${{ inputs.think_time }}
+      request-rate: ${{ inputs.request_rate }}
       total-cpu-dram-gb: ${{ inputs.total_cpu_dram_gb }}
       ref: ${{ inputs.ref }}
 

@@ -51,7 +51,6 @@ class ClientArgs(NamedTuple):
     conversation_sampling: ConversationSampling
     request_rate: float
     max_retries: int
-    think_time_lognormal: tuple[float, float] | None  # (mu, sigma) or None
 
 
 class RequestArgs(NamedTuple):
@@ -534,13 +533,6 @@ async def poisson_sleep(request_rate: float, verbose: bool = False) -> None:
     await asyncio.sleep(interval)
 
 
-async def lognormal_sleep(mu: float, sigma: float, verbose: bool = False) -> None:
-    """Sleep for a log-normally distributed duration (models realistic user think-time)."""
-    interval = np.random.lognormal(mean=mu, sigma=sigma)
-    if verbose:
-        logger.info(f"Sleeping for {interval:.3f} seconds (lognormal mu={mu}, sigma={sigma})...")
-    await asyncio.sleep(interval)
-
 
 async def exponential_backoff_sleep(
     attempt_cnt: int,
@@ -779,10 +771,7 @@ async def client_main(
                     conv_id_queue.appendleft(conv_id)
 
             # Sleep between requests (think-time)
-            if args.think_time_lognormal is not None:
-                mu, sigma = args.think_time_lognormal
-                await lognormal_sleep(mu, sigma, args.verbose)
-            elif args.request_rate > 0:
+            if args.request_rate > 0:
                 await poisson_sleep(args.request_rate, args.verbose)
 
     # Send indication that the client is done
@@ -821,24 +810,6 @@ def worker_function(
         )
     )
 
-
-def _parse_lognormal(value: str | None) -> tuple[float, float] | None:
-    """Parse 'mu,sigma' string into a (mu, sigma) tuple."""
-    if value is None:
-        return None
-    parts = value.split(",")
-    if len(parts) != 2:
-        raise ValueError(f"--think-time-lognormal must be 'mu,sigma', got '{value}'")
-    mu, sigma = float(parts[0]), float(parts[1])
-    if sigma <= 0:
-        raise ValueError(f"sigma must be positive, got {sigma}")
-    median = np.exp(mu)
-    mean = np.exp(mu + sigma**2 / 2)
-    logger.info(
-        f"Think-time: log-normal(mu={mu}, sigma={sigma}) → "
-        f"median={median:.1f}s, mean={mean:.1f}s"
-    )
-    return (mu, sigma)
 
 
 def get_client_config(
@@ -886,7 +857,6 @@ def get_client_config(
         conversation_sampling=args.conversation_sampling,
         request_rate=args.request_rate,
         max_retries=args.max_retries,
-        think_time_lognormal=_parse_lognormal(args.think_time_lognormal),
     )
 
     if args.limit_min_tokens > 0 or args.limit_max_tokens > 0:
@@ -1544,15 +1514,6 @@ async def main() -> None:
         "Set to 0 for no delay between requests.",
     )
     parser.add_argument(
-        "--think-time-lognormal",
-        type=str,
-        default=None,
-        help="Log-normal think-time between turns as 'mu,sigma'. "
-        "Median delay = exp(mu) seconds. "
-        "Example: '1.39,1.26' gives median ~4s think-time. "
-        "Overrides --request-rate if both are set.",
-    )
-    parser.add_argument(
         "--max-retries",
         type=int,
         default=int(os.environ.get("MULTITURN_BENCH_MAX_RETRIES", "0")),
@@ -1894,7 +1855,6 @@ async def main() -> None:
         "num_conversations": len(conversations),
         "active_conversations": args.max_active_conversations,
         "seed": args.seed,
-        "think_time_lognormal": args.think_time_lognormal,
     }
 
     if args.limit_min_tokens > 0:

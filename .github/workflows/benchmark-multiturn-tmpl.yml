@@ -31,10 +31,11 @@ on:
       duration:
         required: true
         type: string
-      think-time:
-        description: "Log-normal think-time params (mu,sigma)"
-        required: true
+      request-rate:
+        description: "Request rate per client (Poisson, req/s). 0 = no delay."
+        required: false
         type: string
+        default: '0'
       total-cpu-dram-gb:
         required: false
         type: string
@@ -56,7 +57,7 @@ env:
   USERS: ${{ inputs.users }}
   OFFLOAD_MODE: ${{ inputs.offload-mode }}
   DURATION: ${{ inputs.duration }}
-  THINK_TIME: ${{ inputs.think-time }}
+  REQUEST_RATE: ${{ inputs.request-rate }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   SPEC_DECODING: 'off'
 
@@ -142,6 +143,7 @@ jobs:
             results/config.yaml
             results/vllm_command.txt
             results/benchmark_command.txt
+            results/benchmark_metadata.json
             results/status.txt
           if-no-files-found: ignore
 

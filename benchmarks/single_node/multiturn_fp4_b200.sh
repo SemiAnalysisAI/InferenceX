@@ -6,8 +6,10 @@ set -euo pipefail
 # the enroot container.  Called by runners/launch_b200-nv.sh.
 #
 # Required env vars (set by benchmark-multiturn-tmpl.yml → runner):
-#   MODEL, TP, USERS, OFFLOAD_MODE, DURATION, THINK_TIME,
+#   MODEL, TP, USERS, OFFLOAD_MODE, DURATION,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR
+# Optional:
+#   REQUEST_RATE (default 0, Poisson req/s per client)
 # Optional:
 #   PORT (default 8888), MAX_RETRIES (default 3), REQUEST_TIMEOUT (default 3600)
 
@@ -19,13 +21,13 @@ check_env_vars \
     USERS \
     OFFLOAD_MODE \
     DURATION \
-    THINK_TIME \
     TOTAL_CPU_DRAM_GB \
     RESULT_DIR
 
 PORT=${PORT:-8888}
 MAX_RETRIES=${MAX_RETRIES:-3}
 REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
+REQUEST_RATE=${REQUEST_RATE:-0}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -105,7 +107,7 @@ BENCH_CMD+=" -m $MODEL"
 BENCH_CMD+=" -u http://localhost:$PORT"
 BENCH_CMD+=" -p $USERS"
 BENCH_CMD+=" --duration $DURATION"
-BENCH_CMD+=" --think-time-lognormal $THINK_TIME"
+BENCH_CMD+=" --request-rate $REQUEST_RATE"
 BENCH_CMD+=" --max-retries $MAX_RETRIES"
 BENCH_CMD+=" --request-timeout $REQUEST_TIMEOUT"
 BENCH_CMD+=" --metrics-output $RESULT_DIR/metrics"

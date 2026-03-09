@@ -7,11 +7,10 @@ cd "$SCRIPT_DIR"
 export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 
 # Realistic sweep experiment for multi-turn benchmark
-# Uses the 20k realistic dataset with log-normal think-time between turns.
+# Uses the 20k realistic dataset.
 #
 # Key differences from sweep_experiment.sh:
 #   - Uses realistic turn distribution (40% single-turn, long tail)
-#   - Log-normal think-time (median ~4s) models real user behavior
 #   - -p = number of concurrent users (not constant batch size)
 #   - Sweeps: TP x num_users x mode (on/off/noprefix)
 #
@@ -27,9 +26,6 @@ REQUEST_TIMEOUT=3600
 MAX_RETRIES=3
 DURATION=180  # 3 minutes per experiment
 
-# Log-normal think-time parameters (mu, sigma)
-# mu=1.39, sigma=1.26 → median ~4s, mean ~8.8s, P90 ~20s
-THINK_TIME="1.39,1.26"
 
 # Output directory - use provided arg or create new
 if [ $# -ge 1 ] && [ -d "$1" ]; then
@@ -48,13 +44,11 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "========================================"
 echo "Starting realistic sweep at $(date)"
 echo "Results directory: $RESULTS_DIR"
-echo "Think-time: log-normal($THINK_TIME)"
 echo "========================================"
 
 # Arrays for sweep
 TP_VALUES=(1 2 4 8)
-# Number of concurrent users (not constant batch size — actual in-flight
-# concurrency fluctuates due to think-time)
+# Number of concurrent users
 USER_VALUES=(2048 1024 512 256 128 64 32 16 8)
 # on=prefix caching + CPU offload, off=prefix caching only, noprefix=no prefix caching
 OFFLOAD_VALUES=(on off noprefix)
@@ -166,8 +160,7 @@ run_experiment() {
         echo "========================================"
         echo "Running experiment: $exp_name (attempt $attempt/$max_retries)"
         echo "  TP=$tp, Users=$users, Mode=$offload"
-        echo "  Think-time: log-normal($THINK_TIME)"
-        if [ "$offload" = "on" ]; then
+if [ "$offload" = "on" ]; then
             echo "  Prefix caching: ON, CPU offload: ON (${offload_size}GB per GPU)"
         elif [ "$offload" = "off" ]; then
             echo "  Prefix caching: ON, CPU offload: OFF"
@@ -234,14 +227,13 @@ EOF
         fi
 
         # Run benchmark
-        echo "Running benchmark (users=$users, duration=${DURATION}s, think_time=$THINK_TIME)..."
+        echo "Running benchmark (users=$users, duration=${DURATION}s)..."
         local benchmark_cmd="python3 benchmark/benchmark_serving_multi_turn.py"
         benchmark_cmd+=" -i $INPUT_FILE"
         benchmark_cmd+=" -m $MODEL"
         benchmark_cmd+=" -u http://localhost:$PORT"
         benchmark_cmd+=" -p $users"
         benchmark_cmd+=" --duration $DURATION"
-        benchmark_cmd+=" --think-time-lognormal $THINK_TIME"
         benchmark_cmd+=" --max-retries $MAX_RETRIES"
         benchmark_cmd+=" --request-timeout $REQUEST_TIMEOUT"
         benchmark_cmd+=" --metrics-output $exp_dir/metrics"
