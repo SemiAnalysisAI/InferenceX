@@ -21,26 +21,32 @@ import numpy as np
 from datasets import load_dataset
 
 
-def load_wildchat() -> tuple[list[int], list[int]]:
-    """Load inferencemax/WildChat-4.8M-4o-tokcount dataset and get turns and user tokens per conversation."""
+def load_wildchat() -> tuple[list[int], list[int], list[float]]:
+    """Load inferencemax/WildChat-4.8M-4o-tokcount dataset and get turns, user tokens, and tokens per turn."""
     print("Loading inferencemax/WildChat-4.8M-4o-tokcount dataset from HuggingFace...")
 
     dataset = load_dataset("inferencemax/WildChat-4.8M-4o-tokcount", split="train")
     print(f"Loaded {len(dataset):,} conversations")
 
-    # Columns already exist in dataset
-    turns_per_conv = [t for t in dataset["turn"] if t > 0]
-    user_tokens_per_conv = [t for t in dataset["user_token_count"] if t > 0]
+    turns_per_conv = []
+    user_tokens_per_conv = []
+    tokens_per_turn = []
+    for t, tok in zip(dataset["turn"], dataset["user_token_count"]):
+        if t > 0 and tok > 0:
+            turns_per_conv.append(t)
+            user_tokens_per_conv.append(tok)
+            tokens_per_turn.append(tok / t)
 
-    return turns_per_conv, user_tokens_per_conv
+    return turns_per_conv, user_tokens_per_conv, tokens_per_turn
 
 
-def generate_plots(turns_per_conv: list[int], user_tokens_per_conv: list[int], output_path: Path):
+def generate_plots(turns_per_conv: list[int], user_tokens_per_conv: list[int], output_path: Path, tokens_per_turn: list[float] | None = None):
     """Generate histogram, CDF, and exceedance plots."""
     turns = np.array(turns_per_conv)
     user_tokens = np.array(user_tokens_per_conv)
+    tpt = np.array(tokens_per_turn) if tokens_per_turn else user_tokens / np.maximum(turns, 1)
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(3, 2, figsize=(14, 15))
     fig.suptitle(f"WildChat: Conversation Statistics (n={len(turns):,})", fontsize=14)
 
     # Top-left: Histogram
@@ -120,16 +126,50 @@ def generate_plots(turns_per_conv: list[int], user_tokens_per_conv: list[int], o
     ax.set_ylim(0, max(token_pct_above) * 1.3)
     ax.grid(True, alpha=0.3, axis='y')
 
+    # Row 3, left: Histogram of user tokens per turn
+    ax = axes[2, 0]
+    # Clip for readability
+    clip = min(np.percentile(tpt, 99.5), 2000)
+    tpt_clipped = tpt[tpt <= clip]
+    ax.hist(tpt_clipped, bins=80, edgecolor='black', alpha=0.7, color='mediumpurple')
+    ax.axvline(np.median(tpt), color='red', linestyle='--', linewidth=1.5, label=f'Median: {np.median(tpt):.0f}')
+    ax.axvline(np.mean(tpt), color='orange', linestyle='--', linewidth=1.5, label=f'Mean: {np.mean(tpt):.0f}')
+    ax.set_xlabel("User Tokens per Turn")
+    ax.set_ylabel("Number of Conversations")
+    ax.set_title("Avg Request Length (User Tokens / Turns)")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, axis='y')
+
+    # Row 3, right: CDF of user tokens per turn
+    ax = axes[2, 1]
+    sorted_tpt = np.sort(tpt)
+    cdf_tpt = np.arange(1, len(sorted_tpt) + 1) / len(sorted_tpt)
+    ax.plot(sorted_tpt, cdf_tpt, linewidth=2, color='mediumpurple')
+    ax.fill_between(sorted_tpt, cdf_tpt, alpha=0.3, color='mediumpurple')
+    for p in [50, 75, 90, 95, 99]:
+        val = np.percentile(tpt, p)
+        ax.axhline(y=p/100, color='gray', linestyle='--', alpha=0.5)
+        ax.axvline(x=val, color='gray', linestyle='--', alpha=0.5)
+        ax.annotate(f'P{p}: {val:.0f}', xy=(val, p/100),
+                   xytext=(val + 20, p/100 - 0.04), fontsize=9)
+    ax.set_xlabel("User Tokens per Turn")
+    ax.set_ylabel("Cumulative Probability")
+    ax.set_title("CDF of Avg Request Length")
+    ax.set_xlim(0, np.percentile(tpt, 99.5))
+    ax.set_ylim(0, 1.05)
+    ax.grid(True, alpha=0.3)
+
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved plot to {output_path}")
 
 
-def print_summary(turns_per_conv: list[int], user_tokens_per_conv: list[int]):
+def print_summary(turns_per_conv: list[int], user_tokens_per_conv: list[int], tokens_per_turn: list[float] | None = None):
     """Print summary statistics."""
     turns = np.array(turns_per_conv)
     user_tokens = np.array(user_tokens_per_conv)
+    tpt = np.array(tokens_per_turn) if tokens_per_turn else user_tokens / np.maximum(turns, 1)
     n = len(turns)
 
     print("\n" + "=" * 50)
@@ -164,18 +204,28 @@ def print_summary(turns_per_conv: list[int], user_tokens_per_conv: list[int]):
     for t in [500, 1000, 2000, 4000, 8000, 16000, 32000]:
         count = np.sum(user_tokens > t)
         print(f"  > {t:>5,} tokens: {count:>10,} ({100*count/n:>5.1f}%)")
+
+    print(f"\nUser tokens per turn (avg request length):")
+    print(f"  Mean:   {tpt.mean():.1f}")
+    print(f"  Median: {np.median(tpt):.0f}")
+    print(f"  Std:    {tpt.std():.1f}")
+    print(f"  Min:    {tpt.min():.1f}")
+    print(f"  Max:    {tpt.max():.1f}")
+    print(f"\nTokens per turn percentiles:")
+    for p in [25, 50, 75, 90, 95, 99]:
+        print(f"  P{p}: {np.percentile(tpt, p):,.0f} tokens")
     print("=" * 50)
 
 
 def main(output_path: Path):
-    turns_per_conv, user_tokens_per_conv = load_wildchat()
+    turns_per_conv, user_tokens_per_conv, tokens_per_turn = load_wildchat()
 
     if not turns_per_conv:
         print("No conversation data found!")
         return
 
-    print_summary(turns_per_conv, user_tokens_per_conv)
-    generate_plots(turns_per_conv, user_tokens_per_conv, output_path)
+    print_summary(turns_per_conv, user_tokens_per_conv, tokens_per_turn)
+    generate_plots(turns_per_conv, user_tokens_per_conv, output_path, tokens_per_turn)
 
 
 if __name__ == "__main__":

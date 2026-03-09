@@ -549,8 +549,27 @@ class MetricsCollector:
             ax.set_title("Decode Speed (1/TPOT) vs Time")
             ax.grid(True, alpha=0.3)
 
-            # Hide unused subplot
-            axes[4, 1].axis('off')
+            # 10. Preemptions over time
+            ax = axes[4, 1]
+            preemption_rates = []
+            for i in range(1, len(self.snapshots)):
+                dt = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp
+                delta = self.snapshots[i].num_preemptions - self.snapshots[i-1].num_preemptions
+                preemption_rates.append(delta / dt if dt > 0 else 0)
+            if any(r > 0 for r in preemption_rates):
+                ax.plot(times[1:], preemption_rates, 'r-', linewidth=1.5, alpha=0.8)
+                # Cumulative on secondary axis
+                ax2 = ax.twinx()
+                cumulative = [self.snapshots[i].num_preemptions - self.snapshots[0].num_preemptions
+                              for i in range(1, len(self.snapshots))]
+                ax2.plot(times[1:], cumulative, 'b--', linewidth=1, alpha=0.5, label='Cumulative')
+                ax2.set_ylabel("Cumulative Preemptions", color='blue')
+                ax2.tick_params(axis='y', labelcolor='blue')
+            ax.set_xlabel("Time (s)")
+            ax.set_ylabel("Preemptions/sec", color='red')
+            ax.tick_params(axis='y', labelcolor='red')
+            ax.set_title("Preemptions Over Time")
+            ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
         plt.savefig(f"{output_prefix}_plots.png", dpi=150)

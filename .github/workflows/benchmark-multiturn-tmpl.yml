@@ -144,6 +144,8 @@ jobs:
             results/vllm_command.txt
             results/benchmark_command.txt
             results/benchmark_metadata.json
+            results/metrics_workload.png
+            results/responses.json
             results/status.txt
           if-no-files-found: ignore
 

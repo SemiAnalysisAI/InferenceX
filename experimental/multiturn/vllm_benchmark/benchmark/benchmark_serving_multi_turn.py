@@ -1819,6 +1819,12 @@ async def main() -> None:
                 client_metrics=client_metrics,
             )
 
+    # Generate workload analysis
+    if client_metrics:
+        from bench.workload_analysis import generate_from_request_stats
+        workload_path = f"{args.metrics_output}_workload.png"
+        generate_from_request_stats(client_metrics, workload_path)
+
     # Calculate requests per second
     requests_per_sec = len(client_metrics) / benchmark_runtime_sec
     benchmark_runtime_ms = benchmark_runtime_sec * 1000.0
