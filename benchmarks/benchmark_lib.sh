@@ -651,7 +651,7 @@ _start_eval_server() {
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-2}"
+    local num_fewshot="${NUM_FEWSHOT:-8}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0

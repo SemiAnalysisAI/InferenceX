@@ -29,7 +29,7 @@ generation_kwargs:
   do_sample: false
   temperature: 0.0
 repeats: 1
-num_fewshot: 5
+num_fewshot: 8
 filter_list:
   - name: "strict-match"
     filter:
