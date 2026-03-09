@@ -608,7 +608,14 @@ class MetricsCollector:
                 delta = self.snapshots[i].num_preemptions - self.snapshots[i-1].num_preemptions
                 preemption_rates.append(delta / dt if dt > 0 else 0)
             if any(r > 0 for r in preemption_rates):
-                ax.plot(times[1:], preemption_rates, 'r-', linewidth=1.5, alpha=0.8)
+                ax.scatter(times[1:], preemption_rates, alpha=0.15, s=3, c='red')
+                preempt_window = min(30, len(preemption_rates) // 10) if len(preemption_rates) > 10 else 1
+                if preempt_window > 1:
+                    rolling_preempt = [
+                        sum(preemption_rates[max(0, i - preempt_window):i + 1]) / len(preemption_rates[max(0, i - preempt_window):i + 1])
+                        for i in range(len(preemption_rates))
+                    ]
+                    ax.plot(times[1:], rolling_preempt, 'r-', linewidth=1.5, label=f'Rolling avg (n={preempt_window})')
                 # Cumulative on secondary axis
                 ax2 = ax.twinx()
                 cumulative = [self.snapshots[i].num_preemptions - self.snapshots[0].num_preemptions

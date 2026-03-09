@@ -56,7 +56,10 @@ def generate_workload_plots(
         print("No workload data to plot")
         return
 
-    turns = np.array([s.input_num_turns for s in stats])
+    # input_num_turns is len(messages) = number of messages in context (1, 3, 5, ...)
+    # Normalize to conversation turns: 1 message = turn 1, 3 messages = turn 2, etc.
+    raw_msg_counts = np.array([s.input_num_turns for s in stats])
+    turns = (raw_msg_counts + 1) // 2  # 1->1, 3->2, 5->3, ...
     input_tokens = np.array([s.input_num_tokens for s in stats])
     output_tokens = np.array([s.output_num_tokens for s in stats])
     tpt = input_tokens / np.maximum(turns, 1)
@@ -79,9 +82,9 @@ def generate_workload_plots(
                 f"{int(count)}",
                 ha="center", va="bottom", fontsize=7,
             )
-    ax.set_xlabel("Number of Turns (context)")
+    ax.set_xlabel("Conversation Turn")
     ax.set_ylabel("Number of Requests")
-    ax.set_title("Turns per Request")
+    ax.set_title("Which Turn of the Conversation")
     ax.set_xticks(range(1, max_t + 1))
     ax.grid(True, alpha=0.3, axis="y")
 
