@@ -42,7 +42,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
 --attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval 30 \
+--scheduler-recv-interval 30 \
 --stream-interval 30 --quantization modelopt_fp4 \
 --kv-cache-dtype fp8_e4m3 --fp4-gemm-backend flashinfer_cutlass > $SERVER_LOG 2>&1 &
 
