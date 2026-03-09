@@ -931,4 +931,14 @@
     - "Switch to --attention-backend ROCM_AITER_UNIFIED_ATTN and add fuse_rope_kvcache compilation pass"
     - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
-  
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang-mtp
+    - qwen3.5-fp8-b200-sglang-mtp
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Add Single Node Agg MTP configs for Qwen3.5 B200 SGLang (bf16, fp8, fp4)"
+    - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
+    - "New scripts: benchmarks/single_node/qwen3.5_bf16_b200_mtp.sh, qwen3.5_fp8_b200_mtp.sh, qwen3.5_fp4_b200_mtp.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
