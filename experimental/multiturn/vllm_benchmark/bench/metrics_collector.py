@@ -319,7 +319,7 @@ class MetricsCollector:
         times = [(s.timestamp - start_time) for s in self.snapshots]
 
         # Create figure with subplots
-        num_rows = 5 if client_metrics else 3
+        num_rows = 6 if client_metrics else 4
         fig, axes = plt.subplots(num_rows, 2, figsize=(14, 4 * num_rows))
         fig.suptitle("vLLM Server Metrics During Benchmark", fontsize=14)
 
@@ -487,7 +487,33 @@ class MetricsCollector:
         ax.set_title("Prefill Token Sources Over Time")
         ax.grid(True, alpha=0.3)
 
-        # 7 & 8. Client metrics plots (TTFT and Latency vs Time)
+        # 7. Cumulative KV Offload Transfers
+        initial = self.snapshots[0]
+        # GPU → CPU cumulative
+        ax = axes[3, 0]
+        cum_g2c = [(s.kv_offload_bytes_gpu_to_cpu - initial.kv_offload_bytes_gpu_to_cpu) / 1e9
+                    for s in self.snapshots]
+        if any(v > 0 for v in cum_g2c):
+            ax.plot(times, cum_g2c, 'b-', linewidth=1.5)
+            ax.fill_between(times, cum_g2c, alpha=0.2, color='blue')
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Cumulative Transfer (GB)")
+        ax.set_title("KV Offload: GPU → CPU (Cumulative)")
+        ax.grid(True, alpha=0.3)
+
+        # CPU → GPU cumulative
+        ax = axes[3, 1]
+        cum_c2g = [(s.kv_offload_bytes_cpu_to_gpu - initial.kv_offload_bytes_cpu_to_gpu) / 1e9
+                    for s in self.snapshots]
+        if any(v > 0 for v in cum_c2g):
+            ax.plot(times, cum_c2g, 'r-', linewidth=1.5)
+            ax.fill_between(times, cum_c2g, alpha=0.2, color='red')
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Cumulative Transfer (GB)")
+        ax.set_title("KV Offload: CPU → GPU (Cumulative)")
+        ax.grid(True, alpha=0.3)
+
+        # 8 & 9. Client metrics plots (TTFT and Latency vs Time)
         if client_metrics and len(client_metrics) > 0:
             # Sort by start time
             sorted_metrics = sorted(client_metrics, key=lambda x: x.start_time_ms)
@@ -497,8 +523,8 @@ class MetricsCollector:
             ttfts = [m.ttft_ms for m in sorted_metrics]
             latencies = [m.latency_ms for m in sorted_metrics]
 
-            # 7. TTFT vs Time
-            ax = axes[3, 0]
+            # 8. TTFT vs Time
+            ax = axes[4, 0]
             ax.scatter(request_times, ttfts, alpha=0.3, s=5, c='blue')
             # Add rolling average
             window = min(50, len(ttfts) // 10) if len(ttfts) > 10 else 1
@@ -514,8 +540,8 @@ class MetricsCollector:
             ax.set_title("Time to First Token vs Time")
             ax.grid(True, alpha=0.3)
 
-            # 8. Latency vs Time
-            ax = axes[3, 1]
+            # 9. Latency vs Time
+            ax = axes[4, 1]
             ax.scatter(request_times, latencies, alpha=0.3, s=5, c='green')
             # Add rolling average
             if window > 1:
@@ -530,8 +556,8 @@ class MetricsCollector:
             ax.set_title("Request Latency vs Time")
             ax.grid(True, alpha=0.3)
 
-            # 9. Interactivity (1/TPOT = tokens/sec) vs Time
-            ax = axes[4, 0]
+            # 10. Interactivity (1/TPOT = tokens/sec) vs Time
+            ax = axes[5, 0]
             # Filter out zero TPOT values to avoid division by zero
             tpots = [m.tpot_ms for m in sorted_metrics]
             interactivity = [1000.0 / t if t > 0 else 0 for t in tpots]  # Convert to tokens/sec
@@ -549,8 +575,8 @@ class MetricsCollector:
             ax.set_title("Decode Speed (1/TPOT) vs Time")
             ax.grid(True, alpha=0.3)
 
-            # 10. Preemptions over time
-            ax = axes[4, 1]
+            # 11. Preemptions over time
+            ax = axes[5, 1]
             preemption_rates = []
             for i in range(1, len(self.snapshots)):
                 dt = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp

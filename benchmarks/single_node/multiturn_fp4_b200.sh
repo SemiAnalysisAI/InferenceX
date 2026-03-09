@@ -45,6 +45,17 @@ INPUT_FILE="$MULTITURN_DIR/sample_20k_realistic.json"
 # Ensure HF CLI dependencies are available (some container builds strip urllib3)
 pip install --quiet urllib3 requests 2>/dev/null || true
 
+# Patch vLLM bug: local_cache_hit counter can go negative under high load
+# (causes "Counters can only be incremented by non-negative amounts" crash)
+STATS_FILE=$(find / -path "*/vllm/v1/metrics/stats.py" 2>/dev/null | head -1)
+if [ -n "$STATS_FILE" ] && grep -q 'self.local_cache_hit += (' "$STATS_FILE"; then
+    echo "Patching vLLM stats.py: $STATS_FILE"
+    sed -i '/self\.local_cache_hit += (/,/)/{
+        s/self\.local_cache_hit += (/self.local_cache_hit += max(0,/
+        s/num_cached_tokens + recomputed - num_external_computed_tokens/num_cached_tokens + recomputed - num_external_computed_tokens)/
+    }' "$STATS_FILE"
+fi
+
 # Download dataset from HuggingFace
 echo "Downloading sample_20k_realistic.json from HuggingFace..."
 hf download inferencemax/multiturn-benchmark-data sample_20k_realistic.json \
