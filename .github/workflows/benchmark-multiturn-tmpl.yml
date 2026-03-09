@@ -40,6 +40,11 @@ on:
         required: false
         type: string
         default: '300'
+      script-suffix:
+        description: "Suffix appended to benchmark script name (e.g. '_lmcache')"
+        required: false
+        type: string
+        default: ''
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -59,6 +64,7 @@ env:
   DURATION: ${{ inputs.duration }}
   REQUEST_RATE: ${{ inputs.request-rate }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  SCRIPT_SUFFIX: ${{ inputs.script-suffix }}
   SPEC_DECODING: 'off'
 
 permissions:

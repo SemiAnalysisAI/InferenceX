@@ -49,6 +49,11 @@ on:
         required: true
         default: 'nvidia/Llama-3.3-70B-Instruct-FP4'
         type: string
+      script_suffix:
+        description: 'Suffix for benchmark script (e.g. "_lmcache" → multiturn_fp4_b200_lmcache.sh)'
+        required: false
+        default: ''
+        type: string
       ref:
         description: 'Git ref (branch/sha) to checkout'
         required: false
@@ -79,6 +84,7 @@ jobs:
       duration: ${{ inputs.duration }}
       request-rate: ${{ inputs.request_rate }}
       total-cpu-dram-gb: ${{ inputs.total_cpu_dram_gb }}
+      script-suffix: ${{ inputs.script_suffix }}
       ref: ${{ inputs.ref }}
 
   # ---------------------------------------------------------------------------

@@ -503,7 +503,7 @@ class MetricsCollector:
                 cum_ext_pct.append(0)
         if any(v > 0 for v in cum_compute_pct):
             ax.stackplot(times, cum_compute_pct, cum_cache_pct, cum_ext_pct,
-                        labels=['Local Compute', 'Local Cache Hit', 'External KV Transfer'],
+                        labels=['Prefill', 'HBM Cache Hit', 'Offload Cache Hit'],
                         colors=['coral', 'steelblue', 'mediumseagreen'], alpha=0.8)
             ax.legend(fontsize=8, loc='lower left')
         ax.set_xlabel("Time (s)")
@@ -685,9 +685,9 @@ class MetricsCollector:
         total_by_source = total_compute + total_cache_hit + total_ext
         if total_by_source > 0:
             print(f"Prompt token sources:")
-            print(f"  - Local compute:      {total_compute:>12,} ({100*total_compute/total_by_source:.1f}%)")
-            print(f"  - Local cache hit:    {total_cache_hit:>12,} ({100*total_cache_hit/total_by_source:.1f}%)")
-            print(f"  - External KV xfer:   {total_ext:>12,} ({100*total_ext/total_by_source:.1f}%)")
+            print(f"  - Prefill:            {total_compute:>12,} ({100*total_compute/total_by_source:.1f}%)")
+            print(f"  - HBM cache hit:      {total_cache_hit:>12,} ({100*total_cache_hit/total_by_source:.1f}%)")
+            print(f"  - Offload cache hit:  {total_ext:>12,} ({100*total_ext/total_by_source:.1f}%)")
 
         # KV offload transfer stats
         g2c_bytes = final.kv_offload_bytes_gpu_to_cpu - initial.kv_offload_bytes_gpu_to_cpu
