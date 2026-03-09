@@ -51,10 +51,17 @@ pip install --quiet urllib3 requests 2>/dev/null || true
 STATS_FILE=$(python3 -c "import vllm; import os; print(os.path.join(os.path.dirname(vllm.__file__), 'v1', 'metrics', 'stats.py'))" 2>/dev/null || echo "")
 if [ -n "$STATS_FILE" ] && [ -f "$STATS_FILE" ] && grep -q 'self.local_cache_hit += (' "$STATS_FILE"; then
     echo "Patching vLLM stats.py: $STATS_FILE"
-    sed -i '/self\.local_cache_hit += (/,/)/{
-        s/self\.local_cache_hit += (/self.local_cache_hit += max(0,/
-        s/num_cached_tokens + recomputed - num_external_computed_tokens/num_cached_tokens + recomputed - num_external_computed_tokens)/
-    }' "$STATS_FILE"
+    python3 -c "
+import re, sys
+with open(sys.argv[1]) as f:
+    src = f.read()
+src = src.replace(
+    'self.local_cache_hit += (\n            num_cached_tokens + recomputed - num_external_computed_tokens\n        )',
+    'self.local_cache_hit += max(0,\n            num_cached_tokens + recomputed - num_external_computed_tokens\n        )',
+)
+with open(sys.argv[1], 'w') as f:
+    f.write(src)
+" "$STATS_FILE"
 fi
 
 # Download dataset from HuggingFace
