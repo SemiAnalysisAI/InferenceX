@@ -1881,8 +1881,8 @@ async def main() -> None:
         "requests_per_sec": requests_per_sec,
         "params": params,
     }
-    metrics_dir = Path(args.metrics_output).parent
-    metadata_path = metrics_dir / "benchmark_metadata.json"
+    metrics_dir = os.path.dirname(args.metrics_output)
+    metadata_path = os.path.join(metrics_dir, "benchmark_metadata.json") if metrics_dir else "benchmark_metadata.json"
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=2)
     logger.info(f"{Color.GREEN}Wrote benchmark metadata to {metadata_path}{Color.RESET}")
