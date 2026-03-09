@@ -413,7 +413,7 @@ minimaxm2.5-fp8-mi325x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
@@ -444,7 +444,7 @@ gptoss-fp4-mi300x-vllm:
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi325x
@@ -475,8 +475,8 @@ gptoss-fp4-mi325x-vllm:
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
-  model: openai/gpt-oss-120b
+  image: vllm/vllm-openai-rocm:v0.17.0
+  model: amd/gpt-oss-120b-w-mxfp4-a-fp8
   model-prefix: gptoss
   runner: mi355x
   precision: fp4

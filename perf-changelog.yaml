@@ -913,9 +913,20 @@
   evals-only: true
   
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD GPT-OSS vLLM image from v0.16.0 to v0.17.0 for MI300X, MI325X, and MI355X"
+    - "MI355X: Switch model to amd/gpt-oss-120b-w-mxfp4-a-fp8 (MXFP4 weights + FP8 activations)"
+    - "MI355X: Add VLLM_ROCM_USE_AITER_TRITON_ROPE=1 for AITER triton RoPE kernel"
+    - "Add AMDGCN_USE_BUFFER_OPS=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 env vars"
+    - "Switch to --attention-backend ROCM_AITER_UNIFIED_ATTN and add fuse_rope_kvcache compilation pass"
+    - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
+
+- config-keys:
     - minimaxm2.5-fp8-h200-vllm
   description:
     - "Extend MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP8)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/869
-
-  
