@@ -54,6 +54,11 @@ on:
         type: boolean
         required: true
         default: false
+      eval-only:
+        description: "Run only evals (skip throughput benchmark)"
+        type: boolean
+        required: false
+        default: false
       random-range-ratio:
         required: false
         type: string
@@ -83,6 +88,7 @@ env:
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
+  EVAL_ONLY: ${{ inputs.eval-only }}
 
 permissions:
   contents: read
@@ -91,7 +97,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 300
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.run-eval && ' | eval' || '' }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
@@ -145,28 +151,35 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-          FOUND_RESULT_FILE=
-          for i in {1..10}; do
-            if [ -f "$RESULT_FILENAME.json" ]; then
-              FOUND_RESULT_FILE=true
-              break
-            fi
-            echo "Waiting for result file... (attempt $i)"
-            sleep 1
-          done
 
-          if [ -z "$FOUND_RESULT_FILE" ]; then
-            echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
-            exit 1
+          if [ "${{ inputs.eval-only }}" = "true" ]; then
+            echo "Eval-only mode: skipping benchmark result file check"
+          else
+            FOUND_RESULT_FILE=
+            for i in {1..10}; do
+              if [ -f "$RESULT_FILENAME.json" ]; then
+                FOUND_RESULT_FILE=true
+                break
+              fi
+              echo "Waiting for result file... (attempt $i)"
+              sleep 1
+            done
+
+            if [ -z "$FOUND_RESULT_FILE" ]; then
+              echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
+              exit 1
+            fi
           fi
 
       - name: Process result
+        if: ${{ !inputs.eval-only }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           python3 utils/process_result.py
 
       - name: Upload result
+        if: ${{ !inputs.eval-only }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
@@ -189,7 +202,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
-        if: ${{ env.RUN_EVAL == 'true' }}
+        if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
@@ -200,7 +213,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ env.RUN_EVAL == 'true' }}
+        if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}
         run: |
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace

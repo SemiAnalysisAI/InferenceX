@@ -81,6 +81,7 @@ def main():
     final_results = {
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
+        "evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
             "head_ref": args.head_ref,
@@ -88,7 +89,8 @@ def main():
         },
     }
 
-    all_results = []
+    all_benchmark_results = []
+    all_eval_results = []
     # Deduplicate repeated configs, if for some reason a config key appears multiple times
     # in one commit, we don't want to run that config two times (there will just be twice as many
     # data points for that config, which is not useful)
@@ -106,21 +108,34 @@ def main():
             continue
         all_configs_to_run.update(configs_to_run)
 
-        # Use --evals-only if specified in changelog entry, otherwise --run-evals
-        eval_flag = "--evals-only" if entry.evals_only else "--run-evals"
+        base_cmd = [
+            "python3",
+            GENERATE_SWEEPS_PY_SCRIPT,
+            "test-config",
+            "--config-keys",
+            *configs_to_run,
+            "--config-files",
+            *MASTER_CONFIGS,
+        ]
 
+        if not entry.evals_only:
+            # Generate benchmark entries (no evals)
+            try:
+                result = subprocess.run(
+                    base_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                print(e.stderr)
+                raise
+            all_benchmark_results.extend(json.loads(result.stdout))
+
+        # Generate eval entries separately
         try:
-            result = subprocess.run(
-                [
-                    "python3",
-                    GENERATE_SWEEPS_PY_SCRIPT,
-                    "test-config",
-                    "--config-keys",
-                    *configs_to_run,
-                    "--config-files",
-                    *MASTER_CONFIGS,
-                    eval_flag
-                ],
+            eval_result = subprocess.run(
+                [*base_cmd, "--evals-only"],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -128,15 +143,16 @@ def main():
         except subprocess.CalledProcessError as e:
             print(e.stderr)
             raise
+        all_eval_results.extend(json.loads(eval_result.stdout))
 
-        all_results.extend(json.loads(result.stdout))
-
-    for result in all_results:
+    for result in all_benchmark_results:
         seq_len_str = seq_len_to_str(result["isl"], result["osl"])
         if "prefill" in result and result["prefill"] is not None:
             final_results["multi_node"][seq_len_str].append(result)
         else:
             final_results["single_node"][seq_len_str].append(result)
+
+    final_results["evals"] = all_eval_results
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)

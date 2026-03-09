@@ -80,6 +80,13 @@ check_env_vars() {
 #   --server-pid: Server process ID (required)
 #   --sleep-interval: Sleep interval between health checks (optional, default: 5)
 wait_for_server_ready() {
+    # In eval-only mode, skip waiting for the benchmark server entirely.
+    # run_eval() will start its own eval server.
+    if [ "${EVAL_ONLY}" = "true" ]; then
+        echo "EVAL_ONLY mode: skipping benchmark server wait"
+        return 0
+    fi
+
     set +x
     local port=""
     local server_log=""
@@ -166,6 +173,12 @@ wait_for_server_ready() {
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
+    # In eval-only mode, skip the throughput benchmark entirely.
+    if [ "${EVAL_ONLY}" = "true" ]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+        return 0
+    fi
+
     set +x
     local model=""
     local port=""
@@ -766,10 +779,12 @@ run_eval() {
         esac
     done
 
-    # Kill benchmark server and restart with native max context for eval
-    echo "Stopping benchmark server (PID=$SERVER_PID) for eval restart..."
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    # Kill benchmark server (if running) and restart with native max context for eval
+    if [[ -n "${SERVER_PID:-}" ]]; then
+        echo "Stopping benchmark server (PID=$SERVER_PID) for eval restart..."
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
     _start_eval_server
 
     case "$framework" in
