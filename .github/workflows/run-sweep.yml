@@ -265,46 +265,31 @@ jobs:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
 
-    trigger-vercel-deploy:
+    trigger-ingest:
         needs:
             [
-                sweep-single-node-1k1k,
-                sweep-single-node-1k8k,
-                sweep-single-node-8k1k,
-                sweep-multi-node-1k1k,
-                sweep-multi-node-1k8k,
-                sweep-multi-node-8k1k,
                 collect-results,
+                collect-evals,
+                calc-success-rate,
+                upload-changelog-metadata,
             ]
         if: >-
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
-            needs.collect-results.result == 'success' &&
-            (needs.sweep-single-node-1k1k.result == 'success' || needs.sweep-single-node-1k1k.result == 'skipped') &&
-            (needs.sweep-single-node-1k8k.result == 'success' || needs.sweep-single-node-1k8k.result == 'skipped') &&
-            (needs.sweep-single-node-8k1k.result == 'success' || needs.sweep-single-node-8k1k.result == 'skipped') &&
-            (needs.sweep-multi-node-1k1k.result == 'success' || needs.sweep-multi-node-1k1k.result == 'skipped') &&
-            (needs.sweep-multi-node-1k8k.result == 'success' || needs.sweep-multi-node-1k8k.result == 'skipped') &&
-            (needs.sweep-multi-node-8k1k.result == 'success' || needs.sweep-multi-node-8k1k.result == 'skipped')
+            (needs.collect-results.result != 'skipped' || needs.collect-evals.result != 'skipped')
         runs-on: ubuntu-latest
         steps:
-            - name: Download results artifacts
-              uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
-              with:
-                  path: artifacts
-            - name: Ingest results to DB
-              uses: SemiAnalysisAI/inferencemax-app/packages/ingest-action@main # latest only
-              with:
-                  database-url: ${{ secrets.DATABASE_WRITE_URL }}
-                  github-token: ${{ secrets.REPO_PAT }}
-                  run-id: ${{ github.run_id }}
-                  run-attempt: ${{ github.run_attempt }}
-                  artifacts-path: artifacts
-            - name: Trigger Vercel Deployment
+            - name: Trigger database ingest
               run: |
-                  curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
-            - name: Revalidate Vercel cache
-              run: |
-                  curl -s -X POST "https://inferencex.semianalysis.com/api/v1/invalidate" \
-                    -H "Authorization: Bearer ${{ secrets.VERCEL_REVALIDATE_URL }}" || true
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/inferencemax-app/dispatches \
+                    -d '{
+                      "event_type": "ingest-results",
+                      "client_payload": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}"
+                      }
+                    }'
