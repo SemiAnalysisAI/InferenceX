@@ -420,7 +420,7 @@ class MetricsCollector:
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
 
-        # 4. Throughput vs Time (tokens/sec)
+        # 4. Throughput vs Time (tokens/sec) with rolling average
         ax = axes[1, 1]
         throughputs = []
         for i in range(1, len(self.snapshots)):
@@ -430,7 +430,15 @@ class MetricsCollector:
                 throughputs.append(delta_gen / delta_time)
             else:
                 throughputs.append(0)
-        ax.plot(times[1:], throughputs, 'orange', linewidth=1.5)
+        ax.scatter(times[1:], throughputs, alpha=0.15, s=3, c='orange')
+        window = min(30, len(throughputs) // 10) if len(throughputs) > 10 else 1
+        if window > 1:
+            rolling_tp = [
+                sum(throughputs[max(0, i - window):i + 1]) / len(throughputs[max(0, i - window):i + 1])
+                for i in range(len(throughputs))
+            ]
+            ax.plot(times[1:], rolling_tp, 'orange', linewidth=1.5, label=f'Rolling avg (n={window})')
+            ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Tokens/sec")
         ax.set_title("Generation Throughput")
@@ -451,40 +459,57 @@ class MetricsCollector:
                 gpu_to_cpu_rates.append(0)
                 cpu_to_gpu_rates.append(0)
         if any(r > 0 for r in gpu_to_cpu_rates) or any(r > 0 for r in cpu_to_gpu_rates):
-            ax.plot(times[1:], gpu_to_cpu_rates, 'b-', linewidth=1, alpha=0.8, label='GPU→CPU')
-            ax.plot(times[1:], cpu_to_gpu_rates, 'r-', linewidth=1, alpha=0.8, label='CPU→GPU')
+            ax.scatter(times[1:], gpu_to_cpu_rates, alpha=0.15, s=3, c='blue')
+            ax.scatter(times[1:], cpu_to_gpu_rates, alpha=0.15, s=3, c='red')
+            xfer_window = min(30, len(gpu_to_cpu_rates) // 10) if len(gpu_to_cpu_rates) > 10 else 1
+            if xfer_window > 1:
+                rolling_g2c = [
+                    sum(gpu_to_cpu_rates[max(0, i - xfer_window):i + 1]) / len(gpu_to_cpu_rates[max(0, i - xfer_window):i + 1])
+                    for i in range(len(gpu_to_cpu_rates))
+                ]
+                rolling_c2g = [
+                    sum(cpu_to_gpu_rates[max(0, i - xfer_window):i + 1]) / len(cpu_to_gpu_rates[max(0, i - xfer_window):i + 1])
+                    for i in range(len(cpu_to_gpu_rates))
+                ]
+                ax.plot(times[1:], rolling_g2c, 'b-', linewidth=1.5, label=f'GPU→CPU (avg n={xfer_window})')
+                ax.plot(times[1:], rolling_c2g, 'r-', linewidth=1.5, label=f'CPU→GPU (avg n={xfer_window})')
+            else:
+                ax.plot(times[1:], gpu_to_cpu_rates, 'b-', linewidth=1, alpha=0.8, label='GPU→CPU')
+                ax.plot(times[1:], cpu_to_gpu_rates, 'r-', linewidth=1, alpha=0.8, label='CPU→GPU')
             ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Transfer Rate (MB/s)")
         ax.set_title("KV Offload Transfer Rate")
         ax.grid(True, alpha=0.3)
 
-        # 6. Prompt Token Sources Over Time (stacked area)
+        # 6. Prompt Token Sources Over Time (cumulative percentage)
         ax = axes[2, 1]
-        compute_rates = []
-        cache_hit_rates_src = []
-        ext_transfer_rates = []
-        for i in range(1, len(self.snapshots)):
-            dt = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp
-            if dt > 0:
-                delta_compute = self.snapshots[i].prompt_tokens_local_compute - self.snapshots[i-1].prompt_tokens_local_compute
-                delta_cache = self.snapshots[i].prompt_tokens_local_cache_hit - self.snapshots[i-1].prompt_tokens_local_cache_hit
-                delta_ext = self.snapshots[i].prompt_tokens_external_kv_transfer - self.snapshots[i-1].prompt_tokens_external_kv_transfer
-                compute_rates.append(delta_compute / dt)
-                cache_hit_rates_src.append(delta_cache / dt)
-                ext_transfer_rates.append(delta_ext / dt)
+        initial = self.snapshots[0]
+        cum_compute_pct = []
+        cum_cache_pct = []
+        cum_ext_pct = []
+        for s in self.snapshots:
+            c = s.prompt_tokens_local_compute - initial.prompt_tokens_local_compute
+            h = s.prompt_tokens_local_cache_hit - initial.prompt_tokens_local_cache_hit
+            e = s.prompt_tokens_external_kv_transfer - initial.prompt_tokens_external_kv_transfer
+            total = c + h + e
+            if total > 0:
+                cum_compute_pct.append(100.0 * c / total)
+                cum_cache_pct.append(100.0 * h / total)
+                cum_ext_pct.append(100.0 * e / total)
             else:
-                compute_rates.append(0)
-                cache_hit_rates_src.append(0)
-                ext_transfer_rates.append(0)
-        if any(r > 0 for r in compute_rates):
-            ax.stackplot(times[1:], compute_rates, cache_hit_rates_src, ext_transfer_rates,
+                cum_compute_pct.append(0)
+                cum_cache_pct.append(0)
+                cum_ext_pct.append(0)
+        if any(v > 0 for v in cum_compute_pct):
+            ax.stackplot(times, cum_compute_pct, cum_cache_pct, cum_ext_pct,
                         labels=['Local Compute', 'Local Cache Hit', 'External KV Transfer'],
                         colors=['coral', 'steelblue', 'mediumseagreen'], alpha=0.8)
-            ax.legend(fontsize=8, loc='upper left')
+            ax.legend(fontsize=8, loc='lower left')
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Tokens/sec")
-        ax.set_title("Prefill Token Sources Over Time")
+        ax.set_ylabel("% of Prefill Tokens")
+        ax.set_title("Cumulative Prefill Token Source Breakdown")
+        ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
 
         # 7. Cumulative KV Offload Transfers
@@ -517,9 +542,9 @@ class MetricsCollector:
         if client_metrics and len(client_metrics) > 0:
             # Sort by start time
             sorted_metrics = sorted(client_metrics, key=lambda x: x.start_time_ms)
-            # Convert to relative time (seconds from first request)
-            first_start = sorted_metrics[0].start_time_ms
-            request_times = [(m.start_time_ms - first_start) / 1000.0 for m in sorted_metrics]
+            # Align client times to server start_time so x-axis matches server plots
+            server_start_ms = start_time * 1000.0
+            request_times = [(m.start_time_ms - server_start_ms) / 1000.0 for m in sorted_metrics]
             ttfts = [m.ttft_ms for m in sorted_metrics]
             latencies = [m.latency_ms for m in sorted_metrics]
 
