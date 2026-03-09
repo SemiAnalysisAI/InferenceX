@@ -14,6 +14,7 @@ jobs:
         with:
           token: ${{ secrets.PAT_TOKEN }}
           fetch-depth: 0
+          lfs: false
 
       - name: Configure Git
         run: |
@@ -21,6 +22,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Add Upstream Remote (Fetch Only)
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
         run: |
           echo "Setting upstream as fetch-only (no push allowed)..."
           git remote add upstream https://github.com/SemiAnalysisAI/InferenceX.git
@@ -28,6 +31,8 @@ jobs:
           git fetch upstream --tags
 
       - name: Sync upstream
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
         run: |
           echo "Starting branch synchronization..."
           for branch in $(git branch -r | grep 'upstream/' | grep -v 'HEAD' | grep -v '\->' | sed 's|upstream/||'); do
@@ -41,6 +46,8 @@ jobs:
           done
 
       - name: Sync Tags
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
         run: |
           echo "Syncing tags..."
           git fetch upstream --tags
