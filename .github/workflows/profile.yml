@@ -44,7 +44,7 @@ jobs:
       count: ${{ steps.filter.outputs.count }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.ref || github.ref }}
 
@@ -149,7 +149,7 @@ jobs:
           fi
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: profile_${{ env.RESULT_FILENAME }}
           path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
@@ -217,7 +217,7 @@ jobs:
 
       - name: Upload TP-0-DECODE trace as artifact
         if: ${{ steps.run.outputs.tp0_decode != '' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
           path: ${{ steps.run.outputs.tp0_decode }}
@@ -225,7 +225,7 @@ jobs:
 
       - name: Upload TP-0-EXTEND trace as artifact
         if: ${{ steps.run.outputs.tp0_extend != '' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
           path: ${{ steps.run.outputs.tp0_extend }}
@@ -233,7 +233,7 @@ jobs:
 
       - name: Upload MoE debug log as artifact
         if: ${{ env.MOE_DEBUG == '1' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
           path: "moe_debug.tp0.log"
@@ -241,7 +241,7 @@ jobs:
 
       - name: Checkout storage repo
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage

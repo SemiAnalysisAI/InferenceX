@@ -26,6 +26,9 @@ hf download $MODEL
 export SGLANG_USE_AITER=1
 export SGLANG_AITER_MLA_PERSIST=1
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
@@ -62,4 +65,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

@@ -274,3 +274,21 @@ jobs:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
             - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
 
+            ### Expert Parallelism in Benchmark Scripts
+            vLLM and SGLang handle expert parallelism differently. When writing or reviewing benchmark scripts for MoE models:
+
+            - **vLLM** (`vllm serve`): Uses `--enable-expert-parallel` (a boolean flag). vLLM does NOT accept `--expert-parallel-size`. When EP is enabled, vLLM automatically determines the EP size based on TP and the number of available GPUs.
+            - **SGLang** (`sglang.launch_server`): Uses `--expert-parallel-size N` (an explicit integer). Pass the `EP_SIZE` env var value directly.
+            - **ATOM** (AMD vLLM fork): Uses `--enable-expert-parallel` (same as vLLM).
+
+            **Required pattern for vLLM/ATOM scripts:** Scripts must conditionally enable `--enable-expert-parallel` based on the `EP_SIZE` env var from the config YAML, rather than hardcoding it:
+            ```bash
+            if [ "$EP_SIZE" -gt 1 ]; then
+              EP=" --enable-expert-parallel"
+            else
+              EP=" "
+            fi
+            # Then use $EP in the vllm serve command
+            ```
+            This ensures the script respects the `ep` setting in the master config YAML's search-space.
+

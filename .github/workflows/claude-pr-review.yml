@@ -129,6 +129,26 @@ jobs:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
             - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
 
+            ## Expert Parallelism Validation:
+            When reviewing benchmark scripts for MoE models, verify that expert parallelism flags are used correctly:
+
+            - **vLLM** (`vllm serve`): Uses `--enable-expert-parallel` (boolean flag). Does NOT accept `--expert-parallel-size`. EP size is automatically determined by vLLM.
+            - **SGLang** (`sglang.launch_server`): Uses `--expert-parallel-size N` (explicit integer).
+            - **ATOM** (AMD vLLM fork): Uses `--enable-expert-parallel` (same as vLLM).
+
+            **Required pattern for vLLM/ATOM scripts:**
+            Scripts must NOT hardcode `--enable-expert-parallel`. Instead, they should conditionally enable it based on the `EP_SIZE` env var:
+            ```bash
+            if [ "$EP_SIZE" -gt 1 ]; then
+              EP=" --enable-expert-parallel"
+            else
+              EP=" "
+            fi
+            ```
+            If a script hardcodes `--enable-expert-parallel` without checking `EP_SIZE`:
+            - This is a 🟡 **WARNING** issue
+            - Comment: "Expert parallelism should be conditional on the `EP_SIZE` env var from the config YAML, not hardcoded. Use the `if [ \"$EP_SIZE\" -gt 1 ]` pattern to conditionally enable `--enable-expert-parallel`."
+
             Remember: Silence is golden. No comment is better than a low-value comment.
 
             ## Container Image Accessibility Validation:

@@ -1,34 +1,18 @@
 #!/usr/bin/bash
 
-export HF_HUB_CACHE_MOUNT="/home/hf_hub_cache/"
-export PORT=$(( 8888 + ${USER: -1} ))
+export HF_HUB_CACHE_MOUNT="/home/gharunner/gharunners/hf-hub-cache/"
+export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="main"
-SQUASH_FILE="/home/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell
-JOB_ID=$(squeue -u $USER -h -o %A | head -n1)
 
 set -x
-# Use Docker image directly for openai/gpt-oss-120b with trt, otherwise use squash file
-if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
-    CONTAINER_IMAGE=$IMAGE
-else
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    fi
-    CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
-fi
-
-srun --jobid=$JOB_ID \
---container-image=$CONTAINER_IMAGE \
+srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
+--container-image=$IMAGE \
+--container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER} \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-remap-root \
 --container-writable \
@@ -36,5 +20,3 @@ srun --jobid=$JOB_ID \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
 bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
-
-scancel $JOB_ID

@@ -220,8 +220,9 @@ fi
 # =============================================================================
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 
-PREFILL_NODES_PER_WORKER=$((PREFILL_TP_SIZE / GPUS_PER_NODE))
-DECODE_NODES_PER_WORKER=$((DECODE_TP_SIZE / GPUS_PER_NODE))
+# Ceiling division by GPUS_PER_NODE for nodes-per-worker
+PREFILL_NODES_PER_WORKER=$(((PREFILL_TP_SIZE + 7) / GPUS_PER_NODE))
+DECODE_NODES_PER_WORKER=$(((DECODE_TP_SIZE + 7) / GPUS_PER_NODE))
 NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 
 # Build prefill arguments dynamically based on xP
