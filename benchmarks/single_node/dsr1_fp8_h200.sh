@@ -15,7 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-pip3 install --user sentencepiece
+pip3 install --user --break-system-packages sentencepiece
 
 hf download "$MODEL"
 SERVER_LOG=/workspace/server.log

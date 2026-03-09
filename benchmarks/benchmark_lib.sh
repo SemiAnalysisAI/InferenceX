@@ -80,18 +80,12 @@ check_env_vars() {
 #   --server-pid: Server process ID (required)
 #   --sleep-interval: Sleep interval between health checks (optional, default: 5)
 wait_for_server_ready() {
-    # In eval-only mode, skip waiting for the benchmark server entirely.
-    # run_eval() will start its own eval server.
-    if [ "${EVAL_ONLY}" = "true" ]; then
-        echo "EVAL_ONLY mode: skipping benchmark server wait"
-        return 0
-    fi
-
     set +x
     local port=""
     local server_log=""
     local server_pid=""
     local sleep_interval=5
+    local skip_eval_only=true
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -112,12 +106,23 @@ wait_for_server_ready() {
                 sleep_interval="$2"
                 shift 2
                 ;;
+            --no-skip-eval-only)
+                skip_eval_only=false
+                shift
+                ;;
             *)
                 echo "Unknown parameter: $1"
                 return 1
                 ;;
         esac
     done
+
+    # In eval-only mode, skip waiting for the benchmark server entirely.
+    # run_eval() will start its own eval server (with --no-skip-eval-only).
+    if [ "${EVAL_ONLY}" = "true" ] && [ "$skip_eval_only" = "true" ]; then
+        echo "EVAL_ONLY mode: skipping benchmark server wait"
+        return 0
+    fi
 
     # Validate required parameters
     if [[ -z "$port" ]]; then
@@ -640,7 +645,7 @@ _start_eval_server() {
     esac
 
     EVAL_SERVER_PID=$!
-    wait_for_server_ready --port "$port" --server-log "$eval_server_log" --server-pid "$EVAL_SERVER_PID"
+    wait_for_server_ready --port "$port" --server-log "$eval_server_log" --server-pid "$EVAL_SERVER_PID" --no-skip-eval-only
 }
 
 run_lm_eval() {
