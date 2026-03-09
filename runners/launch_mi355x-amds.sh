@@ -179,6 +179,8 @@ else
         fi
     "
 
+    export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
