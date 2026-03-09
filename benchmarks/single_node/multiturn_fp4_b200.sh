@@ -42,6 +42,9 @@ nvidia-smi
 MULTITURN_DIR=/workspace/experimental/multiturn/vllm_benchmark
 INPUT_FILE="$MULTITURN_DIR/sample_20k_realistic.json"
 
+# Ensure HF CLI dependencies are available (some container builds strip urllib3)
+pip install --quiet urllib3 requests 2>/dev/null || true
+
 # Download dataset from HuggingFace
 echo "Downloading sample_20k_realistic.json from HuggingFace..."
 hf download inferencemax/multiturn-benchmark-data sample_20k_realistic.json \
