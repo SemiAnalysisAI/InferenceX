@@ -31,6 +31,11 @@ else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    eval_ctx=$(compute_eval_context_length "$MODEL" "10240")
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $eval_ctx "
+fi
+
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -65,9 +70,8 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
-EVAL_SERVER_EXTRA_ARGS="--kv_cache_dtype fp8"
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x

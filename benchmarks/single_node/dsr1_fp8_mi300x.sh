@@ -67,9 +67,8 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
-EVAL_SERVER_EXTRA_ARGS="--kv-cache-dtype fp8_e4m3 --attention-backend aiter"
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x

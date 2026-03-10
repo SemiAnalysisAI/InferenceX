@@ -40,7 +40,11 @@ CHUNKED_PREFILL_SIZE=32768
 MAX_PREFILL_TOKENS=32768
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MAX_RUNNING_REQUESTS=128
-CONTEXT_LENGTH=$((ISL + OSL + 20))
+if [ "${EVAL_ONLY}" = "true" ]; then
+    CONTEXT_LENGTH=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+else
+    CONTEXT_LENGTH=$((ISL + OSL + 20))
+fi
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
@@ -75,9 +79,8 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
-EVAL_SERVER_EXTRA_ARGS="--attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm"
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x

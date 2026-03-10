@@ -97,6 +97,10 @@ MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+fi
+
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
     # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
     capture_tokens=(1 2 4 8 16 32 64 128)
@@ -143,7 +147,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x

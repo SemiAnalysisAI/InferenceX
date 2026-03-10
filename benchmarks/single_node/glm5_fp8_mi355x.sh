@@ -61,9 +61,8 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
-EVAL_SERVER_EXTRA_ARGS="--tool-call-parser glm47 --reasoning-parser glm45 --nsa-prefill-backend tilelang --nsa-decode-backend tilelang"
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x

@@ -85,7 +85,6 @@ wait_for_server_ready() {
     local server_log=""
     local server_pid=""
     local sleep_interval=5
-    local skip_eval_only=true
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -106,23 +105,12 @@ wait_for_server_ready() {
                 sleep_interval="$2"
                 shift 2
                 ;;
-            --no-skip-eval-only)
-                skip_eval_only=false
-                shift
-                ;;
             *)
                 echo "Unknown parameter: $1"
                 return 1
                 ;;
         esac
     done
-
-    # In eval-only mode, skip waiting for the benchmark server entirely.
-    # run_eval() will start its own eval server (with --no-skip-eval-only).
-    if [ "${EVAL_ONLY}" = "true" ] && [ "$skip_eval_only" = "true" ]; then
-        echo "EVAL_ONLY mode: skipping benchmark server wait"
-        return 0
-    fi
 
     # Validate required parameters
     if [[ -z "$port" ]]; then
@@ -596,61 +584,24 @@ for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_
 "
 }
 
-_start_eval_server() {
+# Compute the context length for eval-only mode.
+# Uses 10x the benchmark context capped at the model's native max.
+# Exports EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
+# Echoes the computed value for scripts to capture.
+#
+# Usage: local ctx=$(compute_eval_context_length "$MODEL" "${current_ctx}")
+compute_eval_context_length() {
+    local model="$1"
+    local benchmark_ctx="${2:-0}"
     local native_max
-    native_max=$(get_native_max_context_length "$MODEL")
-    # Use 10x the benchmark MAX_MODEL_LEN instead of full native context to avoid OOM on lower TP
-    local eval_ctx=$(( ${MAX_MODEL_LEN:-$native_max} * 10 ))
+    native_max=$(get_native_max_context_length "$model")
+
+    local eval_ctx=$(( ${benchmark_ctx:-$native_max} * 10 ))
     if [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi
     export EVAL_MAX_MODEL_LEN="$eval_ctx"
-
-    local eval_server_log="/workspace/eval_server.log"
-    local port="${PORT:-8888}"
-    local tp="${TP:-1}"
-    local ep="${EP_SIZE:-1}"
-
-    echo "Starting eval server with context length: $eval_ctx (native=$native_max, framework=$FRAMEWORK)"
-
-    case "${FRAMEWORK}" in
-        sglang)
-            python3 -m sglang.launch_server \
-                --model-path "$MODEL" --host 0.0.0.0 --port "$port" \
-                --tensor-parallel-size "$tp" --ep-size "$ep" \
-                --context-length "$eval_ctx" \
-                --trust-remote-code \
-                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
-            ;;
-        vllm)
-            vllm serve "$MODEL" --port "$port" \
-                --tensor-parallel-size "$tp" \
-                --max-model-len "$eval_ctx" \
-                --trust-remote-code \
-                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
-            ;;
-        trt|trtllm)
-            mpirun -n 1 --oversubscribe --allow-run-as-root \
-                trtllm-serve "$MODEL" --port="$port" \
-                --backend=pytorch \
-                --tp_size="$tp" --ep_size="$ep" \
-                --max_seq_len="$eval_ctx" \
-                --trust_remote_code \
-                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
-            ;;
-        atom)
-            python3 -m atom.entrypoints.openai_server \
-                --model "$MODEL" --server-port "$port" \
-                -tp "$tp" \
-                --max-model-len "$eval_ctx" \
-                ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
-            ;;
-        *)
-            echo "Unknown FRAMEWORK '${FRAMEWORK}' for eval server"; return 1 ;;
-    esac
-
-    EVAL_SERVER_PID=$!
-    wait_for_server_ready --port "$port" --server-log "$eval_server_log" --server-pid "$EVAL_SERVER_PID" --no-skip-eval-only
+    echo "$eval_ctx"
 }
 
 run_lm_eval() {
@@ -786,23 +737,14 @@ run_eval() {
         esac
     done
 
-    # Kill benchmark server (if running) and restart with native max context for eval
-    if [[ -n "${SERVER_PID:-}" ]]; then
-        echo "Stopping benchmark server (PID=$SERVER_PID) for eval restart..."
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
+    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
+    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+        compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
-    _start_eval_server
 
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" ;;
         *)               echo "Unknown framework '${framework}'"; return 1 ;;
     esac
-    local eval_exit=$?
-
-    # Clean up eval server
-    kill "$EVAL_SERVER_PID" 2>/dev/null || true
-    wait "$EVAL_SERVER_PID" 2>/dev/null || true
-
-    return $eval_exit
+    return $?
 }

@@ -108,6 +108,10 @@ torch_compile_config:
 EOF
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+fi
+
 set -x
 # Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
@@ -141,6 +145,6 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi

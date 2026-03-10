@@ -22,7 +22,11 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
-MAX_SEQ_LEN=$((ISL + OSL + 20))
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_SEQ_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+else
+    MAX_SEQ_LEN=$((ISL + OSL + 20))
+fi
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 
@@ -72,9 +76,8 @@ run_benchmark_serving \
     --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
-EVAL_SERVER_EXTRA_ARGS="--quantization fp8 --kv-cache-dtype fp8_e4m3 --attention-backend flashinfer --reasoning-parser qwen3 --tool-call-parser qwen3_coder --mamba-ssm-dtype bfloat16"
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 set +x
