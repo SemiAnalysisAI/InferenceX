@@ -1,4 +1,11 @@
 - config-keys:
+    - kimik2.5-int4-mi325x-vllm
+  description:
+    - "Add Kimi K2.5 INT4 single-node MI325X vLLM benchmark (TP8)"
+    - "Uses vLLM ROCm v0.16.0 image following AMD Andy Luo's recipe"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/857
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
@@ -267,6 +274,12 @@
     - Add official GSM8k eval results to GPT-OSS and DeepSeek R1 scenarios
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/558
   evals-only: true
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update H200 DeepSeek R1 FP8 SGLang image from v0.5.7 to v0.5.9"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   
 - config-keys:
   - dsr1-fp4-b300-dynamo-trt
@@ -733,6 +746,15 @@
     - "Extend concurrency range to conc-end: 256 across all sequence lengths (1k1k, 1k8k, 8k1k)"
     - "Fix MTP 1k8k conc-start from 256 to 4 to enable full concurrency sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/699
+ 
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang benchmark for MI355X"
+    - "Model: zai-org/GLM-5-FP8 with NSA tilelang backends"
+    - "Image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219"
+    - "TP=8, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - gptoss-fp4-mi300x-vllm
@@ -883,12 +905,37 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/865
 
 - config-keys:
+    - qwen3.5-bf16-b200-sglang
+    - qwen3.5-bf16-mi300x-sglang
+    - qwen3.5-bf16-mi325x-sglang
+    - qwen3.5-bf16-mi355x-sglang
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Redo qwen eval"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/892
+  evals-only: true
+  
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+    - gptoss-fp4-mi325x-vllm
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update AMD GPT-OSS vLLM image from v0.16.0 to v0.17.0 for MI300X, MI325X, and MI355X"
+    - "MI355X: Switch model to amd/gpt-oss-120b-w-mxfp4-a-fp8 (MXFP4 weights + FP8 activations)"
+    - "MI355X: Add VLLM_ROCM_USE_AITER_TRITON_ROPE=1 for AITER triton RoPE kernel"
+    - "Add AMDGCN_USE_BUFFER_OPS=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 env vars"
+    - "Switch to --attention-backend ROCM_AITER_UNIFIED_ATTN and add fuse_rope_kvcache compilation pass"
+    - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
+  
+- config-keys:
     - gptoss-fp4-b200-vllm
     - gptoss-fp4-h100-vllm
     - gptoss-fp4-h200-vllm
   description:
     - "Update vLLM image from v0.15.1 to v0.16.0-cu130 for NVIDIA GPT-OSS configs"
-    - "All existing BKC flags preserved (VLLM_MXFP4_USE_MARLIN=1 on H100/H200, VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 on B200)"
-    - "v0.16.0 key changes: async scheduling + PP (30.8% throughput), new MXFP4 backends (SM90 FlashInfer BF16, SM100 CUTLASS), MoE cold start optimization"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/800
-  

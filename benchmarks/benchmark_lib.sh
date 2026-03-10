@@ -2,6 +2,63 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# --------------------------------
+# GPU monitoring helpers
+# --------------------------------
+
+GPU_MONITOR_PID=""
+GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+
+# Start background GPU monitoring that logs metrics every second to CSV.
+# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
+# Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
+start_gpu_monitor() {
+    local output="$GPU_METRICS_CSV"
+    local interval=1
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --output)   output="$2"; shift 2 ;;
+            --interval) interval="$2"; shift 2 ;;
+            *)          shift ;;
+        esac
+    done
+
+    GPU_METRICS_CSV="$output"
+
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+            --format=csv -l "$interval" > "$output" 2>/dev/null &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    elif command -v amd-smi &>/dev/null; then
+        # Use amd-smi native watch mode (-w) which includes timestamps automatically.
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
+        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    else
+        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
+        return 0
+    fi
+}
+
+# Stop the background GPU monitor and report file size.
+stop_gpu_monitor() {
+    if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        kill "$GPU_MONITOR_PID" 2>/dev/null
+        wait "$GPU_MONITOR_PID" 2>/dev/null || true
+        echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
+        if [[ -f "$GPU_METRICS_CSV" ]]; then
+            local lines
+            lines=$(wc -l < "$GPU_METRICS_CSV")
+            echo "[GPU Monitor] Collected $lines rows -> $GPU_METRICS_CSV"
+        fi
+    fi
+    GPU_MONITOR_PID=""
+}
+
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set
