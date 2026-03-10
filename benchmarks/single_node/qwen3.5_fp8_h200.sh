@@ -9,42 +9,55 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE 
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+nvidia-smi
+
 hf download "$MODEL"
-
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
-
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+MAX_SEQ_LEN=$((ISL + OSL + 20))
 
+echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
+
+set -x
 python3 -m sglang.launch_server \
-    --attention-backend aiter \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
+  --model "$MODEL" \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --tp "$TP" \
+  --expert-parallel-size "$EP_SIZE" \
+  --reasoning-parser qwen3 \
+  --tool-call-parser qwen3_coder \
+  --enable-flashinfer-allreduce-fusion \
+  --max-running-requests 128 \
+  --chunked-prefill-size 16384 \
+  --decode-log-interval 1 \
+  --mem-fraction-static 0.8 \
+  --cuda-graph-max-bs "$CONC" \
+  --context-length "$MAX_SEQ_LEN" \
+  --kv-cache-dtype fp8_e4m3 \
+  --quantization fp8 \
+  --attention-backend flashinfer \
+  --stream-interval 50 \
+  --tokenizer-worker-num 6 \
+  --mamba-ssm-dtype bfloat16 \
+  --disable-radix-cache \
+  --trust-remote-code \
+  > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
