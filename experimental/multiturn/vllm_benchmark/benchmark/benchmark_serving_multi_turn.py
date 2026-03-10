@@ -51,6 +51,9 @@ class ClientArgs(NamedTuple):
     conversation_sampling: ConversationSampling
     request_rate: float
     max_retries: int
+    user_centric_turn_gap: float  # 0 = disabled, >0 = seconds between this client's turns
+    user_centric_stagger_interval: float  # seconds between each client's start (1/total_QPS)
+    virtual_history: bool  # stagger clients to start mid-conversation
 
 
 class RequestArgs(NamedTuple):
@@ -585,14 +588,22 @@ async def client_main(
     num_failures = 0
 
     # Track the timestamp (time.perf_counter())
-    # of the last turn per conversation (only for debug)
+    # of the last turn per conversation
     time_of_last_turn: dict[ConvId, float] = {}
 
     # Flag that indicates that there are no new tasks (conversations) for the client
     task_queue_empty = False
 
+    # Virtual history: first conversation starts mid-way to simulate steady state
+    is_first_conversation = args.virtual_history
+
     async with aiohttp.ClientSession() as session:
-        # Print progress
+        # User-centric stagger: offset each client's start time so requests
+        # arrive evenly spaced across all clients
+        # Client 0 starts at t=0, client 1 at t=1/QPS, client 2 at t=2/QPS...
+        if args.user_centric_stagger_interval > 0 and client_id > 0:
+            stagger_delay = client_id * args.user_centric_stagger_interval
+            await asyncio.sleep(stagger_delay)
 
         while task_queue_empty is False:
             result = None
@@ -631,6 +642,27 @@ async def client_main(
                     # Default turns_count[conv_id] will be zero if conv_id
                     # was never inserted/updated in turns_count.
                     turns_count[conv_id] += 2
+
+                # Virtual history: first conversation starts at a staggered turn
+                # to simulate joining an already-running system (steady state).
+                # Each client starts at a different depth based on client_id.
+                if is_first_conversation:
+                    is_first_conversation = False
+                    num_user_turns = sum(
+                        1 for m in messages if m["role"] == "user"
+                    )
+                    if num_user_turns > 1:
+                        # Stagger: client_id determines starting depth
+                        # Each client gets a different fraction of the conversation
+                        skip_turns = (client_id % num_user_turns)
+                        # Skip in pairs (user + assistant = 2 messages per turn)
+                        turns_count[conv_id] += skip_turns * 2
+                        if args.verbose:
+                            logger.info(
+                                f"{Color.BLUE}Client {client_id} virtual history: "
+                                f"starting conversation {conv_id} at turn "
+                                f"{skip_turns} / {num_user_turns}{Color.RESET}"
+                            )
 
                 if turns_count[conv_id] < len(messages):
                     # Add new conversation
@@ -674,8 +706,8 @@ async def client_main(
                 f" that has only {len(messages)} messages"
             )
 
+            curr_time_sec: float = time.perf_counter()
             if args.verbose:
-                curr_time_sec: float = time.perf_counter()
                 time_since_last_turn: str | float = "N/A"
                 if conv_id in time_of_last_turn:
                     time_since_last_turn = round(
@@ -684,7 +716,7 @@ async def client_main(
                 logger.info(
                     f"Client {client_id} using conversation ID {conv_id} (turn: {current_turn}, time since last turn [sec]: {time_since_last_turn})"  # noqa: E501
                 )
-                time_of_last_turn[conv_id] = curr_time_sec
+            time_of_last_turn[conv_id] = curr_time_sec
 
             success = False
             for attempt_cnt in range(args.max_retries + 1):
@@ -771,7 +803,15 @@ async def client_main(
                     conv_id_queue.appendleft(conv_id)
 
             # Sleep between requests (think-time)
-            if args.request_rate > 0:
+            if args.user_centric_turn_gap > 0:
+                # User-centric timing: fixed gap between this client's turns.
+                # Measured from when we started this turn (curr_time_sec).
+                # If the server took longer than the gap, send immediately.
+                elapsed = time.perf_counter() - curr_time_sec
+                remaining = args.user_centric_turn_gap - elapsed
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+            elif args.request_rate > 0:
                 await poisson_sleep(args.request_rate, args.verbose)
 
     # Send indication that the client is done
@@ -818,6 +858,19 @@ def get_client_config(
     if args.num_clients < 1:
         raise ValueError("Number of clients must be a positive number")
 
+    if args.user_centric_rate > 0 and args.request_rate > 0:
+        raise ValueError(
+            "--user-centric-rate and --request-rate are mutually exclusive"
+        )
+
+    if args.user_centric_rate > 0:
+        turn_gap = args.num_clients / args.user_centric_rate
+        logger.info(
+            f"{Color.CYAN}User-centric timing: {args.user_centric_rate:.1f} QPS "
+            f"across {args.num_clients} clients → {turn_gap:.1f}s gap per client"
+            f"{Color.RESET}"
+        )
+
     if len(input_conv) < args.num_clients:
         raise ValueError(
             "Number of conversations must be equal or larger than the number of clients"
@@ -857,6 +910,9 @@ def get_client_config(
         conversation_sampling=args.conversation_sampling,
         request_rate=args.request_rate,
         max_retries=args.max_retries,
+        user_centric_turn_gap=args.num_clients / args.user_centric_rate if args.user_centric_rate > 0 else 0,
+        user_centric_stagger_interval=1.0 / args.user_centric_rate if args.user_centric_rate > 0 else 0,
+        virtual_history=args.virtual_history,
     )
 
     if args.limit_min_tokens > 0 or args.limit_max_tokens > 0:
@@ -1512,6 +1568,25 @@ async def main() -> None:
         default=0,
         help="Expected request rate (Poisson process) per client in requests/sec. "
         "Set to 0 for no delay between requests.",
+    )
+    parser.add_argument(
+        "--user-centric-rate",
+        type=float,
+        default=0,
+        help="User-centric timing mode: target QPS across all clients. "
+        "Each client waits a fixed turn gap = num_clients / rate between turns. "
+        "If the server takes longer than the gap, the next turn is sent immediately. "
+        "Set to 0 to disable (default: back-to-back requests). "
+        "Mutually exclusive with --request-rate.",
+    )
+    parser.add_argument(
+        "--virtual-history",
+        action="store_true",
+        default=False,
+        help="Simulate steady-state by staggering clients to start mid-conversation. "
+        "Each client begins at a different turn depth, creating an immediate mix "
+        "of early and deep conversations (no cold-start transient). "
+        "Best used with --user-centric-rate.",
     )
     parser.add_argument(
         "--max-retries",

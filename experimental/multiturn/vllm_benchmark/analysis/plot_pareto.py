@@ -17,6 +17,55 @@ import numpy as np
 from pathlib import Path
 
 
+def _load_aiperf_jsonl(jsonl_path: Path) -> pd.DataFrame | None:
+    """Load per-request metrics from aiperf profile_export JSONL."""
+    records = []
+    with open(jsonl_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            meta = entry.get("metadata", {})
+            metrics = entry.get("metrics", {})
+
+            if meta.get("benchmark_phase") != "profiling":
+                continue
+            if meta.get("was_cancelled", False):
+                continue
+
+            def val(key, default=0):
+                m = metrics.get(key)
+                if m is None:
+                    return default
+                return m.get("value", default) if isinstance(m, dict) else m
+
+            itl = metrics.get("inter_token_latency")
+            if itl and isinstance(itl, dict):
+                tpot_ms = itl.get("value", 0)
+            else:
+                osl = val("output_sequence_length", 1)
+                ttft = val("time_to_first_token", 0)
+                latency = val("request_latency", 0)
+                tpot_ms = (latency - ttft) / max(osl - 1, 1) if osl > 1 else 0
+
+            start_ns = meta.get("request_start_ns", 0)
+            start_ms = start_ns / 1e6
+
+            records.append({
+                "start_time_ms": start_ms,
+                "ttft_ms": val("time_to_first_token"),
+                "tpot_ms": tpot_ms,
+                "latency_ms": val("request_latency"),
+                "input_num_tokens": val("input_sequence_length"),
+                "output_num_tokens": val("output_sequence_length"),
+            })
+
+    if not records:
+        return None
+    return pd.DataFrame(records)
+
+
 def load_experiment_data(exp_dir: Path) -> dict | None:
     """Load and aggregate metrics from an experiment directory."""
     client_metrics_file = exp_dir / "metrics_client_metrics.csv"
@@ -30,11 +79,26 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
     if status != "SUCCESS":
         return None
 
-    if not client_metrics_file.exists():
+    # Also check for aiperf output
+    aiperf_jsonl = None
+    aiperf_artifacts = exp_dir / "aiperf_artifacts"
+    if aiperf_artifacts.exists():
+        candidates = list(aiperf_artifacts.glob("profile_export_aiperf.jsonl"))
+        if not candidates:
+            candidates = list(aiperf_artifacts.glob("profile_export*.jsonl"))
+        if candidates:
+            aiperf_jsonl = candidates[0]
+
+    if not client_metrics_file.exists() and aiperf_jsonl is None:
         return None
 
     try:
-        df = pd.read_csv(client_metrics_file)
+        if client_metrics_file.exists():
+            df = pd.read_csv(client_metrics_file)
+        elif aiperf_jsonl is not None:
+            df = _load_aiperf_jsonl(aiperf_jsonl)
+        else:
+            return None
 
         # Load server metrics for cache hit rates
         gpu_hit_rate = None

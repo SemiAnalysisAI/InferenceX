@@ -23,6 +23,75 @@ import pandas as pd
 import numpy as np
 
 
+def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:
+    """Load per-request metrics from custom benchmark client CSV."""
+    df = pd.read_csv(client_csv)
+    if len(df) == 0:
+        return None
+    # Columns expected: start_time_ms, ttft_ms, tpot_ms, latency_ms,
+    #                   input_num_tokens, output_num_tokens, ...
+    return df
+
+
+def _load_aiperf_jsonl(jsonl_path: Path) -> pd.DataFrame | None:
+    """Load per-request metrics from aiperf profile_export JSONL.
+
+    Converts aiperf's per-record format into the same column schema
+    used by the custom benchmark client CSV.
+    """
+    records = []
+    with open(jsonl_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            meta = entry.get("metadata", {})
+            metrics = entry.get("metrics", {})
+
+            # Skip non-profiling records or cancelled requests
+            if meta.get("benchmark_phase") != "profiling":
+                continue
+            if meta.get("was_cancelled", False):
+                continue
+
+            # Extract values (aiperf stores metrics as {value, unit} dicts)
+            def val(key, default=0):
+                m = metrics.get(key)
+                if m is None:
+                    return default
+                return m.get("value", default) if isinstance(m, dict) else m
+
+            # Compute TPOT from ITL if available
+            itl = metrics.get("inter_token_latency")
+            if itl and isinstance(itl, dict):
+                tpot_ms = itl.get("value", 0)
+            else:
+                # Fallback: (latency - ttft) / (output_tokens - 1)
+                osl = val("output_sequence_length", 1)
+                ttft = val("time_to_first_token", 0)
+                latency = val("request_latency", 0)
+                tpot_ms = (latency - ttft) / max(osl - 1, 1) if osl > 1 else 0
+
+            # Convert request_start_ns to ms (epoch)
+            start_ns = meta.get("request_start_ns", 0)
+            start_ms = start_ns / 1e6
+
+            records.append({
+                "start_time_ms": start_ms,
+                "ttft_ms": val("time_to_first_token"),
+                "tpot_ms": tpot_ms,
+                "latency_ms": val("request_latency"),
+                "input_num_tokens": val("input_sequence_length"),
+                "output_num_tokens": val("output_sequence_length"),
+            })
+
+    if not records:
+        return None
+
+    return pd.DataFrame(records)
+
+
 def load_experiment(exp_dir: Path) -> dict | None:
     """Load metrics from a single experiment artifact directory."""
     client_csv = exp_dir / "metrics_client_metrics.csv"
@@ -33,7 +102,17 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return None
     status = status_file.read_text().strip()
 
-    if not client_csv.exists():
+    # Also check for aiperf output
+    aiperf_jsonl = None
+    aiperf_artifacts = exp_dir / "aiperf_artifacts"
+    if aiperf_artifacts.exists():
+        candidates = list(aiperf_artifacts.glob("profile_export_aiperf.jsonl"))
+        if not candidates:
+            candidates = list(aiperf_artifacts.glob("profile_export*.jsonl"))
+        if candidates:
+            aiperf_jsonl = candidates[0]
+
+    if not client_csv.exists() and aiperf_jsonl is None:
         return None
 
     # Parse experiment name from directory: multiturn_tp{N}_users{M}_offload{mode}
@@ -63,8 +142,15 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        df = pd.read_csv(client_csv)
-        if len(df) == 0:
+        # Determine data source: custom client CSV or aiperf JSONL
+        if client_csv.exists():
+            df = _load_custom_client_csv(client_csv, exp_dir)
+        elif aiperf_jsonl is not None:
+            df = _load_aiperf_jsonl(aiperf_jsonl)
+        else:
+            return result
+
+        if df is None or len(df) == 0:
             return result
 
         # Prefer benchmark_metadata.json for precise wall-clock duration

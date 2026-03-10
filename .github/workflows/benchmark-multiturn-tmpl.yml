@@ -113,6 +113,7 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          submodules: true
 
 
       - name: Launch job script
@@ -152,6 +153,7 @@ jobs:
             results/benchmark_metadata.json
             results/metrics_workload.png
             results/responses.json
+            results/aiperf_artifacts/
             results/status.txt
           if-no-files-found: ignore
 
