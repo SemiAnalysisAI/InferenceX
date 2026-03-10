@@ -108,6 +108,3 @@ else
         echo "       This is normal for clusters without QoS or outside Docker containers."
     fi
 fi
-
-#FIXME: WA for latest upstream 0305 image 
-export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
