@@ -234,7 +234,7 @@ else
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:nvidia_h200:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file
