@@ -937,4 +937,5 @@
     - dsr1-fp4-mi355x-sglang-disagg-mtp
   description:
     - "Add more sweep configs for MI355X FP4 Disagg"
+    - "Bump FP4 image to March 5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/899
