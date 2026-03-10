@@ -599,37 +599,42 @@ for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_
 _start_eval_server() {
     local native_max
     native_max=$(get_native_max_context_length "$MODEL")
-    export EVAL_MAX_MODEL_LEN="$native_max"
+    # Use 10x the benchmark MAX_MODEL_LEN instead of full native context to avoid OOM on lower TP
+    local eval_ctx=$(( ${MAX_MODEL_LEN:-$native_max} * 10 ))
+    if [ "$eval_ctx" -gt "$native_max" ]; then
+        eval_ctx="$native_max"
+    fi
+    export EVAL_MAX_MODEL_LEN="$eval_ctx"
 
     local eval_server_log="/workspace/eval_server.log"
     local port="${PORT:-8888}"
     local tp="${TP:-1}"
     local ep="${EP_SIZE:-1}"
 
-    echo "Starting eval server with native max context length: $native_max (framework=$FRAMEWORK)"
+    echo "Starting eval server with context length: $eval_ctx (native=$native_max, framework=$FRAMEWORK)"
 
     case "${FRAMEWORK}" in
         sglang)
             python3 -m sglang.launch_server \
                 --model-path "$MODEL" --host 0.0.0.0 --port "$port" \
                 --tensor-parallel-size "$tp" --ep-size "$ep" \
-                --context-length "$native_max" \
+                --context-length "$eval_ctx" \
                 --trust-remote-code \
                 ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
             ;;
         vllm)
             vllm serve "$MODEL" --port "$port" \
                 --tensor-parallel-size "$tp" \
-                --max-model-len "$native_max" \
+                --max-model-len "$eval_ctx" \
                 --trust-remote-code \
                 ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
             ;;
-        trtllm)
+        trt|trtllm)
             mpirun -n 1 --oversubscribe --allow-run-as-root \
                 trtllm-serve "$MODEL" --port="$port" \
                 --backend=pytorch \
                 --tp_size="$tp" --ep_size="$ep" \
-                --max_seq_len="$native_max" \
+                --max_seq_len="$eval_ctx" \
                 --trust_remote_code \
                 ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
             ;;
@@ -637,7 +642,7 @@ _start_eval_server() {
             python3 -m atom.entrypoints.openai_server \
                 --model "$MODEL" --server-port "$port" \
                 -tp "$tp" \
-                --max-model-len "$native_max" \
+                --max-model-len "$eval_ctx" \
                 ${EVAL_SERVER_EXTRA_ARGS:-} > "$eval_server_log" 2>&1 &
             ;;
         *)
@@ -651,23 +656,21 @@ _start_eval_server() {
 run_lm_eval() {
     local port="${PORT:-8888}"
     local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-8}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests=32
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --port)           port="$2"; shift 2 ;;
             --task)           task="$2"; shift 2 ;;
-            --num-fewshot)    num_fewshot="$2"; shift 2 ;;
             --results-dir)    results_dir="$2"; shift 2 ;;
             --gen-max-tokens) gen_max_tokens="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
-            --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
+            --concurrent-requests) shift 2; continue ;; # ignored; use EVAL_CONCURRENT_REQUESTS env var
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -680,16 +683,15 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # Reserve 30% of context for the prompt, use remaining 70% for generation
-    local max_gen_tokens=$((gen_max_tokens * 70 / 100))
-    echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens} (70% of context)"
+    # Cap generation tokens to avoid excessive KV cache reservation per request on TRT.
+    local max_gen_tokens=16384
+    echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "utils/evals/${task}.yaml" \
-      --num_fewshot "${num_fewshot}" \
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
