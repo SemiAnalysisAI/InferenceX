@@ -938,3 +938,4 @@
     - "Add Kimi K2.5 FP4 B200 vLLM benchmark configuration"
     - "Image: vllm/vllm-openai:v0.17.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/862
+
