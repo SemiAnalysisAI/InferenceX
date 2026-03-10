@@ -91,6 +91,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
             "num_requests": num_requests,
             "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
             "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
+            "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
             "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
             "mean_ttft_ms": df["ttft_ms"].mean(),
             "p50_ttft_ms": df["ttft_ms"].median(),

@@ -84,13 +84,17 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
         total_input_tokens = df["input_num_tokens"].sum()
         input_throughput_tps = total_input_tokens / total_time_sec if total_time_sec > 0 else 0
 
-        # Total token throughput (input + output)
+        # Output token throughput (decode only)
         total_output_tokens = df["output_num_tokens"].sum()
+        output_throughput_tps = total_output_tokens / total_time_sec if total_time_sec > 0 else 0
+
+        # Total token throughput (input + output)
         total_tokens = total_input_tokens + total_output_tokens
         total_throughput_tps = total_tokens / total_time_sec if total_time_sec > 0 else 0
 
         # Normalized throughput (per GPU)
         input_tps_per_gpu = input_throughput_tps / tp
+        output_tps_per_gpu = output_throughput_tps / tp
         total_tps_per_gpu = total_throughput_tps / tp
 
         return {
@@ -103,6 +107,7 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
             "input_throughput_tps": input_throughput_tps,
             "total_throughput_tps": total_throughput_tps,
             "input_tps_per_gpu": input_tps_per_gpu,
+            "output_tps_per_gpu": output_tps_per_gpu,
             "total_tps_per_gpu": total_tps_per_gpu,
             "mean_ttft_ms": df["ttft_ms"].mean(),
             "p50_ttft_ms": df["ttft_ms"].median(),
@@ -227,7 +232,7 @@ def generate_pareto_only_figure(df: pd.DataFrame, results_dir: Path):
 
     # Create figure with columns for each mode
     num_cols = len(available_modes)
-    fig, axes = plt.subplots(3, num_cols, figsize=(6 * num_cols, 14))
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
     fig.suptitle("Pareto Frontiers Only (with Concurrency Labels)", fontsize=14)
 
     # Handle single column case
@@ -243,6 +248,8 @@ def generate_pareto_only_figure(df: pd.DataFrame, results_dir: Path):
         (0, "p50_ttft_ms", "input_tps_per_gpu", "TTFT", "Median TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p50_latency_ms", "total_tps_per_gpu", "E2E Latency", "Median E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/TPOT)", "Output Throughput/GPU (tok/s)", True),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
@@ -302,7 +309,7 @@ def generate_pareto_only_figure_p90(df: pd.DataFrame, results_dir: Path):
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     num_cols = len(available_modes)
-    fig, axes = plt.subplots(3, num_cols, figsize=(6 * num_cols, 14))
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
     fig.suptitle("Pareto Frontiers (P90 Latencies) with Concurrency Labels", fontsize=14)
 
     if num_cols == 1:
@@ -315,6 +322,7 @@ def generate_pareto_only_figure_p90(df: pd.DataFrame, results_dir: Path):
         (0, "p90_ttft_ms", "input_tps_per_gpu", "TTFT", "P90 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p90", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/P90 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p90_latency_ms", "total_tps_per_gpu", "E2E Latency", "P90 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p90", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/P90 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
@@ -378,7 +386,7 @@ def generate_pareto_overlay_figure_p90(df: pd.DataFrame, results_dir: Path):
         "noprefix": "No Prefix",
     }
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 14))
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
     fig.suptitle("Pareto Frontiers (P90 Latencies): Mode Comparison", fontsize=14)
 
     tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
@@ -388,6 +396,7 @@ def generate_pareto_overlay_figure_p90(df: pd.DataFrame, results_dir: Path):
         (0, "p90_ttft_ms", "input_tps_per_gpu", "TTFT vs Input Throughput/GPU", "P90 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p90", "total_tps_per_gpu", "Interactivity vs Total Throughput/GPU", "Interactivity (1000/P90 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p90_latency_ms", "total_tps_per_gpu", "E2E Latency vs Total Throughput/GPU", "P90 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p90", "output_tps_per_gpu", "Output Throughput vs Interactivity", "Interactivity (1000/P90 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
@@ -452,7 +461,7 @@ def generate_pareto_only_figure_p99(df: pd.DataFrame, results_dir: Path):
 
     # Create figure with columns for each mode
     num_cols = len(available_modes)
-    fig, axes = plt.subplots(3, num_cols, figsize=(6 * num_cols, 14))
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
     fig.suptitle("Pareto Frontiers (P99 Latencies) with Concurrency Labels", fontsize=14)
 
     # Handle single column case
@@ -468,6 +477,7 @@ def generate_pareto_only_figure_p99(df: pd.DataFrame, results_dir: Path):
         (0, "p99_ttft_ms", "input_tps_per_gpu", "TTFT", "P99 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p99", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/P99 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p99_latency_ms", "total_tps_per_gpu", "E2E Latency", "P99 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p99", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/P99 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
@@ -539,7 +549,7 @@ def generate_pareto_overlay_figure_p99(df: pd.DataFrame, results_dir: Path):
     }
 
     # Create 4x1 figure
-    fig, axes = plt.subplots(3, 1, figsize=(10, 14))
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
     fig.suptitle("Pareto Frontiers (P99 Latencies): Mode Comparison", fontsize=14)
 
     # Color by TP
@@ -551,6 +561,7 @@ def generate_pareto_overlay_figure_p99(df: pd.DataFrame, results_dir: Path):
         (0, "p99_ttft_ms", "input_tps_per_gpu", "TTFT vs Input Throughput/GPU", "P99 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p99", "total_tps_per_gpu", "Interactivity vs Total Throughput/GPU", "Interactivity (1000/P99 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p99_latency_ms", "total_tps_per_gpu", "E2E Latency vs Total Throughput/GPU", "P99 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p99", "output_tps_per_gpu", "Output Throughput vs Interactivity", "Interactivity (1000/P99 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
@@ -612,7 +623,7 @@ def generate_pareto_only_figure_p999(df: pd.DataFrame, results_dir: Path):
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     num_cols = len(available_modes)
-    fig, axes = plt.subplots(3, num_cols, figsize=(6 * num_cols, 14))
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
     fig.suptitle("Pareto Frontiers (P99.9 Latencies) with Concurrency Labels", fontsize=14)
 
     if num_cols == 1:
@@ -625,6 +636,7 @@ def generate_pareto_only_figure_p999(df: pd.DataFrame, results_dir: Path):
         (0, "p999_ttft_ms", "input_tps_per_gpu", "TTFT", "P99.9 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p999", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/P99.9 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p999_latency_ms", "total_tps_per_gpu", "E2E Latency", "P99.9 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p999", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/P99.9 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
@@ -688,7 +700,7 @@ def generate_pareto_overlay_figure_p999(df: pd.DataFrame, results_dir: Path):
         "noprefix": "No Prefix",
     }
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 14))
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
     fig.suptitle("Pareto Frontiers (P99.9 Latencies): Mode Comparison", fontsize=14)
 
     tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
@@ -698,6 +710,7 @@ def generate_pareto_overlay_figure_p999(df: pd.DataFrame, results_dir: Path):
         (0, "p999_ttft_ms", "input_tps_per_gpu", "TTFT vs Input Throughput/GPU", "P99.9 TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity_p999", "total_tps_per_gpu", "Interactivity vs Total Throughput/GPU", "Interactivity (1000/P99.9 TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p999_latency_ms", "total_tps_per_gpu", "E2E Latency vs Total Throughput/GPU", "P99.9 E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity_p999", "output_tps_per_gpu", "Output Throughput vs Interactivity", "Interactivity (1000/P99.9 TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
@@ -762,13 +775,13 @@ def generate_combined_pareto_figure(df: pd.DataFrame, results_dir: Path,
 
     pct = percentile  # e.g. "p50"
     pct_label = {"p50": "Median", "p90": "P90", "p99": "P99", "p999": "P99.9"}[pct]
-    suffix = "" if pct == "p50" else f"_{pct}"
+    suffix = f"_{pct}"
 
     df = df.copy()
     interactivity_col = f"interactivity{suffix}"
     df[interactivity_col] = 1000.0 / df[f"{pct}_tpot_ms"]
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 14))
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
     fig.suptitle(f"Combined Pareto Frontier — {pct_label} SLA (All Configs)", fontsize=14)
 
     tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
@@ -785,6 +798,7 @@ def generate_combined_pareto_figure(df: pd.DataFrame, results_dir: Path,
         (0, f"{pct}_ttft_ms",     "input_tps_per_gpu", "TTFT",          f"{pct_label} TTFT (ms)",                       "Input Throughput/GPU (tok/s)", False),
         (1, interactivity_col,    "total_tps_per_gpu", "Interactivity", f"Interactivity (1000/{pct_label} TPOT)",       "Total Throughput/GPU (tok/s)", True),
         (2, f"{pct}_latency_ms",  "total_tps_per_gpu", "E2E Latency",   f"{pct_label} E2E Latency (ms)",               "Total Throughput/GPU (tok/s)", False),
+        (3, interactivity_col,    "output_tps_per_gpu", "Output Throughput", f"Interactivity (1000/{pct_label} TPOT)",       "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
@@ -877,7 +891,7 @@ def generate_pareto_overlay_figure(df: pd.DataFrame, results_dir: Path):
     }
 
     # Create 4x1 figure
-    fig, axes = plt.subplots(3, 1, figsize=(10, 14))
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
     fig.suptitle("Pareto Frontiers: Prefix Caching Mode Comparison", fontsize=14)
 
     # Color by TP
@@ -889,6 +903,7 @@ def generate_pareto_overlay_figure(df: pd.DataFrame, results_dir: Path):
         (0, "p50_ttft_ms", "input_tps_per_gpu", "TTFT vs Input Throughput/GPU", "Median TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity", "total_tps_per_gpu", "Interactivity vs Total Throughput/GPU", "Interactivity (1000/TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p50_latency_ms", "total_tps_per_gpu", "E2E Latency vs Total Throughput/GPU", "Median E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput vs Interactivity", "Interactivity (1000/TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
@@ -971,7 +986,7 @@ def main(results_dir: Path):
 
     # Create figure with columns for each mode
     num_cols = len(available_modes)
-    fig, axes = plt.subplots(3, num_cols, figsize=(6 * num_cols, 14))
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
     fig.suptitle("Pareto Frontiers: Throughput/GPU vs Latency (All Points)", fontsize=14)
 
     # Handle single column case
@@ -987,6 +1002,8 @@ def main(results_dir: Path):
         (0, "p50_ttft_ms", "input_tps_per_gpu", "TTFT", "Median TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
         (1, "interactivity", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/TPOT)", "Total Throughput/GPU (tok/s)", True),
         (2, "p50_latency_ms", "total_tps_per_gpu", "E2E Latency", "Median E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/TPOT)", "Output Throughput/GPU (tok/s)", True),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/TPOT)", "Output Throughput/GPU (tok/s)", True),
     ]
 
     for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:

@@ -420,28 +420,40 @@ class MetricsCollector:
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
 
-        # 4. Throughput vs Time (tokens/sec) with rolling average
+        # 4. Throughput vs Time (tokens/sec) with rolling average — decode + total
         ax = axes[1, 1]
-        throughputs = []
+        decode_throughputs = []
+        total_throughputs = []
         for i in range(1, len(self.snapshots)):
             delta_gen = self.snapshots[i].generation_tokens - self.snapshots[i-1].generation_tokens
+            delta_prompt = self.snapshots[i].prompt_tokens - self.snapshots[i-1].prompt_tokens
             delta_time = self.snapshots[i].timestamp - self.snapshots[i-1].timestamp
             if delta_time > 0:
-                throughputs.append(delta_gen / delta_time)
+                decode_throughputs.append(delta_gen / delta_time)
+                total_throughputs.append((delta_gen + delta_prompt) / delta_time)
             else:
-                throughputs.append(0)
-        ax.scatter(times[1:], throughputs, alpha=0.15, s=3, c='orange')
-        window = min(30, len(throughputs) // 10) if len(throughputs) > 10 else 1
+                decode_throughputs.append(0)
+                total_throughputs.append(0)
+        window = min(30, len(decode_throughputs) // 10) if len(decode_throughputs) > 10 else 1
         if window > 1:
-            rolling_tp = [
-                sum(throughputs[max(0, i - window):i + 1]) / len(throughputs[max(0, i - window):i + 1])
-                for i in range(len(throughputs))
+            rolling_decode = [
+                sum(decode_throughputs[max(0, i - window):i + 1]) / len(decode_throughputs[max(0, i - window):i + 1])
+                for i in range(len(decode_throughputs))
             ]
-            ax.plot(times[1:], rolling_tp, 'orange', linewidth=1.5, label=f'Rolling avg (n={window})')
+            rolling_total = [
+                sum(total_throughputs[max(0, i - window):i + 1]) / len(total_throughputs[max(0, i - window):i + 1])
+                for i in range(len(total_throughputs))
+            ]
+            ax.plot(times[1:], rolling_total, 'steelblue', linewidth=1.5, label=f'Total (avg n={window})')
+            ax.plot(times[1:], rolling_decode, 'orange', linewidth=1.5, label=f'Decode (avg n={window})')
+            ax.legend(fontsize=8)
+        else:
+            ax.plot(times[1:], total_throughputs, 'steelblue', linewidth=1, alpha=0.8, label='Total')
+            ax.plot(times[1:], decode_throughputs, 'orange', linewidth=1, alpha=0.8, label='Decode')
             ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Tokens/sec")
-        ax.set_title("Generation Throughput")
+        ax.set_title("Throughput (Total & Decode)")
         ax.grid(True, alpha=0.3)
 
         # 5. KV Offload Transfer Rate (from vLLM metrics)
@@ -542,9 +554,9 @@ class MetricsCollector:
         if client_metrics and len(client_metrics) > 0:
             # Sort by start time
             sorted_metrics = sorted(client_metrics, key=lambda x: x.start_time_ms)
-            # Align client times to server start_time so x-axis matches server plots
-            server_start_ms = start_time * 1000.0
-            request_times = [(m.start_time_ms - server_start_ms) / 1000.0 for m in sorted_metrics]
+            # Convert to relative time (seconds from first request)
+            first_start = sorted_metrics[0].start_time_ms
+            request_times = [(m.start_time_ms - first_start) / 1000.0 for m in sorted_metrics]
             ttfts = [m.ttft_ms for m in sorted_metrics]
             latencies = [m.latency_ms for m in sorted_metrics]
 
