@@ -1117,6 +1117,25 @@ dsr1-fp4-mi355x-sglang-disagg:
         additional-settings:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
+    
+    # 1*DEP4+ 1*DEP8
+    - spec-decoding: "none"
+      conc-list: [ 512, 1024, 2048 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=0"
 
   - isl: 8192
     osl: 1024
@@ -1196,6 +1215,25 @@ dsr1-fp4-mi355x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    # 4*DEP4 + 1*DEP8
+    - spec-decoding: "none"
+      conc-list: [ 1024, 2048, 4096 ]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=4"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
@@ -1288,6 +1326,25 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=1"
 
+    # 1*DEP4+ 1*DEP8
+    - spec-decoding: "mtp"
+      conc-list: [ 512, 1024, 2048 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=1"
+
 
   - isl: 8192
     osl: 1024
@@ -1368,6 +1425,25 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=1"
+
+    # 4*DEP4 + 1*DEP8
+    - spec-decoding: "mtp"
+      conc-list: [ 1024, 2048, 4096 ]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "PREFILL_NODES=4"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=1"
 
 
