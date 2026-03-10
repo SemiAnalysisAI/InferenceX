@@ -932,3 +932,11 @@
     - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
   
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B200 SGLang benchmark config and launch script"
+    - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Configs: 1k1k (conc 4-64 ep1, conc 128 ep8), 1k8k (conc 4-128 ep1), 8k1k (conc 4-128 ep1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
