@@ -34,6 +34,9 @@ MEM_FRAC_STATIC=0.85
 
 echo "Config: ISL=$ISL, OSL=$OSL, CONC=$CONC, EP=$EP_SIZE, MEM=$MEM_FRAC_STATIC, CUDA_BS=$CUDA_GRAPH_MAX_BS, MAX_RR=$MAX_RUNNING_REQUESTS"
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
@@ -68,4 +71,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
