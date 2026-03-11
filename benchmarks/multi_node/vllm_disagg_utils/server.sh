@@ -53,37 +53,43 @@ host_name=$(hostname)
 echo "[INFO] Management IP (barriers/proxy): $host_ip"
 echo "[INFO] RDMA IP (Nixl KV transfer): $rdma_ip"
 
-# ---------------------------------------------------------------------------
-# RDMA route setup for Pensando ionic (RoCEv2) point-to-point /31 links.
-# Each benic interface has a /31 to the TOR switch. Without explicit routes,
-# traffic to other nodes' RDMA IPs falls through to the management network
-# (no RDMA capability). Fix: add a /24 route via the TOR gateway so RoCEv2
-# stays on the ionic fabric.
-# ---------------------------------------------------------------------------
-if [[ "$rdma_ip" =~ ^192\.168\.([0-9]+)\.([0-9]+)$ ]]; then
-    rdma_subnet="${BASH_REMATCH[1]}"
-    rdma_host="${BASH_REMATCH[2]}"
-    rdma_gw="192.168.${rdma_subnet}.$(( rdma_host | 1 ))"  # /31 peer = TOR switch
-    rdma_iface=$(ip -o addr show | awk -v ip="$rdma_ip" '$4 ~ ip {print $2}' | head -1)
-    if [[ -n "$rdma_iface" ]]; then
-        ip route replace "192.168.${rdma_subnet}.0/24" via "$rdma_gw" dev "$rdma_iface" 2>/dev/null && \
-            echo "[RDMA-ROUTE] Added 192.168.${rdma_subnet}.0/24 via $rdma_gw dev $rdma_iface" || \
-            echo "[RDMA-ROUTE] Route add failed for 192.168.${rdma_subnet}.0/24"
-    fi
-fi
+# =============================================================================
+# RDMA / Nixl Workarounds
+# =============================================================================
 
-# Patch Nixl UCX backend: set ucx_error_handling_mode=none for shared-memory
-# transport compatibility (Pensando ionic NICs don't support rdmacm, so the
-# default UCP_ERR_HANDLING_MODE_PEER causes "no active messages transport" errors)
-NIXL_API_FILE=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
-if [[ -n "$NIXL_API_FILE" ]]; then
-    if ! grep -q 'ucx_error_handling_mode' "$NIXL_API_FILE"; then
-        sed -i '/init\["num_threads"\] = str(nixl_conf.num_threads)/a\                        init["ucx_error_handling_mode"] = "none"' "$NIXL_API_FILE"
-        echo "[PATCH] Added ucx_error_handling_mode=none to $NIXL_API_FILE"
-    else
-        echo "[PATCH] ucx_error_handling_mode already set in $NIXL_API_FILE"
+setup_rdma_env() {
+    # Pensando ionic (RoCEv2) point-to-point /31 route fix.
+    # Each benic interface has a /31 to the TOR switch. Without explicit routes,
+    # traffic to other nodes' RDMA IPs falls through to the management network.
+    if [[ "$rdma_ip" =~ ^192\.168\.([0-9]+)\.([0-9]+)$ ]]; then
+        local rdma_subnet="${BASH_REMATCH[1]}"
+        local rdma_host="${BASH_REMATCH[2]}"
+        local rdma_gw="192.168.${rdma_subnet}.$(( rdma_host | 1 ))"
+        local rdma_iface
+        rdma_iface=$(ip -o addr show | awk -v ip="$rdma_ip" '$4 ~ ip {print $2}' | head -1)
+        if [[ -n "$rdma_iface" ]]; then
+            ip route replace "192.168.${rdma_subnet}.0/24" via "$rdma_gw" dev "$rdma_iface" 2>/dev/null && \
+                echo "[RDMA-ROUTE] Added 192.168.${rdma_subnet}.0/24 via $rdma_gw dev $rdma_iface" || \
+                echo "[RDMA-ROUTE] Route add failed for 192.168.${rdma_subnet}.0/24"
+        fi
     fi
-fi
+
+    # Patch Nixl UCX backend: set ucx_error_handling_mode=none.
+    # Pensando ionic NICs don't support rdmacm, so the default
+    # UCP_ERR_HANDLING_MODE_PEER causes "no active messages transport" errors.
+    local nixl_api
+    nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
+    if [[ -n "$nixl_api" ]]; then
+        if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
+            sed -i '/init\["num_threads"\] = str(nixl_conf.num_threads)/a\                        init["ucx_error_handling_mode"] = "none"' "$nixl_api"
+            echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api"
+        else
+            echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
+        fi
+    fi
+}
+
+setup_rdma_env
 
 if [[ -z "$UCX_NET_DEVICES" ]]; then
     echo "Error: UCX_NET_DEVICES is empty after env.sh detection" >&2
@@ -91,56 +97,45 @@ if [[ -z "$UCX_NET_DEVICES" ]]; then
 fi
 
 # =============================================================================
-# Model-Specific Configuration Maps
+# Model-Specific Configuration from YAML
 # =============================================================================
+MODELS_YAML="${VLLM_WS_PATH}/models.yaml"
 
-declare -A MODEL_PREFILL_CONFIGS=(
-    ["Llama-3.1-405B-Instruct-FP8-KV"]="--tensor-parallel-size 8 --kv-cache-dtype fp8"
-    ["amd-Llama-3.3-70B-Instruct-FP8-KV"]="--tensor-parallel-size 8 --max-model-len 65536 --kv-cache-dtype fp8"
-    ["DeepSeek-V3"]="--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
-    ["DeepSeek-R1-0528"]="--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
-    ["gpt-oss-120b"]="--tensor-parallel-size 8"
-)
-
-declare -A MODEL_DECODE_CONFIGS=(
-    ["Llama-3.1-405B-Instruct-FP8-KV"]="--tensor-parallel-size 8 --kv-cache-dtype fp8"
-    ["amd-Llama-3.3-70B-Instruct-FP8-KV"]="--tensor-parallel-size 8 --max-model-len 65536 --kv-cache-dtype fp8"
-    ["DeepSeek-V3"]="--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
-    ["DeepSeek-R1-0528"]="--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
-    ["gpt-oss-120b"]="--tensor-parallel-size 8"
-)
-
-declare -A MODEL_ENVS=(
-    ["amd-Llama-3.3-70B-Instruct-FP8-KV"]="VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
-    ["Llama-3.1-405B-Instruct-FP8-KV"]="VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
-    ["DeepSeek-V3"]="VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0"
-    ["DeepSeek-R1-0528"]="VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0"
-    ["gpt-oss-120b"]="VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0 VLLM_USE_AITER_UNIFIED_ATTENTION=1 VLLM_ROCM_USE_AITER_MHA=0 ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0"
-)
-
-get_model_config() {
-    local mode="$1"
-    local model_name="$2"
-    if [[ "$mode" == "prefill" ]]; then
-        echo "${MODEL_PREFILL_CONFIGS[$model_name]:-"--tensor-parallel-size 8"}"
-    elif [[ "$mode" == "decode" ]]; then
-        echo "${MODEL_DECODE_CONFIGS[$model_name]:-"--tensor-parallel-size 8"}"
-    fi
-}
-
-get_model_envs() {
-    echo "${MODEL_ENVS[$1]:-""}"
-}
+if [[ ! -f "$MODELS_YAML" ]]; then
+    echo "ERROR: models.yaml not found at $MODELS_YAML"
+    exit 1
+fi
 
 if [[ -z "$MODEL_NAME" ]]; then
     echo "ERROR: MODEL_NAME is not set"; exit 1
 fi
 
-PREFILL_SERVER_CONFIG=$(get_model_config "prefill" "$MODEL_NAME")
-DECODE_SERVER_CONFIG=$(get_model_config "decode" "$MODEL_NAME")
-PREFILL_MODEL_ENVS=$(get_model_envs "$MODEL_NAME")
-DECODE_MODEL_ENVS=$(get_model_envs "$MODEL_NAME")
-echo "Using model-specific configuration for: $MODEL_NAME"
+eval "$(python3 -c "
+import yaml, sys
+
+with open('${MODELS_YAML}') as f:
+    models = yaml.safe_load(f)
+
+model_name = '${MODEL_NAME}'
+if model_name not in models:
+    print(f'echo \"ERROR: Model {model_name} not in models.yaml\"; exit 1')
+    sys.exit(0)
+
+m = models[model_name]
+
+def bash_escape(s):
+    \"\"\"Escape a value for safe embedding in a bash double-quoted assignment.\"\"\"
+    return s.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"').replace('\$', '\\\\\$').replace('\`', '\\\\\`')
+
+pf = bash_escape(m.get('prefill_flags', '--tensor-parallel-size 8'))
+df = bash_escape(m.get('decode_flags', '--tensor-parallel-size 8'))
+ev = bash_escape(m.get('env', ''))
+print(f'PREFILL_SERVER_CONFIG=\"{pf}\"')
+print(f'DECODE_SERVER_CONFIG=\"{df}\"')
+print(f'MODEL_ENVS=\"{ev}\"')
+")"
+
+echo "Loaded model configuration for: $MODEL_NAME"
 
 # =============================================================================
 # Container Synchronization
@@ -203,20 +198,15 @@ done
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
-# Common UCX/Nixl environment for prefill and decode workers
-setup_ucx_env() {
-    export UCX_TLS=all
-    export UCX_SOCKADDR_TLS_PRIORITY=tcp
-    export UCX_MEMTYPE_CACHE=y
-    export UCX_RNDV_SCHEME=get_zcopy
-    export UCX_RNDV_THRESH=4k
-    export UCX_ROCM_IPC_MIN_ZCOPY=0
-    export HSA_ENABLE_SDMA=1
-    export UCX_LOG_LEVEL=info
+# vLLM/Nixl-specific environment (UCX transport vars are set at the Docker level in job.slurm)
+setup_vllm_env() {
     export VLLM_USE_V1=1
     export VLLM_SERVER_DEV_MODE=0
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${host_ip}
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5557
+    for env_pair in ${MODEL_ENVS}; do
+        export "$env_pair"
+    done
 }
 
 # =============================================================================
@@ -334,10 +324,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -le "$xP" ]; then
     echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
-    setup_ucx_env
-    for env_pair in ${PREFILL_MODEL_ENVS}; do
-        export "$env_pair"
-    done
+    setup_vllm_env
 
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
@@ -387,10 +374,7 @@ else
     echo "${host_name}:${host_ip} is Decode Node (Model: ${MODEL_NAME})"
     echo "Using decode config: $DECODE_SERVER_CONFIG"
 
-    setup_ucx_env
-    for env_pair in ${DECODE_MODEL_ENVS}; do
-        export "$env_pair"
-    done
+    setup_vllm_env
 
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
