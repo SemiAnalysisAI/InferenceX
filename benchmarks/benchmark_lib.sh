@@ -484,6 +484,9 @@ move_profile_trace_for_relay() {
 # ------------------------------
 
 _install_lm_eval_deps() {
+    # Remove torchvision to avoid circular import issues in ATOM containers.
+    # lm_eval[api] uses local-chat-completions (API-based) and does not need it.
+    python3 -m pip uninstall -y torchvision 2>/dev/null || true
     python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
