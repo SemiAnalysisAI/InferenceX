@@ -641,20 +641,19 @@ run_lm_eval() {
     local max_gen_tokens=16384
     echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
 
-    # Build comma-separated list of YAML paths from task names
-    local tasks_arg=""
+    # Build array of YAML paths from task names
+    local tasks_args=()
     IFS=',' read -ra task_arr <<< "$task"
     for t in "${task_arr[@]}"; do
         t=$(echo "$t" | xargs)  # trim whitespace
-        if [ -n "$tasks_arg" ]; then tasks_arg="${tasks_arg},"; fi
-        tasks_arg="${tasks_arg}utils/evals/${t}.yaml"
+        tasks_args+=("utils/evals/${t}.yaml")
     done
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "${tasks_arg}" \
+      --tasks "${tasks_args[@]}" \
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=999,tokenized_requests=False,max_length=${gen_max_tokens}" \
