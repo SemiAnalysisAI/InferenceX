@@ -81,7 +81,7 @@ setup_rdma_env() {
     nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
     if [[ -n "$nixl_api" ]]; then
         if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
-            sed -i '/init\["num_threads"\] = str(nixl_conf.num_threads)/a\                        init["ucx_error_handling_mode"] = "none"' "$nixl_api"
+            sed -i '/self\.create_backend(bknd, init)/i\                init["ucx_error_handling_mode"] = "none"' "$nixl_api"
             echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api"
         else
             echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
@@ -202,8 +202,8 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 setup_vllm_env() {
     export VLLM_USE_V1=1
     export VLLM_SERVER_DEV_MODE=0
-    export VLLM_NIXL_SIDE_CHANNEL_HOST=${host_ip}
-    export VLLM_NIXL_SIDE_CHANNEL_PORT=5557
+    export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
+    export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done
@@ -329,8 +329,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -le "$xP" ]; then
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --disable-log-requests \
-        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"engine_id\": \"${ENGINE_ID}\", \"kv_role\": \"kv_producer\", \"kv_parallel_size\": 8, \"kv_rank\": 0, \"kv_buffer_size\": 5000000000, \"kv_buffer_device\": \"cuda\", \"kv_ip\": \"'\"${rdma_ip}\"'\", \"kv_port\": 14600}' \
+        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_producer\", \"kv_load_failure_policy\": \"fail\"}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -379,8 +378,7 @@ else
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --disable-log-requests \
-        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"engine_id\": \"${ENGINE_ID}\", \"kv_role\": \"kv_consumer\", \"kv_parallel_size\": 8, \"kv_rank\": 0, \"kv_buffer_size\": 5000000000, \"kv_buffer_device\": \"cuda\", \"kv_ip\": \"'\"${rdma_ip}\"'\", \"kv_port\": 14600}' \
+        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_consumer\", \"kv_load_failure_policy\": \"fail\"}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
