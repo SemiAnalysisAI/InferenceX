@@ -46,16 +46,27 @@ export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=1200
 export MORI_SHMEM_MODE=ISOLATION
 export SGLANG_MORI_FP8_DISP=True
 
-export SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=16384
+if [[ "$MODEL_NAME" == *mxfp4* ]]; then
+export SGLANG_MORI_FP8_DISP=False
+fi
+
+export SGLANG_MORI_FP4_DISP=False
+export SGLANG_MORI_FP8_COMB=False
 
 # Per-role dispatch token limits (prefill uses higher throughput, decode uses lower)
 export MORI_MAX_DISPATCH_TOKENS_PREFILL=16384
-export MORI_MAX_DISPATCH_TOKENS_DECODE=256
+if [[ "$MODEL_NAME" == *mxfp4* ]]; then
+    export MORI_MAX_DISPATCH_TOKENS_PREFILL=12288
+fi
+export MORI_MAX_DISPATCH_TOKENS_DECODE=160
 
 # set MTP size=1 when EP16
 export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
 
 export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
+export MORI_IO_QP_MAX_SEND_WR=16384
+export MORI_IO_QP_MAX_CQE=32768
+export MORI_IO_QP_MAX_SGE=4
 
 export MORI_APP_LOG_LEVEL=INFO
 
@@ -111,3 +122,5 @@ fi
 
 # FIXME: WA for latest upstream 0305 image
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
+
+
