@@ -932,3 +932,10 @@
     - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
   
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Add Kimi K2.5 FP4 B200 vLLM benchmark configuration"
+    - "Image: vllm/vllm-openai:v0.17.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/862
+
