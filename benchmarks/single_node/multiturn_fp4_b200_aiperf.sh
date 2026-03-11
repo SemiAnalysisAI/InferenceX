@@ -117,15 +117,16 @@ set -x
 pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
 # Install aiperf
-# Pin huggingface-hub to prevent upgrading it (breaks vLLM's transformers)
+# Generate constraints to freeze all existing packages so pip only installs
+# what's missing without upgrading or uninstalling anything.
 echo "Installing aiperf..."
 cd "$AIPERF_DIR"
-HF_HUB_VERSION=$(pip show huggingface-hub 2>/dev/null | grep Version | awk '{print $2}')
-pip install -q -e . --constraint <(echo "huggingface-hub==${HF_HUB_VERSION}") 2>&1 | tail -5
+pip freeze > /tmp/constraints.txt
+pip install -q -e . --constraint /tmp/constraints.txt 2>&1 | tail -10
 cd "$MULTITURN_DIR"
 
 # Verify aiperf is importable
-python3 -c "import aiperf; print(f'aiperf installed OK')"
+python3 -c "import aiperf; print('aiperf installed OK')"
 set +x
 
 # ---- Start server metrics collector -----------------------------------------
