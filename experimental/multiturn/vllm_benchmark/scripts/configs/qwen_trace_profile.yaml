@@ -1,0 +1,72 @@
+# Synthetic multi-turn benchmark config modeled on Qwen/Bailian production traces.
+# Derived from qwen_traceA_blksz_16.jsonl (text-only conversations, n=16,447).
+# Used by generate_synthetic_dataset.py to produce mooncake_trace-compatible JSONL.
+
+system_prompt_length: 0
+
+delay:
+  min_ms: 1000
+  max_ms: 3000
+
+# Turn count distribution (text-only, 16,447 conversations).
+turn_count:
+  1: 59
+  2: 20
+  3: 10
+  4: 5
+  5: 3
+  6: 2
+  7: 1
+
+# ISL: new user tokens per turn
+isl:
+  # Turn 0 — bimodal: peak at ~70 and cluster at ~750. Fine buckets to capture shape.
+  "0":
+    - {min: 50, max: 80, weight: 18}
+    - {min: 80, max: 120, weight: 12}
+    - {min: 120, max: 160, weight: 4}
+    - {min: 160, max: 200, weight: 2}
+    - {min: 200, max: 250, weight: 2}
+    - {min: 250, max: 300, weight: 3}
+    - {min: 300, max: 350, weight: 2}
+    - {min: 350, max: 400, weight: 2}
+    - {min: 400, max: 500, weight: 4}
+    - {min: 500, max: 600, weight: 2}
+    - {min: 600, max: 700, weight: 1}
+    - {min: 700, max: 800, weight: 22}
+    - {min: 800, max: 900, weight: 6}
+    - {min: 900, max: 1000, weight: 3}
+    - {min: 1000, max: 1200, weight: 4}
+    - {min: 1200, max: 1400, weight: 4}
+    - {min: 1400, max: 1600, weight: 2}
+    - {min: 1600, max: 2000, weight: 2}
+    - {min: 2000, max: 3000, weight: 2}
+    - {min: 3000, max: 5000, weight: 1}
+  # Turns 1-6 — lognormal MLE (n=14,327, act_med=23, act_mean=118)
+  "1-6": {type: lognormal, mu: 3.610, sigma: 1.173}
+  # Turns 7+ — wider tail (n=970, act_med=28, act_mean=161)
+  "default": {type: lognormal, mu: 3.788, sigma: 1.275}
+
+# OSL: output tokens per turn
+osl:
+  # Turn 0 — plateau-shaped, not cleanly lognormal. Fine buckets. (act: mean=362, med=318)
+  "0":
+    - {min: 1, max: 20, weight: 3}
+    - {min: 20, max: 50, weight: 4}
+    - {min: 50, max: 100, weight: 8}
+    - {min: 100, max: 150, weight: 8}
+    - {min: 150, max: 200, weight: 7}
+    - {min: 200, max: 250, weight: 8}
+    - {min: 250, max: 300, weight: 9}
+    - {min: 300, max: 350, weight: 9}
+    - {min: 350, max: 400, weight: 10}
+    - {min: 400, max: 500, weight: 14}
+    - {min: 500, max: 600, weight: 7}
+    - {min: 600, max: 700, weight: 4}
+    - {min: 700, max: 900, weight: 4}
+    - {min: 900, max: 1200, weight: 3}
+    - {min: 1200, max: 2000, weight: 1}
+  # Turns 1-6 — lognormal MLE (n=14,327, act_med=442, act_mean=505)
+  "1-6": {type: lognormal, mu: 5.923, sigma: 0.905}
+  # Turns 7+ — outputs decline + wider variance (n=970, act_med=312, act_mean=450)
+  "default": {type: lognormal, mu: 5.518, sigma: 1.261}

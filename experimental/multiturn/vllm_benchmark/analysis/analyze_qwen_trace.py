@@ -674,6 +674,349 @@ def filter_conversations_by_type(conversations: list[list[dict]], allowed_types:
     return filtered
 
 
+def generate_request_distribution_plot(
+    turn_data: list[dict], output_path: Path, label: str = ""
+):
+    """Generate request distribution plot showing ISL/OSL buckets and ISL increment breakdown.
+
+    Produces a 2x2 figure:
+    - (0,0) ISL bucket distribution (bar chart with % labels)
+    - (0,1) OSL by ISL bucket (grouped bars showing mean OSL per ISL bucket)
+    - (1,0) ISL increment distribution (for turns > 0, the new tokens added per turn)
+    - (1,1) Recommended --seq-dist summary table as text
+    """
+    isl = np.array([t["isl"] for t in turn_data])
+    osl = np.array([t["osl"] for t in turn_data])
+    isl_incr = np.array([t["isl_increment"] for t in turn_data])
+    n = len(isl)
+
+    # ISL bucket edges
+    edges = [0, 200, 500, 1000, 2000, 4000, 8000, 16000, 100000]
+    bucket_labels = []
+    bucket_pcts = []
+    bucket_isl_means = []
+    bucket_isl_stds = []
+    bucket_osl_means = []
+    bucket_osl_stds = []
+
+    for i in range(len(edges) - 1):
+        lo, hi = edges[i], edges[i + 1]
+        mask = (isl >= lo) & (isl < hi)
+        cnt = mask.sum()
+        if cnt == 0:
+            continue
+        pct = 100 * cnt / n
+        bucket_labels.append(f"{lo}-{hi}" if hi < 100000 else f"{lo}+")
+        bucket_pcts.append(pct)
+        bucket_isl_means.append(isl[mask].mean())
+        bucket_isl_stds.append(isl[mask].std())
+        bucket_osl_means.append(osl[mask].mean())
+        bucket_osl_stds.append(osl[mask].std())
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    title_suffix = f" - {label}" if label else ""
+    fig.suptitle(
+        f"Request Distribution Analysis{title_suffix} (n={n:,})", fontsize=14
+    )
+
+    # (0,0) ISL bucket distribution
+    ax = axes[0, 0]
+    x = np.arange(len(bucket_labels))
+    bars = ax.bar(x, bucket_pcts, edgecolor="black", alpha=0.7, color="steelblue")
+    for bar, pct, im in zip(bars, bucket_pcts, bucket_isl_means):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{pct:.0f}%\n(mean={im:.0f})",
+            ha="center",
+            va="bottom",
+            fontsize=7,
+        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(bucket_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xlabel("ISL Range (tokens)")
+    ax.set_ylabel("% of Requests")
+    ax.set_title("ISL Bucket Distribution")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (0,1) Mean OSL by ISL bucket
+    ax = axes[0, 1]
+    bars = ax.bar(
+        x, bucket_osl_means, yerr=bucket_osl_stds, capsize=3,
+        edgecolor="black", alpha=0.7, color="coral",
+    )
+    for bar, om in zip(bars, bucket_osl_means):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{om:.0f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(bucket_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xlabel("ISL Range (tokens)")
+    ax.set_ylabel("Mean OSL (tokens)")
+    ax.set_title("Output Length by ISL Bucket")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (1,0) New user tokens distribution (all turns)
+    ax = axes[1, 0]
+    new_user_tokens = []
+    for t in turn_data:
+        if t["turn_idx"] == 0:
+            new_user_tokens.append(t["isl"])
+        else:
+            nut = t["isl_increment"] - t.get("prev_osl", 0)
+            new_user_tokens.append(max(0, nut))
+    nut_arr = np.array(new_user_tokens)
+    clip = min(np.percentile(nut_arr, 99), 5000)
+    ax.hist(nut_arr[nut_arr <= clip], bins=50, edgecolor="black", alpha=0.7, color="forestgreen")
+    ax.axvline(
+        np.median(nut_arr), color="red", linestyle="--", linewidth=1.5,
+        label=f"Median: {np.median(nut_arr):.0f}",
+    )
+    ax.axvline(
+        nut_arr.mean(), color="orange", linestyle="--", linewidth=1.5,
+        label=f"Mean: {nut_arr.mean():.0f}",
+    )
+    ax.legend(fontsize=8)
+    ax.set_xlabel("New User Tokens")
+    ax.set_ylabel("Count")
+    ax.set_title("New User Tokens per Turn (all turns)")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (1,1) Summary table — new user tokens bucketed for --seq-dist
+    ax = axes[1, 1]
+    ax.axis("off")
+
+    # Bucket new user tokens
+    nut_edges = [0, 50, 150, 400, 800, 1500, 3000, 100000]
+    nut_labels = []
+    nut_pcts = []
+    nut_means = []
+    nut_stds = []
+    nut_osl_means = []
+    nut_osl_stds = []
+
+    all_osl = np.array([t["osl"] for t in turn_data])
+    for i in range(len(nut_edges) - 1):
+        lo, hi = nut_edges[i], nut_edges[i + 1]
+        mask = (nut_arr >= lo) & (nut_arr < hi)
+        cnt = mask.sum()
+        if cnt == 0:
+            continue
+        pct = 100 * cnt / len(nut_arr)
+        nut_labels.append(f"{lo}-{hi}" if hi < 100000 else f"{lo}+")
+        nut_pcts.append(pct)
+        nut_means.append(nut_arr[mask].mean())
+        nut_stds.append(nut_arr[mask].std())
+        nut_osl_means.append(all_osl[mask].mean())
+        nut_osl_stds.append(all_osl[mask].std())
+
+    # Build seq-dist strings
+    simple_parts = [f"{nm:.0f},{om:.0f}:{pct:.0f}" for nm, om, pct in zip(
+        nut_means, nut_osl_means, nut_pcts)]
+    seq_parts = [f"{nm:.0f}|{ns:.0f},{om:.0f}|{os:.0f}:{pct:.0f}" for nm, ns, om, os, pct in zip(
+        nut_means, nut_stds, nut_osl_means, nut_osl_stds, nut_pcts)]
+
+    table_text = "Recommended --seq-dist (new user tokens):\n\n"
+    table_text += f"{'NUT Range':>12s}  {'%':>5s}  {'New User Tokens':>8s}  {'NUT σ':>8s}  {'OSL':>8s}  {'OSL σ':>8s}\n"
+    table_text += "-" * 60 + "\n"
+    for lbl, pct, nm, ns, om, os in zip(
+        nut_labels, nut_pcts, nut_means, nut_stds, nut_osl_means, nut_osl_stds,
+    ):
+        table_text += f"{lbl:>12s}  {pct:>4.0f}%  {nm:>8,.0f}  {ns:>8,.0f}  {om:>8,.0f}  {os:>8,.0f}\n"
+
+    table_text += "\n--seq-dist (simple):\n"
+    table_text += ";".join(simple_parts)
+
+    ax.text(
+        0.05, 0.95, table_text,
+        transform=ax.transAxes, fontsize=8, verticalalignment="top",
+        fontfamily="monospace",
+        bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8),
+    )
+
+    plt.tight_layout()
+    out_file = output_path.with_name(
+        output_path.stem.replace("_analysis", "") + "_request_distribution.png"
+    )
+    plt.savefig(out_file, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved request distribution plot to {out_file}")
+
+    # Also print seq-dist to stdout
+    print(f"\n  --seq-dist (simple): \"{';'.join(simple_parts)}\"")
+    print(f"  --seq-dist (with stddev): \"{';'.join(seq_parts)}\"")
+
+
+def generate_per_turn_distribution_plot(
+    conversations: list[list[dict]], output_path: Path, label: str = ""
+):
+    """Generate per-turn New User Tokens and OSL distributions to show independence from turn number.
+
+    2x2 figure:
+    - (0,0) Median New User Tokens by turn number (bar chart)
+    - (0,1) Median OSL by turn number (bar chart)
+    - (1,0) New User Tokens box plot by turn number
+    - (1,1) OSL box plot by turn number
+    """
+    max_turn = 10
+    turn_nuts = {}  # turn_idx -> list of new user tokens
+    turn_osls = {}  # turn_idx -> list of OSL
+
+    for conv in conversations:
+        for i, turn in enumerate(conv):
+            if i > max_turn:
+                break
+            osl = turn["output_length"]
+            if i == 0:
+                nut = turn["input_length"]
+            else:
+                nut = max(0, turn["input_length"] - conv[i - 1]["input_length"] - conv[i - 1]["output_length"])
+            turn_nuts.setdefault(i, []).append(nut)
+            turn_osls.setdefault(i, []).append(osl)
+
+    # Filter to turns with enough samples
+    valid_turns = [t for t in range(max_turn + 1) if len(turn_nuts.get(t, [])) >= 50]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    title_suffix = f" - {label}" if label else ""
+    fig.suptitle(f"New User Tokens & OSL by Turn Number{title_suffix}", fontsize=14)
+
+    # (0,0) Median New User Tokens by turn
+    ax = axes[0, 0]
+    medians = [np.median(turn_nuts[t]) for t in valid_turns]
+    means = [np.mean(turn_nuts[t]) for t in valid_turns]
+    counts = [len(turn_nuts[t]) for t in valid_turns]
+    bars = ax.bar(valid_turns, medians, color="forestgreen", alpha=0.7, edgecolor="black", label="Median")
+    ax.plot(valid_turns, means, "ro--", markersize=5, label="Mean")
+    for bar, med, cnt in zip(bars, medians, counts):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"{med:.0f}\n(n={cnt:,})", ha="center", va="bottom", fontsize=7)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("New User Tokens")
+    ax.set_title("Median New User Tokens by Turn")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (0,1) Median OSL by turn
+    ax = axes[0, 1]
+    medians = [np.median(turn_osls[t]) for t in valid_turns]
+    means = [np.mean(turn_osls[t]) for t in valid_turns]
+    bars = ax.bar(valid_turns, medians, color="coral", alpha=0.7, edgecolor="black", label="Median")
+    ax.plot(valid_turns, means, "ro--", markersize=5, label="Mean")
+    for bar, med in zip(bars, medians):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"{med:.0f}", ha="center", va="bottom", fontsize=7)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("Output Tokens")
+    ax.set_title("Median OSL by Turn")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (1,0) New User Tokens box plot by turn
+    ax = axes[1, 0]
+    box_data = [np.clip(turn_nuts[t], 0, np.percentile(turn_nuts[t], 95)) for t in valid_turns]
+    bp = ax.boxplot(box_data, positions=valid_turns, widths=0.6, patch_artist=True,
+                    showfliers=False, medianprops=dict(color="red", linewidth=1.5))
+    for patch in bp["boxes"]:
+        patch.set_facecolor("forestgreen")
+        patch.set_alpha(0.5)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("New User Tokens (clipped P95)")
+    ax.set_title("New User Tokens Distribution by Turn")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (1,1) OSL box plot by turn
+    ax = axes[1, 1]
+    box_data = [np.clip(turn_osls[t], 0, np.percentile(turn_osls[t], 95)) for t in valid_turns]
+    bp = ax.boxplot(box_data, positions=valid_turns, widths=0.6, patch_artist=True,
+                    showfliers=False, medianprops=dict(color="red", linewidth=1.5))
+    for patch in bp["boxes"]:
+        patch.set_facecolor("coral")
+        patch.set_alpha(0.5)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("Output Tokens (clipped P95)")
+    ax.set_title("OSL Distribution by Turn")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    out_file = output_path.with_name(
+        output_path.stem.replace("_analysis", "") + "_per_turn_distribution.png"
+    )
+    plt.savefig(out_file, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved per-turn distribution plot to {out_file}")
+
+
+def generate_per_turn_delay_plot(
+    conversations: list[list[dict]], output_path: Path, label: str = ""
+):
+    """Generate inter-turn delay distribution by turn number.
+
+    2x1 figure:
+    - (0) Median delay by turn number (bar chart with mean overlay)
+    - (1) Delay box plot by turn number
+    """
+    max_turn = 10
+    turn_delays = {}
+
+    for conv in conversations:
+        for i in range(1, len(conv)):
+            if i > max_turn:
+                break
+            delay = conv[i]["timestamp"] - conv[i - 1]["timestamp"]
+            turn_delays.setdefault(i, []).append(delay)
+
+    valid_turns = [t for t in range(1, max_turn + 1) if len(turn_delays.get(t, [])) >= 50]
+    if not valid_turns:
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    title_suffix = f" - {label}" if label else ""
+    fig.suptitle(f"Inter-Turn Delay by Turn Number{title_suffix}", fontsize=14)
+
+    # Left: median/mean delay by turn
+    ax = axes[0]
+    medians = [np.median(turn_delays[t]) for t in valid_turns]
+    means = [np.mean(turn_delays[t]) for t in valid_turns]
+    counts = [len(turn_delays[t]) for t in valid_turns]
+    bars = ax.bar(valid_turns, medians, color="steelblue", alpha=0.7, edgecolor="black", label="Median")
+    ax.plot(valid_turns, means, "ro--", markersize=5, label="Mean")
+    for bar, med, cnt in zip(bars, medians, counts):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"{med:.0f}s\n(n={cnt:,})", ha="center", va="bottom", fontsize=7)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("Delay (seconds)")
+    ax.set_title("Median Inter-Turn Delay by Turn")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # Right: delay box plot by turn
+    ax = axes[1]
+    box_data = [np.clip(turn_delays[t], 0, np.percentile(turn_delays[t], 95)) for t in valid_turns]
+    bp = ax.boxplot(box_data, positions=valid_turns, widths=0.6, patch_artist=True,
+                    showfliers=False, medianprops=dict(color="red", linewidth=1.5))
+    for patch in bp["boxes"]:
+        patch.set_facecolor("steelblue")
+        patch.set_alpha(0.5)
+    ax.set_xlabel("Turn Number")
+    ax.set_ylabel("Delay (seconds, clipped P95)")
+    ax.set_title("Delay Distribution by Turn")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    out_file = output_path.with_name(
+        output_path.stem.replace("_analysis", "") + "_per_turn_delay.png"
+    )
+    plt.savefig(out_file, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved per-turn delay plot to {out_file}")
+
+
 def run_analysis(conversations: list[list[dict]], output_path: Path, label: str):
     """Run full analysis pipeline on a set of conversations."""
     print(f"\n{'#' * 70}")
@@ -687,12 +1030,15 @@ def run_analysis(conversations: list[list[dict]], output_path: Path, label: str)
     print_sequence_summary(turn_data)
     generate_sequence_analysis_plot(turn_data, output_path, label)
     generate_isl_per_turn_plot(turn_data, conversations, output_path, label)
+    generate_request_distribution_plot(turn_data, output_path, label)
+    generate_per_turn_distribution_plot(conversations, output_path, label)
 
     # Inter-turn timing analysis
     delays = compute_inter_turn_delays(conversations)
     if len(delays) > 0:
         print_timing_summary(delays, label)
         generate_timing_plot(delays, output_path, label)
+        generate_per_turn_delay_plot(conversations, output_path, label)
 
 
 def main():

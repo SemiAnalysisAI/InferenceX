@@ -6,11 +6,11 @@ set -x
 # Uses AIPerf as the benchmark client with server-side metrics collection.
 #
 # Required env vars (set by benchmark-multiturn-tmpl.yml → runner):
-#   MODEL, TP, USERS, OFFLOAD_MODE, DURATION,
+#   MODEL, TP, USERS, OFFLOAD_MODE,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR
 # Optional:
-#   TRACE_FILE (default: mooncake trace from HuggingFace)
 #   PORT (default 8888), REQUEST_TIMEOUT (default 3600)
+#   CONVOS_PER_USER (default 5) — conversations per concurrent user
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -19,12 +19,12 @@ check_env_vars \
     TP \
     USERS \
     OFFLOAD_MODE \
-    DURATION \
     TOTAL_CPU_DRAM_GB \
     RESULT_DIR
 
 PORT=${PORT:-8888}
 REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
+CONVOS_PER_USER=${CONVOS_PER_USER:-5}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -59,11 +59,16 @@ with open(sys.argv[1], 'w') as f:
 " "$STATS_FILE"
 fi
 
-# Download WildChat dataset from HuggingFace
-INPUT_FILE="$MULTITURN_DIR/sample_20k_realistic.json"
-echo "Downloading sample_20k_realistic.json from HuggingFace..."
-hf download inferencemax/multiturn-benchmark-data sample_20k_realistic.json \
-    --repo-type dataset --local-dir "$MULTITURN_DIR"
+# Generate synthetic multi-turn dataset
+CONV_COUNT=$((USERS * CONVOS_PER_USER))
+INPUT_FILE="$MULTITURN_DIR/synthetic_multiturn.jsonl"
+SYNTH_CONFIG="$MULTITURN_DIR/scripts/configs/qwen_trace_profile.yaml"
+echo "Generating synthetic dataset ($CONV_COUNT conversations = $USERS users x $CONVOS_PER_USER convos)..."
+python3 "$MULTITURN_DIR/scripts/generate_synthetic_dataset.py" \
+    --config "$SYNTH_CONFIG" \
+    --num-conversations "$CONV_COUNT" \
+    --seed 42 \
+    --output "$INPUT_FILE"
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
@@ -133,7 +138,6 @@ echo "Starting server metrics collector..."
 python3 -m bench.run_metrics_collector \
     --url "http://localhost:$PORT" \
     --output-prefix "$RESULT_DIR/metrics" \
-    --duration "$DURATION" \
     --pid-file "$RESULT_DIR/metrics_collector.pid" &
 METRICS_PID=$!
 echo "Metrics collector PID: $METRICS_PID"
@@ -142,26 +146,21 @@ echo "Metrics collector PID: $METRICS_PID"
 sleep 2
 
 # ---- Run AIPerf benchmark ----------------------------------------------------
-# User-centric rate: QPS scales with USERS to maintain ~1 req/s per user
-# with a turn gap of ~1s. Adjust USER_CENTRIC_QPS to control load.
-USER_CENTRIC_QPS=${USER_CENTRIC_QPS:-$USERS}
-
 AIPERF_CMD="$AIPERF_BIN profile"
 AIPERF_CMD+=" --model $MODEL"
 AIPERF_CMD+=" --url http://localhost:$PORT"
 AIPERF_CMD+=" --endpoint-type chat"
 AIPERF_CMD+=" --streaming"
 AIPERF_CMD+=" --input-file $INPUT_FILE"
-AIPERF_CMD+=" --custom-dataset-type wildchat"
-AIPERF_CMD+=" --user-centric-rate $USER_CENTRIC_QPS"
-AIPERF_CMD+=" --session-turns-mean 2"
-AIPERF_CMD+=" --num-users $USERS"
+AIPERF_CMD+=" --custom-dataset-type mooncake_trace"
+AIPERF_CMD+=" --shared-system-prompt-length 100"
 AIPERF_CMD+=" --concurrency $USERS"
-AIPERF_CMD+=" --benchmark-duration $DURATION"
+AIPERF_CMD+=" --conversation-num $CONV_COUNT"
 AIPERF_CMD+=" --request-timeout-seconds $REQUEST_TIMEOUT"
 AIPERF_CMD+=" --output-artifact-dir $RESULT_DIR/aiperf_artifacts"
-AIPERF_CMD+=" --export-level raw"
+AIPERF_CMD+=" --export-level records"
 AIPERF_CMD+=" --ui-type none"
+AIPERF_CMD+=" --benchmark-grace-period 0"
 AIPERF_CMD+=" --random-seed 42"
 
 echo "$AIPERF_CMD" > "$RESULT_DIR/benchmark_command.txt"
