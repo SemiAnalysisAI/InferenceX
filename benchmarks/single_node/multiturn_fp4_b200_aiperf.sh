@@ -160,7 +160,7 @@ AIPERF_CMD+=" --request-timeout-seconds $REQUEST_TIMEOUT"
 AIPERF_CMD+=" --output-artifact-dir $RESULT_DIR/aiperf_artifacts"
 AIPERF_CMD+=" --extra-inputs ignore_eos:true"
 AIPERF_CMD+=" --export-level records"
-AIPERF_CMD+=" --ui-type none"
+AIPERF_CMD+=" --ui-type progress"
 AIPERF_CMD+=" --random-seed 42"
 
 echo "$AIPERF_CMD" > "$RESULT_DIR/benchmark_command.txt"
