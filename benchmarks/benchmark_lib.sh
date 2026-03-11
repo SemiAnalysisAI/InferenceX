@@ -641,25 +641,29 @@ run_lm_eval() {
     local max_gen_tokens=16384
     echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
 
-    # Build array of YAML paths from task names
-    local tasks_args=()
+    # Export for append_lm_eval_summary to pick up
+    export EVAL_RESULT_DIR="$results_dir"
+
+    # Run each task separately for compatibility across lm-eval versions
+    local eval_exit=0
     IFS=',' read -ra task_arr <<< "$task"
     for t in "${task_arr[@]}"; do
         t=$(echo "$t" | xargs)  # trim whitespace
-        tasks_args+=("utils/evals/${t}.yaml")
+        echo "=== Running eval task: ${t} ==="
+        set -x
+        python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+          --tasks "utils/evals/${t}.yaml" \
+          --output_path "${results_dir}" \
+          --log_samples \
+          --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=999,tokenized_requests=False,max_length=${gen_max_tokens}" \
+          --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
+        local task_exit=$?
+        set +x
+        if [ $task_exit -ne 0 ]; then
+            echo "WARNING: eval task '${t}' failed with exit code ${task_exit}"
+            eval_exit=$task_exit
+        fi
     done
-
-    # Export for append_lm_eval_summary to pick up
-    export EVAL_RESULT_DIR="$results_dir"
-    set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "${tasks_args[@]}" \
-      --output_path "${results_dir}" \
-      --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=999,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
-    local eval_exit=$?
-    set +x
     return $eval_exit
 }
 
