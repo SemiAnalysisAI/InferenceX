@@ -18,13 +18,14 @@ echo ""
 # Model Validation
 # =============================================================================
 
-VALID_MODELS=(
-    "Llama-3.1-405B-Instruct-FP8-KV"
-    "amd-Llama-3.3-70B-Instruct-FP8-KV"
-    "DeepSeek-V3"
-    "DeepSeek-R1-0528"
-    "gpt-oss-120b"
-)
+# Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
+# at runtime, but the CWD remains the submit-time directory (vllm_disagg_utils/).
+MODELS_YAML="$(pwd)/models.yaml"
+
+if [[ ! -f "$MODELS_YAML" ]]; then
+    echo "Error: models.yaml not found at $MODELS_YAML"
+    exit 1
+fi
 
 if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
     echo "Error: DOCKER_IMAGE_NAME is not set."
@@ -32,13 +33,10 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-model_found=false
-for m in "${VALID_MODELS[@]}"; do
-    [[ "$MODEL_NAME" == "$m" ]] && model_found=true && break
-done
-if [[ "$model_found" != "true" ]]; then
-    echo "Error: Model '$MODEL_NAME' not found. Available:"
-    printf '  - %s\n' "${VALID_MODELS[@]}"
+if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
+    echo "Error: Model '$MODEL_NAME' not found in models.yaml"
+    echo "Available models:"
+    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
     exit 1
 fi
 echo "Model found: $MODEL_NAME"
@@ -67,11 +65,6 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # Model Path Resolution
 # =============================================================================
 
-# HF cache directory names may differ from MODEL_NAME
-declare -A MODEL_DIR_NAMES=(
-    ["DeepSeek-R1-0528"]="models--deepseek-ai--DeepSeek-R1-0528"
-)
-
 # MODEL_DIR detection: prefer env var, fall back to hostname detection
 if [[ -z "$MODEL_DIR" ]]; then
     NODENAME=$(hostname -s)
@@ -86,7 +79,11 @@ if [[ -z "$MODEL_DIR" ]]; then
 fi
 export MODEL_DIR
 
-DISK_DIR_NAME="${MODEL_DIR_NAMES[$MODEL_NAME]:-$MODEL_NAME}"
+# Extract hf_dir from models.yaml (the line after the model's top-level key)
+DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    found && /^[^ ]/{exit}
+    found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
 echo "Looking for model: $MODEL_NAME (disk dir: $DISK_DIR_NAME)"
 
 resolve_hf_cache_path() {
@@ -270,10 +267,7 @@ exec sudo docker run --rm \
     --security-opt seccomp=unconfined \
     --privileged \
     -v /sys:/sys \
-    -v /etc/libibverbs.d/ionic.driver:/etc/libibverbs.d/ionic.driver:ro \
-    -v /lib/x86_64-linux-gnu/libionic.so.1:/lib/x86_64-linux-gnu/libionic.so.1:ro \
-    -v /lib/x86_64-linux-gnu/libionic.so:/lib/x86_64-linux-gnu/libionic.so:ro \
-    -v /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro \
+    $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
@@ -302,13 +296,13 @@ exec sudo docker run --rm \
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL \
     -e DRY_RUN=\$DRY_RUN \
     -e BENCHMARK_LOGS_DIR=/benchmark_logs \
-    -e UCX_TLS=all \
+    -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma \
     -e UCX_SOCKADDR_TLS_PRIORITY=tcp \
     -e UCX_MEMTYPE_CACHE=y \
     -e UCX_RNDV_SCHEME=get_zcopy \
     -e UCX_RNDV_THRESH=4k \
     -e UCX_ROCM_IPC_MIN_ZCOPY=0 \
-    -e UCX_LOG_LEVEL=info \
+    -e UCX_LOG_LEVEL=warn \
     -e HSA_ENABLE_SDMA=1 \
     --name \"$DOCKER_CONT_NAME\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
