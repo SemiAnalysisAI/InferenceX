@@ -56,6 +56,9 @@ SPECULATIVE_EAGLE_TOPK=1
 
 SGLANG_ENABLE_SPEC_V2=1
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --model-path=$MODEL \
@@ -109,4 +112,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

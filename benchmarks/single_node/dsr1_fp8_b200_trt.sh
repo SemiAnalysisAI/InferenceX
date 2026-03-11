@@ -91,6 +91,9 @@ batch_wait_max_tokens_ratio: 0.8
 EOF
 fi
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 
 MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
@@ -146,4 +149,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

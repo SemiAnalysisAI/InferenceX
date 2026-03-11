@@ -26,7 +26,10 @@ PORT=${PORT:-8888}
 
 set +x
 
-export TRTLLM_ENABLE_PDL=1 
+export TRTLLM_ENABLE_PDL=1
+
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
 
 set -x
 cat > gptoss-config.yml << EOF
@@ -82,4 +85,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

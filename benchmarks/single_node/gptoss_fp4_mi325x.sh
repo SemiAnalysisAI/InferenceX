@@ -42,6 +42,9 @@ FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True -cc.use_inductor_graph
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
   $ATTN_BACKEND $FUSE_ROPE_KVCACHE \
@@ -73,4 +76,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
