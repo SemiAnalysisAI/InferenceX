@@ -609,7 +609,7 @@ compute_eval_context_length() {
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local task="${EVAL_TASK:-gsm8k}"
+    local task="${EVAL_TASK:-gsm8k,gpqa_diamond}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
@@ -641,14 +641,23 @@ run_lm_eval() {
     local max_gen_tokens=16384
     echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
 
+    # Build comma-separated list of YAML paths from task names
+    local tasks_arg=""
+    IFS=',' read -ra task_arr <<< "$task"
+    for t in "${task_arr[@]}"; do
+        t=$(echo "$t" | xargs)  # trim whitespace
+        if [ -n "$tasks_arg" ]; then tasks_arg="${tasks_arg},"; fi
+        tasks_arg="${tasks_arg}utils/evals/${t}.yaml"
+    done
+
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "utils/evals/${task}.yaml" \
+      --tasks "${tasks_arg}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=999,tokenized_requests=False,max_length=${gen_max_tokens}" \
       --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
