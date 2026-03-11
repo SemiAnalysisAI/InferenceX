@@ -34,7 +34,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
-    export MODEL_NAME="DeepSeek-R1"
+    export MODEL_NAME=${MODEL##*/}
     export MODEL_PATH="/it-share/data"
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104
@@ -170,6 +170,7 @@ else
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
     salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
@@ -177,16 +178,22 @@ else
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
 
-    if [[ "$FRAMEWORK" == "atom" ]]; then
-        srun --jobid=$JOB_ID bash -c "rm $SQUASH_FILE"
-    fi
+    # Use flock to serialize concurrent imports to the same squash file
+    srun --jobid=$JOB_ID bash -c "
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if [[ \"$FRAMEWORK\" == \"atom\" ]]; then
+            rm -f \"$SQUASH_FILE\"
+        fi
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+        fi
+    "
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    fi
+    export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \

@@ -15,31 +15,33 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+# GLM-5 requires transformers with glm_moe_dsa model type support.
+# However, the Image rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219 doesn't provide this support.
+python3 -m pip install -U --no-cache-dir \
+  "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
+
 hf download "$MODEL"
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
-
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
+# ROCm / SGLang performance tuning for MI355X
+export SGLANG_ROCM_FUSED_DECODE_MLA=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export SAFETENSORS_FAST_GPU=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 python3 -m sglang.launch_server \
-    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
+    --tool-call-parser glm47 \
+    --reasoning-parser glm45 \
+    --mem-fraction-static 0.85 \
+    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
+    --nsa-prefill-backend tilelang \
+    --nsa-decode-backend tilelang > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

@@ -5,9 +5,11 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -15,31 +17,30 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+nvidia-smi
+
 hf download "$MODEL"
-
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
-
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-python3 -m sglang.launch_server \
-    --attention-backend aiter \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
-    --max-prefill-tokens 196608 \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
+export VLLM_USE_FLASHINFER_MOE_FP8=0
+export VLLM_MOE_USE_DEEP_GEMM=0
+
+if [ "$EP_SIZE" -ge 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
+set -x
+vllm serve $MODEL --port $PORT \
+--tensor-parallel-size=$TP \
+$EP \
+--gpu-memory-utilization 0.95 \
+--max-model-len $MAX_MODEL_LEN \
+--block-size=32 \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -56,7 +57,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
