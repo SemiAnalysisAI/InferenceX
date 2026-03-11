@@ -25,6 +25,7 @@ check_env_vars \
 PORT=${PORT:-8888}
 REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
 CONVOS_PER_USER=${CONVOS_PER_USER:-5}
+MIN_CONVERSATIONS=${MIN_CONVERSATIONS:-100}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -61,6 +62,9 @@ fi
 
 # Generate synthetic multi-turn dataset
 CONV_COUNT=$((USERS * CONVOS_PER_USER))
+if [ "$CONV_COUNT" -lt "$MIN_CONVERSATIONS" ]; then
+    CONV_COUNT=$MIN_CONVERSATIONS
+fi
 INPUT_FILE="$MULTITURN_DIR/synthetic_multiturn.jsonl"
 SYNTH_CONFIG="$MULTITURN_DIR/scripts/configs/qwen_trace_profile.yaml"
 echo "Generating synthetic dataset ($CONV_COUNT conversations = $USERS users x $CONVOS_PER_USER convos)..."
