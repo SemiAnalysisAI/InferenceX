@@ -1842,15 +1842,15 @@ qwen3.5-fp8-b200-sglang-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.15.1
