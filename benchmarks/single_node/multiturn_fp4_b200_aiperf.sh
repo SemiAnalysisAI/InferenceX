@@ -116,17 +116,14 @@ wait_for_server_ready \
 set -x
 pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
-# Install aiperf
-# Generate constraints to freeze all existing packages so pip only installs
-# what's missing without upgrading or uninstalling anything.
-echo "Installing aiperf..."
-cd "$AIPERF_DIR"
-pip freeze > /tmp/constraints.txt
-pip install -q -e . --constraint /tmp/constraints.txt 2>&1 | tail -10
-cd "$MULTITURN_DIR"
+# Install aiperf in a separate venv to avoid dependency conflicts with vLLM
+echo "Installing aiperf in isolated venv..."
+python3 -m venv /tmp/aiperf-venv --system-site-packages
+/tmp/aiperf-venv/bin/pip install -q -e "$AIPERF_DIR" 2>&1 | tail -10
+AIPERF_BIN="/tmp/aiperf-venv/bin/aiperf"
 
 # Verify aiperf is importable
-python3 -c "import aiperf; print('aiperf installed OK')"
+/tmp/aiperf-venv/bin/python -c "import aiperf; print('aiperf installed OK')"
 set +x
 
 # ---- Start server metrics collector -----------------------------------------
@@ -149,7 +146,7 @@ sleep 2
 # with a turn gap of ~1s. Adjust USER_CENTRIC_QPS to control load.
 USER_CENTRIC_QPS=${USER_CENTRIC_QPS:-$USERS}
 
-AIPERF_CMD="aiperf profile"
+AIPERF_CMD="$AIPERF_BIN profile"
 AIPERF_CMD+=" --model $MODEL"
 AIPERF_CMD+=" --url http://localhost:$PORT"
 AIPERF_CMD+=" --endpoint-type chat"
