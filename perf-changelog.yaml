@@ -932,3 +932,11 @@
     - "Remove deprecated VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION/VLLM_ROCM_USE_AITER_MHA env vars and compilation-config cudagraph_mode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/867
   
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update MI300X FP8 DSR1 SGLang image from v0.5.8 to lmsysorg/sglang-daily:v0.5.9-rocm720-mi30x-20260310"
+    - "Include configuration files for three GEMM operations: https://github.com/ROCm/aiter/pull/2024"
+    - "Improve TPOT by using fp8 bmm in MLA and MI300X for DSR1/V3: https://github.com/sgl-project/sglang/pull/18624"
+    - "Broaden the optimized paths to all HIP platforms and add tuned FP8 GEMM configs: https://github.com/sgl-project/sglang/pull/18242"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/811
