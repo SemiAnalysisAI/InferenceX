@@ -113,13 +113,21 @@ wait_for_server_ready \
     --server-pid "$SERVER_PID"
 
 # ---- Install dependencies ---------------------------------------------------
+set -x
 pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
-# Install aiperf (--no-deps to avoid breaking container's pinned packages)
+# Install aiperf
+# Strategy: install aiperf without deps to avoid version conflicts,
+# then install only the deps that are missing from the container.
 echo "Installing aiperf..."
 cd "$AIPERF_DIR"
 pip install -q --no-deps -e .
+pip install -q cyclopts pyzmq orjson textual rich plotly 2>/dev/null || true
 cd "$MULTITURN_DIR"
+
+# Verify aiperf is importable
+python3 -c "import aiperf; print(f'aiperf installed OK')"
+set +x
 
 # ---- Start server metrics collector -----------------------------------------
 export PYTHONPATH="$MULTITURN_DIR:${PYTHONPATH:-}"
