@@ -6,7 +6,7 @@
 #               Set by runner or auto-detected from hostname.
 #
 # The Docker image (built from vllm_disagg_inference.ubuntu.amd.Dockerfile) already
-# sets LD_LIBRARY_PATH for UCX (/usr/local/ucx/lib) and RIXL (/usr/local/RIXL/install/lib).
+# sets LD_LIBRARY_PATH for UCX (/usr/local/ucx/lib) and RIXL (/usr/local/rixl/lib).
 
 set -x
 
