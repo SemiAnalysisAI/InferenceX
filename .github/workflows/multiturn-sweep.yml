@@ -25,9 +25,9 @@ on:
         default: '["on", "off", "noprefix"]'
         type: string
       duration:
-        description: 'Benchmark duration in seconds'
-        required: true
-        default: '300'
+        description: 'Benchmark duration in seconds (optional, runs to completion if omitted)'
+        required: false
+        default: ''
         type: string
       request_rate:
         description: 'Request rate per client (Poisson, req/s). 0 = no delay.'

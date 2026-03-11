@@ -29,8 +29,9 @@ on:
         required: true
         type: string
       duration:
-        required: true
+        required: false
         type: string
+        default: ''
       request-rate:
         description: "Request rate per client (Poisson, req/s). 0 = no delay."
         required: false
