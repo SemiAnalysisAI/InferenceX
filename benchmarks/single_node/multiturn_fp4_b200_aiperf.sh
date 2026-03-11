@@ -117,12 +117,11 @@ set -x
 pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
 # Install aiperf
-# Strategy: install aiperf without deps to avoid version conflicts,
-# then install only the deps that are missing from the container.
+# Pin huggingface-hub to prevent upgrading it (breaks vLLM's transformers)
 echo "Installing aiperf..."
 cd "$AIPERF_DIR"
-pip install -q --no-deps -e .
-pip install -q cyclopts pyzmq orjson textual rich plotly 2>/dev/null || true
+HF_HUB_VERSION=$(pip show huggingface-hub 2>/dev/null | grep Version | awk '{print $2}')
+pip install -q -e . --constraint <(echo "huggingface-hub==${HF_HUB_VERSION}") 2>&1 | tail -5
 cd "$MULTITURN_DIR"
 
 # Verify aiperf is importable
