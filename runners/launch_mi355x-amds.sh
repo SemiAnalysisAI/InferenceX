@@ -52,7 +52,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" || "$FRAMEWORK" == "vllm-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node"
@@ -103,8 +103,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     cat > collect_latest_results.py <<'PY'
 import os, sys
-sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+prefixes = ["sglang", "vllm"]
+logs_root = f"{job_dir}/logs/"
+candidates = []
+if os.path.isdir(logs_root):
+    for name in os.listdir(logs_root):
+        for pfx in prefixes:
+            subdir = f"{logs_root}{name}/{pfx}_isl_{isl}_osl_{osl}"
+            if os.path.isdir(subdir):
+                candidates.append(subdir)
+for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
