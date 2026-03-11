@@ -4,7 +4,7 @@
     - "Add Kimi K2.5 NVFP4 single-node B200 vLLM benchmark (TP4, TP8)"
     - "Uses nvidia/Kimi-K2.5-NVFP4 checkpoint for native Blackwell tensor core execution"
     - "NVFP4 expected ~2.35x throughput improvement over INT4 on Blackwell"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/905
 
 - config-keys:
     - kimik2.5-int4-mi325x-vllm
