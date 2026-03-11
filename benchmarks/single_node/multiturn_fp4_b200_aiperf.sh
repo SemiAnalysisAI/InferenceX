@@ -115,13 +115,10 @@ wait_for_server_ready \
 # ---- Install dependencies ---------------------------------------------------
 pip install -q -r "$MULTITURN_DIR/requirements.txt"
 
-# Install aiperf (--ignore-installed to avoid conflicts with container system packages)
+# Install aiperf (--no-deps to avoid breaking container's pinned packages)
 echo "Installing aiperf..."
 cd "$AIPERF_DIR"
-pip install -q --ignore-installed -e . || pip install -q --ignore-installed . || {
-    echo "WARNING: Full install failed, trying with --no-deps..."
-    pip install -q --no-deps -e .
-}
+pip install -q --no-deps -e .
 cd "$MULTITURN_DIR"
 
 # ---- Start server metrics collector -----------------------------------------
