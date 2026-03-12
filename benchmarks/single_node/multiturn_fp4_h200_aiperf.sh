@@ -61,13 +61,21 @@ with open(sys.argv[1], 'w') as f:
 fi
 
 # Generate synthetic multi-turn dataset
-CONV_COUNT=$((USERS * CONVOS_PER_USER))
-if [ "$CONV_COUNT" -lt "$MIN_CONVERSATIONS" ]; then
-    CONV_COUNT=$MIN_CONVERSATIONS
+# Duration mode: generate a large pool and run for a fixed time
+# Count mode: generate exactly USERS * CONVOS_PER_USER conversations
+if [ -n "${DURATION:-}" ]; then
+    CONV_COUNT=10000
+    echo "Duration mode: ${DURATION}s with $CONV_COUNT conversation pool"
+else
+    CONV_COUNT=$((USERS * CONVOS_PER_USER))
+    if [ "$CONV_COUNT" -lt "$MIN_CONVERSATIONS" ]; then
+        CONV_COUNT=$MIN_CONVERSATIONS
+    fi
+    echo "Count mode: $CONV_COUNT conversations ($USERS users x $CONVOS_PER_USER convos)"
 fi
 INPUT_FILE="$MULTITURN_DIR/synthetic_multiturn.jsonl"
 SYNTH_CONFIG="$MULTITURN_DIR/scripts/configs/qwen_trace_profile.yaml"
-echo "Generating synthetic dataset ($CONV_COUNT conversations = $USERS users x $CONVOS_PER_USER convos)..."
+echo "Generating synthetic dataset ($CONV_COUNT conversations)..."
 python3 "$MULTITURN_DIR/scripts/generate_synthetic_dataset.py" \
     --config "$SYNTH_CONFIG" \
     --num-conversations "$CONV_COUNT" \
@@ -162,6 +170,10 @@ AIPERF_CMD+=" --custom-dataset-type mooncake_trace"
 AIPERF_CMD+=" --shared-system-prompt-length 100"
 AIPERF_CMD+=" --concurrency $USERS"
 AIPERF_CMD+=" --conversation-num $CONV_COUNT"
+if [ -n "${DURATION:-}" ]; then
+    AIPERF_CMD+=" --benchmark-duration $DURATION"
+    AIPERF_CMD+=" --benchmark-grace-period 0"
+fi
 AIPERF_CMD+=" --request-timeout-seconds $REQUEST_TIMEOUT"
 AIPERF_CMD+=" --output-artifact-dir $RESULT_DIR/aiperf_artifacts"
 AIPERF_CMD+=" --extra-inputs ignore_eos:true"
