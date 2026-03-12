@@ -3,9 +3,11 @@
 # =============================================================================
 #
 # Node role assignment (by NODE_RANK):
-#   0            -> Proxy/Router node
-#   1..xP        -> Prefill nodes  (kv_producer)
-#   xP+1..xP+yD -> Decode nodes   (kv_consumer)
+#   0           -> Proxy/Router + first Prefill node  (kv_producer)
+#   1..xP-1     -> Additional Prefill nodes            (kv_producer)
+#   xP..xP+yD-1 -> Decode nodes                        (kv_consumer)
+#
+# Total nodes = xP + yD (router co-located with first prefill, like SGLang).
 
 # =============================================================================
 # Environment Configuration
@@ -32,7 +34,7 @@ BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 DRY_RUN="${DRY_RUN:-0}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
-ROUTER_PORT="${ROUTER_PORT:-2584}"
+ROUTER_PORT="${ROUTER_PORT:-30000}"
 SERVER_PORT="${SERVER_PORT:-2584}"
 ENGINE_ID="${ENGINE_ID:-${MODEL_NAME}-pd-run}"
 
@@ -192,11 +194,11 @@ IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 PREFILL_ARGS=""
 DECODE_ARGS=""
 
-for ((i=1; i<=xP && i<${#IP_ARRAY[@]}; i++)); do
+for ((i=0; i<xP && i<${#IP_ARRAY[@]}; i++)); do
     PREFILL_ARGS+="${IP_ARRAY[$i]} "
 done
 
-for ((i=xP+1; i<${#IP_ARRAY[@]}; i++)); do
+for ((i=xP; i<${#IP_ARRAY[@]}; i++)); do
     DECODE_ARGS+="${IP_ARRAY[$i]} "
 done
 
@@ -228,15 +230,33 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "CLUSTER INFO ===================================="
     echo "================================================"
-    echo "${host_name}:${host_ip} is Proxy Node"
+    echo "${host_name}:${host_ip} is Proxy Node and Prefill Node"
+    echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill servers: ${PREFILL_ARGS}"
     echo "Decode  servers: ${DECODE_ARGS}"
     echo "================================================"
 
-    PD_IPADDRS="${IPADDRS#*,}"
+    setup_vllm_env
+
+    PREFILL_CMD="vllm serve ${MODEL_PATH} \
+        --port $SERVER_PORT \
+        --trust-remote-code \
+        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_producer\", \"kv_load_failure_policy\": \"fail\"}' \
+        ${PREFILL_SERVER_CONFIG}"
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: $PREFILL_CMD"
+    else
+        set -x
+        eval "$PREFILL_CMD" \
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+        set +x
+        prefill_pid=$!
+    fi
+
     echo "Waiting for all prefill and decode servers to be up . . ."
     python3 $VLLM_WS_PATH/sync.py barrier \
-        --node-ips ${PD_IPADDRS} \
+        --node-ips ${IPADDRS} \
         --node-ports $SERVER_PORT \
         --wait-for-all-ports \
         --timeout 1800
@@ -322,11 +342,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
-    echo "Killing the proxy server"
-    [[ "$DRY_RUN" -eq 0 ]] && kill $proxy_pid
+    echo "Killing the proxy server and prefill server"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+        kill $proxy_pid
+        kill $prefill_pid
+    fi
 
-elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -le "$xP" ]; then
-    echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME})"
+elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
+    echo "${host_name}:${host_ip} is Additional Prefill Node (Model: ${MODEL_NAME})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
