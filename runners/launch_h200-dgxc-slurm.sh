@@ -258,7 +258,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp')${SCRIPT_SUFFIX:-}.sh
 
     scancel $JOB_ID
 

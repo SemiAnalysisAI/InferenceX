@@ -1,0 +1,3 @@
+[submodule "experimental/multiturn/vllm_benchmark/aiperf"]
+	path = experimental/multiturn/vllm_benchmark/aiperf
+	url = https://github.com/cquil11/aiperf.git
