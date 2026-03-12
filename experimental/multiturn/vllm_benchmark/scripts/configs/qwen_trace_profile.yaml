@@ -49,23 +49,8 @@ isl:
 
 # OSL: output tokens per turn
 osl:
-  # Turn 0 — plateau-shaped, not cleanly lognormal. Fine buckets. (act: mean=362, med=318)
-  "0":
-    - {min: 1, max: 20, weight: 3}
-    - {min: 20, max: 50, weight: 4}
-    - {min: 50, max: 100, weight: 8}
-    - {min: 100, max: 150, weight: 8}
-    - {min: 150, max: 200, weight: 7}
-    - {min: 200, max: 250, weight: 8}
-    - {min: 250, max: 300, weight: 9}
-    - {min: 300, max: 350, weight: 9}
-    - {min: 350, max: 400, weight: 10}
-    - {min: 400, max: 500, weight: 14}
-    - {min: 500, max: 600, weight: 7}
-    - {min: 600, max: 700, weight: 4}
-    - {min: 700, max: 900, weight: 4}
-    - {min: 900, max: 1200, weight: 3}
-    - {min: 1200, max: 2000, weight: 1}
+  # Turn 0 — lognormal MLE (n=16,447, act_med=318, act_mean=362, KS=0.125)
+  "0": {type: lognormal, mu: 5.533, sigma: 0.990}
   # Turns 1-6 — lognormal MLE (n=14,327, act_med=442, act_mean=505)
   "1-6": {type: lognormal, mu: 5.923, sigma: 0.905}
   # Turns 7+ — outputs decline + wider variance (n=970, act_med=312, act_mean=450)

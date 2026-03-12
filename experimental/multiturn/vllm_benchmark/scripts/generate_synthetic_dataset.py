@@ -250,9 +250,30 @@ def _sample_distribution(rng: random.Random, dist: Any) -> int:
 # Main generation
 # ---------------------------------------------------------------------------
 
+def _expand_turn_count_config(turn_count_config: dict) -> list[tuple[int, float]]:
+    """Expand turn count config (supports ranges like "4-6") into (turn, weight) pairs.
+
+    Ranges distribute weight uniformly across all turn counts in the range.
+    Example: "4-6": 6 -> turn 4: 2, turn 5: 2, turn 6: 2
+    """
+    expanded: dict[int, float] = {}
+    for key, weight in turn_count_config.items():
+        key_str = str(key)
+        if "-" in key_str:
+            parts = key_str.split("-")
+            lo, hi = int(parts[0]), int(parts[1])
+            per_turn = weight / (hi - lo + 1)
+            for t in range(lo, hi + 1):
+                expanded[t] = expanded.get(t, 0) + per_turn
+        else:
+            t = int(key_str)
+            expanded[t] = expanded.get(t, 0) + weight
+    return sorted(expanded.items())
+
+
 def _build_turn_count_cdf(turn_count_config: dict) -> list[tuple[int, float]]:
     """Build a list of (turn_count, cumulative_weight) for weighted sampling."""
-    items = sorted((int(k), v) for k, v in turn_count_config.items())
+    items = _expand_turn_count_config(turn_count_config)
     total = sum(w for _, w in items)
     cdf = []
     cumulative = 0.0
@@ -330,14 +351,14 @@ def print_summary(config: dict, num_conversations: int, seed: int) -> None:
     print(f"  Delay:               [{delay.get('min_ms', '?')}, {delay.get('max_ms', '?')}] ms")
 
     print("\n  Turn count distribution:")
-    tc = config["turn_count"]
-    total_w = sum(tc.values())
-    for k in sorted(tc, key=int):
-        pct = tc[k] / total_w * 100
-        print(f"    {k} turns: {pct:.1f}%")
+    expanded = _expand_turn_count_config(config["turn_count"])
+    total_w = sum(w for _, w in expanded)
+    for tc, w in expanded:
+        pct = w / total_w * 100
+        print(f"    {tc} turns: {pct:.1f}%")
 
     # Estimate expected total turns
-    expected_turns = sum(int(k) * v / total_w for k, v in tc.items())
+    expected_turns = sum(tc * w / total_w for tc, w in expanded)
     print(f"  Expected turns/conv: {expected_turns:.2f}")
     print(f"  Expected total turns: ~{int(expected_turns * num_conversations)}")
 
