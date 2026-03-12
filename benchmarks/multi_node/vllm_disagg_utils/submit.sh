@@ -5,8 +5,8 @@
 # This script submits a multi-node vLLM disaggregated benchmark job to SLURM.
 # It must be configured for your specific cluster before use.
 #
-# Key difference from SGLang: vLLM uses a dedicated proxy node, so
-# NUM_NODES = PREFILL_NODES + DECODE_NODES + 1.
+# Router is co-located with the first prefill node (same as SGLang), so
+# NUM_NODES = PREFILL_NODES + DECODE_NODES.
 
 usage() {
     cat << 'USAGE'
@@ -67,8 +67,8 @@ CONCURRENCIES=$7
 REQUEST_RATE=$8
 NODE_LIST=${9}
 
-# vLLM needs xP + yD + 1 nodes (dedicated proxy node)
-NUM_NODES=$((PREFILL_NODES + DECODE_NODES + 1))
+# Router co-located with first prefill: xP + yD nodes total
+NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
 profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
 # Export variables for the SLURM job
@@ -77,7 +77,7 @@ export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export PROFILER_ARGS=$profiler_args
 
 # For vLLM, each worker = 1 node (TP=8 per node).
-# xP/yD must match the node counts so job.slurm's NUM_NODES = xP+yD+1 is correct.
+# xP/yD must match the node counts so NUM_NODES = xP+yD is correct.
 export xP=$PREFILL_NODES
 export yD=$DECODE_NODES
 export NUM_NODES=$NUM_NODES

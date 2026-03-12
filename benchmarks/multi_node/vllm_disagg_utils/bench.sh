@@ -26,7 +26,7 @@ num_prompts_multiplier=${13:-10}
 
 IFS='x' read -r -a chosen_concurrencies <<< "$concurrency_list"
 
-ROUTER_PORT="${ROUTER_PORT:-2584}"
+ROUTER_PORT="${ROUTER_PORT:-30000}"
 
 echo "Config ${chosen_isl}; ${chosen_osl}; ${chosen_concurrencies[0]}; ${chosen_req_rate}"
 
