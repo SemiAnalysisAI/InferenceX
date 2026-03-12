@@ -88,7 +88,6 @@ mkdir -p "$RESULT_DIR"
 # ---- Generate vLLM config --------------------------------------------------
 cat > "$RESULT_DIR/config.yaml" << 'EOF'
 kv-cache-dtype: fp8
-compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}'
 async-scheduling: true
 max-num-batched-tokens: 8192
 EOF
@@ -102,7 +101,7 @@ VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 VLLM_CMD+=" --max-num-seqs $max_seqs"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
-VLLM_CMD+=" --attention-config.use_trtllm_attention=0"
+VLLM_CMD+=" --disable-log-requests"
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
     VLLM_CMD+=" --kv_offloading_backend native"
@@ -116,7 +115,7 @@ echo "$VLLM_CMD" > "$RESULT_DIR/vllm_command.txt"
 
 # ---- Start vLLM server ------------------------------------------------------
 echo "Starting vllm server..."
-export TORCH_CUDA_ARCH_LIST="10.0"
+export TORCH_CUDA_ARCH_LIST="9.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB='{"2":32,"4":32,"8":8}'
 
