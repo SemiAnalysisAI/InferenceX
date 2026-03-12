@@ -9,7 +9,8 @@
 GPU_MONITOR_PID=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
 
-# Start background nvidia-smi monitoring that logs GPU metrics every second to CSV.
+# Start background GPU monitoring that logs metrics every second to CSV.
+# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
 start_gpu_monitor() {
     local output="$GPU_METRICS_CSV"
@@ -25,15 +26,22 @@ start_gpu_monitor() {
 
     GPU_METRICS_CSV="$output"
 
-    if ! command -v nvidia-smi &>/dev/null; then
-        echo "[GPU Monitor] nvidia-smi not found, skipping GPU monitoring"
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+            --format=csv -l "$interval" > "$output" 2>/dev/null &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    elif command -v amd-smi &>/dev/null; then
+        # Use amd-smi native watch mode (-w) which includes timestamps automatically.
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
+        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    else
+        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
-
-    nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
-        --format=csv -l "$interval" > "$output" 2>/dev/null &
-    GPU_MONITOR_PID=$!
-    echo "[GPU Monitor] Started (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
 }
 
 # Stop the background GPU monitor and report file size.
