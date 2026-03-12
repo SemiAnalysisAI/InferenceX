@@ -150,6 +150,8 @@ echo "Metrics collector PID: $METRICS_PID"
 sleep 2
 
 # ---- Run AIPerf benchmark ----------------------------------------------------
+export AIPERF_LOG_CONVERSATIONS="$RESULT_DIR/conversations.jsonl"
+
 AIPERF_CMD="$AIPERF_BIN profile"
 AIPERF_CMD+=" --model $MODEL"
 AIPERF_CMD+=" --url http://localhost:$PORT"
