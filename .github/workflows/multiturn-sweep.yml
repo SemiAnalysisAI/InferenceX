@@ -54,6 +54,11 @@ on:
         required: false
         default: ''
         type: string
+      runner:
+        description: 'Runner label (e.g. b200, h200-dgxc-slurm)'
+        required: false
+        default: 'b200'
+        type: string
       ref:
         description: 'Git ref (branch/sha) to checkout'
         required: false
@@ -74,7 +79,7 @@ jobs:
         offload: ${{ fromJson(inputs.offload_values) }}
     secrets: inherit
     with:
-      runner: b200
+      runner: ${{ inputs.runner }}
       image: ${{ inputs.image }}
       model: ${{ inputs.model }}
       exp-name: "multiturn_tp${{ matrix.tp }}_users${{ matrix.users }}_offload${{ matrix.offload }}"
