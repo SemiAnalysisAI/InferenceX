@@ -10,6 +10,11 @@
 # Total nodes = xP + yD (router co-located with first prefill, like SGLang).
 
 # =============================================================================
+# Dependency Setup (idempotent; required when using base vLLM image)
+# =============================================================================
+source "$(dirname "${BASH_SOURCE[0]}")/setup_deps.sh"
+
+# =============================================================================
 # Environment Configuration
 # =============================================================================
 
