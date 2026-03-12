@@ -54,6 +54,11 @@ on:
         required: true
         default: 'nvidia/Llama-3.3-70B-Instruct-FP4'
         type: string
+      precision:
+        description: 'Model precision (fp4, fp8, etc.) — used to select benchmark script'
+        required: false
+        default: 'fp4'
+        type: string
       script_suffix:
         description: 'Suffix for benchmark script (e.g. "_lmcache" → multiturn_fp4_b200_lmcache.sh)'
         required: false
@@ -87,6 +92,7 @@ jobs:
       runner: ${{ inputs.runner }}
       image: ${{ inputs.image }}
       model: ${{ inputs.model }}
+      precision: ${{ inputs.precision }}
       exp-name: "multiturn_tp${{ matrix.tp }}_users${{ matrix.users }}_offload${{ matrix.offload }}"
       tp: "${{ matrix.tp }}"
       users: "${{ matrix.users }}"
