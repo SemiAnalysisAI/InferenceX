@@ -193,6 +193,11 @@ else
 fi
 set +x
 
+# ---- Analyze workload distributions -----------------------------------------
+echo "Analyzing workload distributions..."
+python3 "$MULTITURN_DIR/scripts/analyze_benchmark_distributions.py" \
+    "$RESULT_DIR/aiperf_artifacts" -o "$RESULT_DIR" 2>&1 || true
+
 # ---- Stop metrics collector -------------------------------------------------
 echo "Stopping metrics collector..."
 if [ -n "$METRICS_PID" ] && kill -0 "$METRICS_PID" 2>/dev/null; then

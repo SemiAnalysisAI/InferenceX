@@ -156,6 +156,8 @@ jobs:
             results/responses.json
             results/aiperf_artifacts/
             results/conversations.jsonl
+            results/workload_distribution_summary.txt
+            results/workload_distribution_plots.png
             results/status.txt
           if-no-files-found: ignore
 
