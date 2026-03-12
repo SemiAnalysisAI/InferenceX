@@ -1,6 +1,9 @@
 #!/bin/bash
 # vLLM Disaggregated Benchmark Runner
 #
+# Produces JSON result files via benchmark_serving.py (same as SGLang bench.sh)
+# so that the CI pipeline can collect and process results.
+#
 # Usage: bash bench.sh <n_prefill> <n_decode> <prefill_gpus> <decode_gpus> \
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
@@ -11,7 +14,6 @@ prefill_gpus=$3
 decode_gpus=$4
 model_path=$5
 model_name=$6
-# Prefer MODEL_PATH from environment (handles HF cache snapshot resolution)
 MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
 log_path=$7
 
@@ -30,6 +32,10 @@ echo "Config ${chosen_isl}; ${chosen_osl}; ${chosen_concurrencies[0]}; ${chosen_
 
 profile_folder="${log_path}/vllm_isl_${chosen_isl}_osl_${chosen_osl}"
 mkdir -p "$profile_folder"
+
+source "$(dirname "$0")/../../benchmark_lib.sh"
+
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 for max_concurrency in "${chosen_concurrencies[@]}"; do
 
@@ -50,21 +56,18 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "num_prompts: $num_prompts"
     echo "export_file: $export_file"
 
-    vllm bench serve \
+    run_benchmark_serving \
+        --bench-serving-dir "$REPO_ROOT" \
         --model "$MODEL_PATH" \
-        --backend vllm \
-        --host 127.0.0.1 \
         --port "$ROUTER_PORT" \
-        --dataset-name "random" \
-        --random-input-len "$chosen_isl" \
-        --random-output-len "$chosen_osl" \
-        --random-prefix-len 0 \
+        --backend openai \
+        --input-len "$chosen_isl" \
+        --output-len "$chosen_osl" \
+        --random-range-ratio "$random_range_ratio" \
         --num-prompts "$num_prompts" \
-        --request-rate "$chosen_req_rate" \
-        --ignore-eos \
         --max-concurrency "$max_concurrency" \
-        2>&1 | tee "${export_file}.log"
+        --result-filename "$export_file" \
+        --result-dir /workspace/
 
-    sleep 5
     echo "-----------------------------------------"
 done
