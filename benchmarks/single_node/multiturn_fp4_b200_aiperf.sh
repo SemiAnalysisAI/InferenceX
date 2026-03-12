@@ -170,7 +170,6 @@ AIPERF_CMD+=" --custom-dataset-type mooncake_trace"
 AIPERF_CMD+=" --shared-system-prompt-length 100"
 AIPERF_CMD+=" --concurrency $USERS"
 AIPERF_CMD+=" --conversation-num $CONV_COUNT"
-AIPERF_CMD+=" --dataset-sampling-strategy shuffle"
 if [ -n "${DURATION:-}" ]; then
     AIPERF_CMD+=" --benchmark-duration $DURATION"
     AIPERF_CMD+=" --benchmark-grace-period 0"
