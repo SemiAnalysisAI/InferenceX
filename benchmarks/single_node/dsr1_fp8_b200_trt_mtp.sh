@@ -108,6 +108,9 @@ torch_compile_config:
 EOF
 fi
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 # Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
@@ -144,3 +147,6 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
