@@ -21,8 +21,7 @@ nvidia-smi
 hf download "$MODEL"
 
 export NCCL_NVLS_ENABLE=1
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
+export SGLANG_ENABLE_JIT_DEEPGEMM=false
 export PYTHONUNBUFFERED=1
 
 SERVER_LOG=/workspace/server.log
@@ -35,7 +34,7 @@ else
   SCHEDULER_RECV_INTERVAL=10
 fi
 
-MEM_FRAC_STATIC=0.9
+MEM_FRAC_STATIC=0.8
 CHUNKED_PREFILL_SIZE=32768
 MAX_PREFILL_TOKENS=32768
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
@@ -60,6 +59,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
+--fp8-gemm-backend=flashinfer_trtllm \
 --attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
 --tokenizer-worker-num 6 --stream-interval 30 \
