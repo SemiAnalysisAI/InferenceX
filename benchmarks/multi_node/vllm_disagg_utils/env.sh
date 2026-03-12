@@ -5,8 +5,8 @@
 #   IBDEVICES - RDMA/InfiniBand device names (e.g., ionic_0,ionic_1,... or mlx5_0,mlx5_1,...)
 #               Set by runner or auto-detected from hostname.
 #
-# The Docker image (built from vllm_disagg_inference.ubuntu.amd.Dockerfile) already
-# sets LD_LIBRARY_PATH for UCX (/usr/local/ucx/lib) and RIXL (/usr/local/rixl/lib).
+# UCX and RIXL paths (LD_LIBRARY_PATH, PATH) are set by setup_deps.sh, which is
+# sourced at the top of server.sh before this file.
 
 set -x
 

@@ -305,6 +305,7 @@ exec sudo docker run --rm \
     -e UCX_LOG_LEVEL=warn \
     -e HSA_ENABLE_SDMA=1 \
     --name \"$DOCKER_CONT_NAME\" \
+    --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
