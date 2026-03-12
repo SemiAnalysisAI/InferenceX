@@ -947,3 +947,12 @@
     - "Image: vllm/vllm-openai:v0.17.0"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/757
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Add Single Node Agg FP8 MTP config for Qwen3.5 B200 SGLang"
+    - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
+    - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
+
