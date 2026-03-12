@@ -26,6 +26,11 @@ start_gpu_monitor
 
 export TORCH_CUDA_ARCH_LIST="9.0"
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
@@ -35,7 +40,7 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
     --decode-log-interval 1 \
-    > $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 else
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
@@ -44,7 +49,7 @@ else
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
     --decode-log-interval 1 \
-    > $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 fi
 
 SERVER_PID=$!

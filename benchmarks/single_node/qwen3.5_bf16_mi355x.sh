@@ -20,6 +20,11 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 python3 -m sglang.launch_server \
     --attention-backend triton \
     --model-path $MODEL \
@@ -27,7 +32,7 @@ python3 -m sglang.launch_server \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \
-    --mem-fraction-static 0.8 > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.8 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

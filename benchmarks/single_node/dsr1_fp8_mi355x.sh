@@ -27,6 +27,11 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 python3 -m sglang.launch_server \
     --attention-backend aiter \
     --model-path $MODEL \
@@ -39,7 +44,7 @@ python3 -m sglang.launch_server \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
     --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" > $SERVER_LOG 2>&1 &
+    --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

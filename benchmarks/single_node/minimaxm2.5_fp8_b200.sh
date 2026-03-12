@@ -33,6 +33,10 @@ else
   EP=" "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+fi
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \

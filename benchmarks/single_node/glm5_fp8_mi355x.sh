@@ -30,6 +30,11 @@ export SAFETENSORS_FAST_GPU=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 python3 -m sglang.launch_server \
     --model-path $MODEL \
     --host=0.0.0.0 \
@@ -41,7 +46,7 @@ python3 -m sglang.launch_server \
     --mem-fraction-static 0.85 \
     --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
     --nsa-prefill-backend tilelang \
-    --nsa-decode-backend tilelang > $SERVER_LOG 2>&1 &
+    --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

@@ -645,11 +645,8 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # Cap generation tokens to the server's max_model_len
+    # Cap generation tokens to avoid excessive KV cache reservation per request on TRT.
     local max_gen_tokens=16384
-    if [ "$max_gen_tokens" -gt "$gen_max_tokens" ]; then
-        max_gen_tokens="$gen_max_tokens"
-    fi
     echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
 
     # Export for append_lm_eval_summary to pick up

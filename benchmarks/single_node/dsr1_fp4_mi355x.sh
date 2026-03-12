@@ -30,6 +30,11 @@ fi
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 set -x
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --host=0.0.0.0 --port=$PORT \
@@ -41,7 +46,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --max-prefill-tokens=$PREFILL_SIZE \
 --cuda-graph-max-bs=128 \
 --attention-backend aiter \
---kv-cache-dtype fp8_e4m3 > $SERVER_LOG 2>&1 &
+--kv-cache-dtype fp8_e4m3 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

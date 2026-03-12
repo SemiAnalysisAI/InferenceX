@@ -28,6 +28,10 @@ PORT=${PORT:-8888}
 
 # following AMD andy luo's recipe
 # https://x.com/linluo77/status/2017024513595301985
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+fi
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \

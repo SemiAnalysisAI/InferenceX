@@ -29,6 +29,11 @@ export SGLANG_AITER_MLA_PERSIST=1
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 set -x
 python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
@@ -41,7 +46,7 @@ python3 -m sglang.launch_server \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
 --disable-radix-cache \
-> $SERVER_LOG 2>&1 &
+$EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

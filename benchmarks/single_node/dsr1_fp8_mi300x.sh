@@ -36,6 +36,11 @@ export SGLANG_AITER_MLA_PERSIST=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+fi
+
 set -x
 python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
@@ -47,7 +52,7 @@ python3 -m sglang.launch_server \
 --max-prefill-tokens=131072 \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
---disable-radix-cache > $SERVER_LOG 2>&1 &
+--disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
