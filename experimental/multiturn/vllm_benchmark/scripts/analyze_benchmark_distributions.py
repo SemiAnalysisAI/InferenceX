@@ -108,6 +108,24 @@ def analyze(records: list[dict], output_dir: Path) -> None:
             f"  {ti:4d}  {n:6,}  {mean:8.0f}  {median:8.0f}  {std:8.0f}  {p5:8.0f}  {p95:8.0f}"
         )
 
+    # Overall ISL/OSL stats
+    all_isl = sorted(t["isl"] for v in convos.values() for t in v)
+    all_osl = sorted(t["osl"] for v in convos.values() for t in v)
+    n = len(all_isl)
+    isl_mean = sum(all_isl) / n
+    osl_mean = sum(all_osl) / n
+    lines.append("")
+    lines.append("ALL REQUESTS ISL:")
+    lines.append(
+        f"  n={n:,}  mean={isl_mean:.0f}  median={all_isl[n//2]}  "
+        f"p5={all_isl[int(n*0.05)]}  p95={all_isl[int(n*0.95)]}"
+    )
+    lines.append("ALL REQUESTS OSL:")
+    lines.append(
+        f"  n={n:,}  mean={osl_mean:.0f}  median={all_osl[n//2]}  "
+        f"p5={all_osl[int(n*0.05)]}  p95={all_osl[int(n*0.95)]}"
+    )
+
     # ISL context growth (shows accumulation across turns)
     lines.append("")
     lines.append("ISL CONTEXT GROWTH (sample multi-turn conversations):")
@@ -140,7 +158,7 @@ def _generate_plots(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(3, 3, figsize=(18, 15))
     fig.suptitle("Benchmark Workload Distribution Analysis", fontsize=14)
 
     # (0,0) Turn count distribution
@@ -238,6 +256,46 @@ def _generate_plots(
     ax.set_ylabel("Mean ISL (tokens)")
     ax.set_title("ISL Growth by Turn (context accumulation)")
     ax.grid(True, alpha=0.3, axis="y")
+
+    # (2,0) All requests ISL histogram
+    ax = axes[2, 0]
+    all_isl = [t["isl"] for v in convos.values() for t in v]
+    clip = min(6000, int(sorted(all_isl)[int(len(all_isl) * 0.99)] * 1.2))
+    ax.hist([v for v in all_isl if v <= clip], bins=80, edgecolor="black", alpha=0.7, color="steelblue")
+    all_isl_sorted = sorted(all_isl)
+    median_isl = all_isl_sorted[len(all_isl) // 2]
+    mean_isl = sum(all_isl) / len(all_isl)
+    ax.axvline(median_isl, color="red", linestyle="--", label=f"Median: {median_isl:,}")
+    ax.axvline(mean_isl, color="orange", linestyle="--", label=f"Mean: {mean_isl:,.0f}")
+    ax.set_xlabel("Input Sequence Length")
+    ax.set_ylabel("Count")
+    ax.set_title(f"All Requests ISL (n={len(all_isl):,})")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (2,1) All requests OSL histogram
+    ax = axes[2, 1]
+    all_osl = [t["osl"] for v in convos.values() for t in v]
+    clip = min(3000, int(sorted(all_osl)[int(len(all_osl) * 0.99)] * 1.2))
+    ax.hist([v for v in all_osl if v <= clip], bins=80, edgecolor="black", alpha=0.7, color="coral")
+    all_osl_sorted = sorted(all_osl)
+    median_osl = all_osl_sorted[len(all_osl) // 2]
+    mean_osl = sum(all_osl) / len(all_osl)
+    ax.axvline(median_osl, color="red", linestyle="--", label=f"Median: {median_osl:,}")
+    ax.axvline(mean_osl, color="orange", linestyle="--", label=f"Mean: {mean_osl:,.0f}")
+    ax.set_xlabel("Output Sequence Length")
+    ax.set_ylabel("Count")
+    ax.set_title(f"All Requests OSL (n={len(all_osl):,})")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (2,2) ISL vs OSL scatter
+    ax = axes[2, 2]
+    ax.scatter(all_isl, all_osl, alpha=0.15, s=3, c="purple")
+    ax.set_xlabel("ISL (tokens)")
+    ax.set_ylabel("OSL (tokens)")
+    ax.set_title("ISL vs OSL (all requests)")
+    ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     out = output_dir / "workload_distribution_plots.png"
