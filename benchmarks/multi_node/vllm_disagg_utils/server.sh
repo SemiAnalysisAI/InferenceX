@@ -75,17 +75,22 @@ setup_rdma_env() {
     fi
 
     # Patch Nixl UCX backend: set ucx_error_handling_mode=none.
-    # Pensando ionic NICs don't support rdmacm, so the default
+    # Only needed for Pensando ionic NICs which don't support rdmacm — the default
     # UCP_ERR_HANDLING_MODE_PEER causes "no active messages transport" errors.
-    local nixl_api
-    nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
-    if [[ -n "$nixl_api" ]]; then
-        if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
-            sed -i '/self\.create_backend(bknd, init)/i\                init["ucx_error_handling_mode"] = "none"' "$nixl_api"
-            echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api"
-        else
-            echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
+    # ConnectX/mlx5 NICs (mia1 cluster) handle error mode properly; skip the patch.
+    if [[ "${IBDEVICES:-}" == *ionic* ]]; then
+        local nixl_api
+        nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
+        if [[ -n "$nixl_api" ]]; then
+            if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
+                sed -i '/self\.create_backend(bknd, init)/i\                init["ucx_error_handling_mode"] = "none"' "$nixl_api"
+                echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api"
+            else
+                echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
+            fi
         fi
+    else
+        echo "[INFO] Non-ionic RDMA devices (${IBDEVICES:-unset}); skipping ucx_error_handling_mode patch"
     fi
 }
 
