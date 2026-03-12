@@ -227,8 +227,8 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    HF_HUB_CACHE_MOUNT="/data/gharunners/hf-hub-cache"
+    SQUASH_FILE="/data/containers/gharunners/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
