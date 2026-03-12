@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=vllm-pd-bench
-#SBATCH -N 4            # CHECK this to be right in batch jobs
-#SBATCH -n 4            # CHECK this to be right in batch jobs
+#SBATCH -N 3            # Overridden by submit.sh -N flag
+#SBATCH -n 3            # Overridden by submit.sh -n flag
 #SBATCH --ntasks-per-node=1
 #SBATCH --spread-job
 #SBATCH --gres=gpu:8
@@ -127,9 +127,9 @@ echo "Final MODEL_PATH: $MODEL_PATH"
 # Node Selection and vLLM-Specific NUM_NODES
 # =============================================================================
 
-# vLLM needs xP + yD + 1 (dedicated proxy node)
-NUM_NODES=$((xP + yD + 1))
-echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD + 1 proxy)"
+# Router co-located with first prefill: xP + yD nodes total (same as SGLang)
+NUM_NODES=$((xP + yD))
+echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD, proxy co-located with first prefill)"
 
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)

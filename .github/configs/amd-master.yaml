@@ -1041,7 +1041,7 @@ dsr1-fp8-mi355x-vllm-disagg:
   - isl: 1024
     osl: 1024
     search-space:
-    # 1P2D: 1 prefill node + 2 decode nodes + 1 proxy = 4 nodes total
+    # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total
     - spec-decoding: "none"
       conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
       prefill:
