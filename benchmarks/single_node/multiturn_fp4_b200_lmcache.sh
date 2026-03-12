@@ -89,7 +89,7 @@ max-num-batched-tokens: 8192
 EOF
 
 # ---- Generate LMCache config -----------------------------------------------
-offload_size=$((TOTAL_CPU_DRAM_GB / TP))
+offload_size=$TOTAL_CPU_DRAM_GB  # vLLM: total across all TP ranks, not per-rank
 
 cat > "$RESULT_DIR/lmcache_config.yaml" << EOF
 chunk_size: ${LMCACHE_CHUNK_SIZE}

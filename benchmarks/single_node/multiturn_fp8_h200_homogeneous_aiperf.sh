@@ -66,7 +66,7 @@ max-num-batched-tokens: 8192
 EOF
 
 # ---- Build vLLM command -----------------------------------------------------
-offload_size=$((TOTAL_CPU_DRAM_GB / TP))
+offload_size=$TOTAL_CPU_DRAM_GB  # vLLM: total across all TP ranks, not per-rank
 max_seqs=$USERS
 
 VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
