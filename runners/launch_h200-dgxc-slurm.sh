@@ -227,6 +227,7 @@ EOF
 
 else
 
+    export SCRIPT_SUFFIX="${SCRIPT_SUFFIX:-}"
     HF_HUB_CACHE_MOUNT="/data/gharunners/hf-hub-cache"
     SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 

@@ -19,4 +19,4 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME"
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}${SCRIPT_SUFFIX:-}.sh
