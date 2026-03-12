@@ -609,7 +609,7 @@ compute_eval_context_length() {
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals}"
+    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}" 
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
