@@ -1,5 +1,5 @@
 name: Multi-Turn Benchmark Sweep
-run-name: "Multi-Turn Sweep - tp=${{ inputs.tp_values }} users=${{ inputs.user_values }} offload=${{ inputs.offload_values }}"
+run-name: "${{ inputs.run_name || format('Multi-Turn Sweep - tp={0} users={1} offload={2}', inputs.tp_values, inputs.user_values, inputs.offload_values) }}"
 
 on:
   # push:
@@ -9,6 +9,11 @@ on:
   #     - .github/workflows/multiturn-sweep.yml
   workflow_dispatch:
     inputs:
+      run_name:
+        description: 'Custom run name (optional)'
+        required: false
+        default: ''
+        type: string
       tp_values:
         description: 'TP sizes (JSON array)'
         required: true
