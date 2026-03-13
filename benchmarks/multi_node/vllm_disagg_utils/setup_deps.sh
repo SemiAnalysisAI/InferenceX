@@ -155,6 +155,89 @@ install_vllm_router() {
     _SETUP_INSTALLED+=("vllm-router")
 }
 
+# ---------------------------------------------------------------------------
+# 6. MoRI (Modular RDMA Interface — EP dispatch/combine kernels for MoE)
+#    Required for --all2all-backend mori (Expert Parallelism via RDMA).
+#    GPU kernels are JIT-compiled on first use; no hipcc needed at install.
+# ---------------------------------------------------------------------------
+install_mori() {
+    if python3 -c "import mori" 2>/dev/null; then
+        echo "[SETUP] MoRI Python bindings already present"
+        return 0
+    fi
+
+    echo "[SETUP] Installing MoRI build dependencies..."
+    apt-get update -q -y && apt-get install -q -y \
+        libopenmpi-dev openmpi-bin libpci-dev \
+        && rm -rf /var/lib/apt/lists/*
+
+    echo "[SETUP] Building MoRI from source (ROCm/mori @ b645fc8)..."
+    (
+        set -e
+        git clone --quiet https://github.com/ROCm/mori.git /opt/mori && cd /opt/mori
+        git checkout b645fc8
+        pip install --quiet .
+    )
+    rm -rf /opt/mori
+
+    if ! python3 -c "import mori" 2>/dev/null; then
+        echo "[SETUP] ERROR: MoRI build failed"; exit 1
+    fi
+    _SETUP_INSTALLED+=("MoRI")
+}
+
+# ---------------------------------------------------------------------------
+# 7. Patch vLLM v0.17.1 MoRI-EP + FP8 incompatibility
+#    v0.17.1 asserts MoRI requires AITER fused_moe, but AITER's FP8 kernel
+#    uses defer_input_quant=True which MoRI's prepare/finalize rejects.
+#    Patch: remove both the AITER requirement assertion and the
+#    defer_input_quant NotImplementedError so non-AITER kernels work.
+# ---------------------------------------------------------------------------
+patch_mori_fp8_compat() {
+    python3 -c '
+import re, os, sys
+patched = []
+
+# 1. Patch layer.py: remove multi-line AITER assertion for MoRI
+try:
+    import vllm.model_executor.layers.fused_moe.layer as lm
+    f = lm.__file__
+    src = open(f).read()
+    if "Mori needs to be used with aiter" in src:
+        new = re.sub(
+            r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)",
+            "pass  # [PATCHED] AITER requirement removed for MoRI-EP + FP8",
+            src, flags=re.DOTALL)
+        if new != src:
+            open(f, "w").write(new)
+            patched.append("layer.py")
+except Exception as e:
+    print(f"[SETUP] WARN patch layer.py: {e}", file=sys.stderr)
+
+# 2. Patch mori_prepare_finalize.py: remove defer_input_quant restriction
+try:
+    import vllm.model_executor.layers.fused_moe.mori_prepare_finalize as mm
+    f = mm.__file__
+    src = open(f).read()
+    if "defer_input_quant" in src:
+        new = re.sub(
+            r"raise NotImplementedError\([^)]*defer_input_quant[^)]*\)",
+            "pass  # [PATCHED] defer_input_quant check removed for MoRI-EP + FP8",
+            src)
+        if new != src:
+            open(f, "w").write(new)
+            patched.append("mori_prepare_finalize.py")
+except Exception as e:
+    print(f"[SETUP] WARN patch mori_pf: {e}", file=sys.stderr)
+
+if patched:
+    print(f"[SETUP] Patched: {chr(44).join(patched)}")
+else:
+    print("[SETUP] No MoRI-FP8 patches needed")
+'
+    _SETUP_INSTALLED+=("MoRI-FP8-patch")
+}
+
 # =============================================================================
 # Run installers
 # =============================================================================
@@ -163,6 +246,8 @@ install_ucx
 install_rixl
 install_etcd
 install_libionic
+install_mori
+patch_mori_fp8_compat
 
 if [[ "${NODE_RANK:-0}" -eq 0 ]]; then
     install_vllm_router
