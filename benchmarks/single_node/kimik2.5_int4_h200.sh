@@ -31,6 +31,9 @@ fi
 
 # following https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html recipe
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.95 \
@@ -68,4 +71,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

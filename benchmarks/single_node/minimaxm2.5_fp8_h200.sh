@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -25,9 +26,19 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
 fi
 
+if [ "$EP_SIZE" -ge 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --disable-log-requests \
@@ -56,4 +67,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

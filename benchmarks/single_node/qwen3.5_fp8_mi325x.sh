@@ -24,6 +24,8 @@ EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
 fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
 
 # following AMD Andy linkedin's recipe
 # https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
@@ -58,4 +60,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

@@ -98,7 +98,8 @@ torch_compile_config:
 EOF
 fi  # end of set of configs using piecewise_cuda_graphs
 
-
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
@@ -140,4 +141,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
