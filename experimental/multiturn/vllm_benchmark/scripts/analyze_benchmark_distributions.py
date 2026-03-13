@@ -263,7 +263,7 @@ def _generate_plots(
     # (2,0) All requests ISL histogram
     ax = axes[2, 0]
     all_isl = [t["isl"] for v in convos.values() for t in v]
-    clip = min(6000, int(sorted(all_isl)[int(len(all_isl) * 0.99)] * 1.2))
+    clip = int(sorted(all_isl)[int(len(all_isl) * 0.99)] * 1.2)
     ax.hist([v for v in all_isl if v <= clip], bins=80, edgecolor="black", alpha=0.7, color="steelblue")
     all_isl_sorted = sorted(all_isl)
     median_isl = all_isl_sorted[len(all_isl) // 2]
