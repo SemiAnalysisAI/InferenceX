@@ -947,3 +947,10 @@
     - "Image: vllm/vllm-openai:v0.17.0"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/757
+
+  #TODO: srok, change docker img
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update kimik2.5 int4 perf optimization"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxx
