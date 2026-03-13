@@ -30,14 +30,14 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# vLLM disagg uses TP-only parallelism (no EP/DP).
 # PREFILL_NODES and DECODE_NODES come from additional-settings in the YAML config.
+# NODELIST (optional) constrains which Slurm nodes are used.
 
 JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
-    $ISL $OSL "${CONC_LIST// /x}" inf)
+    $ISL $OSL "${CONC_LIST// /x}" inf "${NODELIST:-}")
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to submit job" >&2
