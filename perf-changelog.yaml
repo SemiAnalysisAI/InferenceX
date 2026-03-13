@@ -961,3 +961,12 @@
   description:
     - "Extend MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP8)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/869
+
+- config-keys:
+    - dsr1-fp8-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+  description:
+    - "Update B200 FP8 DSR1 8k1k dynamo-sglang recipes to new pareto configs"
+    - "Replace old per-file recipes with resolved variants from consolidated 8k1k.yaml"
+    - "14 variants: STP/MTP x low-latency/max-throughput with updated concurrencies and scale points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/907
