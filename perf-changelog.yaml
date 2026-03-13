@@ -955,3 +955,9 @@
     - "Add more sweep configs for MI355X FP4 Disagg"
     - "Bump FP4 image to Feb 27 latest"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/899
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Extend MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/869
