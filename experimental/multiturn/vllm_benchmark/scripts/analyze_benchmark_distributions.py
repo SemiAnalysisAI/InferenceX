@@ -129,6 +129,22 @@ def analyze(records: list[dict], output_dir: Path) -> None:
         f"p5={all_osl[int(n*0.05)]}  p95={all_osl[int(n*0.95)]}"
     )
 
+    # Per-conversation stats
+    conv_max_isl = sorted(max(t["isl"] for t in v) for v in convos.values())
+    conv_total_osl = sorted(sum(t["osl"] for t in v) for v in convos.values())
+    nc = len(conv_max_isl)
+    lines.append("")
+    lines.append("PER-CONVERSATION MAX ISL (final context size):")
+    lines.append(
+        f"  n={nc:,}  mean={sum(conv_max_isl)/nc:.0f}  median={conv_max_isl[nc//2]}  "
+        f"p5={conv_max_isl[int(nc*0.05)]}  p95={conv_max_isl[int(nc*0.95)]}"
+    )
+    lines.append("PER-CONVERSATION TOTAL OSL:")
+    lines.append(
+        f"  n={nc:,}  mean={sum(conv_total_osl)/nc:.0f}  median={conv_total_osl[nc//2]}  "
+        f"p5={conv_total_osl[int(nc*0.05)]}  p95={conv_total_osl[int(nc*0.95)]}"
+    )
+
     # ISL context growth (shows accumulation across turns)
     lines.append("")
     lines.append("ISL CONTEXT GROWTH (sample multi-turn conversations):")
@@ -161,7 +177,7 @@ def _generate_plots(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+    fig, axes = plt.subplots(4, 3, figsize=(18, 20))
     fig.suptitle("Benchmark Workload Distribution Analysis", fontsize=14)
 
     # (0,0) Turn count distribution
@@ -298,6 +314,47 @@ def _generate_plots(
     ax.set_xlabel("ISL (tokens)")
     ax.set_ylabel("OSL (tokens)")
     ax.set_title("ISL vs OSL (all requests)")
+    ax.grid(True, alpha=0.3)
+
+    # (3,0) Per-conversation max ISL (final context size per conversation)
+    ax = axes[3, 0]
+    conv_max_isl = [max(t["isl"] for t in v) for v in convos.values()]
+    clip = int(sorted(conv_max_isl)[int(len(conv_max_isl) * 0.99)] * 1.2)
+    ax.hist([v for v in conv_max_isl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="steelblue")
+    conv_max_isl_sorted = sorted(conv_max_isl)
+    median_max = conv_max_isl_sorted[len(conv_max_isl) // 2]
+    mean_max = sum(conv_max_isl) / len(conv_max_isl)
+    ax.axvline(median_max, color="red", linestyle="--", label=f"Median: {median_max:,}")
+    ax.axvline(mean_max, color="orange", linestyle="--", label=f"Mean: {mean_max:,.0f}")
+    ax.set_xlabel("Max ISL per Conversation (tokens)")
+    ax.set_ylabel("Count")
+    ax.set_title(f"Per-Conversation Final Context Size (n={len(conv_max_isl):,})")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (3,1) Per-conversation total OSL (sum of all output tokens across turns)
+    ax = axes[3, 1]
+    conv_total_osl = [sum(t["osl"] for t in v) for v in convos.values()]
+    clip = int(sorted(conv_total_osl)[int(len(conv_total_osl) * 0.99)] * 1.2)
+    ax.hist([v for v in conv_total_osl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="coral")
+    conv_total_osl_sorted = sorted(conv_total_osl)
+    median_tosl = conv_total_osl_sorted[len(conv_total_osl) // 2]
+    mean_tosl = sum(conv_total_osl) / len(conv_total_osl)
+    ax.axvline(median_tosl, color="red", linestyle="--", label=f"Median: {median_tosl:,}")
+    ax.axvline(mean_tosl, color="orange", linestyle="--", label=f"Mean: {mean_tosl:,.0f}")
+    ax.set_xlabel("Total OSL per Conversation (tokens)")
+    ax.set_ylabel("Count")
+    ax.set_title(f"Per-Conversation Total Output Tokens (n={len(conv_total_osl):,})")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # (3,2) Per-conversation max ISL vs num turns scatter
+    ax = axes[3, 2]
+    conv_turns = [len(v) for v in convos.values()]
+    ax.scatter(conv_turns, conv_max_isl, alpha=0.3, s=8, c="steelblue")
+    ax.set_xlabel("Number of Turns")
+    ax.set_ylabel("Max ISL (tokens)")
+    ax.set_title("Final Context Size vs Turn Count")
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
