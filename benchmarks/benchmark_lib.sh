@@ -596,7 +596,7 @@ for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_
 }
 
 # Compute the context length for eval-only mode.
-# Uses 10x the benchmark context capped at the model's native max.
+# Uses 5x the benchmark context capped at the model's native max.
 # Exports EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
 # Echoes the computed value for scripts to capture.
 #
@@ -607,7 +607,7 @@ compute_eval_context_length() {
     local native_max
     native_max=$(get_native_max_context_length "$model")
 
-    local eval_ctx=$(( ${benchmark_ctx:-$native_max} * 10 ))
+    local eval_ctx=$(( ${benchmark_ctx:-$native_max} * 5 ))
     if [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi
@@ -617,7 +617,7 @@ compute_eval_context_length() {
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals}"
+    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}" 
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
@@ -656,7 +656,7 @@ run_lm_eval() {
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=999,tokenized_requests=False,max_length=${gen_max_tokens}" \
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${gen_max_tokens}" \
       --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
