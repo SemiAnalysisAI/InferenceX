@@ -65,6 +65,7 @@ class RequestArgs(NamedTuple):
     limit_min_tokens: int  # Use negative value for no limit
     limit_max_tokens: int  # Use negative value for no limit
     timeout_sec: int
+    ignore_eos: bool = False
 
 
 class BenchmarkArgs(NamedTuple):
@@ -219,6 +220,7 @@ async def send_request(
     min_tokens: int | None = None,
     max_tokens: int | None = None,
     timeout_sec: int = 120,
+    ignore_eos: bool = False,
 ) -> ServerResponse:
     payload = {
         "model": model,
@@ -236,6 +238,9 @@ async def send_request(
 
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
+
+    if ignore_eos:
+        payload["ignore_eos"] = True
 
     headers = {"Content-Type": "application/json"}
 
@@ -428,6 +433,7 @@ async def send_turn(
         min_tokens,
         max_tokens,
         req_args.timeout_sec,
+        req_args.ignore_eos,
     )
 
     if response.valid is False:
@@ -1040,6 +1046,7 @@ def get_client_config(
         limit_min_tokens=args.limit_min_tokens,
         limit_max_tokens=args.limit_max_tokens,
         timeout_sec=args.request_timeout_sec,
+        ignore_eos=args.ignore_eos,
     )
 
     return client_args, req_args
@@ -1740,6 +1747,13 @@ async def main() -> None:
         "of early and deep conversations (no cold-start transient). "
         "Best used with --user-centric-rate.",
     )
+    parser.add_argument(
+        "--ignore-eos",
+        action="store_true",
+        default=False,
+        help="Pass ignore_eos=true to the server to force generating until max_tokens.",
+    )
+
     parser.add_argument(
         "--steady-state-prefill",
         action="store_true",
