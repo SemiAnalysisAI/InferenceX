@@ -117,13 +117,11 @@ BENCH_CMD+=" --synthetic-num-convos 10000"
 BENCH_CMD+=" --num-clients $USERS"
 BENCH_CMD+=" --max-active-conversations 1"
 BENCH_CMD+=" --steady-state-prefill"
-BENCH_CMD+=" --ignore-eos"
 BENCH_CMD+=" --request-timeout-sec $REQUEST_TIMEOUT"
 BENCH_CMD+=" --seed 42"
 if [ -n "${DURATION:-}" ]; then
     BENCH_CMD+=" --duration $DURATION"
 fi
-BENCH_CMD+=" --save-result --result-dir $RESULT_DIR --result-filename benchmark_results"
 BENCH_CMD+=" --output-file $RESULT_DIR/conversations.json"
 
 echo "$BENCH_CMD" > "$RESULT_DIR/benchmark_command.txt"
