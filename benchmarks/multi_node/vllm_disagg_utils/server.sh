@@ -212,12 +212,18 @@ done
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
-# vLLM/Nixl-specific environment (UCX transport vars are set at the Docker level in job.slurm)
+# MoRI-IO proxy ZMQ registration port (must match moriio_proxy.py PROXY_PING_PORT)
+PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+
+# vLLM environment (UCX transport vars are set at the Docker level in job.slurm)
 setup_vllm_env() {
     export VLLM_USE_V1=1
     export VLLM_SERVER_DEV_MODE=0
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
+    # Workaround: disable request-ID randomization so MoRI-IO connector can
+    # match completion IDs between prefill and decode without PR #34907 patch.
+    export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done
@@ -245,10 +251,26 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     setup_vllm_env
 
+    # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
+    echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
+        python3 $VLLM_WS_PATH/moriio_proxy.py"
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: $PROXY_CMD"
+    else
+        PROXY_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/moriio_proxy_${host_name}.log"
+        set -x
+        eval "$PROXY_CMD" 2>&1 | tee "$PROXY_LOG_FILE" &
+        set +x
+        proxy_pid=$!
+        sleep 3
+    fi
+
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_producer\", \"kv_load_failure_policy\": \"fail\"}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -270,56 +292,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
-    echo "Starting vLLM Router..."
-    [ -f /root/.cargo/env ] && source /root/.cargo/env
-
-    PREFILL_URLS=""
-    DECODE_URLS=""
-    for ip in ${PREFILL_ARGS}; do
-        PREFILL_URLS+="--prefill http://${ip}:${SERVER_PORT} "
-    done
-    for ip in ${DECODE_ARGS}; do
-        DECODE_URLS+="--decode http://${ip}:${SERVER_PORT} "
-    done
-
-    ROUTER_CMD="UCX_TLS=tcp,self,shm VLLM_USE_V1=1 \
-    vllm-router \
-        --host 0.0.0.0 \
-        --port $ROUTER_PORT \
-        --vllm-pd-disaggregation \
-        $PREFILL_URLS \
-        $DECODE_URLS \
-        --policy round_robin \
-        --prefill-policy round_robin \
-        --decode-policy round_robin \
-        --intra-node-data-parallel-size 1 \
-        --retry-max-retries 3 \
-        --health-check-endpoint /health \
-        --prometheus-port 29000"
+    # Wait for proxy /health to confirm it is accepting requests
+    HEALTH_BARRIER_CMD="python3 $VLLM_WS_PATH/sync.py barrier \
+        --node-ips ${NODE0_ADDR} \
+        --node-ports ${ROUTER_PORT} \
+        --wait-for-all-health \
+        --health-endpoint /health \
+        --timeout 1800"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-        echo "DRY RUN: $ROUTER_CMD"
+        echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
-        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_${host_name}.log"
-        set -x
-        eval "$ROUTER_CMD" 2>&1 | tee "$ROUTER_LOG_FILE" &
-        set +x
-        proxy_pid=$!
-
-        HEALTH_BARRIER_CMD="python3 $VLLM_WS_PATH/sync.py barrier \
-            --node-ips ${NODE0_ADDR} \
-            --node-ports ${ROUTER_PORT} \
-            --wait-for-all-health \
-            --health-endpoint /health \
-            --timeout 1800"
-
-        if [[ "$DRY_RUN" -eq 1 ]]; then
-            echo "DRY RUN: $HEALTH_BARRIER_CMD"
-        else
-            eval "$HEALTH_BARRIER_CMD"
-        fi
-
-        echo "Router is ready for benchmarking"
+        eval "$HEALTH_BARRIER_CMD"
+        echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
@@ -364,7 +349,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_producer\", \"kv_load_failure_policy\": \"fail\"}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -418,7 +403,7 @@ else
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"NixlConnector\", \"kv_role\": \"kv_consumer\", \"kv_load_failure_policy\": \"fail\"}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then

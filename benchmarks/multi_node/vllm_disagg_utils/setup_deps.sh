@@ -131,28 +131,25 @@ install_libionic() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. vllm-router (Rust-based proxy for PD disaggregation)
+# 5. MoRI-IO proxy deps (Python packages for the MoRI-IO-aware proxy server)
+#    The proxy replaces vllm-router: it handles both HTTP routing AND the
+#    MoRI-IO ZMQ registration/request-enrichment protocol.
 #    Only needed on NODE_RANK=0 (proxy node).
 # ---------------------------------------------------------------------------
-install_vllm_router() {
-    if pip show vllm-router &>/dev/null; then
-        echo "[SETUP] vllm-router already installed"
+install_mori_proxy_deps() {
+    if python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
+        echo "[SETUP] MoRI-IO proxy Python deps already present"
         return 0
     fi
 
-    echo "[SETUP] Installing Rust toolchain..."
-    if ! command -v cargo &>/dev/null; then
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        export PATH="/root/.cargo/bin:${PATH}"
-    fi
+    echo "[SETUP] Installing MoRI-IO proxy Python deps..."
+    pip install --quiet --ignore-installed blinker
+    pip install --quiet quart aiohttp msgpack pyzmq
 
-    echo "[SETUP] Installing vllm-router via pip..."
-    pip install --quiet vllm-router
-
-    if ! pip show vllm-router &>/dev/null; then
-        echo "[SETUP] ERROR: vllm-router install failed"; exit 1
+    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
+        echo "[SETUP] ERROR: MoRI-IO proxy deps install failed"; exit 1
     fi
-    _SETUP_INSTALLED+=("vllm-router")
+    _SETUP_INSTALLED+=("mori-proxy-deps")
 }
 
 # ---------------------------------------------------------------------------
@@ -250,7 +247,7 @@ install_mori
 patch_mori_fp8_compat
 
 if [[ "${NODE_RANK:-0}" -eq 0 ]]; then
-    install_vllm_router
+    install_mori_proxy_deps
 fi
 
 # =============================================================================
