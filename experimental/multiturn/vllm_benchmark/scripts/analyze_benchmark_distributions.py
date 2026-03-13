@@ -36,10 +36,13 @@ def analyze(records: list[dict], output_dir: Path) -> None:
     # Group by conversation
     convos: dict[str, list[dict]] = defaultdict(list)
     for r in records:
+        metrics = r.get("metrics", {})
+        if "input_sequence_length" not in metrics or "output_sequence_length" not in metrics:
+            continue
         cid = r["metadata"]["conversation_id"]
         ti = r["metadata"]["turn_index"]
-        isl = r["metrics"]["input_sequence_length"]["value"]
-        osl = r["metrics"]["output_sequence_length"]["value"]
+        isl = metrics["input_sequence_length"]["value"]
+        osl = metrics["output_sequence_length"]["value"]
         convos[cid].append({"turn": ti, "isl": isl, "osl": osl})
 
     # Sort turns within each conversation
