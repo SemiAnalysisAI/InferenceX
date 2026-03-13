@@ -1098,6 +1098,16 @@ async def main_mp(
             while not result_queue.empty():
                 client_metrics.append(result_queue.get())
                 pbar.update(1)
+            # Fallback: detect dead children whose TERM_SIGNAL was lost
+            dead = sum(1 for c in clients if not c.is_alive())
+            if dead >= bench_args.num_clients:
+                lost = bench_args.num_clients - num_clients_finished
+                logger.warning(
+                    f"{Color.YELLOW}All client processes are dead but "
+                    f"{lost} TERM_SIGNALs were lost — breaking out of "
+                    f"main loop{Color.RESET}"
+                )
+                break
             continue
 
         # Collect results (measurements)
@@ -2011,3 +2021,7 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+    # Force exit to avoid hanging on multiprocessing Queue feeder threads
+    # during interpreter shutdown (the queues may still have thousands of
+    # undelivered items whose feeder threads deadlock on GC).
+    os._exit(0)
