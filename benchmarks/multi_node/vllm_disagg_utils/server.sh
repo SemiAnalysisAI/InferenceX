@@ -142,9 +142,11 @@ def bash_escape(s):
 pf = bash_escape(m.get('prefill_flags', '--tensor-parallel-size 8'))
 df = bash_escape(m.get('decode_flags', '--tensor-parallel-size 8'))
 ev = bash_escape(m.get('env', ''))
+dev = bash_escape(m.get('decode_env', ''))
 print(f'PREFILL_SERVER_CONFIG=\"{pf}\"')
 print(f'DECODE_SERVER_CONFIG=\"{df}\"')
 print(f'MODEL_ENVS=\"{ev}\"')
+print(f'DECODE_MODEL_ENVS=\"{dev}\"')
 ")"
 
 echo "Loaded model configuration for: $MODEL_NAME"
@@ -407,6 +409,11 @@ else
     echo "Using decode config: $DECODE_SERVER_CONFIG"
 
     setup_vllm_env
+
+    for env_pair in ${DECODE_MODEL_ENVS}; do
+        export "$env_pair"
+        echo "[DECODE_ENV] $env_pair"
+    done
 
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
