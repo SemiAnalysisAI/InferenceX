@@ -39,7 +39,8 @@ def analyze(records: list[dict], output_dir: Path) -> None:
         metrics = r.get("metrics", {})
         if "input_sequence_length" not in metrics or "output_sequence_length" not in metrics:
             continue
-        cid = r["metadata"]["conversation_id"]
+        # Use x_correlation_id (unique per session) not conversation_id (template, reused)
+        cid = r["metadata"].get("x_correlation_id") or r["metadata"]["conversation_id"]
         ti = r["metadata"]["turn_index"]
         isl = metrics["input_sequence_length"]["value"]
         osl = metrics["output_sequence_length"]["value"]
