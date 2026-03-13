@@ -80,6 +80,9 @@ fi
 
 MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 # Launch TRT-LLM server
 PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
@@ -116,3 +119,6 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
