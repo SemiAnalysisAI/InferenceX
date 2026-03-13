@@ -30,6 +30,7 @@ from transformers import AutoTokenizer  # type: ignore
 
 NUM_TOKENS_FROM_DATASET = 0
 TERM_SIGNAL = None
+SHAKESPEARE_PATH = os.path.join(os.path.dirname(__file__), "assets", "shakespeare.txt")
 
 
 class ConversationSampling(str, Enum):
@@ -54,6 +55,7 @@ class ClientArgs(NamedTuple):
     user_centric_turn_gap: float  # 0 = disabled, >0 = seconds between this client's turns
     user_centric_stagger_interval: float  # seconds between each client's start (1/total_QPS)
     virtual_history: bool  # stagger clients to start mid-conversation
+    steady_state_prefill: bool  # actually prefill KV cache before benchmark
 
 
 class RequestArgs(NamedTuple):
@@ -556,6 +558,65 @@ async def exponential_backoff_sleep(
     await asyncio.sleep(jittered_delay)
 
 
+def generate_synthetic_conversations(
+    tokenizer: AutoTokenizer,
+    num_convos: int,
+    turns_mean: int,
+    turns_stddev: float,
+    isl_mean: int,
+    isl_stddev: float,
+    osl_mean: int,
+    osl_stddev: float,
+    seed: int = 42,
+) -> ConversationsMap:
+    """Generate synthetic multi-turn conversations using Shakespeare corpus.
+
+    Each turn has a user message with ~isl_mean tokens and an assistant
+    message with ~osl_mean tokens. Token counts are sampled from normal
+    distributions clipped to >= 1.
+    """
+    rng = random.Random(seed)
+
+    # Load and tokenize Shakespeare corpus
+    with open(SHAKESPEARE_PATH) as f:
+        corpus_text = f.read()
+    corpus_tokens = tokenizer.encode(corpus_text)
+    corpus_size = len(corpus_tokens)
+    logger.info(f"Loaded Shakespeare corpus: {corpus_size:,} tokens")
+
+    def sample_text(num_tokens: int) -> str:
+        start = rng.randint(0, corpus_size - 1)
+        if start + num_tokens <= corpus_size:
+            tokens = corpus_tokens[start : start + num_tokens]
+        else:
+            tokens = corpus_tokens[start:] + corpus_tokens[: num_tokens - (corpus_size - start)]
+        return tokenizer.decode(tokens)
+
+    def sample_normal(mean: float, stddev: float) -> int:
+        return max(1, round(rng.gauss(mean, stddev))) if stddev > 0 else max(1, round(mean))
+
+    conversations: ConversationsMap = {}
+    total_turns = 0
+
+    for i in range(num_convos):
+        num_turns = sample_normal(turns_mean, turns_stddev)
+        messages: MessagesList = []
+        for _ in range(num_turns):
+            user_tokens = sample_normal(isl_mean, isl_stddev)
+            assistant_tokens = sample_normal(osl_mean, osl_stddev)
+            messages.append({"role": "user", "content": sample_text(user_tokens)})
+            messages.append({"role": "assistant", "content": sample_text(assistant_tokens)})
+        conversations[f"synth_{i}"] = messages
+        total_turns += num_turns
+
+    logger.info(
+        f"Generated {num_convos} synthetic conversations "
+        f"({total_turns} total turns, "
+        f"~{isl_mean} ISL, ~{osl_mean} OSL per turn)"
+    )
+    return conversations
+
+
 async def client_main(
     args: ClientArgs,
     req_args: RequestArgs,
@@ -604,6 +665,45 @@ async def client_main(
         if args.user_centric_stagger_interval > 0 and client_id > 0:
             stagger_delay = client_id * args.user_centric_stagger_interval
             await asyncio.sleep(stagger_delay)
+
+        # Steady-state prefill: run first conversation to a staggered turn depth
+        # by actually sending requests to the server (warms KV cache).
+        if args.steady_state_prefill and not task_queue_empty:
+            conv_id, messages = task_queue.get()
+            if conv_id is TERM_SIGNAL:
+                task_queue_empty = True
+            else:
+                num_user_turns = sum(1 for m in messages if m["role"] == "user")
+                if num_user_turns > 1:
+                    target_turn = client_id % num_user_turns
+                    if target_turn > 0:
+                        logger.info(
+                            f"{Color.BLUE}Client {client_id}: prefilling "
+                            f"conversation {conv_id} to turn {target_turn}/{num_user_turns}"
+                            f"{Color.RESET}"
+                        )
+                        # Run turns 0..target_turn-1 through the server
+                        for t in range(target_turn):
+                            msg_idx = t * 2 + 1  # user msg at index 0, 2, 4, ...
+                            if msg_idx > len(messages):
+                                break
+                            await send_turn(
+                                session, client_id, conv_id, messages,
+                                msg_idx, tokenizer, req_args,
+                                False, False,
+                            )
+                            # Store server response as assistant turn
+                            # (send_turn already appends to conversation_messages)
+                        turns_count[conv_id] = target_turn * 2
+                        logger.info(
+                            f"{Color.BLUE}Client {client_id}: prefill complete, "
+                            f"starting benchmark at turn {target_turn}{Color.RESET}"
+                        )
+
+                # Add the conversation to active pool for benchmarking
+                if turns_count[conv_id] < len(messages):
+                    active_convs[conv_id] = messages
+                    conv_id_queue.append(conv_id)
 
         while task_queue_empty is False:
             result = None
@@ -913,6 +1013,7 @@ def get_client_config(
         user_centric_turn_gap=args.num_clients / args.user_centric_rate if args.user_centric_rate > 0 else 0,
         user_centric_stagger_interval=1.0 / args.user_centric_rate if args.user_centric_rate > 0 else 0,
         virtual_history=args.virtual_history,
+        steady_state_prefill=args.steady_state_prefill,
     )
 
     if args.limit_min_tokens > 0 or args.limit_max_tokens > 0:
@@ -1445,8 +1546,59 @@ async def main() -> None:
         "-i",
         "--input-file",
         type=str,
-        required=True,
-        help="Input JSON file with WildChat conversations (from sample_wildchat.py)",
+        default=None,
+        help="Input JSON file with WildChat conversations (from sample_wildchat.py). "
+        "Not required when using --synthetic.",
+    )
+
+    # Synthetic data generation
+    synth_group = parser.add_argument_group("Synthetic Data")
+    synth_group.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Generate synthetic multi-turn conversations instead of loading from file",
+    )
+    synth_group.add_argument(
+        "--synthetic-num-convos",
+        type=int,
+        default=1000,
+        help="Number of synthetic conversations to generate (default: 1000)",
+    )
+    synth_group.add_argument(
+        "--synthetic-isl-mean",
+        type=int,
+        default=2000,
+        help="Mean input sequence length per turn in tokens (default: 2000)",
+    )
+    synth_group.add_argument(
+        "--synthetic-isl-stddev",
+        type=float,
+        default=200,
+        help="Stddev of input sequence length (default: 200)",
+    )
+    synth_group.add_argument(
+        "--synthetic-osl-mean",
+        type=int,
+        default=500,
+        help="Mean output sequence length per turn in tokens (default: 500)",
+    )
+    synth_group.add_argument(
+        "--synthetic-osl-stddev",
+        type=float,
+        default=50,
+        help="Stddev of output sequence length (default: 50)",
+    )
+    synth_group.add_argument(
+        "--synthetic-turns-mean",
+        type=int,
+        default=10,
+        help="Mean number of turns per conversation (default: 10)",
+    )
+    synth_group.add_argument(
+        "--synthetic-turns-stddev",
+        type=float,
+        default=1,
+        help="Stddev of turns per conversation (default: 1)",
     )
     parser.add_argument(
         "-o",
@@ -1588,6 +1740,18 @@ async def main() -> None:
         "of early and deep conversations (no cold-start transient). "
         "Best used with --user-centric-rate.",
     )
+    parser.add_argument(
+        "--steady-state-prefill",
+        action="store_true",
+        default=False,
+        help="Actually prefill conversations through the server before benchmarking. "
+        "Each client's first conversation is assigned a random starting turn, and "
+        "turns 0..N-1 are run through the server to populate the KV cache. "
+        "Unlike --virtual-history which just skips turns (cold KV cache), this "
+        "warms the KV cache with real inference. Prefill requests are excluded "
+        "from benchmark metrics.",
+    )
+
     parser.add_argument(
         "--max-retries",
         type=int,
@@ -1739,33 +1903,49 @@ async def main() -> None:
 
     await get_server_info(args.url)
 
-    # Load the input file (WildChat format from sample_wildchat.py)
-    logger.info(f"Reading input file: {args.input_file}")
-    with open(args.input_file) as f:
-        input_data = json.load(f)
+    # Load conversations: synthetic or from file
+    if args.synthetic:
+        conversations = generate_synthetic_conversations(
+            tokenizer=tokenizer,
+            num_convos=args.synthetic_num_convos,
+            turns_mean=args.synthetic_turns_mean,
+            turns_stddev=args.synthetic_turns_stddev,
+            isl_mean=args.synthetic_isl_mean,
+            isl_stddev=args.synthetic_isl_stddev,
+            osl_mean=args.synthetic_osl_mean,
+            osl_stddev=args.synthetic_osl_stddev,
+            seed=args.seed,
+        )
+        original_conversations = {
+            k: [dict(m) for m in v] for k, v in conversations.items()
+        }
+    else:
+        if args.input_file is None:
+            raise ValueError("--input-file is required when not using --synthetic")
 
-    if not isinstance(input_data, list):
-        raise Exception(f"Input file {args.input_file} must be a JSON array")
+        logger.info(f"Reading input file: {args.input_file}")
+        with open(args.input_file) as f:
+            input_data = json.load(f)
 
-    logger.info(f"Found {len(input_data)} conversations in the input file")
+        if not isinstance(input_data, list):
+            raise Exception(f"Input file {args.input_file} must be a JSON array")
 
-    # Convert WildChat format to ConversationsMap
-    # WildChat format: {"conversation_hash": str, "conversation": [...], ...}
-    conversations: ConversationsMap = {}
-    original_conversations: ConversationsMap = {}  # Keep original for responses file
-    for item in input_data:
-        conv_id = item["conversation_hash"]
-        # Extract only role and content from each message
-        messages: MessagesList = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in item["conversation"]
-        ]
-        conversations[conv_id] = messages
-        # Deep copy for original reference
-        original_conversations[conv_id] = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in item["conversation"]
-        ]
+        logger.info(f"Found {len(input_data)} conversations in the input file")
+
+        # Convert WildChat format to ConversationsMap
+        conversations: ConversationsMap = {}
+        original_conversations: ConversationsMap = {}
+        for item in input_data:
+            conv_id = item["conversation_hash"]
+            messages: MessagesList = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in item["conversation"]
+            ]
+            conversations[conv_id] = messages
+            original_conversations[conv_id] = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in item["conversation"]
+            ]
 
     logger.info(f"Loaded {len(conversations)} unique conversations")
 
