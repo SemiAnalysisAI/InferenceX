@@ -583,6 +583,7 @@ run_lm_eval() {
     local temperature=0
     local top_p=1
     local concurrent_requests=32
+    local limit=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -594,6 +595,7 @@ run_lm_eval() {
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
             --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
+            --limit)          limit="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -615,6 +617,7 @@ run_lm_eval() {
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
+      ${limit:+--limit "$limit"} \
       --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
