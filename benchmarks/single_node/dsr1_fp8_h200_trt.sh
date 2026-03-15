@@ -66,6 +66,7 @@ MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 fi
 
 # Launch TRT-LLM server

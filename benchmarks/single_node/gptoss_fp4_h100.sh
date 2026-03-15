@@ -21,6 +21,7 @@ MAX_MODEL_LEN=10240
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 fi
 
 cat > config.yaml << EOF

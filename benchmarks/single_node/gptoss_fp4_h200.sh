@@ -34,6 +34,7 @@ fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     CALCULATED_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$CALCULATED_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN="$CALCULATED_MAX_MODEL_LEN"
 fi
 
 # Create config.yaml
