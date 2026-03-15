@@ -753,9 +753,18 @@ run_eval() {
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
+    local eval_rc=0
     case "$framework" in
-        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" ;;
-        *)               echo "Unknown framework '${framework}'"; return 1 ;;
+        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
+        *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
-    return $?
+
+    if [ "$eval_rc" -ne 0 ]; then
+        echo "ERROR: run_eval failed with exit code $eval_rc" >&2
+        if [ "${EVAL_ONLY}" = "true" ]; then
+            echo "Eval-only mode: exiting with failure" >&2
+            exit "$eval_rc"
+        fi
+    fi
+    return $eval_rc
 }

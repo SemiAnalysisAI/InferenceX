@@ -154,6 +154,31 @@ jobs:
 
           if [ "${{ inputs.eval-only }}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
+            # Verify eval produced results
+            if ! ls results*.json 1>/dev/null 2>&1; then
+              echo "Eval-only run failed: no results*.json files found." >&2
+              exit 1
+            fi
+            # Verify eval scores meet minimum threshold (85%)
+            python3 << 'PYEOF'
+          import json, glob, sys
+          MIN_SCORE = 0.85
+          failed = False
+          for f in glob.glob("results*.json"):
+              with open(f) as fh:
+                  data = json.load(fh)
+              for task, metrics in data.get("results", {}).items():
+                  for name, val in metrics.items():
+                      if not name.startswith("exact_match,") or "stderr" in name:
+                          continue
+                      if isinstance(val, (int, float)) and val < MIN_SCORE:
+                          print(f"FAIL: {task} {name} = {val:.4f} (< {MIN_SCORE})", file=sys.stderr)
+                          failed = True
+                      elif isinstance(val, (int, float)):
+                          print(f"PASS: {task} {name} = {val:.4f}")
+          if failed:
+              sys.exit(1)
+          PYEOF
           else
             FOUND_RESULT_FILE=
             for i in {1..10}; do
@@ -210,7 +235,7 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
-          if-no-files-found: ignore
+          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}
