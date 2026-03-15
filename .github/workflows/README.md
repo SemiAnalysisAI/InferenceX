@@ -276,3 +276,7 @@ python utils/summarize.py <results_directory>
 ```
 
 Outputs GitHub-flavored markdown tables with metrics including TTFT, TPOT, interactivity, E2EL, and throughput per GPU for both single-node and multi-node results.
+
+For multi-node/disaggregated results:
+- `TPUT per GPU`, `Output TPUT per GPU`, and `Input TPUT per GPU` are cluster averages (divided by total GPUs in the run).
+- `Output TPUT per Decode GPU` and `Input TPUT per Prefill GPU` are also emitted for role-specific analysis.

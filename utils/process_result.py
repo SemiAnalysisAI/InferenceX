@@ -4,6 +4,14 @@ import os
 from pathlib import Path
 
 
+def safe_division(numerator, denominator, metric_name):
+    """Divide safely and raise a clear error on invalid denominators."""
+    if denominator <= 0:
+        raise ValueError(
+            f"{metric_name} requires a positive denominator, got {denominator}.")
+    return numerator / denominator
+
+
 def get_required_env_vars(required_vars):
     """Load and validate required environment variables."""
     env_values = {}
@@ -57,6 +65,9 @@ data = {
 }
 
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
+total_token_throughput = float(bmk_result['total_token_throughput'])
+output_throughput = float(bmk_result['output_throughput'])
+input_throughput = total_token_throughput - output_throughput
 
 if is_multinode:
     # TODO: Eventually will have to have a separate condition in here for multinode disagg and
@@ -74,6 +85,12 @@ if is_multinode:
     decode_tp = int(multinode_env['DECODE_TP'])
     decode_ep = int(multinode_env['DECODE_EP'])
     decode_dp_attn = multinode_env['DECODE_DP_ATTN']
+    total_gpus = prefill_gpus + decode_gpus
+
+    output_tput_per_decode_gpu = safe_division(
+        output_throughput, decode_gpus, 'output_tput_per_decode_gpu')
+    input_tput_per_prefill_gpu = safe_division(
+        input_throughput, prefill_gpus, 'input_tput_per_prefill_gpu')
 
     multi_node_data = {
         'is_multinode': True,
@@ -87,9 +104,14 @@ if is_multinode:
         'decode_num_workers': decode_num_workers,
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / (prefill_gpus + decode_gpus),
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / decode_gpus,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
+        # For disaggregated runs, keep input/output throughput per GPU
+        # comparable to aggregated setups by averaging over the whole cluster.
+        'tput_per_gpu': safe_division(total_token_throughput, total_gpus, 'tput_per_gpu'),
+        'output_tput_per_gpu': safe_division(output_throughput, total_gpus, 'output_tput_per_gpu'),
+        'input_tput_per_gpu': safe_division(input_throughput, total_gpus, 'input_tput_per_gpu'),
+        # Keep role-specific metrics for deeper disaggregated analysis.
+        'output_tput_per_decode_gpu': output_tput_per_decode_gpu,
+        'input_tput_per_prefill_gpu': input_tput_per_prefill_gpu,
     }
 
     data = data | multi_node_data
@@ -107,9 +129,9 @@ else:
         'tp': tp_size,
         'ep': ep_size,
         'dp_attention': dp_attention,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
+        'tput_per_gpu': safe_division(total_token_throughput, tp_size, 'tput_per_gpu'),
+        'output_tput_per_gpu': safe_division(output_throughput, tp_size, 'output_tput_per_gpu'),
+        'input_tput_per_gpu': safe_division(input_throughput, tp_size, 'input_tput_per_gpu'),
     }
 
     data = data | single_node_data

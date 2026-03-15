@@ -47,6 +47,7 @@ def base_env_vars():
         "OSL": "1024",
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
+        "IMAGE": "lmsysorg/sglang:test",
     }
 
 
@@ -235,8 +236,10 @@ class TestProcessResultScript:
         # Verify throughput calculations
         total_gpus = 20 + 8  # prefill + decode
         assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / total_gpus)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
-        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
+        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / total_gpus)
+        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / total_gpus)
+        assert output_data["output_tput_per_decode_gpu"] == pytest.approx(12000.0 / 8)
+        assert output_data["input_tput_per_prefill_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)
 
     def test_missing_base_env_vars(self, tmp_path, sample_benchmark_result):
         """Test that missing base env vars causes failure."""
@@ -367,7 +370,7 @@ class TestCalculations:
             "model_id": "test-model",
             "max_concurrency": 64,
             "total_token_throughput": 28000.0,  # Will be divided by total GPUs
-            "output_throughput": 16000.0,  # Will be divided by decode GPUs
+            "output_throughput": 16000.0,  # Cluster-average field uses total GPUs
         }
 
         env = multinode_env_vars.copy()
@@ -379,8 +382,29 @@ class TestCalculations:
 
         output_data = json.loads(result.stdout)
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
-        assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
-        assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
+        assert output_data["output_tput_per_gpu"] == pytest.approx(571.428571, rel=1e-6)  # 16000 / 28
+        assert output_data["input_tput_per_gpu"] == pytest.approx(428.571429, rel=1e-6)  # (28000 - 16000) / 28
+        assert output_data["output_tput_per_decode_gpu"] == pytest.approx(2000.0)  # 16000 / 8
+        assert output_data["input_tput_per_prefill_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
+        assert output_data["tput_per_gpu"] == pytest.approx(
+            output_data["output_tput_per_gpu"] + output_data["input_tput_per_gpu"], rel=1e-6)
+
+    def test_multinode_zero_decode_gpus_fails(self, tmp_path, multinode_env_vars):
+        """Test multinode validation for zero decode GPU denominator."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 28000.0,
+            "output_throughput": 16000.0,
+        }
+
+        env = multinode_env_vars.copy()
+        env["DECODE_GPUS"] = "0"
+
+        result = run_script(tmp_path, env, benchmark_result)
+
+        assert result.returncode != 0
+        assert "output_tput_per_decode_gpu requires a positive denominator" in result.stderr
 
 
 # =============================================================================

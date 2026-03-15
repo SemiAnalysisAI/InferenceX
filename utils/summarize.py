@@ -23,6 +23,10 @@ E2EL = "E2EL (s)"
 TPUT_PER_GPU = "TPUT per GPU"
 OUTPUT_TPUT_PER_GPU = "Output TPUT per GPU"
 INPUT_TPUT_PER_GPU = "Input TPUT per GPU"
+OUTPUT_TPUT_PER_GPU_CLUSTER = "Output TPUT per GPU (cluster avg)"
+INPUT_TPUT_PER_GPU_CLUSTER = "Input TPUT per GPU (cluster avg)"
+OUTPUT_TPUT_PER_DECODE_GPU = "Output TPUT per Decode GPU"
+INPUT_TPUT_PER_PREFILL_GPU = "Input TPUT per Prefill GPU"
 PREFILL_TP = "Prefill TP"
 PREFILL_EP = "Prefill EP"
 PREFILL_DP_ATTN = "Prefill DP Attn"
@@ -50,6 +54,40 @@ def load_json(path: Path) -> Optional[Dict[str, Any]]:
             return json.load(f)
     except Exception:
         return None
+
+
+def get_multinode_tput_metrics(result: Dict[str, Any]) -> tuple[float, float, float, float]:
+    """Return normalized throughput metrics for multinode summaries.
+
+    New results include both:
+    - cluster-averaged IO throughput (`output_tput_per_gpu` / `input_tput_per_gpu`)
+    - role-scoped IO throughput (`output_tput_per_decode_gpu` / `input_tput_per_prefill_gpu`)
+
+    Older results only include role-scoped IO throughput in
+    `output_tput_per_gpu` and `input_tput_per_gpu`. In that case we derive
+    comparable cluster averages using prefill/decode GPU counts.
+    """
+    output_tput_per_gpu = float(result['output_tput_per_gpu'])
+    input_tput_per_gpu = float(result['input_tput_per_gpu'])
+    output_tput_per_decode_gpu = result.get('output_tput_per_decode_gpu')
+    input_tput_per_prefill_gpu = result.get('input_tput_per_prefill_gpu')
+
+    if output_tput_per_decode_gpu is None or input_tput_per_prefill_gpu is None:
+        output_tput_per_decode_gpu = output_tput_per_gpu
+        input_tput_per_prefill_gpu = input_tput_per_gpu
+        prefill_gpus = int(result.get('num_prefill_gpu', 0))
+        decode_gpus = int(result.get('num_decode_gpu', 0))
+        total_gpus = prefill_gpus + decode_gpus
+        if total_gpus > 0:
+            output_tput_per_gpu = output_tput_per_decode_gpu * (decode_gpus / total_gpus)
+            input_tput_per_gpu = input_tput_per_prefill_gpu * (prefill_gpus / total_gpus)
+
+    return (
+        output_tput_per_gpu,
+        input_tput_per_gpu,
+        float(output_tput_per_decode_gpu),
+        float(input_tput_per_prefill_gpu),
+    )
 
 
 def main():
@@ -114,11 +152,16 @@ def main():
             MODEL, SERVED_MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL,
             PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS, PREFILL_GPUS,
             DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS, DECODE_GPUS,
-            CONC, TTFT, TPOT, INTERACTIVITY, E2EL, TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
+            CONC, TTFT, TPOT, INTERACTIVITY, E2EL, TPUT_PER_GPU,
+            OUTPUT_TPUT_PER_GPU_CLUSTER, INPUT_TPUT_PER_GPU_CLUSTER,
+            OUTPUT_TPUT_PER_DECODE_GPU, INPUT_TPUT_PER_PREFILL_GPU
         ]
 
-        multinode_rows = [
-            [
+        multinode_rows = []
+        for r in multinode_results:
+            output_tput_per_gpu, input_tput_per_gpu, output_tput_per_decode_gpu, input_tput_per_prefill_gpu = get_multinode_tput_metrics(
+                r)
+            multinode_rows.append([
                 r['infmax_model_prefix'],
                 r['model'],
                 r['hw'].upper(),
@@ -142,11 +185,11 @@ def main():
                 f"{r['median_intvty']:.4f}",
                 f"{r['median_e2el']:.4f}",
                 f"{r['tput_per_gpu']:.4f}",
-                f"{r['output_tput_per_gpu']:.4f}",
-                f"{r['input_tput_per_gpu']:.4f}",
-            ]
-            for r in multinode_results
-        ]
+                f"{output_tput_per_gpu:.4f}",
+                f"{input_tput_per_gpu:.4f}",
+                f"{output_tput_per_decode_gpu:.4f}",
+                f"{input_tput_per_prefill_gpu:.4f}",
+            ])
 
         print("## Multi-Node Results\n")
         print("Only [InferenceX](https://github.com/SemiAnalysisAI/InferenceX) repo contains the Official InferenceX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial. Forks may not remove this disclaimer.\n")
