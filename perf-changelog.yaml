@@ -969,4 +969,4 @@
     - "Model: zai-org/GLM-5-FP8, image: lmsysorg/sglang:glm5-hopper"
     - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
     - "openai-chat backend, tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
