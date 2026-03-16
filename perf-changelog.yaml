@@ -961,3 +961,12 @@
   description:
     - "Extend MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP8)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/869
+
+  #TODO: srok, change upstream docker img(nightly if possible)
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update kimik2.5 int4 perf optimization"
+    - "Enable AITER MLA https://github.com/vllm-project/vllm/issues/35641"
+    - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/909
