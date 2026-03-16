@@ -965,7 +965,7 @@
 - config-keys:
     - qwen3.5-fp8-mi355x-sglang
   description:
-    - "Improve fp8 performance 
+    - "Improved fp8 performance"
     - "Relevant Issue: https://github.com/sgl-project/sglang/issues/19633"
     - "Relevant PR: https://github.com/sgl-project/sglang/pull/19826"
     - "Image: rocm/sgl-dev:v0.5.9-rocm720-mi35x-20260315"
