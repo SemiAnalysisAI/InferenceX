@@ -160,25 +160,7 @@ jobs:
               exit 1
             fi
             # Verify eval scores meet minimum threshold (85%)
-            python3 << 'PYEOF'
-          import json, glob, sys
-          MIN_SCORE = 0.85
-          failed = False
-          for f in glob.glob("results*.json"):
-              with open(f) as fh:
-                  data = json.load(fh)
-              for task, metrics in data.get("results", {}).items():
-                  for name, val in metrics.items():
-                      if not name.startswith("exact_match,") or "stderr" in name:
-                          continue
-                      if isinstance(val, (int, float)) and val < MIN_SCORE:
-                          print(f"FAIL: {task} {name} = {val:.4f} (< {MIN_SCORE})", file=sys.stderr)
-                          failed = True
-                      elif isinstance(val, (int, float)):
-                          print(f"PASS: {task} {name} = {val:.4f}")
-          if failed:
-              sys.exit(1)
-          PYEOF
+            python3 utils/evals/validate_scores.py
           else
             FOUND_RESULT_FILE=
             for i in {1..10}; do

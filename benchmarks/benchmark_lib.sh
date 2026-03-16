@@ -2,7 +2,6 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
-
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------
@@ -599,7 +598,7 @@ for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_
 
 # Compute the context length for eval-only mode.
 # Uses 5x the benchmark context capped at the model's native max.
-# Exports EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
+# Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
 # Echoes the computed value for scripts to capture.
 #
 # Usage: local ctx=$(compute_eval_context_length "$MODEL" "${current_ctx}")
@@ -613,15 +612,15 @@ compute_eval_context_length() {
     if [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi
-    export EVAL_MAX_MODEL_LEN="$eval_ctx"
+    EVAL_MAX_MODEL_LEN="$eval_ctx"
     echo "$eval_ctx"
 }
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}" 
+    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens="${EVAL_MAX_MODEL_LEN:-16384}"
+    local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
@@ -631,10 +630,9 @@ run_lm_eval() {
             --port)           port="$2"; shift 2 ;;
             --task)           tasks_dir="$2"; shift 2 ;;
             --results-dir)    results_dir="$2"; shift 2 ;;
-            --gen-max-tokens) gen_max_tokens="$2"; shift 2 ;;
+            --gen-max-tokens) eval_context_len="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
-            --concurrent-requests) shift 2; continue ;; # ignored; use EVAL_CONCURRENT_REQUESTS env var
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -647,9 +645,13 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # Cap generation tokens to avoid excessive KV cache reservation per request on TRT.
-    local max_gen_tokens=16384
-    echo "Eval context budget: max_length=${gen_max_tokens}, max_gen_tokens=${max_gen_tokens}"
+    # Cap output tokens: must fit within context window (leave room for input),
+    # and avoid excessive KV cache reservation per request on TRT.
+    local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
+    if [ "$max_output_tokens" -gt 16384 ]; then
+        max_output_tokens=16384
+    fi
+    echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
@@ -658,8 +660,8 @@ run_lm_eval() {
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=${max_gen_tokens},temperature=${temperature},top_p=${top_p}"
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -667,8 +669,15 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
+    if [ -z "${results_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR is empty; skipping artifact collection" >&2
+        return 1
+    fi
     local out_dir="${results_dir}"
-    mkdir -p "$out_dir" || true
+    if [ ! -d "${out_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR='${out_dir}' does not exist; skipping artifact collection" >&2
+        return 1
+    fi
 
     # Write minimal meta for collectors that expect it
     local meta_json="${out_dir}/meta_env.json"
@@ -716,13 +725,13 @@ META
 
     # Move eval artifacts into PWD (no new directories in workspace)
     if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || true
+        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
     fi
     if [ -d "${out_dir}" ]; then
         while IFS= read -r -d '' jf; do
             base=$(basename "$jf")
             if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || true
+                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
             fi
         done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
     fi

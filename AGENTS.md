@@ -296,7 +296,7 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
 
 ## Evals (Accuracy Validation)
 
-Evals run optional accuracy checks after throughput benchmarks to ensure model outputs aren't degraded by inference optimizations.
+Evals run optional accuracy checks to ensure model outputs aren't degraded by inference optimizations. They can run alongside benchmarks or independently in eval-only mode.
 
 ### When Evals Run
 
@@ -329,17 +329,25 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
 
 ### Eval Integration in Benchmark Scripts
 
-All benchmark scripts in `benchmarks/` follow this pattern:
+All benchmark scripts in `benchmarks/` follow one of two flows:
 
 ```bash
+# Combined mode (benchmark + eval):
 # 1. Start server
 # 2. wait_for_server_ready
 # 3. run_benchmark_serving (throughput)
 # 4. Conditionally run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
-    append_lm_eval_summary  # Writes meta_env.json and moves artifacts
+    run_eval --framework lm-eval --port "$PORT"
+    append_lm_eval_summary
 fi
+
+# Eval-only mode (EVAL_ONLY=true):
+# 1. Compute expanded context via compute_eval_context_length
+# 2. Start server with expanded context (--context-length or --max-model-len)
+# 3. wait_for_server_ready
+# 4. run_benchmark_serving returns immediately (skipped)
+# 5. run_eval + append_lm_eval_summary
 ```
 
 ### Key Eval Functions in `benchmarks/benchmark_lib.sh`
@@ -351,6 +359,8 @@ fi
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
+| `compute_eval_context_length` | Computes eval context length (5x benchmark context, capped at model native max) |
+| `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Eval Results Collection
 
