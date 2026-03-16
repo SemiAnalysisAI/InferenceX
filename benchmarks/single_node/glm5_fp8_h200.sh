@@ -42,33 +42,19 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# If your --model is not on Hugging Face (e.g. glm-5-fp8), set BENCH_TOKENIZER
-# to a local path or a public HF model id, e.g. export BENCH_TOKENIZER=THUDM/glm-4-9b-chat
-TOKENIZER_ARGS=""
-if [ -n "${BENCH_TOKENIZER:-}" ]; then
-  TOKENIZER_ARGS="--tokenizer $BENCH_TOKENIZER"
-fi
-
-num_prompts=$((CONC * 5))
-SGLANG_URL="http://0.0.0.0:$PORT"
-
-python3 utils/bench_serving/benchmark_serving.py \
-    --backend openai-chat \
-    --base-url "$SGLANG_URL" \
-    --endpoint /v1/chat/completions \
-    --model glm-5-fp8 \
-    $TOKENIZER_ARGS \
-    --dataset-name random \
-    --num-prompts "$num_prompts" \
-    --random-input-len "$ISL" \
-    --random-output-len "$OSL" \
-    --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
-    --ignore-eos \
-    --percentile-metrics ttft,tpot,itl,e2el \
+# Server is SGLang; benchmark client uses OpenAI-compatible (vllm) backend to talk to it
+run_benchmark_serving \
+    --model "$MODEL" \
+    --port "$PORT" \
+    --backend vllm \
+    --input-len "$ISL" \
+    --output-len "$OSL" \
+    --random-range-ratio "$RANDOM_RANGE_RATIO" \
+    --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
-    --save-result \
-    --result-dir /workspace \
-    --result-filename "$RESULT_FILENAME.json"
+    --result-filename "$RESULT_FILENAME" \
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
