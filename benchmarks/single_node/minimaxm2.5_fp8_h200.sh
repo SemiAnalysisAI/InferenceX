@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -21,12 +22,19 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "$EP_SIZE" -ge 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --disable-log-requests \
