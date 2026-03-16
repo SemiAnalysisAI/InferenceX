@@ -35,6 +35,7 @@ python3 -m sglang.launch_server \
   --reasoning-parser glm45 \
   --mem-fraction-static 0.85 \
   --served-model-name glm-5-fp8 \
+  --trust-remote-code \
   > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
@@ -42,7 +43,6 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# Server is SGLang; benchmark client uses OpenAI-compatible (vllm) backend to talk to it
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -57,7 +57,9 @@ run_benchmark_serving \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
+# Server accepts glm-5-fp8 (--served-model-name); lm-eval must use that model name
 if [ "${RUN_EVAL}" = "true" ]; then
+    export MODEL_NAME=glm-5-fp8
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
