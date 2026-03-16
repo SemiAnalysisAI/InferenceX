@@ -967,6 +967,6 @@
     - kimik2.5-int4-mi355x-vllm
   description:
     - "Update kimik2.5 int4 perf optimization"
-    - "Enable AITER MLA https://github.com/vllm-project/vllm/issues/35641"
+    - "Enable AITER MLA, export VLLM_ROCM_USE_AITER=1, https://github.com/vllm-project/vllm/issues/35641"
     - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/909
