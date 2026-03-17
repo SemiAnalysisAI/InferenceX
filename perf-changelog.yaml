@@ -967,4 +967,4 @@
   description:
     - "Add GLM-5 FP8 SGLang benchmark for B200"
     - "Supports TP8 (low latency) and DEP8 (high throughput) modes with NSA attention backend"
-  pr-link: <PR_LINK>
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/915
