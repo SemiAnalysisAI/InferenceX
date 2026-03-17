@@ -37,7 +37,8 @@ JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
-    $ISL $OSL "${CONC_LIST// /x}" inf "${NODELIST:-}")
+    $ISL $OSL "${CONC_LIST// /x}" inf "${NODELIST:-}" \
+    ${RANDOM_RANGE_RATIO})
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to submit job" >&2

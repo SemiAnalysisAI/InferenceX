@@ -12,18 +12,19 @@ usage() {
     cat << 'USAGE'
 Usage:
   bash submit.sh <PREFILL_NODES> <PREFILL_WORKERS> <DECODE_NODES> <DECODE_WORKERS> \
-                 <ISL> <OSL> <CONCURRENCIES> <REQUEST_RATE> [NODE_LIST]
+                 <ISL> <OSL> <CONCURRENCIES> <REQUEST_RATE> [NODE_LIST] [RANDOM_RANGE_RATIO]
 
 Arguments:
-  PREFILL_NODES    Number of prefill nodes
-  PREFILL_WORKERS  Number of prefill workers (usually 1)
-  DECODE_NODES     Number of decode nodes
-  DECODE_WORKERS   Number of decode workers (usually 1)
-  ISL              Input sequence length
-  OSL              Output sequence length
-  CONCURRENCIES    Concurrency levels, delimited by 'x' (e.g., "8x16x32")
-  REQUEST_RATE     Request rate ("inf" for max throughput)
-  NODE_LIST        Optional: comma-separated hostnames
+  PREFILL_NODES       Number of prefill nodes
+  PREFILL_WORKERS     Number of prefill workers (usually 1)
+  DECODE_NODES        Number of decode nodes
+  DECODE_WORKERS      Number of decode workers (usually 1)
+  ISL                 Input sequence length
+  OSL                 Output sequence length
+  CONCURRENCIES       Concurrency levels, delimited by 'x' (e.g., "8x16x32")
+  REQUEST_RATE        Request rate ("inf" for max throughput)
+  NODE_LIST           Optional: comma-separated hostnames
+  RANDOM_RANGE_RATIO  Optional: random range ratio for benchmark (default 0.8)
 
 Required environment variables:
   SLURM_ACCOUNT    SLURM account name
@@ -66,6 +67,7 @@ OSL=$6
 CONCURRENCIES=$7
 REQUEST_RATE=$8
 NODE_LIST=${9}
+RANDOM_RANGE_RATIO=${10}
 
 # Router co-located with first prefill: xP + yD nodes total
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
@@ -85,10 +87,10 @@ export GPUS_PER_NODE=$GPUS_PER_NODE
 export MODEL_NAME=$MODEL_NAME
 export BENCH_INPUT_LEN=${ISL}
 export BENCH_OUTPUT_LEN=${OSL}
-export BENCH_RANDOM_RANGE_RATIO=${BENCH_RANDOM_RANGE_RATIO:-1}
 export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
 export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
+export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
