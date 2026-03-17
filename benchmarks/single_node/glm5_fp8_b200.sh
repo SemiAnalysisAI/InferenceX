@@ -20,6 +20,8 @@ nvidia-smi
 
 hf download "$MODEL"
 
+pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
+
 export SGL_ENABLE_JIT_DEEPGEMM=1
 
 SERVER_LOG=/workspace/server.log
@@ -45,8 +47,8 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --trust-remote-code \
 --tensor-parallel-size=$TP \
 $DP_FLAGS \
---kv-cache-dtype bf16 --quantization fp8 \
---attention-backend nsa --nsa-decode-backend trtllm \
+--kv-cache-dtype fp8_e4m3 --quantization fp8 \
+--nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC --max-running-requests $CONC \
 --mem-fraction-static 0.85 \
