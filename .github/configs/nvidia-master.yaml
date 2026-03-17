@@ -1842,17 +1842,17 @@ glm5-fp8-b200-sglang:
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128 }
   - isl: 1024
     osl: 8192
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128 }
 
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.15.1
