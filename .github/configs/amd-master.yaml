@@ -1499,9 +1499,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-v2:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=3"
 
-    
-
-
 
   # FIXME(billishyahao): disable FP4 1k8k for now
   # - isl: 1024
