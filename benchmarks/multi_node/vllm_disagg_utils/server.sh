@@ -284,11 +284,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     echo "Waiting for all prefill and decode servers to be up . . ."
-    python3 $VLLM_WS_PATH/sync.py barrier \
-        --node-ips ${IPADDRS} \
-        --node-ports $SERVER_PORT \
-        --wait-for-all-ports \
-        --timeout 1800
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: skipping barrier (wait-for-all-ports)"
+    else
+        python3 $VLLM_WS_PATH/sync.py barrier \
+            --node-ips ${IPADDRS} \
+            --node-ports $SERVER_PORT \
+            --wait-for-all-ports \
+            --timeout 1800
+    fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
@@ -336,8 +340,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "Killing the proxy server and prefill server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        kill $proxy_pid
-        kill $prefill_pid
+        [[ -n "${proxy_pid:-}" ]] && kill $proxy_pid 2>/dev/null || true
+        [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
