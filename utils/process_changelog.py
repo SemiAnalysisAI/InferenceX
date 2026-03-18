@@ -91,38 +91,62 @@ def main():
 
     all_benchmark_results = []
     all_eval_results = []
-    # Deduplicate repeated configs, if for some reason a config key appears multiple times
-    # in one commit, we don't want to run that config two times (there will just be twice as many
-    # data points for that config, which is not useful)
-    all_configs_to_run = set()
+    # Deduplicate repeated configs separately for benchmarks and evals.
+    # An evals-only entry should not prevent a later regular entry from
+    # generating benchmarks for the same config, and vice versa.
+    benchmark_configs_seen = set()
+    eval_configs_seen = set()
 
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
-        configs_to_run = get_config_keys_from_master(
+        all_configs = get_config_keys_from_master(
             entry.config_keys, load_config_files(MASTER_CONFIGS)
         )
 
-        # Skip configs already processed
-        configs_to_run = [c for c in configs_to_run if c not in all_configs_to_run]
-        if not configs_to_run:
-            continue
-        all_configs_to_run.update(configs_to_run)
-
-        base_cmd = [
-            "python3",
-            GENERATE_SWEEPS_PY_SCRIPT,
-            "test-config",
-            "--config-keys",
-            *configs_to_run,
-            "--config-files",
-            *MASTER_CONFIGS,
-        ]
-
         if not entry.evals_only:
             # Generate benchmark entries (no evals)
+            benchmark_configs = [c for c in all_configs if c not in benchmark_configs_seen]
+            if benchmark_configs:
+                benchmark_configs_seen.update(benchmark_configs)
+                base_cmd = [
+                    "python3",
+                    GENERATE_SWEEPS_PY_SCRIPT,
+                    "test-config",
+                    "--config-keys",
+                    *benchmark_configs,
+                    "--config-files",
+                    *MASTER_CONFIGS,
+                    "--no-evals",
+                ]
+                try:
+                    result = subprocess.run(
+                        base_cmd,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(e.stderr)
+                    raise
+                all_benchmark_results.extend(json.loads(result.stdout))
+
+        # Generate eval entries separately
+        eval_configs = [c for c in all_configs if c not in eval_configs_seen]
+        if eval_configs:
+            eval_configs_seen.update(eval_configs)
+            base_cmd = [
+                "python3",
+                GENERATE_SWEEPS_PY_SCRIPT,
+                "test-config",
+                "--config-keys",
+                *eval_configs,
+                "--config-files",
+                *MASTER_CONFIGS,
+                "--evals-only",
+            ]
             try:
-                result = subprocess.run(
-                    [*base_cmd, "--no-evals"],
+                eval_result = subprocess.run(
+                    base_cmd,
                     capture_output=True,
                     text=True,
                     check=True,
@@ -130,20 +154,7 @@ def main():
             except subprocess.CalledProcessError as e:
                 print(e.stderr)
                 raise
-            all_benchmark_results.extend(json.loads(result.stdout))
-
-        # Generate eval entries separately
-        try:
-            eval_result = subprocess.run(
-                [*base_cmd, "--evals-only"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            print(e.stderr)
-            raise
-        all_eval_results.extend(json.loads(eval_result.stdout))
+            all_eval_results.extend(json.loads(eval_result.stdout))
 
     for result in all_benchmark_results:
         seq_len_str = seq_len_to_str(result["isl"], result["osl"])

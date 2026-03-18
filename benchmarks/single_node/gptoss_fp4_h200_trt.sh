@@ -8,6 +8,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
     DP_ATTENTION \
@@ -57,6 +58,7 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
 --max_num_tokens 20000 \
+--max_seq_len=$MAX_MODEL_LEN \
 --backend pytorch \
 --extra_llm_api_options gptoss-config.yml \
 --ep_size=$EP_SIZE \

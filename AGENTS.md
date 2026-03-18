@@ -404,16 +404,18 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RUN_EVAL` | `false` | Enable eval after throughput |
+| `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
+| `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_TASK` | `gsm8k` | Task definition file (without `.yaml`) |
-| `NUM_FEWSHOT` | `2` | Number of few-shot examples |
+| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
+| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
 
 ### Adding a New Eval Task
 
 1. Create a task YAML in `utils/evals/` (follow lm-eval task format)
-2. Set `EVAL_TASK=<your_task>` when running benchmarks
+2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks
 3. Update `utils/collect_eval_results.py` if new metrics need extraction
 
 ### lm-eval Patches
