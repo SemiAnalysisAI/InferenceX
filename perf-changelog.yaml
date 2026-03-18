@@ -961,3 +961,10 @@
   description:
     - "Extend MiniMax M2.5 FP8 single-node config for H200 with vLLM v0.16.0 (TP8)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/869
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+  description:
+    - "test"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
