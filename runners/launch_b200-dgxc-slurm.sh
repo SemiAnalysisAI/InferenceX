@@ -21,7 +21,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
         export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/raid/models/dsr1-0528-fp8"
+        export MODEL_PATH="/raid/tmp/dsr1-0528-fp8"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     else
         echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
