@@ -32,7 +32,9 @@ PORT=${PORT:-8888}
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
-    EVAL_CONTEXT_ARGS="--context-length $(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")"
+    _eval_ctx=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+    EVAL_CONTEXT_ARGS="--context-length $_eval_ctx"
+    export EVAL_MAX_MODEL_LEN="$_eval_ctx"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor

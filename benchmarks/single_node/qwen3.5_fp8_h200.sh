@@ -24,6 +24,7 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_SEQ_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+    export EVAL_MAX_MODEL_LEN="$MAX_SEQ_LEN"
 else
     MAX_SEQ_LEN=$((ISL + OSL + 20))
 fi

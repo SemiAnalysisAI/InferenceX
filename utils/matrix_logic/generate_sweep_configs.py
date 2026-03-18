@@ -723,9 +723,9 @@ def main():
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(
-        '--run-evals',
+        '--no-evals',
         action='store_true',
-        help='When specified, run evals on a subset of configs (in addition to all configs).'
+        help='When specified, skip evals (throughput benchmarks only).'
     )
     eval_group.add_argument(
         '--evals-only',
@@ -930,10 +930,9 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle eval options (mutually exclusive)
-    if args.run_evals or args.evals_only:
+    # Handle eval options (mutually exclusive: --no-evals or --evals-only)
+    if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
-        # IF --evals-only is specified, filter to only eval entries
         if args.evals_only:
             matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
 

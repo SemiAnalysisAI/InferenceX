@@ -122,7 +122,7 @@ def main():
             # Generate benchmark entries (no evals)
             try:
                 result = subprocess.run(
-                    base_cmd,
+                    [*base_cmd, "--no-evals"],
                     capture_output=True,
                     text=True,
                     check=True,

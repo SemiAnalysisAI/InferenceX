@@ -316,10 +316,14 @@ The default eval framework is [lm-evaluation-harness](https://github.com/Eleuthe
 ### Running Evals via CLI
 
 ```bash
-# Generate configs with evals marked (in addition to all configs)
+# Generate configs (evals marked by default on 8k1k subset)
+python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  --master-config .github/configs/nvidia-master.yaml
+
+# Generate throughput-only configs (skip evals)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --master-config .github/configs/nvidia-master.yaml \
-  --run-evals
+  --no-evals
 
 # Generate ONLY the eval subset (excludes non-eval configs)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \

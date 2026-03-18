@@ -593,6 +593,8 @@ for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_
     if hasattr(config, attr):
         print(getattr(config, attr))
         break
+else:
+    print(0)
 "
 }
 
@@ -608,7 +610,10 @@ compute_eval_context_length() {
     local native_max
     native_max=$(get_native_max_context_length "$model")
 
-    local eval_ctx=$(( ${benchmark_ctx:-$native_max} * 5 ))
+    if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
+        benchmark_ctx="$native_max"
+    fi
+    local eval_ctx=$(( benchmark_ctx * 5 ))
     if [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi

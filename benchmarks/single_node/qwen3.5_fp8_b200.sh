@@ -42,6 +42,7 @@ CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MAX_RUNNING_REQUESTS=128
 if [ "${EVAL_ONLY}" = "true" ]; then
     CONTEXT_LENGTH=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+    export EVAL_MAX_MODEL_LEN="$CONTEXT_LENGTH"
 else
     CONTEXT_LENGTH=$((ISL + OSL + 20))
 fi
