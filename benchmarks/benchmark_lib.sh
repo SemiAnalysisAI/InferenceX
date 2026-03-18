@@ -614,8 +614,13 @@ compute_eval_context_length() {
         benchmark_ctx="$native_max"
     fi
     local eval_ctx=$(( benchmark_ctx * 5 ))
-    if [ "$eval_ctx" -gt "$native_max" ]; then
+    if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
+    fi
+    # If eval_ctx is still 0 (both benchmark_ctx and native_max were 0), fall back
+    if [ "$eval_ctx" -le 0 ] 2>/dev/null; then
+        echo "WARN: compute_eval_context_length could not determine context length for $model" >&2
+        eval_ctx="${MAX_MODEL_LEN:-16384}"
     fi
     EVAL_MAX_MODEL_LEN="$eval_ctx"
     echo "$eval_ctx"
