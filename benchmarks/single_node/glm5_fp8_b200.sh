@@ -27,17 +27,8 @@ export SGL_ENABLE_JIT_DEEPGEMM=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Mode-dependent config: TP8 vs DEP8
-if [[ "$DP_ATTENTION" == "true" ]]; then
-  # DEP8: high throughput
-  DP_SIZE=$EP_SIZE
-  DP_FLAGS="--data-parallel-size $DP_SIZE --expert-parallel-size $EP_SIZE --enable-dp-lm-head --enable-dp-attention"
-else
-  # TP8: low latency
-  DP_FLAGS="--data-parallel-size 1 --expert-parallel-size 1"
-fi
 
-echo "DP_ATTENTION: $DP_ATTENTION, EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -46,8 +37,11 @@ set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
 --tensor-parallel-size=$TP \
-$DP_FLAGS \
+--data-parallel-size 1 --expert-parallel-size 1 \
+--tool-call-parser glm47 \
+--reasoning-parser glm45 \
 --kv-cache-dtype fp8_e4m3 --quantization fp8 \
+--attention-backend nsa \
 --nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC --max-running-requests $CONC \
