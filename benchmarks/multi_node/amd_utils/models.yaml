@@ -39,7 +39,7 @@
 
 DeepSeek-V3:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
@@ -70,7 +70,7 @@ DeepSeek-V3:
 
 DeepSeek-V3-0324:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
@@ -101,7 +101,7 @@ DeepSeek-V3-0324:
 
 DeepSeek-R1:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
@@ -132,7 +132,7 @@ DeepSeek-R1:
 
 DeepSeek-R1-0528:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
@@ -163,7 +163,7 @@ DeepSeek-R1-0528:
 
 DeepSeek-R1-0528-MXFP4-Preview:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
@@ -194,7 +194,7 @@ DeepSeek-R1-0528-MXFP4-Preview:
 
 DeepSeek-R1-0528-MXFP4:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
-  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
+  mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-draft-tokens 3"
   dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
