@@ -970,17 +970,7 @@
     - "Replace old per-file recipes with resolved variants from consolidated 8k1k.yaml"
     - "14 variants: STP/MTP x low-latency/max-throughput with updated concurrencies and scale points"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/907
-<<<<<<< qwen-sglang-b200-mtp-fp8
 
-- config-keys:
-    - qwen3.5-fp8-b200-sglang-mtp
-  description:
-    - "Add Single Node Agg FP8 MTP config for Qwen3.5 B200 SGLang"
-    - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
-    - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
-=======
-  
 - config-keys:
     - glm5-fp8-h200-sglang
   description:
@@ -989,4 +979,11 @@
     - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
     - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
->>>>>>> main
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Add Single Node Agg FP8 MTP config for Qwen3.5 B200 SGLang"
+    - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
+    - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
