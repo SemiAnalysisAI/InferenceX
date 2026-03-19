@@ -970,3 +970,10 @@
     - "Replace old per-file recipes with resolved variants from consolidated 8k1k.yaml"
     - "14 variants: STP/MTP x low-latency/max-throughput with updated concurrencies and scale points"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/907
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Replace FP8 TP4/EP4 with TP8 config (conc 4-128) for all ISL/OSL combos"
+    - "Add --enable-flashinfer-allreduce-fusion to FP8 benchmark script"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
