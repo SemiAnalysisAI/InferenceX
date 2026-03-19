@@ -18,6 +18,7 @@ import os
 import re
 import socket
 import threading
+import time
 import uuid
 
 import aiohttp
@@ -36,6 +37,8 @@ prefill_instances: list[dict] = []
 decode_instances: list[dict] = []
 request_nums = 0
 app = Quart(__name__)
+
+STREAM_IDLE_TIMEOUT = int(os.environ.get("PROXY_STREAM_IDLE_TIMEOUT", "300"))
 
 IP_PORT_PATTERN = re.compile(r"//(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d+)")
 
@@ -173,13 +176,27 @@ async def start_decode_request(endpoint, req_data, request_id):
 async def stream_decode_response(session, response, request_id):
     try:
         if response.status == 200:
-            async for chunk_bytes in response.content.iter_chunked(1024):
-                yield chunk_bytes
+            chunk_iter = response.content.iter_chunked(1024).__aiter__()
+            while True:
+                try:
+                    chunk_bytes = await asyncio.wait_for(
+                        chunk_iter.__anext__(), timeout=STREAM_IDLE_TIMEOUT,
+                    )
+                    yield chunk_bytes
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Decode stream %s idle for %ds, aborting",
+                        request_id, STREAM_IDLE_TIMEOUT,
+                    )
+                    break
         else:
             raise RuntimeError(
                 f"Decode response status={response.status}"
             )
     finally:
+        await response.release()
         await session.close()
 
 
