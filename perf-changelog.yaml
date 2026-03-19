@@ -976,4 +976,4 @@
   description:
     - "Replace FP8 TP4/EP4 with TP8 config (conc 4-128) for all ISL/OSL combos"
     - "Add --enable-flashinfer-allreduce-fusion to FP8 benchmark script"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
