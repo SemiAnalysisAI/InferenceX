@@ -970,3 +970,12 @@
     - "Replace old per-file recipes with resolved variants from consolidated 8k1k.yaml"
     - "14 variants: STP/MTP x low-latency/max-throughput with updated concurrencies and scale points"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/907
+  
+- config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang H200 single-node benchmark"
+    - "Model: zai-org/GLM-5-FP8, image: lmsysorg/sglang:glm5-hopper"
+    - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
+    - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
