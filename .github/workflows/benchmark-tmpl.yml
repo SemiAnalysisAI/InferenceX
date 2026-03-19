@@ -196,7 +196,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: server_logs_${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
           path: server.log
           if-no-files-found: ignore
 
@@ -204,7 +204,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: gpu_metrics_${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
           path: gpu_metrics.csv
           if-no-files-found: ignore
 

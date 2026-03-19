@@ -56,7 +56,7 @@ def main() -> int:
     if checked == 0:
         print("WARN: no metrics matched prefix '{}'".format(args.metric_prefix), file=sys.stderr)
 
-    return 1 if failed else 0
+    return 1 if (failed or checked == 0) else 0
 
 
 if __name__ == "__main__":
