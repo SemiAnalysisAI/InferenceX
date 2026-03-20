@@ -979,3 +979,10 @@
     - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
     - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
+  
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang benchmark for B200"
+    - "Supports TP8 (low latency) and DEP8 (high throughput) modes with NSA attention backend"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/915
