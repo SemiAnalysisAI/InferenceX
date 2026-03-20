@@ -75,6 +75,7 @@ run_benchmark_serving \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
+    --use-chat-template \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
