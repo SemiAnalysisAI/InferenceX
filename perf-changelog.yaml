@@ -982,7 +982,7 @@
 
 - config-keys:
     - gptoss-fp4-h100-vllm
-    - dsr1-fp4-mi355x-atom-mtp
+    - dsr1-fp8-mi325x-sglang
   description:
     - "Separate evals, change to 8k1k, fail loudly, 5-shot, top of curve & middle of curve"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/911
