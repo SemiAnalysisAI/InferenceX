@@ -47,6 +47,12 @@ export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 export VLLM_ROCM_USE_AITER_TRITON_ROPE=1
 
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 # following AMD andy luo's recipe
 # https://x.com/linluo77/status/2017024513595301985
 
@@ -56,6 +62,7 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=1 \
