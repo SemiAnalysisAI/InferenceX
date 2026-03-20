@@ -242,10 +242,12 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
-              env:
-                  CONFIG_JSON: ${{ needs.setup.outputs.search-space-config }}
               run: |
-                  echo "$CONFIG_JSON" | jq '.changelog_metadata' > changelog_metadata.json
+                  cat <<'CONFIGEOF' > _full_config.json
+                  ${{ needs.setup.outputs.search-space-config }}
+                  CONFIGEOF
+                  jq '.changelog_metadata' _full_config.json > changelog_metadata.json
+                  rm -f _full_config.json
 
             - name: Upload changelog artifact
               uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
