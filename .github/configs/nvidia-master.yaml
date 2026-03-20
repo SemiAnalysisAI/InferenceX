@@ -1816,15 +1816,18 @@ qwen3.5-fp8-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
 
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.15.1
