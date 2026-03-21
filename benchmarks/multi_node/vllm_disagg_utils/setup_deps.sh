@@ -171,8 +171,18 @@ install_mori_proxy_deps() {
 #    GPU kernels are JIT-compiled on first use; no hipcc needed at install.
 # ---------------------------------------------------------------------------
 install_mori() {
-    if python3 -c "import mori" 2>/dev/null; then
-        echo "[SETUP] MoRI Python bindings already present"
+    local MORI_TARGET_COMMIT="b645fc8"
+    local MORI_MARKER="/usr/local/lib/python3.*/dist-packages/.mori_commit_${MORI_TARGET_COMMIT}"
+
+    # The pre-installed MoRI in vllm base images has a PCI topology bug: it
+    # only maps the secondary bus of each bridge instead of the full
+    # secondary-to-subordinate range (dsp2dev). This causes an assertion
+    # failure in TopoSystemPci::Load() on nodes with deeply-nested PCIe
+    # switch topologies (e.g. Broadcom PEX890xx on MI355X mia1 nodes).
+    # Always rebuild from the target commit unless the marker file proves
+    # the correct version was already installed in this container.
+    if ls $MORI_MARKER &>/dev/null; then
+        echo "[SETUP] MoRI @ $MORI_TARGET_COMMIT already installed (marker found)"
         return 0
     fi
 
@@ -181,19 +191,22 @@ install_mori() {
         libopenmpi-dev openmpi-bin libpci-dev \
         && rm -rf /var/lib/apt/lists/*
 
-    echo "[SETUP] Building MoRI from source (ROCm/mori @ b645fc8)..."
+    echo "[SETUP] Building MoRI from source (ROCm/mori @ $MORI_TARGET_COMMIT)..."
+    echo "[SETUP]   (overriding pre-installed version to fix PCI topology bug)"
     (
         set -e
         git_clone_retry https://github.com/ROCm/mori.git /opt/mori && cd /opt/mori
-        git checkout b645fc8
-        pip install --quiet .
+        git checkout "$MORI_TARGET_COMMIT"
+        pip install --quiet --force-reinstall .
     )
     rm -rf /opt/mori
 
     if ! python3 -c "import mori" 2>/dev/null; then
         echo "[SETUP] ERROR: MoRI build failed"; exit 1
     fi
-    _SETUP_INSTALLED+=("MoRI")
+    # Drop a marker so re-entry doesn't rebuild
+    touch $(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")/.mori_commit_${MORI_TARGET_COMMIT}
+    _SETUP_INSTALLED+=("MoRI@$MORI_TARGET_COMMIT")
 }
 
 # ---------------------------------------------------------------------------
