@@ -60,7 +60,7 @@ run_benchmark_serving \
 # Server accepts glm-5-fp8 (--served-model-name); lm-eval must use that model name
 if [ "${RUN_EVAL}" = "true" ]; then
     export MODEL_NAME=glm-5-fp8
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
