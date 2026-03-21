@@ -102,10 +102,6 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
-          # Cleanup root-owned files left by containers (e.g. __pycache__) that block
-          # actions/checkout clean and workspace removal.
-          sudo find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-
           # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
