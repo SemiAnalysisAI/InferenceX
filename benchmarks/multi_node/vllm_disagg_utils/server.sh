@@ -82,22 +82,21 @@ setup_rdma_env() {
     fi
 
     # Patch Nixl UCX backend: set ucx_error_handling_mode=none.
-    # Only needed for Pensando ionic NICs which don't support rdmacm — the default
-    # UCP_ERR_HANDLING_MODE_PEER causes "no active messages transport" errors.
-    # ConnectX/mlx5 NICs (mia1 cluster) handle error mode properly; skip the patch.
-    if [[ "${IBDEVICES:-}" == *ionic* ]]; then
-        local nixl_api
-        nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
-        if [[ -n "$nixl_api" ]]; then
-            if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
-                sed -i '/self\.create_backend(bknd, init)/i\                init["ucx_error_handling_mode"] = "none"' "$nixl_api"
-                echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api"
-            else
-                echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
-            fi
+    # Required for ALL NIC types under high concurrency (C512+). Without this,
+    # UCX's default UCP_ERR_HANDLING_MODE_PEER triggers transport-level error
+    # recovery on ibv_post_send failures, preventing RIXL RDMA READ retries from
+    # recovering gracefully. This causes the prefill KV cache to fill to 100%
+    # and deadlock the pipeline. On ionic NICs this was already applied (rdmacm
+    # incompatibility); on mlx5 NICs it was incorrectly skipped.
+    local nixl_api
+    nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
+    if [[ -n "$nixl_api" ]]; then
+        if ! grep -q 'ucx_error_handling_mode' "$nixl_api"; then
+            sed -i '/self\.create_backend(bknd, init)/i\                init["ucx_error_handling_mode"] = "none"' "$nixl_api"
+            echo "[PATCH] Added ucx_error_handling_mode=none to $nixl_api (IBDEVICES=${IBDEVICES:-unset})"
+        else
+            echo "[PATCH] ucx_error_handling_mode already set in $nixl_api"
         fi
-    else
-        echo "[INFO] Non-ionic RDMA devices (${IBDEVICES:-unset}); skipping ucx_error_handling_mode patch"
     fi
 }
 
