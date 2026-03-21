@@ -1,4 +1,5 @@
-#  InferenceX™, Open Source Continuous Inference Standard and Research Platform trusted by Operators of Trillion Dollar Token Factories like OpenAI, Microsoft, Oracle, etc, & trusted by PyTorch Foundation, vLLM, SGLang, Tri Dao
+#  InferenceX™, Open Source Continuous Inference Standard and Research Platform 
+## Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Microsoft, Oracle, etc, & ML Community such as PyTorch Foundation, vLLM, SGLang, Tri Dao
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)
