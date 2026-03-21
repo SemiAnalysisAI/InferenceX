@@ -898,14 +898,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/855
 
 - config-keys:
-    - minimaxm2.5-fp8-mi355x-vllm
-  description:
-    - "ADD minimax TP=8 with EP, in config of 1k1k, 1k8k, and 8k1k sequence lengths"
-    - "Config concurrency: 32-512"
-    - "Remove TP=4 configs"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/868
-
-- config-keys:
     - dsr1-fp8-mi355x-sglang
   description:
     - "Expanding TP search space"
@@ -1002,3 +994,11 @@
     - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
     - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "ADD minimax TP=8 with EP, in config of 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Config concurrency: 32-256"
+    - "update image to vllm/vllm-openai-rocm:v0.18.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/868

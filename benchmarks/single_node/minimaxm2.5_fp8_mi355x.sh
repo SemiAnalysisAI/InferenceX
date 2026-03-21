@@ -43,8 +43,6 @@ vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
 --gpu-memory-utilization 0.95 \
---max-num-seqs 512 \
---max-num-batched-tokens 16384 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
 --disable-log-requests \
