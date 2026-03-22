@@ -42,10 +42,7 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_MLA=1
-export VLLM_ROCM_USE_AITER_MOE=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT8
-export VLLM_ROCM_USE_AITER_TRITON_ROPE=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
