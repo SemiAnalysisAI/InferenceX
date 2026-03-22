@@ -132,6 +132,10 @@ jobs:
             fi
           fi
 
+          # Cleanup stale __pycache__ files from self-hosted runners
+          rm -rf /it-share/gharunners/gharunner8/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
+          rm -f /it-share/gharunners/gharunner6/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
