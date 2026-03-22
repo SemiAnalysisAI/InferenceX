@@ -39,9 +39,10 @@ from datetime import datetime
 from multiprocessing import Pool, cpu_count
 from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
 
+import aiohttp
 import numpy as np
-from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,
-                                  RequestFuncOutput)
+from backend_request_func import (AIOHTTP_TIMEOUT, ASYNC_REQUEST_FUNCS,
+                                  RequestFuncInput, RequestFuncOutput)
 from tqdm.asyncio import tqdm
 from transformers import PreTrainedTokenizerBase
 
@@ -470,11 +471,14 @@ async def benchmark(
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
+    connector = aiohttp.TCPConnector(limit=0, enable_cleanup_closed=True)
+    shared_session = aiohttp.ClientSession(
+        trust_env=True, timeout=AIOHTTP_TIMEOUT, connector=connector)
+
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = (
         input_requests[0])
     if backend != "openai-chat" and test_mm_content is not None:
-        # multi-modal benchmark is only available on OpenAI Chat backend.
         raise ValueError(
             "Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
@@ -493,11 +497,13 @@ async def benchmark(
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
         warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else contextlib.nullcontext()
+        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else asyncio.Semaphore(num_warmups)
 
         async def warmup_limited_req_fn():
             async with warmup_semaphore:
-                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
+                return await request_func(
+                    request_func_input=test_input, pbar=warmup_pbar,
+                    session=shared_session)
 
         warmup_tasks = []
         for _ in range(num_warmups):
@@ -510,7 +516,6 @@ async def benchmark(
         print("Warmup completed.")
 
     if lora_modules:
-        # For each input request, choose a LoRA module at random.
         lora_modules = iter(
             [random.choice(lora_modules) for _ in range(len(input_requests))])
 
@@ -527,7 +532,8 @@ async def benchmark(
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,
                                          ignore_eos=ignore_eos)
-        profile_output = await request_func(request_func_input=profile_input)
+        profile_output = await request_func(
+            request_func_input=profile_input, session=shared_session)
         if profile_output.success:
             print("Profiler started")
 
@@ -542,20 +548,16 @@ async def benchmark(
 
     pbar = None if disable_tqdm else tqdm(total=len(input_requests))
 
-    # This can be used once the minimum Python version is 3.10 or higher,
-    # and it will simplify the code in limited_request_func.
-    #    semaphore = (asyncio.Semaphore(max_concurrency)
-    #                 if max_concurrency else contextlib.nullcontext())
     semaphore = (asyncio.Semaphore(max_concurrency)
                  if max_concurrency else None)
 
     async def limited_request_func(request_func_input, pbar):
         if semaphore is None:
             return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar)
+                                      pbar=pbar, session=shared_session)
         async with semaphore:
             return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar)
+                                      pbar=pbar, session=shared_session)
 
     print("Starting main benchmark run...")
 
@@ -582,7 +584,28 @@ async def benchmark(
             asyncio.create_task(
                 limited_request_func(request_func_input=request_func_input,
                                      pbar=pbar)))
-    outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
+    gather_timeout = max(7200, len(input_requests) * 30)
+    try:
+        outputs: List[RequestFuncOutput] = await asyncio.wait_for(
+            asyncio.gather(*tasks), timeout=gather_timeout)
+    except asyncio.TimeoutError:
+        completed = pbar.n if pbar else "?"
+        print(f"\n[WARNING] Benchmark timed out after {gather_timeout}s "
+              f"({completed}/{len(tasks)} requests completed). "
+              "Collecting partial results...")
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        outputs = []
+        for task in tasks:
+            if task.done() and not task.cancelled():
+                try:
+                    outputs.append(task.result())
+                except Exception:
+                    outputs.append(RequestFuncOutput())
+            else:
+                outputs.append(RequestFuncOutput())
 
     if profile:
         print("Stopping profiler...")
@@ -595,9 +618,13 @@ async def benchmark(
             logprobs=logprobs,
             best_of=best_of,
         )
-        profile_output = await request_func(request_func_input=profile_input)
+        profile_output = await request_func(
+            request_func_input=profile_input, session=shared_session)
         if profile_output.success:
             print("Profiler stopped")
+
+    await shared_session.close()
+    await connector.close()
 
     if pbar is not None:
         pbar.close()
