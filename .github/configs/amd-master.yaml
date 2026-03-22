@@ -1017,6 +1017,7 @@ dsr1-fp8-mi355x-vllm-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
+        - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
       decode:
         num-worker: 2
         tp: 8
@@ -1037,6 +1038,7 @@ dsr1-fp8-mi355x-vllm-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
+        - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
       decode:
         num-worker: 2
         tp: 8
@@ -1057,6 +1059,7 @@ dsr1-fp8-mi355x-vllm-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
+        - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
       decode:
         num-worker: 2
         tp: 8
