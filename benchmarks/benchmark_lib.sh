@@ -614,7 +614,7 @@ compute_eval_context_length() {
     if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
         benchmark_ctx="${native_max:-0}"
     fi
-    local eval_ctx=$(( benchmark_ctx * 2 ))
+    local eval_ctx=$(( benchmark_ctx * 1 ))
     if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi
