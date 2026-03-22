@@ -162,14 +162,14 @@ python3 $VLLM_WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 600
 
 # =============================================================================
 # ETCD Server Setup
 # =============================================================================
 
 echo "Proceeding to start etcd server on $host_name"
-bash ${VLLM_WS_PATH}/start_etcd.sh > /dev/null &
+bash ${VLLM_WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
 etcd_pid=$!
 
 echo "Waiting at etcd server barrier on $host_name"
@@ -260,7 +260,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         PROXY_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/moriio_proxy_${host_name}.log"
         set -x
-        eval "$PROXY_CMD" 2>&1 | tee "$PROXY_LOG_FILE" &
+        eval "$PROXY_CMD" > "$PROXY_LOG_FILE" 2>&1 &
         set +x
         proxy_pid=$!
         sleep 3
@@ -275,9 +275,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
+        PREFILL_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log"
         set -x
-        eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+        eval "$PREFILL_CMD" > "$PREFILL_LOG_FILE" 2>&1 &
         set +x
         prefill_pid=$!
     fi
@@ -341,6 +341,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
         [[ -n "${proxy_pid:-}" ]] && kill $proxy_pid 2>/dev/null || true
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
+        sleep 2
+        # Fallback: ensure no orphaned processes keep ports open
+        pkill -f moriio_proxy 2>/dev/null || true
+        pkill -f "vllm serve" 2>/dev/null || true
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
@@ -358,9 +362,9 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
+        PREFILL_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log"
         set -x
-        eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+        eval "$PREFILL_CMD" > "$PREFILL_LOG_FILE" 2>&1 &
         set +x
         prefill_pid=$!
     fi
@@ -390,7 +394,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     fi
 
     echo "Killing the prefill server"
-    [[ "$DRY_RUN" -eq 0 ]] && kill $prefill_pid
+    [[ "$DRY_RUN" -eq 0 ]] && kill $prefill_pid 2>/dev/null || true
 
 else
     echo "${host_name}:${host_ip} is Decode Node (Model: ${MODEL_NAME})"
@@ -412,9 +416,9 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $DECODE_CMD"
     else
+        DECODE_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log"
         set -x
-        eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
+        eval "$DECODE_CMD" > "$DECODE_LOG_FILE" 2>&1 &
         set +x
         decode_pid=$!
     fi
@@ -444,11 +448,12 @@ else
     fi
 
     echo "Killing the decode server"
-    [[ "$DRY_RUN" -eq 0 ]] && kill $decode_pid
+    [[ "$DRY_RUN" -eq 0 ]] && kill $decode_pid 2>/dev/null || true
 fi
 
 echo "Killing the etcd server"
-kill $etcd_pid
+kill $etcd_pid 2>/dev/null || true
+pkill -f etcd 2>/dev/null || true
 
 echo "Script completed successfully"
 exit 0
