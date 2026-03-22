@@ -221,7 +221,7 @@ jobs:
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}
+        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         run: |
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace

@@ -22,11 +22,10 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+MAX_SEQ_LEN=$((ISL + OSL + 20))
 if [ "${EVAL_ONLY}" = "true" ]; then
-    MAX_SEQ_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
-    export EVAL_MAX_MODEL_LEN="$MAX_SEQ_LEN"
-else
-    MAX_SEQ_LEN=$((ISL + OSL + 20))
+    setup_eval_context
+    MAX_SEQ_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"

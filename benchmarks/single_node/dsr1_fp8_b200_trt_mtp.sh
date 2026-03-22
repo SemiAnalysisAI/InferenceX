@@ -109,8 +109,9 @@ EOF
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
-    export EVAL_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor

@@ -609,9 +609,10 @@ compute_eval_context_length() {
     local benchmark_ctx="${2:-0}"
     local native_max
     native_max=$(get_native_max_context_length "$model")
+    native_max="${native_max:-0}"
 
     if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
-        benchmark_ctx="$native_max"
+        benchmark_ctx="${native_max:-0}"
     fi
     local eval_ctx=$(( benchmark_ctx * 5 ))
     if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
@@ -624,6 +625,14 @@ compute_eval_context_length() {
     fi
     EVAL_MAX_MODEL_LEN="$eval_ctx"
     echo "$eval_ctx"
+}
+
+# Convenience wrapper: compute eval context from ISL/OSL and export EVAL_MAX_MODEL_LEN.
+# Call directly (not in a subshell) so the export persists.
+# Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
+setup_eval_context() {
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+    export EVAL_MAX_MODEL_LEN
 }
 
 run_lm_eval() {
@@ -783,8 +792,8 @@ run_eval() {
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
         if [ "${EVAL_ONLY}" = "true" ]; then
-            echo "Eval-only mode: exiting with failure" >&2
-            exit "$eval_rc"
+            echo "Eval-only mode: failing after artifact collection" >&2
+            return "$eval_rc"
         fi
     fi
     return $eval_rc

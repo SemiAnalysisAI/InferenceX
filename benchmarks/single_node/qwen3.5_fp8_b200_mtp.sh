@@ -49,9 +49,8 @@ SPECULATIVE_EAGLE_TOPK=1
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    _eval_ctx=$(compute_eval_context_length "$MODEL" "$CONTEXT_LENGTH")
-    CONTEXT_LENGTH="$_eval_ctx"
-    export EVAL_MAX_MODEL_LEN="$_eval_ctx"
+    setup_eval_context
+    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor

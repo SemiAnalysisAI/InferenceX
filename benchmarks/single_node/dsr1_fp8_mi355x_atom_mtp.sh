@@ -32,9 +32,8 @@ else
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    eval_ctx=$(compute_eval_context_length "$MODEL" "10240")
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len $eval_ctx "
-    export EVAL_MAX_MODEL_LEN="$eval_ctx"
+    setup_eval_context
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then

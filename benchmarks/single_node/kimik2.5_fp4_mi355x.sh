@@ -32,8 +32,8 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$MAX_MODEL_LEN")
-    export EVAL_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 # do not enable aiter due to Aiter MLA not currently supporting num_heads=8
