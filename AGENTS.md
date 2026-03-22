@@ -303,7 +303,7 @@ Evals run optional accuracy checks to ensure model outputs aren't degraded by in
 Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run at two concurrency levels per configuration group:
 
 - **Highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
-- **Upper-median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn). When only 2 concurrency levels exist, this collapses to just the highest.
+- **Lower-median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 

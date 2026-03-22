@@ -631,7 +631,7 @@ compute_eval_context_length() {
 # Call directly (not in a subshell) so the export persists.
 # Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
 setup_eval_context() {
-    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 20))")
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
     export EVAL_MAX_MODEL_LEN
 }
 
