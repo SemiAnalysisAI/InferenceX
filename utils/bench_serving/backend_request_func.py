@@ -14,7 +14,7 @@ from tqdm.asyncio import tqdm
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
-AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
+AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=30 * 60)
 
 
 @dataclass
@@ -49,12 +49,16 @@ class RequestFuncOutput:
 async def async_request_tgi(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    _own_session = session is None
+    if _own_session:
+        session = aiohttp.ClientSession(trust_env=True,
+                                        timeout=AIOHTTP_TIMEOUT)
+    try:
         params = {
             "best_of": request_func_input.best_of,
             "max_new_tokens": request_func_input.output_len,
@@ -62,7 +66,6 @@ async def async_request_tgi(
             "temperature": 0.01,  # TGI does not accept 0.0 temperature.
             "top_p": 0.99,  # TGI does not accept 1.0 top_p.
             "truncate": request_func_input.prompt_len,
-            # TGI does not accept ignore_eos flag.
         }
         payload = {
             "inputs": request_func_input.prompt,
@@ -113,21 +116,28 @@ async def async_request_tgi(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+    finally:
+        if _own_session:
+            await session.close()
 
-        if pbar:
-            pbar.update(1)
-        return output
+    if pbar:
+        pbar.update(1)
+    return output
 
 
 async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    _own_session = session is None
+    if _own_session:
+        session = aiohttp.ClientSession(trust_env=True,
+                                        timeout=AIOHTTP_TIMEOUT)
+    try:
         assert request_func_input.best_of == 1
         payload = {
             "accumulate_tokens": True,
@@ -181,18 +191,25 @@ async def async_request_trt_llm(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+    finally:
+        if _own_session:
+            await session.close()
 
-        if pbar:
-            pbar.update(1)
-        return output
+    if pbar:
+        pbar.update(1)
+    return output
 
 
 async def async_request_deepspeed_mii(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    _own_session = session is None
+    if _own_session:
+        session = aiohttp.ClientSession(trust_env=True,
+                                        timeout=AIOHTTP_TIMEOUT)
+    try:
         assert request_func_input.best_of == 1
 
         payload = {
@@ -225,23 +242,30 @@ async def async_request_deepspeed_mii(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+    finally:
+        if _own_session:
+            await session.close()
 
-        if pbar:
-            pbar.update(1)
-        return output
+    if pbar:
+        pbar.update(1)
+    return output
 
 
 async def async_request_openai_completions(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith(
         ("completions", "profile")
     ), "OpenAI Completions API URL must end with 'completions' or 'profile'."
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    _own_session = session is None
+    if _own_session:
+        session = aiohttp.ClientSession(trust_env=True,
+                                        timeout=AIOHTTP_TIMEOUT)
+    try:
         payload = {
             "model": request_func_input.model_name \
                 if request_func_input.model_name else request_func_input.model,
@@ -281,33 +305,35 @@ async def async_request_openai_completions(
 
                         chunk = chunk_bytes.decode("utf-8").removeprefix(
                             "data: ")
-                        if chunk != "[DONE]":
-                            data = json.loads(chunk)
+                        if chunk == "[DONE]":
+                            break
 
-                            # NOTE: Some completion API might have a last
-                            # usage summary response without a token so we
-                            # want to check a token was generated
-                            if choices := data.get("choices"):
-                                # Note that text could be empty here
-                                # e.g. for special tokens
-                                text = choices[0].get("text")
-                                timestamp = time.perf_counter()
-                                # First token
-                                if not first_chunk_received:
-                                    first_chunk_received = True
-                                    ttft = time.perf_counter() - st
-                                    output.ttft = ttft
+                        data = json.loads(chunk)
 
-                                # Decoding phase
-                                else:
-                                    output.itl.append(timestamp -
-                                                      most_recent_timestamp)
+                        # NOTE: Some completion API might have a last
+                        # usage summary response without a token so we
+                        # want to check a token was generated
+                        if choices := data.get("choices"):
+                            # Note that text could be empty here
+                            # e.g. for special tokens
+                            text = choices[0].get("text")
+                            timestamp = time.perf_counter()
+                            # First token
+                            if not first_chunk_received:
+                                first_chunk_received = True
+                                ttft = time.perf_counter() - st
+                                output.ttft = ttft
 
-                                most_recent_timestamp = timestamp
-                                generated_text += text or ""
-                            elif usage := data.get("usage"):
-                                output.output_tokens = usage.get(
-                                    "completion_tokens")
+                            # Decoding phase
+                            else:
+                                output.itl.append(timestamp -
+                                                  most_recent_timestamp)
+
+                            most_recent_timestamp = timestamp
+                            generated_text += text or ""
+                        elif usage := data.get("usage"):
+                            output.output_tokens = usage.get(
+                                "completion_tokens")
                     if first_chunk_received:
                         output.success = True
                     else:
@@ -324,6 +350,9 @@ async def async_request_openai_completions(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+    finally:
+        if _own_session:
+            await session.close()
 
     if pbar:
         pbar.update(1)
@@ -333,14 +362,18 @@ async def async_request_openai_completions(
 async def async_request_openai_chat_completions(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith(
         "chat/completions"
     ), "OpenAI Chat Completions API URL must end with 'chat/completions'."
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    _own_session = session is None
+    if _own_session:
+        session = aiohttp.ClientSession(trust_env=True,
+                                        timeout=AIOHTTP_TIMEOUT)
+    try:
         content = [{"type": "text", "text": request_func_input.prompt}]
         if request_func_input.multi_modal_content:
             content.append(request_func_input.multi_modal_content)
@@ -387,28 +420,30 @@ async def async_request_openai_chat_completions(
 
                         chunk = chunk_bytes.decode("utf-8").removeprefix(
                             "data: ")
-                        if chunk != "[DONE]":
-                            timestamp = time.perf_counter()
-                            data = json.loads(chunk)
+                        if chunk == "[DONE]":
+                            break
 
-                            if choices := data.get("choices"):
-                                content = choices[0]["delta"].get("content")
-                                # First token
-                                if ttft == 0.0:
-                                    ttft = timestamp - st
-                                    output.ttft = ttft
+                        timestamp = time.perf_counter()
+                        data = json.loads(chunk)
 
-                                # Decoding phase
-                                else:
-                                    output.itl.append(timestamp -
-                                                      most_recent_timestamp)
+                        if choices := data.get("choices"):
+                            content = choices[0]["delta"].get("content")
+                            # First token
+                            if ttft == 0.0:
+                                ttft = timestamp - st
+                                output.ttft = ttft
 
-                                generated_text += content or ""
-                            elif usage := data.get("usage"):
-                                output.output_tokens = usage.get(
-                                    "completion_tokens")
+                            # Decoding phase
+                            else:
+                                output.itl.append(timestamp -
+                                                  most_recent_timestamp)
 
-                            most_recent_timestamp = timestamp
+                            generated_text += content or ""
+                        elif usage := data.get("usage"):
+                            output.output_tokens = usage.get(
+                                "completion_tokens")
+
+                        most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
                     output.success = True
@@ -420,6 +455,9 @@ async def async_request_openai_chat_completions(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+    finally:
+        if _own_session:
+            await session.close()
 
     if pbar:
         pbar.update(1)
