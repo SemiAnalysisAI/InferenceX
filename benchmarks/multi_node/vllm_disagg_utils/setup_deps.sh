@@ -683,14 +683,7 @@ try:
             if req_id not in self.requests:
                 logger.debug("Request %s already removed, skipping send", req_id)
                 continue
-            req = self.requests[req_id]
-            if RequestStatus.is_finished(req.status):
-                self._free_blocks(req)
-            else:
-                logger.debug(
-                    "Request %s send finished but status=%s, "
-                    "deferring block free to request completion",
-                    req_id, req.status.name)"""
+            self._free_blocks(self.requests[req_id])"""
 
     if old_send in new_src:
         new_src = new_src.replace(old_send, new_send, 1)
@@ -704,6 +697,119 @@ except Exception as e:
     print(f"[SETUP] WARN patch scheduler read-mode: {e}", file=sys.stderr)
 '
     _SETUP_INSTALLED+=("scheduler-read-mode-fix")
+}
+
+# ---------------------------------------------------------------------------
+# 12. Idle KV block reaper for disaggregated prefill (READ mode)
+#     The RIXL notification path can lose `finished_sending` signals under
+#     high concurrency with ibv_post_send failures. This leaves KV blocks
+#     permanently allocated on the prefill engine even after the decode has
+#     finished reading. Over multiple benchmark rounds, leaked blocks
+#     accumulate and eventually saturate the prefill KV cache.
+#
+#     Fix: instrument the scheduler's `schedule()` method to detect idle
+#     periods (0 running, 0 waiting for >5s) and force-free blocks for
+#     any remaining requests whose status is finished.
+# ---------------------------------------------------------------------------
+patch_prefill_idle_kv_reaper() {
+    python3 -c '
+import os, sys
+
+try:
+    import vllm.v1.core.sched.scheduler as smod
+    f = smod.__file__
+    src = open(f).read()
+
+    if "[PATCHED] idle-kv-reaper" in src:
+        print("[SETUP] idle KV block reaper already applied")
+        sys.exit(0)
+
+    # Find the _update_from_kv_xfer_finished method end and add reaper logic
+    # We inject into the method that processes KV transfer completions.
+    marker = "[PATCHED] read-mode recv assertion"
+    if marker not in src:
+        print("[SETUP] WARN: scheduler read-mode patch not found, skipping reaper")
+        sys.exit(0)
+
+    # Add reaper state initialization to __init__
+    old_init_marker = "self.finished_recving_kv_req_ids"
+    if old_init_marker not in src:
+        print("[SETUP] WARN: finished_recving_kv_req_ids not found in scheduler")
+        sys.exit(0)
+
+    # Find the first occurrence to insert reaper state
+    init_pos = src.find(old_init_marker)
+    # Find the line containing it
+    line_end = src.find("\n", init_pos)
+    init_line = src[init_pos:line_end]
+
+    # Add reaper state after this line
+    reaper_init = init_line + """
+        # [PATCHED] idle-kv-reaper state
+        self._idle_kv_reaper_ts = 0.0
+        self._idle_kv_reaper_active = False"""
+
+    src = src.replace(init_line, reaper_init, 1)
+
+    # Now add the reaper logic at the end of _update_from_kv_xfer_finished
+    # Find the finished_sending handler we patched
+    send_handler = """        for req_id in kv_connector_output.finished_sending or ():
+            logger.debug("Finished sending KV transfer for request %s", req_id)
+            if req_id not in self.requests:
+                logger.debug("Request %s already removed, skipping send", req_id)
+                continue
+            self._free_blocks(self.requests[req_id])"""
+
+    reaper_logic = send_handler + """
+
+        # [PATCHED] idle-kv-reaper — force-free leaked prefill KV blocks
+        import time as _time
+        _REAPER_IDLE_SECS = 5.0
+        _num_running = sum(1 for r in self.requests.values()
+                          if r.status == RequestStatus.RUNNING)
+        _num_waiting = sum(1 for r in self.requests.values()
+                          if r.status == RequestStatus.WAITING)
+        _is_idle = (_num_running == 0 and _num_waiting == 0)
+
+        if _is_idle:
+            if not self._idle_kv_reaper_active:
+                self._idle_kv_reaper_active = True
+                self._idle_kv_reaper_ts = _time.monotonic()
+            elif _time.monotonic() - self._idle_kv_reaper_ts > _REAPER_IDLE_SECS:
+                _reaped = 0
+                _reap_ids = []
+                for _rid, _req in list(self.requests.items()):
+                    if RequestStatus.is_finished(_req.status):
+                        _reap_ids.append(_rid)
+                for _rid in _reap_ids:
+                    try:
+                        _req = self.requests[_rid]
+                        self._free_blocks(_req)
+                        _reaped += 1
+                    except Exception as _e:
+                        logger.debug("[KV-REAPER] free_blocks failed for %s: %s", _rid, _e)
+                if _reaped > 0:
+                    logger.warning(
+                        "[KV-REAPER] Force-freed blocks for %d finished "
+                        "requests after %.1fs idle",
+                        _reaped, _time.monotonic() - self._idle_kv_reaper_ts)
+                self._idle_kv_reaper_ts = _time.monotonic()
+        else:
+            self._idle_kv_reaper_active = False"""
+
+    if send_handler in src:
+        src = src.replace(send_handler, reaper_logic, 1)
+    else:
+        print("[SETUP] WARN: send handler not found for reaper injection")
+        sys.exit(0)
+
+    open(f, "w").write(src)
+    print("[SETUP] Patched: idle KV block reaper for prefill")
+
+except Exception as e:
+    print(f"[SETUP] WARN patch idle-kv-reaper: {e}", file=sys.stderr)
+'
+    _SETUP_INSTALLED+=("idle-kv-reaper")
 }
 
 # =============================================================================
@@ -720,6 +826,7 @@ patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
 patch_moriio_load_kv_timeout
 patch_scheduler_read_mode_fix
+patch_prefill_idle_kv_reaper
 
 if [[ "${NODE_RANK:-0}" -eq 0 ]]; then
     install_mori_proxy_deps
