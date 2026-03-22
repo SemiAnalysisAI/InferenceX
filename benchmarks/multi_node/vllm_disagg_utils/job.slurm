@@ -64,6 +64,9 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # =============================================================================
 # Docker privilege detection
 # =============================================================================
+# Detect on the batch host (used for post-srun cleanup).
+# Per-node detection happens inside the srun inline script below because
+# some nodes may require sudo while others do not.
 if docker ps &>/dev/null; then
     DOCKER_CMD="docker"
 else
@@ -249,11 +252,18 @@ set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
-# Pre-clean (idempotent)
-$DOCKER_CMD ps -aq --filter \"name=^container_vllm_\" | xargs -r $DOCKER_CMD rm -f || true
-$DOCKER_CMD ps -aq | xargs -r $DOCKER_CMD stop || true
+# Per-node Docker privilege detection (some nodes need sudo, others don't)
+if docker ps &>/dev/null; then
+    _DCMD=docker
+else
+    _DCMD='sudo docker'
+fi
 
-exec $DOCKER_CMD run --rm \
+# Pre-clean (idempotent)
+\$_DCMD ps -aq --filter \"name=^container_vllm_\" | xargs -r \$_DCMD rm -f || true
+\$_DCMD ps -aq | xargs -r \$_DCMD stop || true
+
+exec \$_DCMD run --rm \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -330,4 +340,4 @@ if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
 fi
 "
 
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c "$DOCKER_CMD rm -f \$DOCKER_CONT_NAME 2>/dev/null || true"
+srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'if docker ps &>/dev/null; then D=docker; else D="sudo docker"; fi; $D rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
