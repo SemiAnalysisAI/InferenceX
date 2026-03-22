@@ -70,4 +70,6 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         --result-dir /workspace/
 
     echo "-----------------------------------------"
+    echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
+    sleep 10
 done
