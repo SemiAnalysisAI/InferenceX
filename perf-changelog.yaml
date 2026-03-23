@@ -1,4 +1,17 @@
 - config-keys:
+    - dsr1-fp8-b200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-trt
+  description:
+    - "Fix metadata inconsistencies in nvidia-master.yaml - TP/EP/DP-attn values now match actual recipe files"
+    - "B200 FP8 TRT 8K/1K: prefill_ep 8→1 (15 entries), prefill_dp_attn true→false (1 entry)"
+    - "H200 FP8 TRT 1K/1K: prefill_dp_attn false→true (9 entries)"
+    - "H200 FP8 TRT 8K/1K: prefill_dp_attn true→false (8 entries)"
+    - "GB200 FP4 TRT 8K/1K: decode_dp_attn true→false (2 entries)"
+    - "All fixes are metadata-only; no recipe files were modified"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/919
+
+- config-keys:
     - kimik2.5-int4-mi325x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI325X vLLM benchmark (TP8)"
