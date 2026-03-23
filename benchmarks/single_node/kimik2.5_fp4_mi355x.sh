@@ -49,6 +49,7 @@ vllm serve $MODEL --port $PORT \
 --block-size=64 \
 --disable-log-requests \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

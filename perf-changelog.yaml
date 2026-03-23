@@ -994,3 +994,14 @@
     - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
     - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
+
+- config-keys:
+    - kimik2.5-int4-mi325x-vllm
+    - kimik2.5-int4-mi355x-vllm
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-h200-vllm
+    - kimik2.5-fp4-mi355x-vllm
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Disable prefix caching (--no-enable-prefix-caching) for all Kimi K2.5 benchmarks using random datasets"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/926
