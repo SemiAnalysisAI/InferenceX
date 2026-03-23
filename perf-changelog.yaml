@@ -1015,11 +1015,21 @@
     - "Config concurrency: 32-256"
     - "update image to vllm/vllm-openai-rocm:v0.18.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
-  
+
 - config-keys:
-    - "*mi355x*"
-    - "*mi325x*"
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - gptoss-fp4-mi355x-atom
+    - gptoss-fp4-mi355x-vllm
+    - minimaxm2.5-fp8-mi355x-vllm
   description:
-    - "Add --exclusive option to salloc commands on MI325X and MI355X nodes which may yield performance improvements"
+    - "Add --exclusive flag to MI355X salloc and multi-node sbatch to prevent node sharing during benchmarks"
+    - "Only non-TP8 configs are affected; TP8 already uses all GPUs on the node"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/929
   
