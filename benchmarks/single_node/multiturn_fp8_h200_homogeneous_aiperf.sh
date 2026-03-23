@@ -142,7 +142,6 @@ AIPERF_CMD+=" --conversation-turn-delay-mean 2000"
 AIPERF_CMD+=" --conversation-turn-delay-stddev 500"
 AIPERF_CMD+=" --concurrency $USERS"
 AIPERF_CMD+=" --conversation-num $CONV_COUNT"
-AIPERF_CMD+=" --steady-state-prefill"
 if [ -n "${DURATION:-}" ]; then
     AIPERF_CMD+=" --benchmark-duration $DURATION"
     AIPERF_CMD+=" --benchmark-grace-period 0"
