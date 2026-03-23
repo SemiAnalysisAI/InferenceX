@@ -1042,3 +1042,9 @@
     - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
   
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/921
+  
