@@ -2,6 +2,13 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
+# root inside containers, and root-owned cache directories break future checkout
+# cleanup on self-hosted runners.
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------

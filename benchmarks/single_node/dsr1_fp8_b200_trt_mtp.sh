@@ -89,7 +89,15 @@ attention_dp_config:
 EOF
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
 MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
+if [ "${EVAL_ONLY}" = "true" ]; then
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
+fi
 
 # prep PW CUDA config per the documentation
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
@@ -104,14 +112,8 @@ if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
     cat << EOF >> $EXTRA_CONFIG_FILE
 torch_compile_config:
     capture_num_tokens: [${CAPTURE_TOKENS_LIST%, }]
-    enable_piecewise_cuda_graph: true 
+    enable_piecewise_cuda_graph: true
 EOF
-fi
-
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
-    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor

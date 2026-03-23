@@ -96,6 +96,8 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
   PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
   PREFILL_TP: ${{ inputs.prefill-tp }}
@@ -142,6 +144,22 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          clean: false
+
+      - name: Workspace cleanup (generated files)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            sudo find "$GITHUB_WORKSPACE" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} + 2>/dev/null || true
+          else
+            find "$GITHUB_WORKSPACE" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} + 2>/dev/null || true
+          fi
+
+          find "$GITHUB_WORKSPACE" -maxdepth 1 -type f \
+            \( -name '*.json' -o -name '*.jsonl' -o -name 'server.log' -o -name 'gpu_metrics.csv' -o -name 'meta_env.json' -o -name 'profile_*.trace.json.gz' -o -name 'config.yaml' -o -name '*-config.yml' -o -name 'dsr1-*.yml' \) \
+            ! -name '.*' -delete 2>/dev/null || true
 
       - name: Launch multi-node job script
         env:

@@ -90,6 +90,7 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 permissions:
   contents: read
@@ -130,17 +131,34 @@ jobs:
                 sleep 5
               done
             fi
-          fi
+          fi 
 
           # Cleanup stale __pycache__ files from self-hosted runners
-          rm -rf /it-share/gharunners/gharunner8/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
-          rm -f /it-share/gharunners/gharunner6/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
+          sudo rm -rf /it-share/gharunners/gharunner8/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
+          sudo rm -rf /it-share/gharunners/gharunner6/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
+          sudo rm -rf /it-share/gharunners/gharunner7/actions-runner/_work/InferenceX/InferenceX/utils/bench_serving/__pycache__ 2>/dev/null || true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          clean: false
+
+      - name: Workspace cleanup (generated files)
+        shell: bash
+        run: | 
+          set -euo pipefail
+
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            sudo find "$GITHUB_WORKSPACE" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} + 2>/dev/null || true
+          else
+            find "$GITHUB_WORKSPACE" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} + 2>/dev/null || true
+          fi
+
+          find "$GITHUB_WORKSPACE" -maxdepth 1 -type f \
+            \( -name '*.json' -o -name '*.jsonl' -o -name 'server.log' -o -name 'gpu_metrics.csv' -o -name 'meta_env.json' -o -name 'profile_*.trace.json.gz' -o -name 'config.yaml' -o -name '*-config.yml' -o -name 'dsr1-*.yml' \) \
+            ! -name '.*' -delete 2>/dev/null || true
 
       - name: Launch job script
         env:
