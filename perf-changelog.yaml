@@ -1046,5 +1046,5 @@
     - kimik2.5-int4-b200-vllm
   description:
     - "Enable VLLM_USE_FLASHINFER_MOE_INT4=1 for Kimi K2.5 INT4 B200 benchmark"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
 
