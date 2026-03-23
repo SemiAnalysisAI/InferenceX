@@ -1022,5 +1022,6 @@
   description:
     - "Document --exclusive flag on MI325X salloc prevents node sharing during benchmarks"
     - "Only non-TP8 configs are affected; TP8 already uses all GPUs on the node"
+    - "May yield performance improvements"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/931
   
