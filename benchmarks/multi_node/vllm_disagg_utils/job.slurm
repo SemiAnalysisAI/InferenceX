@@ -326,6 +326,7 @@ exec \$_DCMD run --rm \
     -e HSA_ENABLE_SDMA=1 \
     -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300} \
     -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1} \
+    -e PYTHONPYCACHEPREFIX=/tmp/pycache \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
