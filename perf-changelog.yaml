@@ -1030,6 +1030,6 @@
     - minimaxm2.5-fp8-mi355x-vllm
   description:
     - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
-    - "Only non-TP8 configs listed; TP8 already uses all GPUs on the node"
+    - "This change may yield performance improvements"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/929
   
