@@ -1017,6 +1017,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
 
 - config-keys:
+    - gptoss-fp4-mi325x-vllm
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Document --exclusive flag on MI325X salloc prevents node sharing during benchmarks"
+    - "Only non-TP8 configs are affected; TP8 already uses all GPUs on the node"
+    - "May yield performance improvements"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/931
+  
+- config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
     - dsr1-fp4-mi355x-sglang
@@ -1032,4 +1041,5 @@
     - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
     - "This change may yield performance improvements"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/929
+  
   
