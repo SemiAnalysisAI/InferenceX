@@ -455,8 +455,5 @@ echo "Killing the etcd server"
 kill $etcd_pid 2>/dev/null || true
 pkill -f etcd 2>/dev/null || true
 
-# Clean root-owned __pycache__ so the CI runner can delete the workspace on next checkout
-find /workspace -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
-
 echo "Script completed successfully"
 exit 0
