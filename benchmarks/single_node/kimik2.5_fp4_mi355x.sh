@@ -31,9 +31,24 @@ fi
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# do not enable aiter due to Aiter MLA not currently supporting num_heads=8
-# https://github.com/vllm-project/vllm/issues/35641
-# export VLLM_ROCM_USE_AITER=1
+# If the machine runs a MEC FW older than 177, RCCL
+# cannot reclaim some memory.
+# Disable that features to avoid crashes.
+# This is related to the changes in the driver at:
+# https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
+version=`rocm-smi --showfw | grep MEC | head -n 1 |  awk '{print $NF}'`
+if [[ "$version" == "" || $version -lt 177 ]]; then
+  export HSA_NO_SCRATCH_RECLAIM=1
+fi
+
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
 
 # following AMD andy luo's recipe
 # https://x.com/linluo77/status/2017024513595301985
@@ -44,11 +59,12 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
+$EP \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
---block-size=64 \
---disable-log-requests \
+--block-size=1 \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -56,6 +72,7 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+export PYTHONDONTWRITEBYTECODE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
