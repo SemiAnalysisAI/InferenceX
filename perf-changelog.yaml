@@ -1001,4 +1001,4 @@
     - "ADD minimax TP=8 with EP, in config of 1k1k, 1k8k, and 8k1k sequence lengths"
     - "Config concurrency: 32-256"
     - "update image to vllm/vllm-openai-rocm:v0.18.0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/868
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
