@@ -767,11 +767,9 @@ try:
         _REAPER_IDLE_SECS = 5.0
         _num_running = sum(1 for r in self.requests.values()
                           if r.status == RequestStatus.RUNNING)
-        _num_waiting = sum(1 for r in self.requests.values()
-                          if r.status == RequestStatus.WAITING)
-        _is_idle = (_num_running == 0 and _num_waiting == 0)
+        _should_reap = (_num_running == 0)
 
-        if _is_idle:
+        if _should_reap:
             if not self._idle_kv_reaper_active:
                 self._idle_kv_reaper_active = True
                 self._idle_kv_reaper_ts = _time.monotonic()
