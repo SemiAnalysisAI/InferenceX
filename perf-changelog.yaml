@@ -1007,3 +1007,10 @@
     - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
     - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
+
+- config-keys:
+    - "*mi355x*"
+    - "*mi325x*"
+  description:
+    - "Add --exclusive option to salloc commands on MI325X and MI355X nodes which may yield performance improvements"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/929
