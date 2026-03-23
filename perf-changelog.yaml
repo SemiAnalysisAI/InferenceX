@@ -1025,21 +1025,3 @@
     - "May yield performance improvements"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/931
   
-- config-keys:
-    - dsr1-fp4-mi355x-atom
-    - dsr1-fp4-mi355x-atom-mtp
-    - dsr1-fp4-mi355x-sglang
-    - dsr1-fp4-mi355x-sglang-disagg
-    - dsr1-fp4-mi355x-sglang-disagg-mtp
-    - dsr1-fp8-mi355x-sglang
-    - dsr1-fp8-mi355x-sglang-disagg
-    - dsr1-fp8-mi355x-sglang-disagg-mtp
-    - gptoss-fp4-mi355x-atom
-    - gptoss-fp4-mi355x-vllm
-    - minimaxm2.5-fp8-mi355x-vllm
-  description:
-    - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
-    - "This change may yield performance improvements"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/929
-  
-  
