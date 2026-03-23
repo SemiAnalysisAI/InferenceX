@@ -985,6 +985,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/907
 
 - config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Add GLM-5 FP8 SGLang H200 single-node benchmark"
+    - "Model: zai-org/GLM-5-FP8, image: lmsysorg/sglang:glm5-hopper"
+    - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
+    - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
+  
+- config-keys:
     - glm5-fp8-b200-sglang
   description:
     - "Add GLM-5 FP8 SGLang benchmark for B200"
@@ -1034,17 +1043,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
 
 - config-keys:
-    - glm5-fp8-h200-sglang
-  description:
-    - "Add GLM-5 FP8 SGLang H200 single-node benchmark"
-    - "Model: zai-org/GLM-5-FP8, image: lmsysorg/sglang:glm5-hopper"
-    - "Benchmark script: benchmarks/single_node/glm5_fp8_h200.sh"
-    - "Tool-call-parser glm47, reasoning-parser glm45, mem-fraction-static 0.85"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/914
-  
-- config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/921
-  
