@@ -1007,3 +1007,38 @@
     - "EAGLE speculative decoding: num-steps 3, draft-tokens 4, topk 1"
     - "New script: benchmarks/single_node/qwen3.5_fp8_b200_mtp.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/898
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "ADD minimax TP=8 with EP, in config of 1k1k, 1k8k, and 8k1k sequence lengths"
+    - "Config concurrency: 32-256"
+    - "update image to vllm/vllm-openai-rocm:v0.18.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
+
+- config-keys:
+    - gptoss-fp4-mi325x-vllm
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Document --exclusive flag on MI325X salloc prevents node sharing during benchmarks"
+    - "Only non-TP8 configs are affected; TP8 already uses all GPUs on the node"
+    - "May yield performance improvements"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/931
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - gptoss-fp4-mi355x-atom
+    - gptoss-fp4-mi355x-vllm
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
+    - "Only non-TP8 configs listed; TP8 already uses all GPUs on the node"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
+
