@@ -1015,6 +1015,32 @@
     - "Config concurrency: 32-256"
     - "update image to vllm/vllm-openai-rocm:v0.18.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
+
+- config-keys:
+    - gptoss-fp4-mi325x-vllm
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Document --exclusive flag on MI325X salloc prevents node sharing during benchmarks"
+    - "Only non-TP8 configs are affected; TP8 already uses all GPUs on the node"
+    - "May yield performance improvements"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/931
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+    - dsr1-fp8-mi355x-sglang
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - gptoss-fp4-mi355x-atom
+    - gptoss-fp4-mi355x-vllm
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
+    - "Only non-TP8 configs listed; TP8 already uses all GPUs on the node"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
   
 - config-keys:
     - qwen3.5-fp8-b200-sglang
@@ -1022,4 +1048,3 @@
     - "Replace FP8 with combination of TP4 and TP8 config"
     - "Add --enable-flashinfer-allreduce-fusion to TP8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
-  
