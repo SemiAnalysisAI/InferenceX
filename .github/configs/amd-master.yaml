@@ -1055,7 +1055,7 @@ dsr1-fp8-mi355x-vllm-disagg:
       decode:
         num-worker: 2
         tp: 8
-        ep: 1
+        ep: 8
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
@@ -1076,7 +1076,7 @@ dsr1-fp8-mi355x-vllm-disagg:
       decode:
         num-worker: 2
         tp: 8
-        ep: 1
+        ep: 8
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
@@ -1097,7 +1097,7 @@ dsr1-fp8-mi355x-vllm-disagg:
       decode:
         num-worker: 2
         tp: 8
-        ep: 1
+        ep: 8
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
