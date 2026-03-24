@@ -17,9 +17,9 @@ def parse_bool(value):
 def colorize_delta(text, delta):
     """Wrap delta text in green (positive) or red (negative) using LaTeX color syntax for GitHub markdown."""
     if delta > 0:
-        return f"${{\\color{{green}}{text}}}$"
+        return f"$\\color{{green}}\\textsf{{{text}}}$"
     elif delta < 0:
-        return f"${{\\color{{red}}{text}}}$"
+        return f"$\\color{{red}}\\textsf{{{text}}}$"
     return text
 
 
