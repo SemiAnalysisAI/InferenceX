@@ -1041,4 +1041,10 @@
     - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
     - "Only non-TP8 configs listed; TP8 already uses all GPUs on the node"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
-
+  
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Replace FP8 with combination of TP4 and TP8 config"
+    - "Add --enable-flashinfer-allreduce-fusion to TP8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
