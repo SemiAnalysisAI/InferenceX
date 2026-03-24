@@ -1,7 +1,6 @@
 """Benchmark vLLM swap_blocks across block sizes from 16KiB to 128MiB."""
 
 import torch
-import time
 import sys
 import json
 from vllm._custom_ops import swap_blocks
@@ -44,16 +43,20 @@ def bench_swap_blocks(
             swap_blocks(src, dst, block_size_bytes, block_mapping)
             torch.cuda.synchronize()
 
-        # Benchmark
+        # Benchmark using CUDA events for accurate GPU timing
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
         torch.cuda.synchronize()
-        start = time.perf_counter()
+        start_event.record()
         for _ in range(bench_iters):
             swap_blocks(src, dst, block_size_bytes, block_mapping)
-            torch.cuda.synchronize()
-        elapsed = time.perf_counter() - start
+        end_event.record()
+        torch.cuda.synchronize()
 
-        avg_time_ms = (elapsed / bench_iters) * 1e3
-        throughput_gbs = (total_bytes_per_iter / (elapsed / bench_iters)) / 1e9
+        elapsed_ms = start_event.elapsed_time(end_event)
+        avg_time_ms = elapsed_ms / bench_iters
+        throughput_gbs = (total_bytes_per_iter / (avg_time_ms / 1e3)) / 1e9
 
         results[direction] = {
             "avg_time_ms": round(avg_time_ms, 4),
