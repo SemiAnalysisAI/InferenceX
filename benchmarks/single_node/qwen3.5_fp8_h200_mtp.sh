@@ -24,6 +24,11 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 MAX_SEQ_LEN=$((ISL + OSL + 20))
 
+# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
+SPECULATIVE_NUM_STEPS=2
+SPECULATIVE_DRAFT_TOKENS=3
+SPECULATIVE_EAGLE_TOPK=1
+
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 
 # Start GPU monitoring (power, temperature, clocks every second)
@@ -54,9 +59,9 @@ python3 -m sglang.launch_server \
   --disable-radix-cache \
   --trust-remote-code \
   --speculative-algorithm EAGLE \
-  --speculative-num-steps 2 \
-  --speculative-num-draft-tokens 3 \
-  --speculative-eagle-topk 1 \
+  --speculative-num-steps "$SPECULATIVE_NUM_STEPS" \
+  --speculative-num-draft-tokens "$SPECULATIVE_DRAFT_TOKENS" \
+  --speculative-eagle-topk "$SPECULATIVE_EAGLE_TOPK" \
   > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
