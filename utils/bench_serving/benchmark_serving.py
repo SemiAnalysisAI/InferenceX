@@ -930,18 +930,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--percentile-metrics",
         type=str,
-        default="ttft,tpot,itl",
+        default="ttft,tpot,itl,e2el",
         help="Comma-seperated list of selected metrics to report percentils. "
         "This argument specifies the metrics to report percentiles. "
         "Allowed metric names are \"ttft\", \"tpot\", \"itl\", \"e2el\". "
-        "Default value is \"ttft,tpot,itl\".")
+        "Default value is \"ttft,tpot,itl,e2el\".")
     parser.add_argument(
         "--metric-percentiles",
         type=str,
-        default="99",
+        default="90,99,99.9",
         help="Comma-seperated list of percentiles for selected metrics. "
         "To report 25-th, 50-th, and 75-th percentiles, use \"25,50,75\". "
-        "Default value is \"99\". "
+        "Default value is \"90,99,99.9\". "
         "Use \"--percentile-metrics\" to select metrics.",
     )
     parser.add_argument(
