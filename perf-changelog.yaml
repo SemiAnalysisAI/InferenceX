@@ -1041,7 +1041,7 @@
     - "Add --exclusive flag to MI355X single-node salloc and multi-node sbatch to prevent node sharing during benchmarks"
     - "Only non-TP8 configs listed; TP8 already uses all GPUs on the node"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/934
-  
+
 - config-keys:
     - dsr1-fp8-mi300x-sglang
   description:
@@ -1050,5 +1050,10 @@
     - "Improve TPOT by using fp8 bmm in MLA and MI300X for DSR1/V3: https://github.com/sgl-project/sglang/pull/18624"
     - "Broaden the optimized paths to all HIP platforms and add tuned FP8 GEMM configs: https://github.com/sgl-project/sglang/pull/18242"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/811
-  
 
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Replace FP8 with combination of TP4 and TP8 config"
+    - "Add --enable-flashinfer-allreduce-fusion to TP8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
