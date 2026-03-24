@@ -16,7 +16,8 @@ def parse_bool(value):
 
 def colorize_delta(text, delta, higher_is_better=True):
     """Wrap delta text in green (improved) or red (regressed) using LaTeX color syntax for GitHub markdown."""
-    escaped = text.replace("%", "\\%")
+    # Use Unicode ％ (U+FF05) instead of ASCII % to avoid LaTeX comment interpretation
+    escaped = text.replace("%", "\uff05")
     improved = (delta > 0) if higher_is_better else (delta < 0)
     regressed = (delta < 0) if higher_is_better else (delta > 0)
     if improved:
