@@ -42,6 +42,12 @@ CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MAX_RUNNING_REQUESTS=128
 CONTEXT_LENGTH=$((ISL + OSL + 20))
 
+if [[ $TP -eq 8 ]]; then
+  EXTRA_ARGS="--enable-flashinfer-allreduce-fusion"
+else
+  EXTRA_ARGS=""
+fi
+
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 # Start GPU monitoring (power, temperature, clocks every second)
@@ -57,7 +63,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
 --attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
---scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+$EXTRA_ARGS --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
 --tokenizer-worker-num 6 --stream-interval 30 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
