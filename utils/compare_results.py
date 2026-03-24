@@ -14,15 +14,26 @@ def parse_bool(value):
     return str(value).lower() == "true"
 
 
-def colorize_delta(text, delta):
-    """Wrap delta text in green (positive) or red (negative) using LaTeX color syntax for GitHub markdown."""
-    # Replace % with \% and wrap in \text{} to handle special chars in LaTeX math mode
+def colorize_delta(text, delta, higher_is_better=True):
+    """Wrap delta text in green (improved) or red (regressed) using LaTeX color syntax for GitHub markdown."""
     escaped = text.replace("%", "\\%")
-    if delta > 0:
+    improved = (delta > 0) if higher_is_better else (delta < 0)
+    regressed = (delta < 0) if higher_is_better else (delta > 0)
+    if improved:
         return f"$\\color{{green}}\\text{{{escaped}}}$"
-    elif delta < 0:
+    elif regressed:
         return f"$\\color{{red}}\\text{{{escaped}}}$"
     return text
+
+
+def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
+    """Compute a colored delta string between current and baseline values."""
+    if current is None or baseline is None or baseline == 0:
+        return "N/A"
+    delta = current - baseline
+    pct = (delta / baseline) * 100
+    text = f"{delta:+{fmt}} ({pct:+.1f}%)"
+    return colorize_delta(text, delta, higher_is_better)
 
 
 def extract_hardware(runner):
@@ -80,8 +91,7 @@ def build_config_params(result):
 # Use LIKE prefix match on model to handle cases where DB model name
 # differs from model-prefix (e.g. model-prefix "gptoss" -> DB "gptoss120b")
 BASELINE_QUERY = """
-    SELECT br.metrics->>'tput_per_gpu' as tput_per_gpu,
-           br.metrics->>'median_intvty' as median_intvty,
+    SELECT br.metrics as metrics,
            c.model as db_model
     FROM benchmark_results br
     JOIN configs c ON c.id = br.config_id
@@ -107,6 +117,69 @@ BASELINE_QUERY = """
     ORDER BY br.date DESC
     LIMIT 1
 """
+
+# Metrics to compare: (result_key, header_label, higher_is_better, format_spec)
+# TTFT is in seconds in the result JSON, display in ms
+# E2EL is in seconds
+# Interactivity is in tok/s/user
+METRIC_DEFS = [
+    # TPUT
+    ("tput_per_gpu", "TPUT/GPU", True, ".2f"),
+    # TTFT (lower is better, stored in seconds, display in ms — handled specially)
+    ("median_ttft", "TTFT Median (ms)", False, ".4f"),
+    ("p90_ttft", "TTFT P90 (ms)", False, ".4f"),
+    ("p99_ttft", "TTFT P99 (ms)", False, ".4f"),
+    ("p99.9_ttft", "TTFT P99.9 (ms)", False, ".4f"),
+    # Interactivity (higher is better)
+    ("median_intvty", "Intvty Median", True, ".4f"),
+    ("p90_intvty", "Intvty@P90 TPOT", True, ".4f"),
+    ("p99_intvty", "Intvty@P99 TPOT", True, ".4f"),
+    ("p99.9_intvty", "Intvty@P99.9 TPOT", True, ".4f"),
+    # E2EL (lower is better, in seconds)
+    ("median_e2el", "E2EL Median (s)", False, ".4f"),
+    ("p90_e2el", "E2EL P90 (s)", False, ".4f"),
+    ("p99_e2el", "E2EL P99 (s)", False, ".4f"),
+    ("p99.9_e2el", "E2EL P99.9 (s)", False, ".4f"),
+]
+
+# Keys that are stored in seconds but should be displayed in ms
+MS_DISPLAY_KEYS = {"median_ttft", "p90_ttft", "p99_ttft", "p99.9_ttft"}
+
+
+def get_metric_value(data, key):
+    """Get a metric value from a result dict, converting to float if present."""
+    val = data.get(key)
+    if val is None:
+        return None
+    return float(val)
+
+
+def format_value(val, key, fmt):
+    """Format a metric value for display, converting seconds to ms for TTFT keys."""
+    if val is None:
+        return "N/A"
+    if key in MS_DISPLAY_KEYS:
+        val = val * 1000
+    return f"{val:{fmt}}"
+
+
+def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt):
+    """Compute colored delta string for a metric."""
+    current = get_metric_value(current_data, key)
+    baseline = get_metric_value(baseline_data, key) if baseline_data else None
+    if current is None or baseline is None or baseline == 0:
+        return "N/A"
+    # For ms-display keys, convert both to ms before computing delta
+    if key in MS_DISPLAY_KEYS:
+        current_display = current * 1000
+        baseline_display = baseline * 1000
+    else:
+        current_display = current
+        baseline_display = baseline
+    delta = current_display - baseline_display
+    pct = (delta / baseline_display) * 100
+    text = f"{delta:+{fmt}} ({pct:+.1f}%)"
+    return colorize_delta(text, delta, higher_is_better)
 
 
 def main():
@@ -153,32 +226,14 @@ def main():
             cur.execute(BASELINE_QUERY, query_params)
             row = cur.fetchone()
 
+        baseline_metrics = None
         if row:
             matched += 1
-            print(f"  -> Matched DB model={row[2]}, tput={row[0]}, intvty={row[1]}", file=sys.stderr)
+            baseline_metrics = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            print(f"  -> Matched DB model={row[1]}, tput={baseline_metrics.get('tput_per_gpu')}", file=sys.stderr)
         else:
             unmatched += 1
             print(f"  -> No baseline found", file=sys.stderr)
-
-        current_tput = float(r["tput_per_gpu"])
-        baseline_tput = float(row[0]) if row else None
-
-        if baseline_tput is not None and baseline_tput > 0:
-            delta = current_tput - baseline_tput
-            pct = (delta / baseline_tput) * 100
-            tput_delta_str = colorize_delta(f"{delta:+.2f} ({pct:+.1f}%)", delta)
-        else:
-            tput_delta_str = "N/A (no baseline)"
-
-        current_intvty = float(r["median_intvty"]) if "median_intvty" in r else None
-        baseline_intvty = float(row[1]) if row and row[1] else None
-
-        if current_intvty is not None and baseline_intvty is not None and baseline_intvty > 0:
-            delta_i = current_intvty - baseline_intvty
-            pct_i = (delta_i / baseline_intvty) * 100
-            intvty_delta_str = colorize_delta(f"{delta_i:+.4f} ({pct_i:+.1f}%)", delta_i)
-        else:
-            intvty_delta_str = "N/A (no baseline)"
 
         is_multinode = r.get("is_multinode", False)
         if is_multinode:
@@ -199,12 +254,8 @@ def main():
             "isl": int(r["isl"]),
             "osl": int(r["osl"]),
             "conc": int(r["conc"]),
-            "current": current_tput,
-            "baseline": baseline_tput,
-            "tput_delta_str": tput_delta_str,
-            "current_intvty": current_intvty,
-            "baseline_intvty": baseline_intvty,
-            "intvty_delta_str": intvty_delta_str,
+            "result": r,
+            "baseline_metrics": baseline_metrics,
         }
         if not is_multinode:
             row_data["dp_attention"] = r.get("dp_attention", False)
@@ -219,19 +270,23 @@ def main():
     single_node = [r for r in rows if "P(" not in r["parallelism"]]
     multi_node = [r for r in rows if "P(" in r["parallelism"]]
 
+    # Build metric headers: for each metric, one column for value and one for delta
+    metric_headers = []
+    for _, label, _, _ in METRIC_DEFS:
+        metric_headers.extend([label, f"{label} Delta"])
+
     if single_node:
         headers = [
             "Model", "Served Model", "Hardware", "Framework", "Precision",
             "ISL", "OSL", "TP", "EP", "DP Attention", "Conc",
-            "TPUT per GPU", "Baseline TPUT per GPU", "TPUT Delta",
-            "Interactivity", "Baseline Interactivity", "Interactivity Delta",
-        ]
+        ] + metric_headers
+
         table_rows = []
         for row in single_node:
             parts = row["parallelism"]  # "tp1/ep1"
             tp_val = parts.split("/")[0].replace("tp", "")
             ep_val = parts.split("/")[1].replace("ep", "")
-            table_rows.append([
+            config_cols = [
                 row["model"],
                 row["served_model"],
                 row["hw"],
@@ -243,13 +298,14 @@ def main():
                 ep_val,
                 row.get("dp_attention", False),
                 row["conc"],
-                f"{row['current']:.4f}",
-                f"{row['baseline']:.4f}" if row["baseline"] is not None else "N/A",
-                row["tput_delta_str"],
-                f"{row['current_intvty']:.4f}" if row["current_intvty"] is not None else "N/A",
-                f"{row['baseline_intvty']:.4f}" if row["baseline_intvty"] is not None else "N/A",
-                row["intvty_delta_str"],
-            ])
+            ]
+            metric_cols = []
+            for key, _, higher_is_better, fmt in METRIC_DEFS:
+                val = get_metric_value(row["result"], key)
+                metric_cols.append(format_value(val, key, fmt))
+                metric_cols.append(compute_metric_delta(
+                    row["result"], row["baseline_metrics"], key, higher_is_better, fmt))
+            table_rows.append(config_cols + metric_cols)
 
         print("## Single-Node Comparison vs. Most Recent\n")
         print(tabulate(table_rows, headers=headers, tablefmt="github"))
@@ -259,14 +315,14 @@ def main():
         headers = [
             "Model", "Served Model", "Hardware", "Framework", "Precision",
             "ISL", "OSL", "Prefill TP", "Prefill EP", "Decode TP", "Decode EP",
-            "Conc", "TPUT per GPU", "Baseline TPUT per GPU", "TPUT Delta",
-            "Interactivity", "Baseline Interactivity", "Interactivity Delta",
-        ]
+            "Conc",
+        ] + metric_headers
+
         table_rows = []
         for row in multi_node:
             # Parse P(tp4/ep4) D(tp8/ep8)
             m = re.match(r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"])
-            table_rows.append([
+            config_cols = [
                 row["model"],
                 row["served_model"],
                 row["hw"],
@@ -279,13 +335,14 @@ def main():
                 m.group(3) if m else "",
                 m.group(4) if m else "",
                 row["conc"],
-                f"{row['current']:.4f}",
-                f"{row['baseline']:.4f}" if row["baseline"] is not None else "N/A",
-                row["tput_delta_str"],
-                f"{row['current_intvty']:.4f}" if row["current_intvty"] is not None else "N/A",
-                f"{row['baseline_intvty']:.4f}" if row["baseline_intvty"] is not None else "N/A",
-                row["intvty_delta_str"],
-            ])
+            ]
+            metric_cols = []
+            for key, _, higher_is_better, fmt in METRIC_DEFS:
+                val = get_metric_value(row["result"], key)
+                metric_cols.append(format_value(val, key, fmt))
+                metric_cols.append(compute_metric_delta(
+                    row["result"], row["baseline_metrics"], key, higher_is_better, fmt))
+            table_rows.append(config_cols + metric_cols)
 
         print("## Multi-Node Comparison vs. Most Recent\n")
         print(tabulate(table_rows, headers=headers, tablefmt="github"))
