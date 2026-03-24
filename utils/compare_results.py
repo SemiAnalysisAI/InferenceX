@@ -16,12 +16,12 @@ def parse_bool(value):
 
 def colorize_delta(text, delta):
     """Wrap delta text in green (positive) or red (negative) using LaTeX color syntax for GitHub markdown."""
-    # Escape special LaTeX characters in the text
+    # Replace % with \% and wrap in \text{} to handle special chars in LaTeX math mode
     escaped = text.replace("%", "\\%")
     if delta > 0:
-        return f"$\\color{{green}}\\textsf{{{escaped}}}$"
+        return f"$\\color{{green}}\\text{{{escaped}}}$"
     elif delta < 0:
-        return f"$\\color{{red}}\\textsf{{{escaped}}}$"
+        return f"$\\color{{red}}\\text{{{escaped}}}$"
     return text
 
 
