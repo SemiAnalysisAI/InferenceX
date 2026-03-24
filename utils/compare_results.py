@@ -14,17 +14,17 @@ def parse_bool(value):
     return str(value).lower() == "true"
 
 
-def colorize_delta(text, delta, higher_is_better=True):
-    """Wrap delta text in green (improved) or red (regressed) using LaTeX color syntax for GitHub markdown."""
-    # Use Unicode ％ (U+FF05) instead of ASCII % to avoid LaTeX comment interpretation
-    escaped = text.replace("%", "\uff05")
-    improved = (delta > 0) if higher_is_better else (delta < 0)
-    regressed = (delta < 0) if higher_is_better else (delta > 0)
+def colorize_delta(delta_val, pct_val, higher_is_better=True, fmt=".4f"):
+    """Format a colored delta string using LaTeX color syntax for GitHub markdown."""
+    improved = (delta_val > 0) if higher_is_better else (delta_val < 0)
+    regressed = (delta_val < 0) if higher_is_better else (delta_val > 0)
+    delta_str = f"{delta_val:+{fmt}}"
+    pct_str = f"({pct_val:+.1f}%)"
     if improved:
-        return f"$\\color{{green}}\\text{{{escaped}}}$"
+        return f"$\\color{{green}}\\text{{{delta_str}}}$ {pct_str}"
     elif regressed:
-        return f"$\\color{{red}}\\text{{{escaped}}}$"
-    return text
+        return f"$\\color{{red}}\\text{{{delta_str}}}$ {pct_str}"
+    return f"{delta_str} {pct_str}"
 
 
 def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
@@ -33,8 +33,7 @@ def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
         return "N/A"
     delta = current - baseline
     pct = (delta / baseline) * 100
-    text = f"{delta:+{fmt}} ({pct:+.1f}%)"
-    return colorize_delta(text, delta, higher_is_better)
+    return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
 def extract_hardware(runner):
@@ -179,8 +178,7 @@ def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt
         baseline_display = baseline
     delta = current_display - baseline_display
     pct = (delta / baseline_display) * 100
-    text = f"{delta:+{fmt}} ({pct:+.1f}%)"
-    return colorize_delta(text, delta, higher_is_better)
+    return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
 def main():
