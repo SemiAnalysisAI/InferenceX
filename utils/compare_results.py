@@ -14,6 +14,15 @@ def parse_bool(value):
     return str(value).lower() == "true"
 
 
+def colorize_delta(text, delta):
+    """Wrap delta text in green (positive) or red (negative) using LaTeX color syntax for GitHub markdown."""
+    if delta > 0:
+        return f"${{\\color{{green}}{text}}}$"
+    elif delta < 0:
+        return f"${{\\color{{red}}{text}}}$"
+    return text
+
+
 def extract_hardware(runner):
     """Strip suffixes like -multinode, -trt, -disagg from runner to get hardware name."""
     return re.split(r"-(multinode|trt|disagg)$", runner)[0].lower()
@@ -70,6 +79,7 @@ def build_config_params(result):
 # differs from model-prefix (e.g. model-prefix "gptoss" -> DB "gptoss120b")
 BASELINE_QUERY = """
     SELECT br.metrics->>'tput_per_gpu' as tput_per_gpu,
+           br.metrics->>'median_intvty' as median_intvty,
            c.model as db_model
     FROM benchmark_results br
     JOIN configs c ON c.id = br.config_id
@@ -143,7 +153,7 @@ def main():
 
         if row:
             matched += 1
-            print(f"  -> Matched DB model={row[1]}, tput={row[0]}", file=sys.stderr)
+            print(f"  -> Matched DB model={row[2]}, tput={row[0]}, intvty={row[1]}", file=sys.stderr)
         else:
             unmatched += 1
             print(f"  -> No baseline found", file=sys.stderr)
@@ -154,9 +164,19 @@ def main():
         if baseline_tput is not None and baseline_tput > 0:
             delta = current_tput - baseline_tput
             pct = (delta / baseline_tput) * 100
-            delta_str = f"{delta:+.2f} ({pct:+.1f}%)"
+            tput_delta_str = colorize_delta(f"{delta:+.2f} ({pct:+.1f}%)", delta)
         else:
-            delta_str = "N/A (no baseline)"
+            tput_delta_str = "N/A (no baseline)"
+
+        current_intvty = float(r["median_intvty"]) if "median_intvty" in r else None
+        baseline_intvty = float(row[1]) if row and row[1] else None
+
+        if current_intvty is not None and baseline_intvty is not None and baseline_intvty > 0:
+            delta_i = current_intvty - baseline_intvty
+            pct_i = (delta_i / baseline_intvty) * 100
+            intvty_delta_str = colorize_delta(f"{delta_i:+.4f} ({pct_i:+.1f}%)", delta_i)
+        else:
+            intvty_delta_str = "N/A (no baseline)"
 
         is_multinode = r.get("is_multinode", False)
         if is_multinode:
@@ -179,7 +199,10 @@ def main():
             "conc": int(r["conc"]),
             "current": current_tput,
             "baseline": baseline_tput,
-            "delta_str": delta_str,
+            "tput_delta_str": tput_delta_str,
+            "current_intvty": current_intvty,
+            "baseline_intvty": baseline_intvty,
+            "intvty_delta_str": intvty_delta_str,
         }
         if not is_multinode:
             row_data["dp_attention"] = r.get("dp_attention", False)
@@ -198,7 +221,8 @@ def main():
         headers = [
             "Model", "Served Model", "Hardware", "Framework", "Precision",
             "ISL", "OSL", "TP", "EP", "DP Attention", "Conc",
-            "TPUT per GPU", "Baseline TPUT per GPU", "Delta",
+            "TPUT per GPU", "Baseline TPUT per GPU", "TPUT Delta",
+            "Interactivity", "Baseline Interactivity", "Interactivity Delta",
         ]
         table_rows = []
         for row in single_node:
@@ -219,10 +243,13 @@ def main():
                 row["conc"],
                 f"{row['current']:.4f}",
                 f"{row['baseline']:.4f}" if row["baseline"] is not None else "N/A",
-                row["delta_str"],
+                row["tput_delta_str"],
+                f"{row['current_intvty']:.4f}" if row["current_intvty"] is not None else "N/A",
+                f"{row['baseline_intvty']:.4f}" if row["baseline_intvty"] is not None else "N/A",
+                row["intvty_delta_str"],
             ])
 
-        print("## Single-Node Throughput Comparison vs. Most Recent\n")
+        print("## Single-Node Comparison vs. Most Recent\n")
         print(tabulate(table_rows, headers=headers, tablefmt="github"))
         print()
 
@@ -230,7 +257,8 @@ def main():
         headers = [
             "Model", "Served Model", "Hardware", "Framework", "Precision",
             "ISL", "OSL", "Prefill TP", "Prefill EP", "Decode TP", "Decode EP",
-            "Conc", "TPUT per GPU", "Baseline TPUT per GPU", "Delta",
+            "Conc", "TPUT per GPU", "Baseline TPUT per GPU", "TPUT Delta",
+            "Interactivity", "Baseline Interactivity", "Interactivity Delta",
         ]
         table_rows = []
         for row in multi_node:
@@ -251,10 +279,13 @@ def main():
                 row["conc"],
                 f"{row['current']:.4f}",
                 f"{row['baseline']:.4f}" if row["baseline"] is not None else "N/A",
-                row["delta_str"],
+                row["tput_delta_str"],
+                f"{row['current_intvty']:.4f}" if row["current_intvty"] is not None else "N/A",
+                f"{row['baseline_intvty']:.4f}" if row["baseline_intvty"] is not None else "N/A",
+                row["intvty_delta_str"],
             ])
 
-        print("## Multi-Node Throughput Comparison vs. Most Recent\n")
+        print("## Multi-Node Comparison vs. Most Recent\n")
         print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
 
