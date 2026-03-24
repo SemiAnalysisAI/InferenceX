@@ -21,6 +21,7 @@ hf download "$MODEL"
 nvidia-smi
 
 export PYTHONNOUSERSITE=1
+export VLLM_USE_FLASHINFER_MOE_INT4=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -38,7 +39,8 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--disable-log-requests \
+--no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

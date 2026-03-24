@@ -1048,3 +1048,10 @@
     - "Replace FP8 with combination of TP4 and TP8 config"
     - "Add --enable-flashinfer-allreduce-fusion to TP8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Enable VLLM_USE_FLASHINFER_MOE_INT4=1 for Kimi K2.5 INT4 B200 benchmark"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/935
+
