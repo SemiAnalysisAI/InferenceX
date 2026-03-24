@@ -20,11 +20,11 @@ TTFT_MEDIAN = "TTFT Median (ms)"
 TTFT_P90 = "TTFT P90 (ms)"
 TTFT_P99 = "TTFT P99 (ms)"
 TTFT_P999 = "TTFT P99.9 (ms)"
-TPOT = "TPOT (ms)"
+TPOT_MEDIAN = "TPOT Median (ms)"
 INTVTY_MEDIAN = "Intvty Median (tok/s/user)"
-INTVTY_P90 = "Intvty P90 (tok/s/user)"
-INTVTY_P99 = "Intvty P99 (tok/s/user)"
-INTVTY_P999 = "Intvty P99.9 (tok/s/user)"
+INTVTY_AT_P90_TPOT = "Intvty at P90 TPOT (tok/s/user)"
+INTVTY_AT_P99_TPOT = "Intvty at P99 TPOT (tok/s/user)"
+INTVTY_AT_P999_TPOT = "Intvty at P99.9 TPOT (tok/s/user)"
 E2EL_MEDIAN = "E2EL Median (s)"
 E2EL_P90 = "E2EL P90 (s)"
 E2EL_P99 = "E2EL P99 (s)"
@@ -85,8 +85,8 @@ def main():
             MODEL, SERVED_MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL, TP, EP, DP_ATTENTION,
             CONC,
             TTFT_MEDIAN, TTFT_P90, TTFT_P99, TTFT_P999,
-            TPOT,
-            INTVTY_MEDIAN, INTVTY_P90, INTVTY_P99, INTVTY_P999,
+            TPOT_MEDIAN,
+            INTVTY_MEDIAN, INTVTY_AT_P90_TPOT, INTVTY_AT_P99_TPOT, INTVTY_AT_P999_TPOT,
             E2EL_MEDIAN, E2EL_P90, E2EL_P99, E2EL_P999,
             TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
         ]
@@ -139,8 +139,8 @@ def main():
             DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS, DECODE_GPUS,
             CONC,
             TTFT_MEDIAN, TTFT_P90, TTFT_P99, TTFT_P999,
-            TPOT,
-            INTVTY_MEDIAN, INTVTY_P90, INTVTY_P99, INTVTY_P999,
+            TPOT_MEDIAN,
+            INTVTY_MEDIAN, INTVTY_AT_P90_TPOT, INTVTY_AT_P99_TPOT, INTVTY_AT_P999_TPOT,
             E2EL_MEDIAN, E2EL_P90, E2EL_P99, E2EL_P999,
             TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
         ]
