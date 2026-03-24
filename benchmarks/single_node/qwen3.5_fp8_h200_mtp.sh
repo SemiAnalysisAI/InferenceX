@@ -10,7 +10,8 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE 
+    EP_SIZE \
+    MAX_MODEL_LEN
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -22,14 +23,13 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
-MAX_SEQ_LEN=$((ISL + OSL + 20))
 
 # MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
 SPECULATIVE_NUM_STEPS=2
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1
 
-echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
+echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_MODEL_LEN: $MAX_MODEL_LEN"
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -49,7 +49,7 @@ python3 -m sglang.launch_server \
   --decode-log-interval 1 \
   --mem-fraction-static 0.8 \
   --cuda-graph-max-bs "$CONC" \
-  --context-length "$MAX_SEQ_LEN" \
+  --context-length "$MAX_MODEL_LEN" \
   --kv-cache-dtype fp8_e4m3 \
   --quantization fp8 \
   --attention-backend flashinfer \
