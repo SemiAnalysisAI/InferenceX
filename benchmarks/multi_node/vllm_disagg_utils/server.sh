@@ -150,6 +150,37 @@ print(f'DECODE_MODEL_ENVS=\"{dev}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
+# Apply tensor-parallel size and EP/DP flags from submit pipeline (YAML PREFILL_TP / dp-attn / ep).
+if [[ -n "${PREFILL_TP:-}" ]]; then
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP}/g")
+    else
+        PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP}"
+    fi
+fi
+if [[ -n "${DECODE_TP:-}" ]]; then
+    if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP}/g")
+    else
+        DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP}"
+    fi
+fi
+if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+    PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
+fi
+if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
+fi
+if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+    DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
+fi
+if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
+fi
+
+echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
+echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================

@@ -217,6 +217,14 @@ export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 
+# TP / EP / DP (from vllm_disagg_utils/submit.sh; mirrors amd_utils disagg)
+export PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-false}"
+export PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-false}"
+export DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-false}"
+export DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-false}"
+export PREFILL_TP="${PREFILL_TP:-8}"
+export DECODE_TP="${DECODE_TP:-8}"
+
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_vllm_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$VLLM_WS_PATH/${RUN_FILE}"
@@ -327,6 +335,12 @@ exec \$_DCMD run --rm \
     -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300} \
     -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1} \
     -e PYTHONPYCACHEPREFIX=/tmp/pycache \
+    -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP \
+    -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP \
+    -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP \
+    -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP \
+    -e PREFILL_TP=\$PREFILL_TP \
+    -e DECODE_TP=\$DECODE_TP \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '

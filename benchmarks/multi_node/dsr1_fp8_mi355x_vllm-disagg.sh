@@ -11,8 +11,12 @@ check_env_vars \
     MODEL_PATH \
     PREFILL_NUM_WORKERS \
     PREFILL_TP \
+    PREFILL_EP \
+    PREFILL_DP_ATTN \
     DECODE_NUM_WORKERS \
     DECODE_TP \
+    DECODE_EP \
+    DECODE_DP_ATTN \
     PREFILL_NODES \
     DECODE_NODES \
     RANDOM_RANGE_RATIO
@@ -30,15 +34,42 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# PREFILL_NODES and DECODE_NODES come from additional-settings in the YAML config.
-# NODELIST (optional) constrains which Slurm nodes are used.
+# Same EP/DP booleans as dsr1_fp8_mi355x_sglang-disagg.sh → amd_utils/submit.sh
+if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+    export PREFILL_ENABLE_EP=false
+else
+    export PREFILL_ENABLE_EP=true
+fi
 
+if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
+    export PREFILL_ENABLE_DP=true
+else
+    export PREFILL_ENABLE_DP=false
+fi
+
+if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+    export DECODE_ENABLE_EP=false
+else
+    export DECODE_ENABLE_EP=true
+fi
+
+if [[ "$DECODE_DP_ATTN" == "true" ]]; then
+    export DECODE_ENABLE_DP=true
+else
+    export DECODE_ENABLE_DP=false
+fi
+
+# Parameter order matches SGLang disagg submit.sh; arg 16 is optional NODELIST.
 JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
-    $ISL $OSL "${CONC_LIST// /x}" inf "${NODELIST:-}" \
-    ${RANDOM_RANGE_RATIO})
+    $ISL $OSL "${CONC_LIST// /x}" inf \
+    ${PREFILL_ENABLE_EP} ${PREFILL_ENABLE_DP} \
+    ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP} \
+    ${PREFILL_TP} ${DECODE_TP} \
+    ${RANDOM_RANGE_RATIO} \
+    "${NODELIST:-}")
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to submit job" >&2

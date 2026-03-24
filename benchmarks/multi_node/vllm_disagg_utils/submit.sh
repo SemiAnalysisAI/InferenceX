@@ -12,19 +12,29 @@ usage() {
     cat << 'USAGE'
 Usage:
   bash submit.sh <PREFILL_NODES> <PREFILL_WORKERS> <DECODE_NODES> <DECODE_WORKERS> \
-                 <ISL> <OSL> <CONCURRENCIES> <REQUEST_RATE> [NODE_LIST] [RANDOM_RANGE_RATIO]
+                 <ISL> <OSL> <CONCURRENCIES> <REQUEST_RATE> \
+                 <PREFILL_ENABLE_EP> <PREFILL_ENABLE_DP> \
+                 <DECODE_ENABLE_EP> <DECODE_ENABLE_DP> \
+                 <PREFILL_TP> <DECODE_TP> \
+                 <RANDOM_RANGE_RATIO> [NODE_LIST]
 
 Arguments:
-  PREFILL_NODES       Number of prefill nodes
-  PREFILL_WORKERS     Number of prefill workers (usually 1)
-  DECODE_NODES        Number of decode nodes
-  DECODE_WORKERS      Number of decode workers (usually 1)
-  ISL                 Input sequence length
-  OSL                 Output sequence length
-  CONCURRENCIES       Concurrency levels, delimited by 'x' (e.g., "8x16x32")
-  REQUEST_RATE        Request rate ("inf" for max throughput)
-  NODE_LIST           Optional: comma-separated hostnames
-  RANDOM_RANGE_RATIO  Optional: random range ratio for benchmark (default 0.8)
+  PREFILL_NODES        Number of prefill nodes
+  PREFILL_WORKERS      Number of prefill workers (usually 1)
+  DECODE_NODES         Number of decode nodes
+  DECODE_WORKERS       Number of decode workers (usually 1)
+  ISL                  Input sequence length
+  OSL                  Output sequence length
+  CONCURRENCIES        Concurrency levels, delimited by 'x' (e.g., "8x16x32")
+  REQUEST_RATE         Request rate ("inf" for max throughput)
+  PREFILL_ENABLE_EP    true/false (from PREFILL_EP in YAML; false when EP==1)
+  PREFILL_ENABLE_DP    true/false (data-parallel attention on prefill)
+  DECODE_ENABLE_EP     true/false (from DECODE_EP in YAML)
+  DECODE_ENABLE_DP     true/false (data-parallel attention on decode)
+  PREFILL_TP           Tensor parallel size per prefill node
+  DECODE_TP            Tensor parallel size per decode node
+  RANDOM_RANGE_RATIO   Random range ratio for benchmark client
+  NODE_LIST            Optional: comma-separated hostnames (must match NUM_NODES)
 
 Required environment variables:
   SLURM_ACCOUNT    SLURM account name
@@ -57,7 +67,7 @@ check_env RUNNER_NAME
 
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
-# COMMAND_LINE ARGS
+# COMMAND_LINE ARGS (aligned with benchmarks/multi_node/amd_utils/submit.sh)
 PREFILL_NODES=$1
 PREFILL_WORKERS=${2:-1}
 DECODE_NODES=$3
@@ -66,8 +76,14 @@ ISL=$5
 OSL=$6
 CONCURRENCIES=$7
 REQUEST_RATE=$8
-NODE_LIST=${9}
-RANDOM_RANGE_RATIO=${10}
+PREFILL_ENABLE_EP=${9:-false}
+PREFILL_ENABLE_DP=${10:-false}
+DECODE_ENABLE_EP=${11:-false}
+DECODE_ENABLE_DP=${12:-false}
+PREFILL_TP=${13:-8}
+DECODE_TP=${14:-8}
+RANDOM_RANGE_RATIO=${15:-0.8}
+NODE_LIST=${16}
 
 # Router co-located with first prefill: xP + yD nodes total
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
@@ -85,6 +101,12 @@ export yD=$DECODE_NODES
 export NUM_NODES=$NUM_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
 export MODEL_NAME=$MODEL_NAME
+export PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP}
+export PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP}
+export DECODE_ENABLE_EP=${DECODE_ENABLE_EP}
+export DECODE_ENABLE_DP=${DECODE_ENABLE_DP}
+export PREFILL_TP=${PREFILL_TP}
+export DECODE_TP=${DECODE_TP}
 export BENCH_INPUT_LEN=${ISL}
 export BENCH_OUTPUT_LEN=${OSL}
 export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
