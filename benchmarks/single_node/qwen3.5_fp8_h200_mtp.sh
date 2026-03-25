@@ -46,7 +46,6 @@ python3 -m sglang.launch_server \
   --enable-flashinfer-allreduce-fusion \
   --max-running-requests 128 \
   --chunked-prefill-size 16384 \
-  --decode-log-interval 1 \
   --mem-fraction-static 0.8 \
   --cuda-graph-max-bs "$CONC" \
   --context-length "$MAX_MODEL_LEN" \
