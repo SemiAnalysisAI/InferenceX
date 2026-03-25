@@ -1055,10 +1055,3 @@
     - "Enable VLLM_USE_FLASHINFER_MOE_INT4=1 for Kimi K2.5 INT4 B200 benchmark"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/935
 
-- config-keys:
-    - gptoss-fp4-h100-vllm
-  description:
-    - "test"
-  pr-link: test
-
-  
