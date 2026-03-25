@@ -1055,3 +1055,10 @@
     - "Enable VLLM_USE_FLASHINFER_MOE_INT4=1 for Kimi K2.5 INT4 B200 benchmark"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/935
 
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/942
+
