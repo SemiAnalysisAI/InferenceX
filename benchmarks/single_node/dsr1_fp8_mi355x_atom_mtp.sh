@@ -37,6 +37,9 @@ else
   EP=" "
 fi
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 
 python3 -m atom.entrypoints.openai_server \
@@ -71,6 +74,9 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
 
 set -x
