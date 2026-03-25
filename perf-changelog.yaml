@@ -1066,5 +1066,5 @@
     - "dsr1-fp8-b200-sglang: v0.5.6-cu129-amd64 → v0.5.9-cu130"
     - "dsr1-fp8-b200-sglang-mtp: v0.5.8-cu130-amd64 → v0.5.9-cu130"
     - "dsr1-fp8-h200-sglang: v0.5.9-cu129-amd64 → v0.5.9-cu130"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxx
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/943
 
