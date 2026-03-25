@@ -33,7 +33,7 @@ python3 -m sglang.launch_server \
     --tensor-parallel-size $TP \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
+    --enable-torch-compile \
     --cuda-graph-max-bs $CONC \
     --context-length $CONTEXT_LENGTH \
     --disable-radix-cache \
