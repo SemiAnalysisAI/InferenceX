@@ -25,7 +25,7 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 # MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
-SPECULATIVE_NUM_STEPS=2
+SPECULATIVE_NUM_STEPS=3
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1
 
