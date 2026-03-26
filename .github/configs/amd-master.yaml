@@ -388,7 +388,7 @@ minimaxm2.5-fp8-mi355x-vllm:
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
 minimaxm2.5-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
+  image: vllm/vllm-openai-rocm:v0.18.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
