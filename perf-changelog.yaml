@@ -1068,3 +1068,12 @@
     - "dsr1-fp8-h200-sglang: v0.5.9-cu129-amd64 → v0.5.9-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/943
 
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
+    - "Enable AITER with INT4 quick reduce; disable AITER RMSNorm for TP < 8 (accuracy)"
+    - "Add expert parallel, TP4, and TP4/EP4 search spaces"
+    - "Switch block-size 64 to 1 gpu-memory-utilization 0.95 to 0.90"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/936
+  
