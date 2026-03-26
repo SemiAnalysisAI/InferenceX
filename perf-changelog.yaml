@@ -1048,3 +1048,12 @@
     - "Replace FP8 with combination of TP4 and TP8 config"
     - "Add --enable-flashinfer-allreduce-fusion to TP8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/918
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
+    - "Enable AITER with INT4 quick reduce; disable AITER RMSNorm for TP < 8 (accuracy)"
+    - "Add expert parallel, TP4, and TP4/EP4 search spaces"
+    - "Switch block-size 64 to 1 gpu-memory-utilization 0.95 to 0.90"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/936
