@@ -158,6 +158,7 @@ jobs:
             results/conversations.jsonl
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
+            results/trace_replay/
             results/status.txt
           if-no-files-found: ignore
 
