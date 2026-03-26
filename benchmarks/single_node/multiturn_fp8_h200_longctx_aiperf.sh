@@ -63,6 +63,28 @@ with open(sys.argv[1], 'w') as f:
 " "$STATS_FILE"
 fi
 
+# Patch vLLM bug: stale KV transfer callback after request cleanup (PR #37859)
+# (causes "AssertionError: assert req_id in self.requests" crash under KV offloading)
+SCHED_FILE=$(python3 -c "import vllm; import os; print(os.path.join(os.path.dirname(vllm.__file__), 'v1', 'core', 'sched', 'scheduler.py'))" 2>/dev/null || echo "")
+if [ -n "$SCHED_FILE" ] && [ -f "$SCHED_FILE" ] && grep -q 'assert req_id in self.requests' "$SCHED_FILE"; then
+    echo "Patching vLLM scheduler.py: $SCHED_FILE"
+    python3 << 'PYEOF' "$SCHED_FILE"
+import sys
+with open(sys.argv[1]) as f:
+    src = f.read()
+src = src.replace(
+    'assert req_id in self.requests\n            req = self.requests[req_id]\n            if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:',
+    'req = self.requests.get(req_id)\n            if req is None:\n                logger.debug("Ignoring finished recving KV transfer for unknown request %s", req_id)\n                self.finished_recving_kv_req_ids.discard(req_id)\n                continue\n            if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:',
+)
+src = src.replace(
+    'assert req_id in self.requests\n            self._free_blocks(self.requests[req_id])',
+    'req = self.requests.get(req_id)\n            if req is None:\n                logger.debug("Ignoring finished sending KV transfer for unknown request %s", req_id)\n                continue\n            self._free_blocks(req)',
+)
+with open(sys.argv[1], 'w') as f:
+    f.write(src)
+PYEOF
+fi
+
 # ---- Conversation count ----------------------------------------------------
 if [ -n "${DURATION:-}" ]; then
     CONV_COUNT=10000

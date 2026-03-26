@@ -47,7 +47,7 @@ on:
       image:
         description: 'Container image'
         required: true
-        default: 'vllm/vllm-openai:v0.16.0'
+        default: 'vllm/vllm-openai:v0.18.0'
         type: string
       model:
         description: 'Model name'
