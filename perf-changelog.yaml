@@ -1084,4 +1084,4 @@
     - "Enable AITER MLA, export VLLM_ROCM_USE_AITER=1, https://github.com/vllm-project/vllm/issues/35641"
     - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
     - "Add --max-num-seqs 256, remove --disable-log-requests"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/950
