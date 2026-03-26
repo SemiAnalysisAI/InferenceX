@@ -29,10 +29,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
     export SERVED_MODEL_NAME=$MODEL
 
-    echo "Cloning srt-slurm repository..."
+    echo "Installing srtctl from srt-slurm..."
     SRT_REPO_DIR="srt-slurm"
     if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
         rm -rf "$SRT_REPO_DIR"
     fi
 
@@ -40,7 +39,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q1-2026
 
-    echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
@@ -67,7 +65,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
-    SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+    # Recipes are now in the main repo at $GITHUB_WORKSPACE/recipes/
+    SRTCTL_ROOT="${GITHUB_WORKSPACE}"
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for B200
@@ -99,6 +98,11 @@ EOF
     make setup ARCH=x86_64
 
     echo "Submitting job with srtctl..."
+    if [ -z "$CONFIG_FILE" ]; then
+        echo "Error: CONFIG_FILE is not set. Ensure 'recipe' is specified in the master config."
+        exit 1
+    fi
+    echo "Using recipe: $CONFIG_FILE"
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)

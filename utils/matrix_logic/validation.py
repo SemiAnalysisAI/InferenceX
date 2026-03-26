@@ -44,6 +44,7 @@ class Fields(Enum):
     BATCH_SIZE = 'batch-size'
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
+    RECIPE = 'recipe'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -101,6 +102,8 @@ class WorkerConfig(BaseModel):
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     additional_settings: Optional[List[str]] = Field(
         default=[], alias=Fields.ADDITIONAL_SETTINGS.value)
+    recipe: Optional[str] = Field(
+        default=None, alias=Fields.RECIPE.value)
 
 
 class MultiNodeMatrixEntry(BaseModel):

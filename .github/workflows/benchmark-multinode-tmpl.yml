@@ -56,6 +56,11 @@ on:
       prefill-dp-attn:
         required: true
         type: string
+      prefill-recipe:
+        description: "Path to srt-slurm recipe YAML (relative to recipes/)"
+        required: false
+        type: string
+        default: ""
       prefill-additional-settings:
         required: false
         type: string
@@ -73,6 +78,11 @@ on:
       decode-dp-attn:
         required: true
         type: string
+      decode-recipe:
+        description: "Path to srt-slurm recipe YAML (relative to recipes/)"
+        required: false
+        type: string
+        default: ""
       decode-additional-settings:
         required: false
         type: string
@@ -154,6 +164,12 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
+
+          # Set CONFIG_FILE from recipe field (preferred) or fall back to additional-settings
+          if [ -n "${{ inputs.prefill-recipe }}" ]; then
+            export CONFIG_FILE="${GITHUB_WORKSPACE}/recipes/${{ inputs.prefill-recipe }}"
+          fi
+
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           # Check if at least one result file was created
