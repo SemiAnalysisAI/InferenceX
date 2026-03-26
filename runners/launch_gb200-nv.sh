@@ -50,6 +50,8 @@ NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
+export EVAL_ONLY="${EVAL_ONLY:-false}"
+
 export ISL="$ISL"
 export OSL="$OSL"
 
@@ -112,7 +114,7 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+git clone https://github.com/Oseltamivir/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout sa-submission-q1-2026
 
@@ -163,6 +165,9 @@ cat srtslurm.yaml
 
 echo "Running make setup..."
 make setup ARCH=aarch64
+
+# Export eval-related env vars for srt-slurm post-benchmark eval
+export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
 
@@ -271,3 +276,17 @@ else
 fi
 
 echo "All result files processed"
+
+# Collect eval results if eval was requested
+if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    EVAL_DIR="$LOGS_DIR/eval_results"
+    if [ -d "$EVAL_DIR" ]; then
+        echo "Extracting eval results from $EVAL_DIR"
+        for eval_file in "$EVAL_DIR"/*; do
+            [ -f "$eval_file" ] && cp "$eval_file" "$GITHUB_WORKSPACE/"
+            echo "Copied eval artifact: $(basename "$eval_file")"
+        done
+    else
+        echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
+    fi
+fi

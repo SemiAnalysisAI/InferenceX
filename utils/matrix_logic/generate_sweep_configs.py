@@ -40,8 +40,9 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
       spec-decoding, dp-attn), mark highest TP with highest conc and lowest TP
       with highest conc.
     - Multi-node: for each unique (model, runner, framework, precision,
-      spec-decoding), prefer 1k8k entries; fall back to 8k1k if unavailable
-      (never 1k1k). Mark the entry with the highest max concurrency.
+      spec-decoding, prefill-dp-attn, decode-dp-attn), prefer 8k1k entries;
+      fall back to 1k8k if unavailable (never 1k1k). Mark the entry with the
+      highest max concurrency.
 
     Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
     independently.
@@ -106,9 +107,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     # --- Multi-node eval selection ---
     # For multi-node (disaggregated) entries, pick one representative per group.
-    # Prefer 1k8k; fall back to 8k1k if unavailable (never 1k1k).
+    # Prefer 8k1k; fall back to 1k8k if unavailable (never 1k1k).
     # Within a group, pick the entry with the highest max concurrency.
-    fallback_isl, fallback_osl = seq_len_stoi["8k1k"]
+    # Multi-node: prefer 8k1k, fallback to 1k8k
+    mn_target_isl, mn_target_osl = seq_len_stoi["8k1k"]
+    fallback_isl, fallback_osl = seq_len_stoi["1k8k"]
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -116,12 +119,16 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if Fields.PREFILL.value not in entry:
             continue
 
+        prefill_dp = entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value)
+        decode_dp = entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value)
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
             entry[Fields.FRAMEWORK.value],
             entry[Fields.PRECISION.value],
             entry[Fields.SPEC_DECODING.value],
+            prefill_dp,
+            decode_dp,
         )
         mn_groups[key].append((i, entry))
 
@@ -129,10 +136,10 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if not entries:
             continue
 
-        # Prefer 1k8k entries; fall back to 8k1k
+        # Prefer 8k1k entries; fall back to 1k8k
         preferred = [(i, e) for i, e in entries
-                     if e.get(Fields.ISL.value) == target_isl
-                     and e.get(Fields.OSL.value) == target_osl]
+                     if e.get(Fields.ISL.value) == mn_target_isl
+                     and e.get(Fields.OSL.value) == mn_target_osl]
         if not preferred:
             preferred = [(i, e) for i, e in entries
                          if e.get(Fields.ISL.value) == fallback_isl

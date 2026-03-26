@@ -37,8 +37,9 @@ InferenceX is an open-source, automated benchmarking system that continuously tr
 │   ├── workflows/           # GitHub Actions CI/CD
 │   │   ├── run-sweep.yml    # Main performance sweep
 │   │   ├── e2e-tests.yml    # End-to-end testing
-│   │   ├── benchmark-tmpl.yml  # Benchmark job template
-│   │   └── collect-evals.yml   # Eval results collection
+│   │   ├── benchmark-tmpl.yml           # Single-node benchmark job template
+│   │   ├── benchmark-multinode-tmpl.yml # Multi-node benchmark job template
+│   │   └── collect-evals.yml            # Eval results collection
 │   └── configs/             # Master configuration files
 │       ├── nvidia-master.yaml
 │       ├── amd-master.yaml
@@ -300,14 +301,27 @@ Evals run optional accuracy checks after throughput benchmarks to ensure model o
 
 ### When Evals Run
 
-Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run for two representative points per configuration group:
+Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mode). The `EVAL_ONLY` flag skips throughput benchmarking and only runs lm-eval.
 
-- **Lowest TP with highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding)
-- **Highest TP with highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding)
+**Single-node** eval selection (from PR #911):
+- All TPs at **highest concurrency** and **median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
+- Only on `8k1k` sequence length
+
+**Multi-node** eval selection:
+- Entry with **highest max concurrency** per (model, runner, framework, precision, spec-decoding)
+- Prefers `8k1k`; falls back to `1k8k` (never `1k1k`)
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
-**Note**: Evals only run on `1k8k` sequence length.
+**Workflow separation**: Eval jobs are independent from benchmark jobs:
+- `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
+- `e2e-tests.yml`: `test-sweep-evals` and `test-sweep-multi-node-evals`
+- Both use their respective benchmark templates with `eval-only: true`
+- `collect-evals` depends only on eval jobs, not benchmark jobs
+
+**Multi-node eval infrastructure**:
+- AMD (MI355X): `server.sh` skips `bench.sh` when `EVAL_ONLY=true`, runs lm-eval directly
+- NVIDIA (GB200/GB300): Uses srt-slurm `infmax-eval` benchmark type with expanded `eval_context_length`
 
 ### Eval Framework: lm-eval
 
@@ -329,18 +343,27 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
 
 ### Eval Integration in Benchmark Scripts
 
-All benchmark scripts in `benchmarks/` follow this pattern:
-
+**Single-node** scripts in `benchmarks/single_node/` follow this pattern:
 ```bash
-# 1. Start server
+# 1. Start server (with --context-length expansion if EVAL_ONLY=true)
 # 2. wait_for_server_ready
-# 3. run_benchmark_serving (throughput)
-# 4. Conditionally run evals:
+# 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
+# 4. Run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary  # Writes meta_env.json and moves artifacts
 fi
 ```
+
+**Multi-node AMD** (`benchmarks/multi_node/amd_utils/server.sh`):
+- Skips `bench.sh` when `EVAL_ONLY=true`
+- Runs lm-eval via `run_eval` against the router on port 30000
+- Copies eval artifacts to `/run_logs/slurm_job-*/eval_results/`
+
+**Multi-node NVIDIA** (GB200/GB300 via srt-slurm):
+- Uses `benchmark.type: "infmax-eval"` in srt-slurm config
+- `benchmark.eval_context_length` expands server context for eval
+- `infmax-eval` benchmark runner sources `benchmark_lib.sh` from `INFMAX_WORKSPACE`
 
 ### Key Eval Functions in `benchmarks/benchmark_lib.sh`
 
@@ -391,10 +414,13 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput |
+| `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
 | `EVAL_TASK` | `gsm8k` | Task definition file (without `.yaml`) |
 | `NUM_FEWSHOT` | `2` | Number of few-shot examples |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
+| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by compute_eval_context_length) |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
 
 ### Adding a New Eval Task
 

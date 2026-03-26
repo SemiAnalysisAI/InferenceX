@@ -468,7 +468,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+    elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
@@ -501,8 +503,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             # Source eval functions from benchmark_lib.sh
             source /workspace/benchmarks/benchmark_lib.sh
 
-            # Cap eval concurrency at 32 for stability
-            EVAL_CONC=256
+            # Use max concurrency from benchmark config (conc values are x-separated)
+            EVAL_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port 30000 --concurrent-requests $EVAL_CONC"

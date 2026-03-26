@@ -81,6 +81,8 @@ def main():
     final_results = {
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
+        "evals": [],
+        "multinode_evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
             "head_ref": args.head_ref,
@@ -131,12 +133,19 @@ def main():
 
         all_results.extend(json.loads(result.stdout))
 
+    all_eval_results = []
     for result in all_results:
         seq_len_str = seq_len_to_str(result["isl"], result["osl"])
         if "prefill" in result and result["prefill"] is not None:
             final_results["multi_node"][seq_len_str].append(result)
         else:
             final_results["single_node"][seq_len_str].append(result)
+
+        if result.get("run-eval"):
+            all_eval_results.append(result)
+
+    final_results["evals"] = [e for e in all_eval_results if "prefill" not in e or e.get("prefill") is None]
+    final_results["multinode_evals"] = [e for e in all_eval_results if "prefill" in e and e.get("prefill") is not None]
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)
