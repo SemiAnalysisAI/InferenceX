@@ -3208,18 +3208,18 @@ minimaxm2.5-fp8-b200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 256 }
   - isl: 1024
     osl: 8192
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.15.1
