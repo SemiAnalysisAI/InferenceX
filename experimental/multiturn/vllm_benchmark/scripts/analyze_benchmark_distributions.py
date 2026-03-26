@@ -29,6 +29,36 @@ def load_records(artifacts_dir: Path) -> list[dict]:
     return records
 
 
+def load_trace_replay_records(trace_replay_dir: Path) -> list[dict]:
+    """Load per-request records from trace_replay detailed_results.csv.
+
+    Converts to the same format as AIPerf JSONL records so the analyze()
+    function can process both formats identically.
+    """
+    import csv
+
+    csv_path = trace_replay_dir / "detailed_results.csv"
+    records = []
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("success") != "True":
+                continue
+            records.append({
+                "metadata": {
+                    "x_correlation_id": row["trace_id"],
+                    "conversation_id": row["trace_id"],
+                    "turn_index": int(row["request_idx"]),
+                    "benchmark_phase": "profiling",
+                },
+                "metrics": {
+                    "input_sequence_length": {"value": int(row["input_tokens"])},
+                    "output_sequence_length": {"value": int(row["output_tokens_actual"])},
+                },
+            })
+    return records
+
+
 def analyze(records: list[dict], output_dir: Path) -> None:
     """Run distribution analysis and save results."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -369,7 +399,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Analyze benchmark workload distributions"
     )
-    parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ directory")
+    parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ or trace_replay/ directory")
     parser.add_argument(
         "-o", "--output", default=None, help="Output directory (default: same as artifacts_dir)"
     )
@@ -378,8 +408,20 @@ def main() -> None:
     artifacts_dir = Path(args.artifacts_dir)
     output_dir = Path(args.output) if args.output else artifacts_dir
 
-    records = load_records(artifacts_dir)
-    print(f"Loaded {len(records):,} records from {artifacts_dir}")
+    # Auto-detect format
+    trace_replay_csv = artifacts_dir / "detailed_results.csv"
+    aiperf_jsonl = artifacts_dir / "profile_export.jsonl"
+
+    if trace_replay_csv.exists():
+        records = load_trace_replay_records(artifacts_dir)
+        print(f"Loaded {len(records):,} records from {artifacts_dir} (trace replay)")
+    elif aiperf_jsonl.exists():
+        records = load_records(artifacts_dir)
+        print(f"Loaded {len(records):,} records from {artifacts_dir} (AIPerf)")
+    else:
+        print(f"No recognized data files in {artifacts_dir}")
+        return
+
     analyze(records, output_dir)
 
 
