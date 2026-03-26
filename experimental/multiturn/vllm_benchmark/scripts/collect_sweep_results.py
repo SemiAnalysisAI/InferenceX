@@ -92,6 +92,29 @@ def _load_aiperf_jsonl(jsonl_path: Path) -> pd.DataFrame | None:
     return pd.DataFrame(records)
 
 
+def _load_trace_replay_csv(csv_path: Path) -> pd.DataFrame | None:
+    """Load per-request metrics from trace_replay detailed_results.csv."""
+    df = pd.read_csv(csv_path)
+    if len(df) == 0:
+        return None
+
+    # Filter to successful requests only
+    df = df[df["success"] == True].copy()
+    if len(df) == 0:
+        return None
+
+    # Convert to the same schema as _load_aiperf_jsonl
+    latency_s = df["request_complete_time"] - df["request_start_time"]
+    return pd.DataFrame({
+        "start_time_ms": df["request_start_time"] * 1000,
+        "ttft_ms": df["ttft"] * 1000,
+        "tpot_ms": df["itl"] * 1000,
+        "latency_ms": latency_s * 1000,
+        "input_num_tokens": df["input_tokens"],
+        "output_num_tokens": df["output_tokens_actual"],
+    })
+
+
 def load_experiment(exp_dir: Path) -> dict | None:
     """Load metrics from a single experiment artifact directory."""
     client_csv = exp_dir / "metrics_client_metrics.csv"
@@ -112,7 +135,10 @@ def load_experiment(exp_dir: Path) -> dict | None:
         if candidates:
             aiperf_jsonl = candidates[0]
 
-    if not client_csv.exists() and aiperf_jsonl is None:
+    # Check for trace replay output
+    trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
+
+    if not client_csv.exists() and aiperf_jsonl is None and not trace_replay_csv.exists():
         return None
 
     # Parse experiment name from directory: multiturn_tp{N}_users{M}_offload{mode}
@@ -142,11 +168,13 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: custom client CSV or aiperf JSONL
+        # Determine data source: custom client CSV, aiperf JSONL, or trace replay CSV
         if client_csv.exists():
             df = _load_custom_client_csv(client_csv, exp_dir)
         elif aiperf_jsonl is not None:
             df = _load_aiperf_jsonl(aiperf_jsonl)
+        elif trace_replay_csv.exists():
+            df = _load_trace_replay_csv(trace_replay_csv)
         else:
             return result
 
