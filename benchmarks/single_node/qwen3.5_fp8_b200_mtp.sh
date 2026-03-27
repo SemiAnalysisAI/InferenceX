@@ -21,32 +21,30 @@ nvidia-smi
 hf download "$MODEL"
 
 export NCCL_NVLS_ENABLE=1
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
+export SGLANG_ENABLE_JIT_DEEPGEMM=false
 export PYTHONUNBUFFERED=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
+# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
   SCHEDULER_RECV_INTERVAL=30
 else
   SCHEDULER_RECV_INTERVAL=10
 fi
 
-MEM_FRAC_STATIC=0.82
+MEM_FRAC_STATIC=0.8
 CHUNKED_PREFILL_SIZE=32768
 MAX_PREFILL_TOKENS=32768
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
-MAX_RUNNING_REQUESTS=128
+MAX_RUNNING_REQUESTS=$CONC
 CONTEXT_LENGTH=$((ISL + OSL + 20))
 
-if [[ $TP -eq 8 ]]; then
-  EXTRA_ARGS="--enable-flashinfer-allreduce-fusion"
-else
-  EXTRA_ARGS=""
-fi
+# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
+SPECULATIVE_NUM_STEPS=3
+SPECULATIVE_DRAFT_TOKENS=4
+SPECULATIVE_EAGLE_TOPK=1
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
@@ -57,14 +55,16 @@ set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
---quantization fp8 --kv-cache-dtype fp8_e4m3 \
---mamba-ssm-dtype bfloat16 \
+--quantization fp8 --kv-cache-dtype fp8_e4m3 --mamba-ssm-dtype bfloat16 \
 --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
+--fp8-gemm-backend=flashinfer_trtllm \
 --attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
-$EXTRA_ARGS --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---tokenizer-worker-num 6 --stream-interval 30 > $SERVER_LOG 2>&1 &
+--enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+--tokenizer-worker-num 6 --stream-interval 30 \
+--speculative-algorithm EAGLE --speculative-num-steps $SPECULATIVE_NUM_STEPS --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -83,7 +83,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

@@ -20,35 +20,15 @@ nvidia-smi
 
 hf download "$MODEL"
 
-export NCCL_NVLS_ENABLE=1
-export SGL_ENABLE_JIT_DEEPGEMM=false
-export SGLANG_ENABLE_FLASHINFER_GEMM=true
-export PYTHONUNBUFFERED=1
+pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
+
+export SGL_ENABLE_JIT_DEEPGEMM=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
-if [[ $CONC -ge 16 ]]; then
-  SCHEDULER_RECV_INTERVAL=30
-else
-  SCHEDULER_RECV_INTERVAL=10
-fi
 
-MEM_FRAC_STATIC=0.82
-CHUNKED_PREFILL_SIZE=32768
-MAX_PREFILL_TOKENS=32768
-CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
-MAX_RUNNING_REQUESTS=128
-CONTEXT_LENGTH=$((ISL + OSL + 20))
-
-if [[ $TP -eq 8 ]]; then
-  EXTRA_ARGS="--enable-flashinfer-allreduce-fusion"
-else
-  EXTRA_ARGS=""
-fi
-
-echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -56,15 +36,20 @@ start_gpu_monitor
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
---quantization fp8 --kv-cache-dtype fp8_e4m3 \
---mamba-ssm-dtype bfloat16 \
---cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
---mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
---context-length $CONTEXT_LENGTH --disable-radix-cache \
---attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
-$EXTRA_ARGS --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---tokenizer-worker-num 6 --stream-interval 30 > $SERVER_LOG 2>&1 &
+--tensor-parallel-size=$TP \
+--data-parallel-size 1 --expert-parallel-size 1 \
+--tool-call-parser glm47 \
+--reasoning-parser glm45 \
+--kv-cache-dtype fp8_e4m3 --quantization fp8 \
+--attention-backend nsa \
+--nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
+--moe-runner-backend flashinfer_trtllm \
+--cuda-graph-max-bs $CONC --max-running-requests $CONC \
+--mem-fraction-static 0.85 \
+--chunked-prefill-size 32768 --max-prefill-tokens 32768 \
+--enable-flashinfer-allreduce-fusion --disable-radix-cache \
+--stream-interval 30 \
+--model-loader-extra-config '{"enable_multithread_load": true}' > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

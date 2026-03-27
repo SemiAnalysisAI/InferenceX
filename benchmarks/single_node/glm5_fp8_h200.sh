@@ -8,7 +8,6 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -16,12 +15,9 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
-
 nvidia-smi
 
-export PYTHONNOUSERSITE=1
-export VLLM_USE_FLASHINFER_MOE_INT4=1
+hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -30,24 +26,22 @@ PORT=${PORT:-8888}
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---gpu-memory-utilization 0.95 \
---tensor-parallel-size $TP \
---max-model-len $MAX_MODEL_LEN \
---max-num-seqs $CONC \
---reasoning-parser kimi_k2 \
---tool-call-parser kimi_k2 \
---compilation_config.pass_config.fuse_allreduce_rms true \
---trust-remote-code \
---disable-log-requests \
---no-enable-prefix-caching > $SERVER_LOG 2>&1 &
+python3 -m sglang.launch_server \
+  --model-path "$MODEL" \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --tp-size "$TP" \
+  --tool-call-parser glm47 \
+  --reasoning-parser glm45 \
+  --mem-fraction-static 0.85 \
+  --served-model-name glm-5-fp8 \
+  --trust-remote-code \
+  > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -63,7 +57,9 @@ run_benchmark_serving \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
+# Server accepts glm-5-fp8 (--served-model-name); lm-eval must use that model name
 if [ "${RUN_EVAL}" = "true" ]; then
+    export MODEL_NAME=glm-5-fp8
     run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
     append_lm_eval_summary
 fi

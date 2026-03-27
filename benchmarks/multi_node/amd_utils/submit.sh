@@ -138,6 +138,7 @@ fi
 sbatch_cmd=(
     sbatch
     --parsable
+    --exclusive
     -N "$NUM_NODES"
     -n "$NUM_NODES"
     "${NODELIST_OPT[@]}"

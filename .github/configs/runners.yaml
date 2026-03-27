@@ -66,11 +66,6 @@ b200-multinode:
 - 'b200-dgxc-slurm_7'
 - 'b200-dgxc-slurm_8'
 mi300x:
-- 'mi300x-amd_0'
-- 'mi300x-amd_1'
-- 'mi300x-amd_2'
-- 'mi300x-amd_3'
-- 'mi300x-amd_4'
 - 'mi300x-amds_0'
 - 'mi300x-amds_1'
 - 'mi300x-amds_2'
