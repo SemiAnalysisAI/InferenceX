@@ -1108,3 +1108,12 @@
   description:
     - "Update vLLM image from v0.15.1 to v0.18.0 for gptoss H100 and H200 configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/960
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-atom
+    - glm5-fp8-mi355x-atom
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "New model support on ATOM framework"
+    - "Kimi-K2.5 FP4, GLM-5 FP8, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/954
