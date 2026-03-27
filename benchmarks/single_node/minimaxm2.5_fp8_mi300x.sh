@@ -38,6 +38,7 @@ vllm serve $MODEL --port $PORT \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
 --disable-log-requests \
+--no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
