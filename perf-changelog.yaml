@@ -1,4 +1,11 @@
 - config-keys:
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.15.1 to v0.18.0 for gptoss H100 and H200 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - dsr1-fp8-b200-dynamo-trt
     - dsr1-fp8-h200-dynamo-trt
     - dsr1-fp4-gb200-dynamo-trt

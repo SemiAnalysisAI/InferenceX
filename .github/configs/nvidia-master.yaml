@@ -3222,7 +3222,7 @@ minimaxm2.5-fp8-b200-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.15.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -3501,7 +3501,7 @@ gptoss-fp4-h200-trt:
     - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.15.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
