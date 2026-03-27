@@ -449,6 +449,7 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
     LlamaTokenizerFast but actually use a ByteLevel/Sequence tokenizer
     architecture, v5 incorrectly replaces the original Sequence pre_tokenizer
     with Metaspace, and the original ByteLevel decoder with Sequence.
+    See: https://github.com/sgl-project/sglang/blob/9238bd08a2895fa3b7ec79ea567e5c27ac951343/python/sglang/srt/utils/hf_transformers_utils.py#L836
 
     The sglang server applies fixes for this in hf_transformers_utils.py
     (_fix_v5_tokenizer_components and _fix_v5_add_bos_eos_token), but the
