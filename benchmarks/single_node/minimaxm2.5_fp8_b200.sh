@@ -24,7 +24,7 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export VLLM_MOE_USE_DEEP_GEMM=0
+export VLLM_USE_DEEP_GEMM=0
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl
 
 if [ "$EP_SIZE" -ge 1 ]; then
