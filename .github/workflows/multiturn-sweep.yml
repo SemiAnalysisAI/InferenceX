@@ -142,9 +142,13 @@ jobs:
                   tp = int(key.replace("tp", ""))
                   users = settings.get("users", [])
                   offloads = settings.get("offload", ["on", "off"])
+                  ep = settings.get("ep", 0)
                   for u in users:
                       for o in offloads:
-                          includes.append({"tp": tp, "users": u, "offload": o})
+                          entry = {"tp": tp, "users": u, "offload": o}
+                          if ep > 0:
+                              entry["ep"] = ep
+                          includes.append(entry)
           else:
               tp_values = json.loads('${{ inputs.tp_values }}')
               user_values = json.loads('${{ inputs.user_values }}')
@@ -185,7 +189,7 @@ jobs:
       request-rate: ${{ inputs.request_rate }}
       total-cpu-dram-gb: ${{ inputs.total_cpu_dram_gb }}
       script-suffix: ${{ inputs.script_suffix }}
-      ep: ${{ inputs.ep }}
+      ep: "${{ matrix.ep || inputs.ep }}"
       ref: ${{ inputs.ref }}
 
   # ---------------------------------------------------------------------------

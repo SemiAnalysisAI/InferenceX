@@ -11,8 +11,10 @@ h200-fp8-llama70b:
 
 b200-fp4-dsr1:
   tp4:
-    users: [2, 4, 8, 16, 24, 32, 48, 64]
+    ep: 4
+    users: [2, 4, 8, 12, 16, 24, 32, 48, 64]
     offload: ["on", "off"]
   tp8:
-    users: [4, 8, 16, 32, 48, 64, 80, 96]
+    ep: 8
+    users: [32, 48, 64, 80, 96]
     offload: ["on", "off"]
