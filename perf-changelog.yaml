@@ -1,4 +1,11 @@
 - config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update vLLM image from v0.16.0 to v0.18.0 for minimax h100 and h200 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - dsr1-fp8-b200-dynamo-trt
     - dsr1-fp8-h200-dynamo-trt
     - dsr1-fp4-gb200-dynamo-trt
@@ -1015,7 +1022,7 @@
     - "Config concurrency: 32-256"
     - "update image to vllm/vllm-openai-rocm:v0.18.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
-
+    
 - config-keys:
     - gptoss-fp4-mi325x-vllm
     - minimaxm2.5-fp8-mi325x-vllm
@@ -1067,6 +1074,13 @@
     - "dsr1-fp8-b200-sglang-mtp: v0.5.8-cu130-amd64 → v0.5.9-cu130"
     - "dsr1-fp8-h200-sglang: v0.5.9-cu129-amd64 → v0.5.9-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/943
+  
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
+    - "Replace TP4 with TP8/EP8, add conc range 4-256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/953
 
 - config-keys:
     - kimik2.5-fp4-mi355x-vllm
@@ -1087,8 +1101,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/950
 
 - config-keys:
-    - minimaxm2.5-fp8-mi325x-vllm
+    - kimik2.5-int4-mi325x-vllm
   description:
     - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
-    - "Replace TP4 with TP8/EP8, add conc range 4-256"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/953
+    - "Enable AITER MLA, export VLLM_ROCM_USE_AITER=1, https://github.com/vllm-project/vllm/issues/35641"
+    - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
+    - "Add --max-num-seqs 256, remove --disable-log-requests"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/957
+
+- config-keys:
+    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.15.1 to v0.18.0 for gptoss H100 and H200 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/960
