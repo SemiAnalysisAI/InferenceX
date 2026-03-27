@@ -1116,4 +1116,4 @@
   description:
     - "New model support on ATOM framework"
     - "Kimi-K2.5 FP4, GLM-5 FP8, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/954
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
