@@ -1092,4 +1092,4 @@
   description:
     - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
     - "Replace TP4 with TP8/EP8, add conc range 4-256"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/953
