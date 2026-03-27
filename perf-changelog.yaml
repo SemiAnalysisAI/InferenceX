@@ -1022,7 +1022,7 @@
     - "Config concurrency: 32-256"
     - "update image to vllm/vllm-openai-rocm:v0.18.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/927
-    
+
 - config-keys:
     - gptoss-fp4-mi325x-vllm
     - minimaxm2.5-fp8-mi325x-vllm
