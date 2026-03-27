@@ -36,6 +36,8 @@ def load_trace_replay_records(trace_replay_dir: Path) -> list[dict]:
     function can process both formats identically.
     """
     import csv
+    import sys
+    csv.field_size_limit(sys.maxsize)
 
     csv_path = trace_replay_dir / "detailed_results.csv"
     records = []
@@ -208,7 +210,7 @@ def _generate_plots(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(4, 3, figsize=(18, 20))
+    fig, axes = plt.subplots(3, 3, figsize=(18, 15))
     fig.suptitle("Benchmark Workload Distribution Analysis", fontsize=14)
 
     # (0,0) Turn count distribution
@@ -232,83 +234,8 @@ def _generate_plots(
     ax.set_title(f"Turn Count Distribution (n={total:,})")
     ax.grid(True, alpha=0.3, axis="y")
 
-    # (0,1) Turn 0 ISL histogram
+    # (0,1) All requests ISL histogram
     ax = axes[0, 1]
-    t0_isl = [t["isl"] for v in convos.values() for t in v if t["turn"] == 0]
-    clip = min(3000, int(sorted(t0_isl)[int(len(t0_isl) * 0.99)] * 1.2))
-    ax.hist([v for v in t0_isl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="steelblue")
-    ax.axvline(sorted(t0_isl)[len(t0_isl) // 2], color="red", linestyle="--", label=f"Median: {sorted(t0_isl)[len(t0_isl)//2]:,}")
-    ax.set_xlabel("Input Sequence Length")
-    ax.set_ylabel("Count")
-    ax.set_title("Turn 0 ISL Distribution")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # (0,2) Turn 1+ ISL histogram
-    ax = axes[0, 2]
-    later_isl = [t["isl"] for v in convos.values() for t in v if t["turn"] > 0]
-    if later_isl:
-        clip = min(5000, int(sorted(later_isl)[int(len(later_isl) * 0.99)] * 1.2))
-        ax.hist([v for v in later_isl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="steelblue")
-        ax.axvline(sorted(later_isl)[len(later_isl) // 2], color="red", linestyle="--", label=f"Median: {sorted(later_isl)[len(later_isl)//2]:,}")
-        ax.legend(fontsize=8)
-    ax.set_xlabel("Input Sequence Length")
-    ax.set_ylabel("Count")
-    ax.set_title("Turn 1+ ISL Distribution (cumulative context)")
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # (1,0) Turn 0 OSL histogram
-    ax = axes[1, 0]
-    t0_osl = [t["osl"] for v in convos.values() for t in v if t["turn"] == 0]
-    clip = min(3000, int(sorted(t0_osl)[int(len(t0_osl) * 0.99)] * 1.2))
-    ax.hist([v for v in t0_osl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="coral")
-    ax.axvline(sorted(t0_osl)[len(t0_osl) // 2], color="red", linestyle="--", label=f"Median: {sorted(t0_osl)[len(t0_osl)//2]:,}")
-    ax.set_xlabel("Output Sequence Length")
-    ax.set_ylabel("Count")
-    ax.set_title("Turn 0 OSL Distribution")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # (1,1) Turn 1+ OSL histogram
-    ax = axes[1, 1]
-    later_osl = [t["osl"] for v in convos.values() for t in v if t["turn"] > 0]
-    if later_osl:
-        clip = min(3000, int(sorted(later_osl)[int(len(later_osl) * 0.99)] * 1.2))
-        ax.hist([v for v in later_osl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="coral")
-        ax.axvline(sorted(later_osl)[len(later_osl) // 2], color="red", linestyle="--", label=f"Median: {sorted(later_osl)[len(later_osl)//2]:,}")
-        ax.legend(fontsize=8)
-    ax.set_xlabel("Output Sequence Length")
-    ax.set_ylabel("Count")
-    ax.set_title("Turn 1+ OSL Distribution")
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # (1,2) ISL growth by turn number (mean + std)
-    ax = axes[1, 2]
-    max_turn = max(t["turn"] for v in convos.values() for t in v)
-    turn_range = range(min(max_turn + 1, 8))
-    means, stds, ns = [], [], []
-    for ti in turn_range:
-        vals = [t["isl"] for v in convos.values() for t in v if t["turn"] == ti]
-        if vals:
-            m = sum(vals) / len(vals)
-            means.append(m)
-            stds.append(math.sqrt(sum((v - m) ** 2 for v in vals) / len(vals)))
-            ns.append(len(vals))
-        else:
-            means.append(0)
-            stds.append(0)
-            ns.append(0)
-    ax.bar(list(turn_range), means, yerr=stds, capsize=3, edgecolor="black", alpha=0.7, color="mediumseagreen")
-    for i, (m, n) in enumerate(zip(means, ns)):
-        if n > 0:
-            ax.text(i, m, f"n={n:,}", ha="center", va="bottom", fontsize=7)
-    ax.set_xlabel("Turn Number")
-    ax.set_ylabel("Mean ISL (tokens)")
-    ax.set_title("ISL Growth by Turn (context accumulation)")
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # (2,0) All requests ISL histogram
-    ax = axes[2, 0]
     all_isl = [t["isl"] for v in convos.values() for t in v]
     clip = int(sorted(all_isl)[int(len(all_isl) * 0.99)] * 1.2)
     ax.hist([v for v in all_isl if v <= clip], bins=80, edgecolor="black", alpha=0.7, color="steelblue")
@@ -323,8 +250,8 @@ def _generate_plots(
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3, axis="y")
 
-    # (2,1) All requests OSL histogram
-    ax = axes[2, 1]
+    # (0,2) All requests OSL histogram
+    ax = axes[0, 2]
     all_osl = [t["osl"] for v in convos.values() for t in v]
     clip = min(3000, int(sorted(all_osl)[int(len(all_osl) * 0.99)] * 1.2))
     ax.hist([v for v in all_osl if v <= clip], bins=80, edgecolor="black", alpha=0.7, color="coral")
@@ -339,16 +266,61 @@ def _generate_plots(
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3, axis="y")
 
-    # (2,2) ISL vs OSL scatter
-    ax = axes[2, 2]
+    # (1,0) Average new prefill tokens by turn index (ISL delta per turn)
+    ax = axes[1, 0]
+    # Collect deltas grouped by turn index
+    deltas_by_turn: dict[int, list[int]] = defaultdict(list)
+    for v in convos.values():
+        for i, t in enumerate(v):
+            if i == 0:
+                deltas_by_turn[t["turn"]].append(t["isl"])
+            else:
+                deltas_by_turn[t["turn"]].append(max(0, t["isl"] - v[i - 1]["isl"]))
+    if deltas_by_turn:
+        turn_indices = sorted(deltas_by_turn.keys())
+        means = [sum(deltas_by_turn[ti]) / len(deltas_by_turn[ti]) for ti in turn_indices]
+        ns = [len(deltas_by_turn[ti]) for ti in turn_indices]
+        ax.plot(turn_indices, means, marker="o", markersize=3, linewidth=1, color="mediumseagreen")
+        ax.fill_between(turn_indices, 0, means, alpha=0.2, color="mediumseagreen")
+        # Label first and last points
+        if len(turn_indices) > 0:
+            ax.annotate(f"{means[0]:,.0f}", (turn_indices[0], means[0]), fontsize=7, ha="left", va="bottom")
+        if len(turn_indices) > 1:
+            ax.annotate(f"{means[-1]:,.0f}\n(n={ns[-1]})", (turn_indices[-1], means[-1]), fontsize=7, ha="right", va="bottom")
+    # Overall mean/median across all deltas
+    all_deltas = [d for dlist in deltas_by_turn.values() for d in dlist]
+    if all_deltas:
+        overall_mean = sum(all_deltas) / len(all_deltas)
+        all_deltas_sorted = sorted(all_deltas)
+        overall_median = all_deltas_sorted[len(all_deltas) // 2]
+        ax.axhline(overall_mean, color="orange", linestyle="--", linewidth=1, label=f"Mean: {overall_mean:,.0f}")
+        ax.axhline(overall_median, color="red", linestyle="--", linewidth=1, label=f"Median: {overall_median:,}")
+        ax.legend(fontsize=7)
+    ax.set_xlabel("Turn Index")
+    ax.set_ylabel("Mean New Prefill Tokens")
+    ax.set_title("Avg New Prefill Tokens by Turn")
+    ax.grid(True, alpha=0.3)
+
+    # (1,1) ISL vs OSL scatter
+    ax = axes[1, 1]
     ax.scatter(all_isl, all_osl, alpha=0.15, s=3, c="purple")
     ax.set_xlabel("ISL (tokens)")
     ax.set_ylabel("OSL (tokens)")
     ax.set_title("ISL vs OSL (all requests)")
     ax.grid(True, alpha=0.3)
 
-    # (3,0) Per-conversation max ISL (final context size per conversation)
-    ax = axes[3, 0]
+    # (1,2) Per-conversation max ISL vs num turns scatter
+    ax = axes[1, 2]
+    conv_turns = [len(v) for v in convos.values()]
+    conv_max_isl_list = [max(t["isl"] for t in v) for v in convos.values()]
+    ax.scatter(conv_turns, conv_max_isl_list, alpha=0.3, s=8, c="steelblue")
+    ax.set_xlabel("Number of Turns")
+    ax.set_ylabel("Max ISL (tokens)")
+    ax.set_title("Final Context Size vs Turn Count")
+    ax.grid(True, alpha=0.3)
+
+    # (2,0) Per-conversation max ISL (final context size per conversation)
+    ax = axes[2, 0]
     conv_max_isl = [max(t["isl"] for t in v) for v in convos.values()]
     clip = int(sorted(conv_max_isl)[int(len(conv_max_isl) * 0.99)] * 1.2)
     ax.hist([v for v in conv_max_isl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="steelblue")
@@ -364,7 +336,7 @@ def _generate_plots(
     ax.grid(True, alpha=0.3, axis="y")
 
     # (3,1) Per-conversation total OSL (sum of all output tokens across turns)
-    ax = axes[3, 1]
+    ax = axes[2, 1]
     conv_total_osl = [sum(t["osl"] for t in v) for v in convos.values()]
     clip = int(sorted(conv_total_osl)[int(len(conv_total_osl) * 0.99)] * 1.2)
     ax.hist([v for v in conv_total_osl if v <= clip], bins=60, edgecolor="black", alpha=0.7, color="coral")
@@ -379,14 +351,8 @@ def _generate_plots(
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3, axis="y")
 
-    # (3,2) Per-conversation max ISL vs num turns scatter
-    ax = axes[3, 2]
-    conv_turns = [len(v) for v in convos.values()]
-    ax.scatter(conv_turns, conv_max_isl, alpha=0.3, s=8, c="steelblue")
-    ax.set_xlabel("Number of Turns")
-    ax.set_ylabel("Max ISL (tokens)")
-    ax.set_title("Final Context Size vs Turn Count")
-    ax.grid(True, alpha=0.3)
+    # (2,2) is empty — already placed scatter at (1,2)
+    axes[2, 2].axis("off")
 
     plt.tight_layout()
     out = output_dir / "workload_distribution_plots.png"
