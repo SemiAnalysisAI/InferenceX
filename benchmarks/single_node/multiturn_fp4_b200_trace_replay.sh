@@ -115,8 +115,8 @@ VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 # VLLM_CMD+=" --max-num-seqs $max_seqs"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
-if [ "${EP_SIZE:-0}" -gt 0 ]; then
-    VLLM_CMD+=" --expert-parallel-size $EP_SIZE"
+if [ "${EP_SIZE:-0}" -gt 1 ]; then
+    VLLM_CMD+=" --enable-expert-parallel"
 fi
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
