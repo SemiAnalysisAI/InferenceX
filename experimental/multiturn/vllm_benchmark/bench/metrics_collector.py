@@ -434,6 +434,15 @@ class MetricsCollector:
             else:
                 decode_throughputs.append(0)
                 total_throughputs.append(0)
+        # Cumulative running average total throughput (total tokens / elapsed time)
+        cumulative_total_avg = []
+        t0 = self.snapshots[0].timestamp
+        tokens0 = self.snapshots[0].generation_tokens + self.snapshots[0].prompt_tokens
+        for i in range(1, len(self.snapshots)):
+            elapsed = self.snapshots[i].timestamp - t0
+            total_tokens = (self.snapshots[i].generation_tokens + self.snapshots[i].prompt_tokens) - tokens0
+            cumulative_total_avg.append(total_tokens / elapsed if elapsed > 0 else 0)
+
         window = min(30, len(decode_throughputs) // 10) if len(decode_throughputs) > 10 else 1
         if window > 1:
             rolling_decode = [
@@ -451,6 +460,8 @@ class MetricsCollector:
             ax.plot(times[1:], total_throughputs, 'steelblue', linewidth=1, alpha=0.8, label='Total')
             ax.plot(times[1:], decode_throughputs, 'orange', linewidth=1, alpha=0.8, label='Decode')
             ax.legend(fontsize=8)
+        ax.plot(times[1:], cumulative_total_avg, 'red', linewidth=2, label='Total Running Avg')
+        ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Tokens/sec")
         ax.set_title("Throughput (Total & Decode)")
