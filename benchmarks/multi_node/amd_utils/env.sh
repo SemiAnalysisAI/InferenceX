@@ -122,7 +122,5 @@ fi
 # FIXME: WA for latest upstream 0305 image
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
-export SGLANG_ENABLE_SPEC_V2=1
-export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
 
 set +x
