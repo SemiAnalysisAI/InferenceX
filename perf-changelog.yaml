@@ -1069,6 +1069,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/943
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
+    - "Enable AITER with INT4 quick reduce; disable AITER RMSNorm for TP < 8 (accuracy)"
+    - "Add expert parallel, TP4, and TP4/EP4 search spaces"
+    - "Switch block-size 64 to 1 gpu-memory-utilization 0.95 to 0.90"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/936
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.15.1 to v0.18.0"
+    - "Enable AITER MLA, export VLLM_ROCM_USE_AITER=1, https://github.com/vllm-project/vllm/issues/35641"
+    - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
+    - "Add --max-num-seqs 256, remove --disable-log-requests"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/950
+
+- config-keys:
     # NVIDIA single-node
     - dsr1-fp4-b200-sglang
     - dsr1-fp4-b200-trt
