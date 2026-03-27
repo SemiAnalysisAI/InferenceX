@@ -94,19 +94,24 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 # ---- Generate vLLM config --------------------------------------------------
+# cat > "$RESULT_DIR/config.yaml" << 'EOF'
+# kv-cache-dtype: fp8
+# async-scheduling: true
+# max-num-batched-tokens: 8192
+# EOF
+
 cat > "$RESULT_DIR/config.yaml" << 'EOF'
 kv-cache-dtype: fp8
 async-scheduling: true
-max-num-batched-tokens: 8192
 EOF
 
 # ---- Build vLLM command -----------------------------------------------------
 offload_size=$TOTAL_CPU_DRAM_GB
-max_seqs=$USERS
+# max_seqs=$USERS
 
 VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
 VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
-VLLM_CMD+=" --max-num-seqs $max_seqs"
+# VLLM_CMD+=" --max-num-seqs $max_seqs"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
 
