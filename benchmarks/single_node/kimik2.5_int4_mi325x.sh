@@ -33,13 +33,14 @@ PORT=${PORT:-8888}
 start_gpu_monitor
 
 set -x
+export VLLM_ROCM_USE_AITER=1
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=64 \
---disable-log-requests \
 --trust-remote-code \
+--max-num-seqs 256 \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
