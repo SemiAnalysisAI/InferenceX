@@ -294,7 +294,7 @@ glm5-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.15.1
+  image: vllm/vllm-openai-rocm:v0.18.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x
