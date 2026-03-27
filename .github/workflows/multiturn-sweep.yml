@@ -20,14 +20,19 @@ on:
         default: '[1, 2, 4, 8]'
         type: string
       user_values:
-        description: 'Concurrent user counts (JSON array)'
-        required: true
+        description: 'Concurrent user counts (JSON array). Ignored if config_file is set.'
+        required: false
         default: '[8, 16, 32, 64, 128, 256, 512, 1024, 2048]'
         type: string
       offload_values:
-        description: 'Offload modes (JSON array: on/off/noprefix)'
-        required: true
+        description: 'Offload modes (JSON array: on/off/noprefix). Ignored if config_file is set.'
+        required: false
         default: '["on", "off", "noprefix"]'
+        type: string
+      config_file:
+        description: 'YAML config with per-TP sweep settings (e.g. .github/configs/multiturn-agentic-trace.yaml). Overrides tp/user/offload values.'
+        required: false
+        default: ''
         type: string
       duration:
         description: 'Benchmark duration in seconds (optional, runs to completion if omitted)'
@@ -76,17 +81,68 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Generate matrix from config file or CLI inputs
+  # ---------------------------------------------------------------------------
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ inputs.config_file != '' }}
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.ref }}
+          sparse-checkout: ${{ inputs.config_file }}
+
+      - id: gen
+        run: |
+          pip install -q pyyaml
+          python3 << 'PYEOF'
+          import json, os, sys
+
+          config_file = "${{ inputs.config_file }}".strip()
+
+          if config_file:
+              import yaml
+              with open(config_file) as f:
+                  config = yaml.safe_load(f)
+
+              includes = []
+              for key, settings in config.items():
+                  tp = int(key.replace("tp", ""))
+                  users = settings.get("users", [])
+                  offloads = settings.get("offload", ["on", "off"])
+                  for u in users:
+                      for o in offloads:
+                          includes.append({"tp": tp, "users": u, "offload": o})
+          else:
+              tp_values = json.loads('${{ inputs.tp_values }}')
+              user_values = json.loads('${{ inputs.user_values }}')
+              offload_values = json.loads('${{ inputs.offload_values }}')
+              includes = []
+              for tp in tp_values:
+                  for u in user_values:
+                      for o in offload_values:
+                          includes.append({"tp": tp, "users": u, "offload": o})
+
+          matrix = {"include": includes}
+          print(f"Generated {len(includes)} matrix entries")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          PYEOF
+
+  # ---------------------------------------------------------------------------
   # Matrix benchmark jobs — each cell calls the multiturn template
   # ---------------------------------------------------------------------------
   sweep:
+    needs: generate-matrix
     uses: ./.github/workflows/benchmark-multiturn-tmpl.yml
     name: sweep /
     strategy:
       fail-fast: false
-      matrix:
-        tp: ${{ fromJson(inputs.tp_values) }}
-        users: ${{ fromJson(inputs.user_values) }}
-        offload: ${{ fromJson(inputs.offload_values) }}
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     secrets: inherit
     with:
       runner: ${{ inputs.runner }}
