@@ -1085,3 +1085,11 @@
     - "Triton Fused Moe Tuning https://github.com/vllm-project/vllm/pull/35093"
     - "Add --max-num-seqs 256, remove --disable-log-requests"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/950
+
+- config-keys:
+    - minimaxm2.5-fp8-mi300x-vllm
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
+    - "Replace TP4 with TP8/EP8, add conc range 4-256"
+  pr-link: TBD
