@@ -29,6 +29,12 @@ export VLLM_ROCM_USE_AITER=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
