@@ -115,6 +115,9 @@ VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 # VLLM_CMD+=" --max-num-seqs $max_seqs"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
+if [ "${EP_SIZE:-0}" -gt 0 ]; then
+    VLLM_CMD+=" --expert-parallel-size $EP_SIZE"
+fi
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
     VLLM_CMD+=" --kv_offloading_backend native"

@@ -46,6 +46,11 @@ on:
         required: false
         type: string
         default: ''
+      ep:
+        description: "Expert parallelism size (for MoE models)"
+        required: false
+        type: string
+        default: '0'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -60,6 +65,7 @@ env:
   PRECISION: ${{ inputs.precision }}
   FRAMEWORK: 'vllm'
   TP: ${{ inputs.tp }}
+  EP_SIZE: ${{ inputs.ep }}
   USERS: ${{ inputs.users }}
   OFFLOAD_MODE: ${{ inputs.offload-mode }}
   DURATION: ${{ inputs.duration }}

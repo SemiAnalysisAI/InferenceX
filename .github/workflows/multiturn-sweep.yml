@@ -79,6 +79,11 @@ on:
         required: false
         default: 'b200'
         type: string
+      ep:
+        description: 'Expert parallelism size (for MoE models, default 0 = disabled)'
+        required: false
+        default: '0'
+        type: string
       ref:
         description: 'Git ref (branch/sha) to checkout'
         required: false
@@ -180,6 +185,7 @@ jobs:
       request-rate: ${{ inputs.request_rate }}
       total-cpu-dram-gb: ${{ inputs.total_cpu_dram_gb }}
       script-suffix: ${{ inputs.script_suffix }}
+      ep: ${{ inputs.ep }}
       ref: ${{ inputs.ref }}
 
   # ---------------------------------------------------------------------------
