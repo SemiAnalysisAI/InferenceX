@@ -37,8 +37,7 @@ vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --config config.yaml \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
---max-num-seqs=$CONC  \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--max-num-seqs=$CONC > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
