@@ -1,9 +1,18 @@
-tp2:
-  users: [2, 4, 6, 8, 10, 12, 16, 20, 24, 32]
-  offload: ["on", "off"]
-tp4:
-  users: [4, 8, 16, 24, 32, 40, 48, 56]
-  offload: ["on", "off"]
-tp8:
-  users: [2, 4, 6, 8, 16, 32, 48, 64, 80]
-  offload: ["on", "off"]
+h200-fp8-llama70b:
+  tp2:
+    users: [2, 4, 6, 8, 10, 12, 16, 20, 24, 32]
+    offload: ["on", "off"]
+  tp4:
+    users: [4, 8, 16, 24, 32, 40, 48, 56]
+    offload: ["on", "off"]
+  tp8:
+    users: [2, 4, 6, 8, 16, 32, 48, 64, 80]
+    offload: ["on", "off"]
+
+b200-fp4-dsr1:
+  tp4:
+    users: [2, 4, 8, 16, 24, 32, 48, 64]
+    offload: ["on", "off"]
+  tp8:
+    users: [4, 8, 16, 32, 48, 64, 80, 96]
+    offload: ["on", "off"]

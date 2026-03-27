@@ -34,6 +34,11 @@ on:
         required: false
         default: ''
         type: string
+      config_key:
+        description: 'Top-level key in config_file to use (e.g. h200-fp8-llama70b, b200-fp4-dsr1). Required if config_file has multiple entries.'
+        required: false
+        default: ''
+        type: string
       duration:
         description: 'Benchmark duration in seconds (optional, runs to completion if omitted)'
         required: false
@@ -107,7 +112,25 @@ jobs:
           if config_file:
               import yaml
               with open(config_file) as f:
-                  config = yaml.safe_load(f)
+                  full_config = yaml.safe_load(f)
+
+              config_key = "${{ inputs.config_key }}".strip()
+
+              # If config_key specified, use that section; otherwise auto-detect
+              if config_key and config_key in full_config:
+                  config = full_config[config_key]
+              elif config_key:
+                  print(f"ERROR: config_key '{config_key}' not found. Available: {list(full_config.keys())}")
+                  sys.exit(1)
+              elif len(full_config) == 1:
+                  config = next(iter(full_config.values()))
+              else:
+                  # Check if top-level keys look like tp entries (tp2, tp4, etc.)
+                  if all(k.startswith("tp") for k in full_config):
+                      config = full_config
+                  else:
+                      print(f"ERROR: Multiple entries in config, specify --config_key. Available: {list(full_config.keys())}")
+                      sys.exit(1)
 
               includes = []
               for key, settings in config.items():
