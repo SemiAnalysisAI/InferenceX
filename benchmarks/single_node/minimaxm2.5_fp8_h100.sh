@@ -47,7 +47,7 @@ $EP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs 256 \
---disable-log-requests \
+--no-enable-prefix-caching \
 --trust-remote-code \
 --compilation-config '{"cudagraph_mode":"PIECEWISE"}' > $SERVER_LOG 2>&1 &
 
