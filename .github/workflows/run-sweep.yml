@@ -106,18 +106,6 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
 
-    sweep-multi-node-1k8k:
-        needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k8k']) != 'null' }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node 1k8k /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k8k'] }}
-        secrets: inherit
-        with: *multi-node-inputs
-
     sweep-multi-node-8k1k:
         needs: setup
         if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
@@ -158,18 +146,6 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: ${{ matrix.config.run-eval }}
-
-    sweep-single-node-1k8k:
-        needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k8k']) != 'null' }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: single-node 1k8k /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['1k8k'] }}
-        secrets: inherit
-        with: *single-node-inputs
 
     sweep-single-node-8k1k:
         needs: setup
@@ -217,10 +193,8 @@ jobs:
         needs:
             [
                 sweep-single-node-1k1k,
-                sweep-single-node-1k8k,
                 sweep-single-node-8k1k,
                 sweep-multi-node-1k1k,
-                sweep-multi-node-1k8k,
                 sweep-multi-node-8k1k,
                 setup,
             ]

@@ -17,7 +17,6 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "1k8k": (1024, 8192),
     "8k1k": (8192, 1024)
 }
 

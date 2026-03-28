@@ -76,10 +76,6 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     elif [[ $CONC == 128 && $DP_ATTENTION == "false" ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
     fi
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC == 64 ]]; then
-        PIECEWISE_CUDA_GRAPHS="true"
-    fi
 fi
 
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then

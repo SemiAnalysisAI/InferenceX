@@ -89,7 +89,7 @@ jobs:
       - name: Fail if no matching entries
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, seq-lens=${{ inputs.seq-lens }}, conc=${{ inputs.conc }}." >&2
+          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
           exit 1
 
   profile:

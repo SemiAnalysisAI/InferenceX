@@ -140,7 +140,6 @@ When working with benchmark configurations, use these valid values:
 
 **Sequence Lengths (ISL/OSL)**:
 - `1k1k` - 1024 input / 1024 output
-- `1k8k` - 1024 input / 8192 output
 - `8k1k` - 8192 input / 1024 output
 
 ## Code Conventions

@@ -45,10 +45,6 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     if [[ $CONC -le 4 ]]; then
         PIECEWISE_CUDA_GRAPHS="false"
     fi
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC -le 8 ]]; then
-        PIECEWISE_CUDA_GRAPHS="false"
-    fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     if [[ $CONC -le 16 ]]; then
         PIECEWISE_CUDA_GRAPHS="false"
