@@ -76,10 +76,6 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     elif [[ $CONC == 128 && $DP_ATTENTION == "false" ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
     fi
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC == 64 ]]; then
-        PIECEWISE_CUDA_GRAPHS="true"
-    fi
 fi
 
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
@@ -100,6 +96,12 @@ fi  # end of set of configs using piecewise_cuda_graphs
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
+fi
 
 set -x
 # Launch TRT-LLM server
@@ -134,7 +136,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

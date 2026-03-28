@@ -8,6 +8,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
     DP_ATTENTION \
@@ -48,10 +49,19 @@ print_iter_log: true
 stream_interval: 20 
 EOF
 
+MAX_NUM_TOKENS=20000
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
+fi
+
 PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 trtllm-serve $MODEL \
 --max_batch_size $CONC \
---max_num_tokens 20000 \
+--max_num_tokens $MAX_NUM_TOKENS \
+--max_seq_len=$MAX_MODEL_LEN \
 --backend pytorch \
 --extra_llm_api_options gptoss-config.yml \
 --ep_size=$EP_SIZE \
@@ -82,7 +92,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
