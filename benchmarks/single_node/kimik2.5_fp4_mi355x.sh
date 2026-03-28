@@ -70,6 +70,7 @@ $EP \
 --block-size=1 \
 --no-enable-prefix-caching \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

@@ -37,6 +37,7 @@ vllm serve $MODEL --port $PORT \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=64 \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --max-num-seqs 256 \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 

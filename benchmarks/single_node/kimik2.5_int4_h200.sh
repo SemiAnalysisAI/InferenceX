@@ -40,6 +40,7 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --disable-log-requests > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
