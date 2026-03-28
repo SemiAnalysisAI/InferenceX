@@ -206,7 +206,7 @@ jobs:
 
     collect-evals:
         needs: [sweep-evals, setup]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: ${{ always() && needs.setup.result != 'skipped' && needs.sweep-evals.result != 'skipped' }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
