@@ -96,6 +96,8 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
   PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
   PREFILL_TP: ${{ inputs.prefill-tp }}
@@ -142,6 +144,7 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          clean: false
 
       - name: Launch multi-node job script
         env:

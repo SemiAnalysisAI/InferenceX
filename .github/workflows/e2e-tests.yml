@@ -37,6 +37,7 @@ jobs:
         outputs:
             single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
             multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
+            eval-config: ${{ steps.get-jobs.outputs.eval-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -53,10 +54,12 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x]))")
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('run-eval', False)]))")
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x]))")
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('run-eval', False)]))")
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
                   echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
+                  echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
         needs: get-jobs
@@ -123,7 +126,38 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
-            run-eval: ${{ matrix.config.run-eval }}
+            run-eval: false
+            ref: ${{ inputs.ref }}
+
+    test-sweep-evals:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: eval /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+            run-eval: true
+            eval-only: true
             ref: ${{ inputs.ref }}
 
     collect-results:
@@ -135,8 +169,8 @@ jobs:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [test-sweep-multi-node, test-sweep-single-node]
-        if: ${{ always() }}
+        needs: [test-sweep-evals]
+        if: ${{ always() && needs.test-sweep-evals.result != 'skipped' }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 

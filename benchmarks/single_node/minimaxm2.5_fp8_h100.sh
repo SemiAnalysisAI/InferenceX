@@ -26,6 +26,11 @@ export PYTHONNOUSERSITE=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -42,7 +47,7 @@ $EP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs 256 \
---disable-log-requests \
+--no-enable-prefix-caching \
 --trust-remote-code \
 --compilation-config '{"cudagraph_mode":"PIECEWISE"}' > $SERVER_LOG 2>&1 &
 
@@ -66,7 +71,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

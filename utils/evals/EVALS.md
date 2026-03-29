@@ -6,7 +6,7 @@ Quick graded QnA which measures model performance. Examples of test suites:
 - **gpqa**: Graduate level, Google-Proof multiple choice questions
 
 ## When?
-At highest concurrency for highest TP and lowest TP, per GPU per model only for 1k8k. Logic is defined in `mark_eval_entries` of `utils/matrix-logic/generate_sweep_configs.py`
+At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k. In eval-only mode, the server starts with expanded context length. In combined mode (RUN_EVAL=true), evals run against the same server used for throughput benchmarks. Logic is defined in `mark_eval_entries` of `utils/matrix_logic/generate_sweep_configs.py`
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations. 
@@ -15,7 +15,7 @@ To verify how model outputs are affected by throughput optimizations.
 - If there was a tradeoff in accuracy for performance
 
 ## How?
-- `run_eval`, definined in `benchmarks/benchmark_lib.sh`, is called in `benchmarks/*`. EleutherAI/lm-evaluation-harness(lmeval), using the same endpoint as the throughput benchmark. JSON results are processed and converted to a table with `utils/collect_eval_results.py`.
+- `run_eval`, defined in `benchmarks/benchmark_lib.sh`, is called in `benchmarks/*`. It runs EleutherAI/lm-evaluation-harness (lmeval) against the running server's OpenAI-compatible endpoint. In eval-only mode (`EVAL_ONLY=true`), the server is started once with expanded context length (up to 5x benchmark context, capped at model native max). JSON results are processed and converted to a table with `utils/collect_eval_results.py`.
 
 ## Misc
 Following files are task definitions from lmeval, more info on changes within the files
