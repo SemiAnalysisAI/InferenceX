@@ -35,6 +35,8 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   RANDOM_RANGE_RATIO: '0.8'
   PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 jobs:
   get-jobs:
@@ -87,7 +89,7 @@ jobs:
       - name: Fail if no matching entries
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, seq-lens=${{ inputs.seq-lens }}, conc=${{ inputs.conc }}." >&2
+          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
           exit 1
 
   profile:
@@ -153,6 +155,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          clean: false
 
       - name: Launch + Profile (single-node sglang/vllm)
         id: run
