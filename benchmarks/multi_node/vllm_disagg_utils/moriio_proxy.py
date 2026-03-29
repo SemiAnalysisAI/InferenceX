@@ -244,8 +244,8 @@ async def handle_request():
         dip, dport = extract_ip_port_fast(decode_instance_endpoint["request_address"])
 
         req_data_to_prefill = copy.deepcopy(req_data)
-        req_data_to_prefill["kv_transfer_params"] = {}
-        req_data["kv_transfer_params"] = {}
+        req_data_to_prefill["kv_transfer_params"] = {"transfer_id": request_id}
+        req_data["kv_transfer_params"] = {"transfer_id": request_id}
         req_data_to_prefill["kv_transfer_params"]["remote_dp_size"] = (
             decode_instance_endpoint["dp_size"]
         )
@@ -269,6 +269,7 @@ async def handle_request():
         req_data["max_tokens"] -= 1
 
         req_data["kv_transfer_params"] = {
+            "transfer_id": request_id,
             "do_remote_decode": False,
             "do_remote_prefill": True,
             "remote_handshake_port": prefill_instance_endpoint["handshake_port"],

@@ -1055,7 +1055,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.17.1
+  image: vllm/vllm-openai-rocm:v0.18.0
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
