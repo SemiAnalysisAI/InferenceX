@@ -2,7 +2,7 @@
 # =============================================================================
 # setup_deps.sh — Install missing vLLM disagg dependencies at container start.
 #
-# Base image: vllm/vllm-openai-rocm:v0.17.1
+# Base image: vllm/vllm-openai-rocm:v0.18.0
 # Sourced by server.sh so PATH / LD_LIBRARY_PATH exports persist.
 # Idempotent: each component is skipped if already present.
 #
@@ -156,8 +156,11 @@ install_mori_proxy_deps() {
     fi
 
     echo "[SETUP] Installing MoRI-IO proxy Python deps..."
+    # v0.18.0 ships aiohttp, pyzmq, blinker(distutils); only quart and msgpack
+    # are missing.  --ignore-installed blinker avoids pip's distutils uninstall
+    # error when quart pulls a newer blinker version.
     pip install --quiet --ignore-installed blinker
-    pip install --quiet quart aiohttp msgpack pyzmq
+    pip install --quiet quart msgpack
 
     if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
         echo "[SETUP] ERROR: MoRI-IO proxy deps install failed"; exit 1
@@ -169,18 +172,16 @@ install_mori_proxy_deps() {
 # 6. MoRI (Modular RDMA Interface — EP dispatch/combine kernels for MoE)
 #    Required for --all2all-backend mori (Expert Parallelism via RDMA).
 #    GPU kernels are JIT-compiled on first use; no hipcc needed at install.
+#
+#    v0.18.0 ships MoRI 0.1.dev185+g2d02c6a98, but it STILL has the PCI
+#    topology bug (TopoSystemPci::Load assertion failure on Broadcom
+#    PEX890xx switches).  Always rebuild from our target commit b645fc8
+#    which includes the dsp2dev subordinate-range fix.
 # ---------------------------------------------------------------------------
 install_mori() {
     local MORI_TARGET_COMMIT="b645fc8"
     local MORI_MARKER="/usr/local/lib/python3.*/dist-packages/.mori_commit_${MORI_TARGET_COMMIT}"
 
-    # The pre-installed MoRI in vllm base images has a PCI topology bug: it
-    # only maps the secondary bus of each bridge instead of the full
-    # secondary-to-subordinate range (dsp2dev). This causes an assertion
-    # failure in TopoSystemPci::Load() on nodes with deeply-nested PCIe
-    # switch topologies (e.g. Broadcom PEX890xx on MI355X mia1 nodes).
-    # Always rebuild from the target commit unless the marker file proves
-    # the correct version was already installed in this container.
     if ls $MORI_MARKER &>/dev/null; then
         echo "[SETUP] MoRI @ $MORI_TARGET_COMMIT already installed (marker found)"
         return 0
@@ -192,7 +193,7 @@ install_mori() {
         && rm -rf /var/lib/apt/lists/*
 
     echo "[SETUP] Building MoRI from source (ROCm/mori @ $MORI_TARGET_COMMIT)..."
-    echo "[SETUP]   (overriding pre-installed version to fix PCI topology bug)"
+    echo "[SETUP]   (overriding image-provided version to fix PCI topology bug)"
     (
         set -e
         git_clone_retry https://github.com/ROCm/mori.git /opt/mori && cd /opt/mori
@@ -204,14 +205,13 @@ install_mori() {
     if ! python3 -c "import mori" 2>/dev/null; then
         echo "[SETUP] ERROR: MoRI build failed"; exit 1
     fi
-    # Drop a marker so re-entry doesn't rebuild
     touch $(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")/.mori_commit_${MORI_TARGET_COMMIT}
     _SETUP_INSTALLED+=("MoRI@$MORI_TARGET_COMMIT")
 }
 
 # ---------------------------------------------------------------------------
-# 7. Patch vLLM v0.17.1 MoRI-EP + FP8 incompatibility
-#    v0.17.1 asserts MoRI requires AITER fused_moe, but AITER's FP8 kernel
+# 7. Patch vLLM MoRI-EP + FP8 incompatibility (present in v0.17.1 & v0.18.0)
+#    vLLM asserts MoRI requires AITER fused_moe, but AITER's FP8 kernel
 #    uses defer_input_quant=True which MoRI's prepare/finalize rejects.
 #    Patch: remove both the AITER requirement assertion and the
 #    defer_input_quant NotImplementedError so non-AITER kernels work.
@@ -621,10 +621,11 @@ except Exception as e:
 
 # ---------------------------------------------------------------------------
 # 11. Fix READ-mode scheduler assertion in _update_from_kv_xfer_finished
-#     vLLM v0.17.1 asserts that a request in finished_recving must be either
+#     vLLM asserts that a request in finished_recving must be either
 #     WAITING_FOR_REMOTE_KVS or finished.  In READ mode the request can
 #     transition to RUNNING before the aggregated recv notification arrives,
 #     crashing the engine with AssertionError.
+#     (present in v0.17.1 & v0.18.0)
 # ---------------------------------------------------------------------------
 patch_scheduler_read_mode_fix() {
     python3 -c '
@@ -819,16 +820,13 @@ install_rixl
 install_etcd
 install_libionic
 install_mori
+install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
 patch_moriio_load_kv_timeout
 patch_scheduler_read_mode_fix
 patch_prefill_idle_kv_reaper
-
-if [[ "${NODE_RANK:-0}" -eq 0 ]]; then
-    install_mori_proxy_deps
-fi
 
 # =============================================================================
 # Export paths (persists for server.sh since this file is sourced)
