@@ -1812,7 +1812,7 @@ glm5-nvfp4-b200-sglang:
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
-  precision: nvfp4
+  precision: fp4
   framework: sglang
   multinode: false
   seq-len-configs:
