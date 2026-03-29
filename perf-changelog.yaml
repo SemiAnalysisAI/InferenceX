@@ -1,13 +1,10 @@
 - config-keys:
     - qwen3.5-bf16-mi300x-sglang
     - qwen3.5-bf16-mi325x-sglang
-    - qwen3.5-bf16-mi355x-sglang
     - qwen3.5-fp8-mi300x-sglang
     - qwen3.5-fp8-mi325x-sglang
-    - qwen3.5-fp8-mi355x-sglang
-    - glm5-fp8-mi355x-sglang
   description:
-    - "Add --disable-radix-cache to SGLang server launch command for all qwen3.5 and glm5 AMD benchmark scripts"
+    - "Add --disable-radix-cache to SGLang server launch command for qwen3.5 MI300X and MI325X benchmark scripts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/970
 
 - config-keys:
