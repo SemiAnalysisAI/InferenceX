@@ -2,7 +2,7 @@
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
-    - "Uses vLLM ROCm v0.16.0 image following AMD Andy Luo's recipe"
+    - "Uses vLLM ROCm v0.18.0 image following AMD Andy Luo's recipe"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
