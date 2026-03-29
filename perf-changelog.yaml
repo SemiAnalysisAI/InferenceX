@@ -1189,3 +1189,12 @@
     - "Separate evals, change to 8k1k, fail loudly, 5-shot, top of curve & middle of curve"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/911
   evals-only: true
+
+- config-keys:
+    - qwen3.5-bf16-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Disable prefix caching on random workloads for qwen3.5 & glm5 mi355x"
+    - "Add --no-enable-prefix-caching to SGLang server launch in benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
