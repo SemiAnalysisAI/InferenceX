@@ -1077,7 +1077,6 @@
   
 - config-keys:
     - minimaxm2.5-fp8-mi325x-vllm
-    - minimaxm2.5-fp8-mi300x-vllm
   description:
     - "Upgrade vLLM ROCm image from v0.16.0 to v0.18.0"
     - "Replace TP4 with TP8/EP8, add conc range 4-256"
