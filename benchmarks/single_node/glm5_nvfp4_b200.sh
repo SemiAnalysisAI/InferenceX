@@ -33,6 +33,10 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+# following https://huggingface.co/nvidia/GLM-5-NVFP4#usage recipe
+# except using latest nightly at the time of writing
+# since the recommended nightly image in that recipe doesn't exist.
+
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
