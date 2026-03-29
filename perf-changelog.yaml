@@ -1195,4 +1195,5 @@
   description:
     - "Update vLLM image from v0.17.0 to v0.18.0 for MiniMax-M2.5 FP8 B200"
     - "Add tp4 ep4 search-space entries (conc 32-256) for all seq-len configs"
+    - "Remove ISL 1024 / OSL 8192 seq-len config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/947
