@@ -210,6 +210,27 @@ install_mori() {
 }
 
 # ---------------------------------------------------------------------------
+# 6b. amd-quark (MXFP4 quantization support for Kimi-K2.5-MXFP4 and similar)
+#     Required due to ROCm vLLM missing the quark dependency:
+#     https://github.com/vllm-project/vllm/issues/35633
+# ---------------------------------------------------------------------------
+install_amd_quark() {
+    if python3 -c "import quark" 2>/dev/null; then
+        echo "[SETUP] amd-quark already present"
+        return 0
+    fi
+
+    echo "[SETUP] Installing amd-quark for MXFP4 quantization support..."
+    pip install --quiet amd-quark
+
+    if ! python3 -c "import quark" 2>/dev/null; then
+        echo "[SETUP] WARN: amd-quark install failed (non-fatal for non-MXFP4 models)"
+        return 0
+    fi
+    _SETUP_INSTALLED+=("amd-quark")
+}
+
+# ---------------------------------------------------------------------------
 # 7. Patch vLLM MoRI-EP + FP8 incompatibility (present in v0.17.1 & v0.18.0)
 #    vLLM asserts MoRI requires AITER fused_moe, but AITER's FP8 kernel
 #    uses defer_input_quant=True which MoRI's prepare/finalize rejects.
@@ -820,6 +841,7 @@ install_rixl
 install_etcd
 install_libionic
 install_mori
+install_amd_quark
 install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
