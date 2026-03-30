@@ -80,4 +80,3 @@ stop_gpu_monitor
 set +x
 
 set -x
-rm -rf ./utils/bench_serving\
