@@ -88,17 +88,21 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
         TC=$(( 4 * ND_DSCP ))
         export MORI_RDMA_SL=$ND_PRIO
+        export MORI_IO_SL=$ND_PRIO
         export MORI_RDMA_TC=$TC
-        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL"
+        export MORI_IO_TC=$TC
+        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
     else
         echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
         # Fall back to hostname-based detection
         NODENAME=$(hostname -s)
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
@@ -109,9 +113,11 @@ else
     NODENAME=$(hostname -s)
     if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
         export MORI_RDMA_TC=96
+        export MORI_IO_TC=96
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
+        export MORI_IO_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
