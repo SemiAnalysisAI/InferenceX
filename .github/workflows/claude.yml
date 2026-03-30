@@ -97,7 +97,7 @@ jobs:
             The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,runner-model-sweep,test-config}`
 
             **Subcommand reference:**
-            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
+            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-lens`. This is the primary subcommand for running benchmarks.
             - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'. Uses the flags `--config-files` and `--config-keys`, does NOT accept any other arguments.
 
             Examples:
@@ -119,7 +119,7 @@ jobs:
 
             **Specify concurrency and sequence length:**
             ```
-            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 1k1k"
             ```
 
             **Test specific config keys (MUST USE `--conc`):**
@@ -130,7 +130,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k). Unless prompted otherwise, use `--seq-len 1k1k`
+            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -291,4 +291,3 @@ jobs:
             # Then use $EP in the vllm serve command
             ```
             This ensures the script respects the `ep` setting in the master config YAML's search-space.
-
