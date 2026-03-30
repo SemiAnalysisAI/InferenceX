@@ -67,7 +67,8 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         --num-prompts "$num_prompts" \
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
-        --result-dir /workspace/
+        --result-dir /workspace/ \
+        --trust-remote-code
 
     echo "-----------------------------------------"
     echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
