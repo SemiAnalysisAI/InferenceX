@@ -9,6 +9,17 @@ h200-fp8-llama70b:
     users: [2, 4, 6, 8, 16, 32, 48, 64, 80]
     offload: ["on", "off"]
 
+mi355x-fp8-llama70b:
+  tp2:
+    users: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56]
+    offload: ["on", "off"]
+  tp4:
+    users: [1, 2, 4, 8, 16, 32, 48, 64, 80, 96, 112]
+    offload: ["on", "off"]
+  tp8:
+    users: [4, 8, 16, 32, 64, 96, 128, 160, 192]
+    offload: ["on", "off"]
+
 b200-fp4-dsr1:
   tp4:
     ep: 4

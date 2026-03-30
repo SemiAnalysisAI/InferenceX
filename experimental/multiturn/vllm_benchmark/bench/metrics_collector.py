@@ -325,29 +325,58 @@ class MetricsCollector:
 
         # 1. KV Cache Usage vs Time
         ax = axes[0, 0]
-        kv_usage = [s.kv_cache_usage * 100 for s in self.snapshots]
-        ax.plot(times, kv_usage, 'b-', label='GPU', linewidth=1.5)
+        kv_usage = [min(s.kv_cache_usage * 100, 100.0) for s in self.snapshots]
+        ax.scatter(times, kv_usage, alpha=0.15, s=2, c='blue')
+        kv_window = min(50, len(kv_usage) // 10) if len(kv_usage) > 10 else 1
+        if kv_window > 1:
+            rolling_kv = [
+                sum(kv_usage[max(0, i - kv_window):i + 1]) / len(kv_usage[max(0, i - kv_window):i + 1])
+                for i in range(len(kv_usage))
+            ]
+            ax.plot(times, rolling_kv, 'b-', label=f'GPU (avg n={kv_window})', linewidth=2)
+        else:
+            ax.plot(times, kv_usage, 'b-', label='GPU', linewidth=2)
         # Add external cache if available
         cpu_kv_usage = [s.cpu_kv_cache_usage * 100 for s in self.snapshots]
         if any(v > 0 for v in cpu_kv_usage):
             ax.plot(times, cpu_kv_usage, 'r--', label='External', linewidth=1.5)
-            ax.legend()
+        ax.legend(fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("KV Cache Usage (%)")
         ax.set_title("KV Cache Utilization Over Time")
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
 
-        # 2. Running & Waiting Requests vs Time
+        # 2. Running & Waiting Requests vs Time (smoothed + total)
         ax = axes[0, 1]
         running = [s.num_requests_running for s in self.snapshots]
         waiting = [s.num_requests_waiting for s in self.snapshots]
-        ax.plot(times, running, 'g-', label='Running', linewidth=1.5)
-        ax.plot(times, waiting, 'r-', label='Waiting', linewidth=1.5)
+        total_queue = [r + w for r, w in zip(running, waiting)]
+        q_window = min(30, len(running) // 10) if len(running) > 10 else 1
+        if q_window > 1:
+            rolling_running = [
+                sum(running[max(0, i - q_window):i + 1]) / len(running[max(0, i - q_window):i + 1])
+                for i in range(len(running))
+            ]
+            rolling_waiting = [
+                sum(waiting[max(0, i - q_window):i + 1]) / len(waiting[max(0, i - q_window):i + 1])
+                for i in range(len(waiting))
+            ]
+            rolling_total = [
+                sum(total_queue[max(0, i - q_window):i + 1]) / len(total_queue[max(0, i - q_window):i + 1])
+                for i in range(len(total_queue))
+            ]
+            ax.plot(times, rolling_running, 'g-', label=f'Running (avg n={q_window})', linewidth=1.5)
+            ax.plot(times, rolling_waiting, 'r-', label=f'Waiting (avg n={q_window})', linewidth=1.5)
+            ax.plot(times, rolling_total, 'b-', label=f'Total (avg n={q_window})', linewidth=1.5)
+        else:
+            ax.plot(times, running, 'g-', label='Running', linewidth=1.5)
+            ax.plot(times, waiting, 'r-', label='Waiting', linewidth=1.5)
+            ax.plot(times, total_queue, 'b-', label='Total', linewidth=1.5)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Requests")
         ax.set_title("Request Queue Depth")
-        ax.legend()
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
         # 3. Cache Hit Rate vs Time (computed from deltas between polling intervals)
