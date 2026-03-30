@@ -9,16 +9,21 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+nvidia-smi
+
 hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+
+echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -28,22 +33,30 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# following AMD Andy linkedin's recipe
-# https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
-python3 -m sglang.launch_server \
-    --attention-backend triton \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --mem-fraction-static 0.8 \
-    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+# following https://huggingface.co/nvidia/GLM-5-NVFP4#usage recipe
+# except using latest nightly at the time of writing
+# since the recommended nightly image in that recipe doesn't exist.
+
+set -x
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP \
+--data-parallel-size 1 --expert-parallel-size 1 \
+--tool-call-parser glm47 \
+--reasoning-parser glm45 \
+--quantization modelopt_fp4 \
+--cuda-graph-max-bs $CONC --max-running-requests $CONC \
+--mem-fraction-static 0.80 \
+--chunked-prefill-size 131072 \
+--stream-interval 30 \
+--model-loader-extra-config '{"enable_multithread_load": true}' $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \

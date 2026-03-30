@@ -21,10 +21,15 @@ hf download "$MODEL"
 nvidia-smi
 
 export PYTHONNOUSERSITE=1
+export VLLM_USE_FLASHINFER_MOE_INT4=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -38,7 +43,8 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--disable-log-requests \
+--no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -62,7 +68,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
