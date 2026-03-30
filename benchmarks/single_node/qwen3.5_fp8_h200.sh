@@ -23,6 +23,10 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 MAX_SEQ_LEN=$((ISL + OSL + 20))
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_SEQ_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 
@@ -76,7 +80,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

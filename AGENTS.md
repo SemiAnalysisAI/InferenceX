@@ -76,27 +76,27 @@ python -m pytest matrix_logic/ -v
 ```bash
 # Full sweep with all configs
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml
+  --config-files .github/configs/nvidia-master.yaml
 
 # Filter by model prefix (dsr1 or gptoss)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
-  --model dsr1
+  --config-files .github/configs/nvidia-master.yaml \
+  --model-prefix dsr1
 
 # Filter by framework (sglang, trt, vllm, atom, dynamo-trt, dynamo-sglang)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
+  --config-files .github/configs/nvidia-master.yaml \
   --framework sglang
 
 # Filter by precision (fp4, fp8)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
+  --config-files .github/configs/nvidia-master.yaml \
   --precision fp8
 
 # Filter by runner type (b200, h100, h200, gb200, mi300x, mi325x, mi355x)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
-  --runner b200
+  --config-files .github/configs/nvidia-master.yaml \
+  --runner-type b200
 ```
 
 ### Processing Results
@@ -141,7 +141,6 @@ When working with benchmark configurations, use these valid values:
 
 **Sequence Lengths (ISL/OSL)**:
 - `1k1k` - 1024 input / 1024 output
-- `1k8k` - 1024 input / 8192 output
 - `8k1k` - 8192 input / 1024 output
 
 ## Code Conventions
@@ -267,7 +266,7 @@ dsr1-fp8-h200-dynamo-sglang:
 **7. Validate configuration:**
 ```bash
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
+  --config-files .github/configs/nvidia-master.yaml \
   --framework dynamo-sglang
 ```
 
@@ -297,19 +296,19 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
 
 ## Evals (Accuracy Validation)
 
-Evals run optional accuracy checks after throughput benchmarks to ensure model outputs aren't degraded by inference optimizations.
+Evals run optional accuracy checks to ensure model outputs aren't degraded by inference optimizations. They can run alongside benchmarks or independently in eval-only mode.
 
 ### When Evals Run
 
 Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mode). The `EVAL_ONLY` flag skips throughput benchmarking and only runs lm-eval.
 
-**Single-node** eval selection (from PR #911):
+**Single-node** eval selection:
 - All TPs at **highest concurrency** and **median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
 - Only on `8k1k` sequence length
 
 **Multi-node** eval selection:
-- Entry with **highest max concurrency** per (model, runner, framework, precision, spec-decoding)
-- Prefers `8k1k`; falls back to `1k8k` (never `1k1k`)
+- Entry with **highest max concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
+- Only `8k1k` sequence length
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
@@ -330,21 +329,27 @@ The default eval framework is [lm-evaluation-harness](https://github.com/Eleuthe
 ### Running Evals via CLI
 
 ```bash
-# Generate configs with evals marked (in addition to all configs)
+# Generate configs (evals marked by default on 8k1k subset)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
-  --run-evals
+  --config-files .github/configs/nvidia-master.yaml
+
+# Generate throughput-only configs (skip evals)
+python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  --config-files .github/configs/nvidia-master.yaml \
+  --no-evals
 
 # Generate ONLY the eval subset (excludes non-eval configs)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --master-config .github/configs/nvidia-master.yaml \
+  --config-files .github/configs/nvidia-master.yaml \
   --evals-only
 ```
 
 ### Eval Integration in Benchmark Scripts
 
-**Single-node** scripts in `benchmarks/single_node/` follow this pattern:
+All benchmark scripts in `benchmarks/` follow one of two flows:
+
 ```bash
+# Combined mode (benchmark + eval):
 # 1. Start server (with --context-length expansion if EVAL_ONLY=true)
 # 2. wait_for_server_ready
 # 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
@@ -353,6 +358,13 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary  # Writes meta_env.json and moves artifacts
 fi
+
+# Eval-only mode (EVAL_ONLY=true):
+# 1. Compute expanded context via compute_eval_context_length
+# 2. Start server with expanded context (--context-length or --max-model-len)
+# 3. wait_for_server_ready
+# 4. run_benchmark_serving returns immediately (skipped)
+# 5. run_eval + append_lm_eval_summary
 ```
 
 **Multi-node AMD** (`benchmarks/multi_node/amd_utils/server.sh`):
@@ -374,6 +386,8 @@ fi
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
+| `compute_eval_context_length` | Computes eval context length (5x benchmark context, capped at model native max) |
+| `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Eval Results Collection
 
@@ -413,19 +427,18 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RUN_EVAL` | `false` | Enable eval after throughput |
+| `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_TASK` | `gsm8k` | Task definition file (without `.yaml`) |
-| `NUM_FEWSHOT` | `2` | Number of few-shot examples |
+| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
-| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by compute_eval_context_length) |
+| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
 
 ### Adding a New Eval Task
 
 1. Create a task YAML in `utils/evals/` (follow lm-eval task format)
-2. Set `EVAL_TASK=<your_task>` when running benchmarks
+2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks
 3. Update `utils/collect_eval_results.py` if new metrics need extraction
 
 ### lm-eval Patches

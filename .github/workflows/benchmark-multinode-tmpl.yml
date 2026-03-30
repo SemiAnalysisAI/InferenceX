@@ -107,6 +107,8 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
   PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
   PREFILL_TP: ${{ inputs.prefill-tp }}
@@ -156,6 +158,7 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+          clean: false
 
       - name: Launch multi-node job script
         env:
@@ -230,26 +233,7 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ inputs.eval-only }}
-        run: |
-          python3 << 'PYEOF'
-          import json, glob, sys
-          MIN_SCORE = 0.85
-          failed = False
-          for f in glob.glob("results*.json"):
-              with open(f) as fh:
-                  data = json.load(fh)
-              for task, metrics in data.get("results", {}).items():
-                  for name, val in metrics.items():
-                      if not name.startswith("exact_match,") or "stderr" in name:
-                          continue
-                      if isinstance(val, (int, float)) and val < MIN_SCORE:
-                          print(f"FAIL: {task} {name} = {val:.4f} (< {MIN_SCORE})", file=sys.stderr)
-                          failed = True
-                      elif isinstance(val, (int, float)):
-                          print(f"PASS: {task} {name} = {val:.4f}")
-          if failed:
-              sys.exit(1)
-          PYEOF
+        run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}

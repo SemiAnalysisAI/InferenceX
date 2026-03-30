@@ -22,6 +22,11 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
 if [ "$EP_SIZE" -ge 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -37,7 +42,7 @@ vllm serve $MODEL --port $PORT \
 $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
---disable-log-requests \
+--no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -60,7 +65,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

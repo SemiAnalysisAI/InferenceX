@@ -29,7 +29,12 @@ if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
 elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
     CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 200))
 else
-    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}  
+    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}
+fi
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    CALCULATED_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 # Create config.yaml
@@ -50,8 +55,7 @@ PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
  --config config.yaml \
  --gpu-memory-utilization 0.9 \
  --tensor-parallel-size $TP \
- --max-num-seqs $CONC  \
- --disable-log-requests > $SERVER_LOG 2>&1 &
+ --max-num-seqs $CONC > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -72,7 +76,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

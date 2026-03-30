@@ -17,7 +17,6 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "1k8k": (1024, 8192),
     "8k1k": (8192, 1024)
 }
 
@@ -35,31 +34,22 @@ def seq_len_to_str(isl: int, osl: int) -> str:
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy:
-    - Only consider 1k8k (isl=1024, osl=8192).
-    - Single-node: for each unique (model, runner, framework, precision, isl, osl,
-      spec-decoding, dp-attn), mark highest TP with highest conc and lowest TP
-      with highest conc.
+    - Single-node: only consider 8k1k (isl=8192, osl=1024).
+      For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
+        - Mark all entries at the highest CONC (all TPs)
+        - Mark all entries at the median CONC (all TPs)
     - Multi-node: for each unique (model, runner, framework, precision,
-      spec-decoding, prefill-dp-attn, decode-dp-attn), prefer 8k1k entries;
-      fall back to 1k8k if unavailable (never 1k1k). Mark the entry with the
-      highest max concurrency.
-
-    Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
-    independently.
+      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
+      Mark the entry with the highest max concurrency.
     """
     from collections import defaultdict
 
-    # Only run evals on 1k8k
-    target_isl, target_osl = seq_len_stoi["1k8k"]
-
-    # --- Single-node eval selection ---
-    # Group entries by (model, runner, framework, precision, isl, osl)
+    # Only run evals on 8k1k
+    target_isl, target_osl = seq_len_stoi["8k1k"]
+    # Group entries by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only include entries that have a top-level TP (i.e., single-node schema).
-    # This avoids relying on structural hints like prefill/decode which may be
-    # reused by future single-node disaggregated modes.
     groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
-        # Skip entries without a top-level TP field
         if Fields.TP.value not in entry:
             continue
 
@@ -78,40 +68,24 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         )
         groups[key].append((i, entry))
 
-    # For each group, find highest TP/highest conc and lowest TP/highest conc
+    # For each group, select entries at highest CONC and median CONC (all TPs)
     eval_indices = set()
     for key, entries in groups.items():
         if not entries:
             continue
 
-        # Find min and max TP values
-        min_tp = min(e[Fields.TP.value] for _, e in entries)
-        max_tp = max(e[Fields.TP.value] for _, e in entries)
+        conc_values = sorted(set(e[Fields.CONC.value] for _, e in entries))
+        median_conc = conc_values[len(conc_values) // 2]
+        target_concs = {conc_values[-1], median_conc}
 
-        # Find highest conc for highest TP
-        highest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == max_tp]
-        if highest_tp_entries:
-            max_conc_highest_tp = max(e[Fields.CONC.value] for _, e in highest_tp_entries)
-            for i, e in highest_tp_entries:
-                if e[Fields.CONC.value] == max_conc_highest_tp:
-                    eval_indices.add(i)
-
-        # Find highest conc for lowest TP (only if different from max_tp)
-        if min_tp != max_tp:
-            lowest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == min_tp]
-            if lowest_tp_entries:
-                max_conc_lowest_tp = max(e[Fields.CONC.value] for _, e in lowest_tp_entries)
-                for i, e in lowest_tp_entries:
-                    if e[Fields.CONC.value] == max_conc_lowest_tp:
-                        eval_indices.add(i)
+        for i, e in entries:
+            if e[Fields.CONC.value] in target_concs:
+                eval_indices.add(i)
 
     # --- Multi-node eval selection ---
     # For multi-node (disaggregated) entries, pick one representative per group.
-    # Prefer 8k1k; fall back to 1k8k if unavailable (never 1k1k).
+    # Only 8k1k entries are eligible (never 1k1k).
     # Within a group, pick the entry with the highest max concurrency.
-    # Multi-node: prefer 8k1k, fallback to 1k8k
-    mn_target_isl, mn_target_osl = seq_len_stoi["8k1k"]
-    fallback_isl, fallback_osl = seq_len_stoi["1k8k"]
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -136,14 +110,10 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if not entries:
             continue
 
-        # Prefer 8k1k entries; fall back to 1k8k
+        # Only 8k1k entries are eligible for eval
         preferred = [(i, e) for i, e in entries
-                     if e.get(Fields.ISL.value) == mn_target_isl
-                     and e.get(Fields.OSL.value) == mn_target_osl]
-        if not preferred:
-            preferred = [(i, e) for i, e in entries
-                         if e.get(Fields.ISL.value) == fallback_isl
-                         and e.get(Fields.OSL.value) == fallback_osl]
+                     if e.get(Fields.ISL.value) == target_isl
+                     and e.get(Fields.OSL.value) == target_osl]
         if not preferred:
             continue
 
@@ -806,9 +776,9 @@ def main():
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(
-        '--run-evals',
+        '--no-evals',
         action='store_true',
-        help='When specified, run evals on a subset of configs (in addition to all configs).'
+        help='When specified, skip evals (throughput benchmarks only).'
     )
     eval_group.add_argument(
         '--evals-only',
@@ -1020,10 +990,9 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle eval options (mutually exclusive)
-    if args.run_evals or args.evals_only:
+    # Handle eval options (mutually exclusive: --no-evals or --evals-only)
+    if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
-        # IF --evals-only is specified, filter to only eval entries
         if args.evals_only:
             matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
 
