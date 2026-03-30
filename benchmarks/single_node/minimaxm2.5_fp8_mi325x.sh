@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -30,6 +31,12 @@ export VLLM_ROCM_USE_AITER=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
@@ -40,10 +47,10 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
---disable-log-requests \
 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 

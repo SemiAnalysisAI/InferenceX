@@ -338,7 +338,7 @@ minimaxm2.5-fp8-mi300x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
+  image: vllm/vllm-openai-rocm:v0.18.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -350,12 +350,12 @@ minimaxm2.5-fp8-mi325x-vllm:
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
