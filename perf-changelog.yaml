@@ -1221,5 +1221,10 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973 
    
-
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/921
+  
 
