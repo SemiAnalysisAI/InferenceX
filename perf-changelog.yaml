@@ -1219,7 +1219,7 @@
     - "Add GLM-5 NVFP4 single-node B200 SGLang benchmark (TP8, conc 4-64)"
     - "Uses nvidia/GLM-5-NVFP4 model with modelopt_fp4 quantization"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973
   
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
