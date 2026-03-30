@@ -31,6 +31,11 @@ fi
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
 # If the machine runs a MEC FW older than 177, RCCL
 # cannot reclaim some memory.
 # Disable that features to avoid crashes.
@@ -70,6 +75,7 @@ $EP \
 --block-size=1 \
 --no-enable-prefix-caching \
 --trust-remote-code \
+--no-enable-prefix-caching \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -92,7 +98,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

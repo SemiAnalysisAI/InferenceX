@@ -2,6 +2,13 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
+# root inside containers, and root-owned cache directories break future checkout
+# cleanup on self-hosted runners.
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------
@@ -174,6 +181,12 @@ wait_for_server_ready() {
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
+    # In eval-only mode, skip the throughput benchmark entirely.
+    if [ "${EVAL_ONLY}" = "true" ]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+        return 0
+    fi
+
     set +x
     local model=""
     local port=""
@@ -486,6 +499,10 @@ move_profile_trace_for_relay() {
 # ------------------------------
 
 _install_lm_eval_deps() {
+    # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
+    if [[ "${IMAGE:-}" == *atom* ]]; then
+        python3 -m pip uninstall -y torchvision 2>/dev/null || true
+    fi
     python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
@@ -574,26 +591,74 @@ PY
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
 
+get_native_max_context_length() {
+    local model_path="$1"
+    python3 -c "
+from transformers import AutoConfig
+config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
+for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+    if hasattr(config, attr):
+        print(getattr(config, attr))
+        break
+else:
+    print(0)
+"
+}
+
+# Compute the context length for eval-only mode.
+# Uses 5x the benchmark context capped at the model's native max.
+# Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
+# Echoes the computed value for scripts to capture.
+#
+# Usage: local ctx=$(compute_eval_context_length "$MODEL" "${current_ctx}")
+compute_eval_context_length() {
+    local model="$1"
+    local benchmark_ctx="${2:-0}"
+    local native_max
+    native_max=$(get_native_max_context_length "$model")
+    native_max="${native_max:-0}"
+
+    if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
+        benchmark_ctx="${native_max:-0}"
+    fi
+    local eval_ctx=$(( benchmark_ctx * 1 ))
+    if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
+        eval_ctx="$native_max"
+    fi
+    # If eval_ctx is still 0 (both benchmark_ctx and native_max were 0), fall back
+    if [ "$eval_ctx" -le 0 ] 2>/dev/null; then
+        echo "WARN: compute_eval_context_length could not determine context length for $model" >&2
+        eval_ctx="${MAX_MODEL_LEN:-16384}"
+    fi
+    EVAL_MAX_MODEL_LEN="$eval_ctx"
+    echo "$eval_ctx"
+}
+
+# Convenience wrapper: compute eval context from ISL/OSL and export EVAL_MAX_MODEL_LEN.
+# Call directly (not in a subshell) so the export persists.
+# Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
+setup_eval_context() {
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
+    export EVAL_MAX_MODEL_LEN
+}
+
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-2}"
+    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens=16384
+    local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests=32
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --port)           port="$2"; shift 2 ;;
-            --task)           task="$2"; shift 2 ;;
-            --num-fewshot)    num_fewshot="$2"; shift 2 ;;
+            --task)           tasks_dir="$2"; shift 2 ;;
             --results-dir)    results_dir="$2"; shift 2 ;;
-            --gen-max-tokens) gen_max_tokens="$2"; shift 2 ;;
+            --gen-max-tokens) eval_context_len="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
-            --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -606,16 +671,23 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
+    # Cap output tokens: must fit within context window (leave room for input),
+    # and avoid excessive KV cache reservation per request on TRT.
+    local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
+    if [ "$max_output_tokens" -gt 16384 ]; then
+        max_output_tokens=16384
+    fi
+    echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
+
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "utils/evals/${task}.yaml" \
-      --num_fewshot "${num_fewshot}" \
+      --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -623,8 +695,15 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
+    if [ -z "${results_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR is empty; skipping artifact collection" >&2
+        return 1
+    fi
     local out_dir="${results_dir}"
-    mkdir -p "$out_dir" || true
+    if [ ! -d "${out_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR='${out_dir}' does not exist; skipping artifact collection" >&2
+        return 1
+    fi
 
     # Write minimal meta for collectors that expect it
     local meta_json="${out_dir}/meta_env.json"
@@ -672,13 +751,13 @@ META
 
     # Move eval artifacts into PWD (no new directories in workspace)
     if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || true
+        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
     fi
     if [ -d "${out_dir}" ]; then
         while IFS= read -r -d '' jf; do
             base=$(basename "$jf")
             if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || true
+                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
             fi
         done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
     fi
@@ -706,8 +785,23 @@ run_eval() {
         esac
     done
 
+    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
+    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+        compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
+    fi
+
+    local eval_rc=0
     case "$framework" in
-        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" ;;
-        *)               echo "Unknown framework '${framework}'"; return 1 ;;
+        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
+        *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
+
+    if [ "$eval_rc" -ne 0 ]; then
+        echo "ERROR: run_eval failed with exit code $eval_rc" >&2
+        if [ "${EVAL_ONLY}" = "true" ]; then
+            echo "Eval-only mode: failing after artifact collection" >&2
+            return "$eval_rc"
+        fi
+    fi
+    return $eval_rc
 }
