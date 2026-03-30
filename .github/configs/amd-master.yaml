@@ -294,7 +294,7 @@ glm5-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-atom:
-  image: TBD
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -386,7 +386,7 @@ kimik2.5-fp4-mi355x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-atom:
-  image: TBD
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
@@ -439,7 +439,7 @@ minimaxm2.5-fp8-mi355x-vllm:
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
 minimaxm2.5-fp8-mi355x-atom:
-  image: TBD
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
