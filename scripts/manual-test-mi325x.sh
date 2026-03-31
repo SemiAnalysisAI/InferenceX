@@ -15,7 +15,7 @@ export IMAGE=ghcr.io/jordannanos/sgl-mi325x-mori:v0.5.9-bnxt-good
 
 export ISL=1024
 export OSL=1024
-export CONC_LIST="4 2 1"
+export CONC_LIST="1024 512 256 128 64 32 16 8 4 2 1"
 export SPEC_DECODING=none
 export RANDOM_RANGE_RATIO=1
 
