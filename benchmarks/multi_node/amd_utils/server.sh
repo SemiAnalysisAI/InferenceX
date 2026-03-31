@@ -504,13 +504,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
             source /workspace/benchmarks/benchmark_lib.sh
 
             # Use max concurrency from benchmark config (conc values are x-separated)
-            EVAL_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 --concurrent-requests $EVAL_CONC"
+                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"
             else
                 # Run lm-eval against the router on port 30000
-                run_eval --framework lm-eval --port 30000 --concurrent-requests "$EVAL_CONC"
+                run_eval --framework lm-eval --port 30000
 
                 # Set metadata env vars for append_lm_eval_summary
                 export TP="${PREFILL_TP_SIZE}"
