@@ -240,6 +240,7 @@ jobs:
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
+          rm -f sample*.jsonl || true
 
       - name: Upload logs
         if: always()

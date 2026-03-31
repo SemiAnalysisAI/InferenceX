@@ -155,57 +155,61 @@ set -x
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
 
-if [ ! -d "$LOGS_DIR" ]; then
-    echo "Warning: Logs directory not found at $LOGS_DIR"
-    exit 1
-fi
+if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [ ! -d "$LOGS_DIR" ]; then
+        echo "Warning: Logs directory not found at $LOGS_DIR"
+        exit 1
+    fi
 
-echo "Found logs directory: $LOGS_DIR"
+    echo "Found logs directory: $LOGS_DIR"
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-# Find all result subdirectories
-RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+    # Find all result subdirectories
+    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
-if [ -z "$RESULT_SUBDIRS" ]; then
-    echo "Warning: No result subdirectories found in $LOGS_DIR"
-else
-    # Process results from all configurations
-    for result_subdir in $RESULT_SUBDIRS; do
-        echo "Processing result subdirectory: $result_subdir"
+    if [ -z "$RESULT_SUBDIRS" ]; then
+        echo "Warning: No result subdirectories found in $LOGS_DIR"
+    else
+        # Process results from all configurations
+        for result_subdir in $RESULT_SUBDIRS; do
+            echo "Processing result subdirectory: $result_subdir"
 
-        # Extract configuration info from directory name
-        CONFIG_NAME=$(basename "$result_subdir")
+            # Extract configuration info from directory name
+            CONFIG_NAME=$(basename "$result_subdir")
 
-        # Find all result JSON files
-        RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+            # Find all result JSON files
+            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
 
-        for result_file in $RESULT_FILES; do
-            if [ -f "$result_file" ]; then
-                # Extract metadata from filename
-                # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
-                filename=$(basename "$result_file")
-                concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
-                ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+            for result_file in $RESULT_FILES; do
+                if [ -f "$result_file" ]; then
+                    # Extract metadata from filename
+                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                    filename=$(basename "$result_file")
+                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
-                echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                cp "$result_file" "$WORKSPACE_RESULT_FILE"
+                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
-                echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-            fi
+                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                fi
+            done
         done
-    done
-fi
+    fi
 
-echo "All result files processed"
+    echo "All result files processed"
+else
+    echo "EVAL_ONLY=true: Skipping benchmark result collection"
+fi
 
 # Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"

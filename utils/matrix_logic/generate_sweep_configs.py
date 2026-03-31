@@ -44,18 +44,21 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """
     from collections import defaultdict
 
-    # Only run evals on 8k1k
     target_isl, target_osl = seq_len_stoi["8k1k"]
-    # Group entries by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only include entries that have a top-level TP (i.e., single-node schema).
-    groups = defaultdict(list)
+    eval_indices = set()
+
+    def _max_conc(ie):
+        c = ie[1][Fields.CONC.value]
+        return max(c) if isinstance(c, list) else c
+
+    # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
+    # Only 8k1k entries with a top-level TP (single-node schema).
+    sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
             continue
-
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             continue
-
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
@@ -64,65 +67,42 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.ISL.value],
             entry[Fields.OSL.value],
             entry[Fields.SPEC_DECODING.value],
-            entry[Fields.DP_ATTN.value]
+            entry[Fields.DP_ATTN.value],
         )
-        groups[key].append((i, entry))
+        sn_groups[key].append((i, entry))
 
-    # For each group, select entries at highest CONC and median CONC (all TPs)
-    eval_indices = set()
-    for key, entries in groups.items():
-        if not entries:
-            continue
-
+    for entries in sn_groups.values():
         conc_values = sorted(set(e[Fields.CONC.value] for _, e in entries))
         median_conc = conc_values[len(conc_values) // 2]
         target_concs = {conc_values[-1], median_conc}
-
         for i, e in entries:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # --- Multi-node eval selection ---
-    # For multi-node (disaggregated) entries, pick one representative per group.
-    # Only 8k1k entries are eligible (never 1k1k).
-    # Within a group, pick the entry with the highest max concurrency.
+    # Multi-node: group by (model, runner, framework, precision, spec-decoding, prefill-dp, decode-dp).
+    # Only 8k1k entries with a prefill key (multi-node schema).
+    # Pick the entry with the highest max concurrency per group.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
-            continue  # single-node, already handled
+            continue
         if Fields.PREFILL.value not in entry:
             continue
-
-        prefill_dp = entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value)
-        decode_dp = entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value)
+        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+            continue
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
             entry[Fields.FRAMEWORK.value],
             entry[Fields.PRECISION.value],
             entry[Fields.SPEC_DECODING.value],
-            prefill_dp,
-            decode_dp,
+            entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value),
+            entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value),
         )
         mn_groups[key].append((i, entry))
 
-    for key, entries in mn_groups.items():
-        if not entries:
-            continue
-
-        # Only 8k1k entries are eligible for eval
-        preferred = [(i, e) for i, e in entries
-                     if e.get(Fields.ISL.value) == target_isl
-                     and e.get(Fields.OSL.value) == target_osl]
-        if not preferred:
-            continue
-
-        # Pick entry with highest max concurrency
-        def _max_conc(ie):
-            c = ie[1][Fields.CONC.value]
-            return max(c) if isinstance(c, list) else c
-        best = max(preferred, key=_max_conc)
-        eval_indices.add(best[0])
+    for entries in mn_groups.values():
+        eval_indices.add(max(entries, key=_max_conc)[0])
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
