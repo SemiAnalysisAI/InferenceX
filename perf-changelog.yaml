@@ -1213,3 +1213,13 @@
     - "Uses nvidia/GLM-5-NVFP4 model with modelopt_fp4 quantization"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Bump SGL mori image to March 27"
+    - "Add more low latency sweep configs"
+    - "Enable v2 mxfp4 DSR1 0528 model"
+    - "Enable fp4 disp feature on mori"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/983
