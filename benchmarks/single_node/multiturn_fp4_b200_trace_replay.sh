@@ -11,7 +11,6 @@ set -x
 # Optional:
 #   PORT (default 8888), REQUEST_TIMEOUT (default 3600)
 #   DURATION (default 1800, benchmark duration in seconds)
-#   TIME_SCALE (default 0.1, trace replay speed multiplier — 10x faster)
 #   MAX_DELAY (default 60, max gap between requests in seconds)
 #   ADVANCE_MIN (default 0.0, min trace advancement fraction)
 #   ADVANCE_MAX (default 0.7, max trace advancement fraction)
@@ -29,7 +28,6 @@ check_env_vars \
 PORT=${PORT:-8888}
 REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
 DURATION=${DURATION:-1800}
-TIME_SCALE=${TIME_SCALE:-0.1}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
@@ -172,13 +170,11 @@ REPLAY_CMD+=" --max-users $USERS"
 REPLAY_CMD+=" --max-ttft 9999"
 REPLAY_CMD+=" --test-duration $DURATION"
 REPLAY_CMD+=" --recycle"
-REPLAY_CMD+=" --time-scale $TIME_SCALE"
 REPLAY_CMD+=" --max-delay $MAX_DELAY"
 REPLAY_CMD+=" --max-concurrent-requests 0"
 REPLAY_CMD+=" --max-new-tokens-per-period 999999999"
 REPLAY_CMD+=" --advance-min $ADVANCE_MIN"
 REPLAY_CMD+=" --advance-max $ADVANCE_MAX"
-REPLAY_CMD+=" --parallel-subagents"
 REPLAY_CMD+=" --seed 42"
 REPLAY_CMD+=" --no-color"
 
