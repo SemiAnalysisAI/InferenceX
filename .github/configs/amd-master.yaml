@@ -1233,7 +1233,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp8-mi325x-sglang-disagg:
-  image: ghcr.io/jordannanos/sgl-mi325x-mori:v0.5.9-bnxt
+  image: ghcr.io/jordannanos/sgl-mi325x-mori:v0.5.9-bnxt-good
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x-disagg
