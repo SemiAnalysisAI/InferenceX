@@ -37,14 +37,6 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
         DELAY_BATCHING="true"
     fi
-elif [[ "$ISL" == "1024" && "$OSL" == "8192" ]]; then
-    if [[ $CONC -ge 256 ]]; then
-        CUDA_GRAPH_MAX_BATCH_SIZE=$(( $CONC / 8 ))
-        MOE_BACKEND="DEEPGEMM"
-        KV_CACHE_FREE_MEM_FRACTION=0.7
-    elif [[ $CONC -ge 128 ]]; then
-        PIECEWISE_CUDA_GRAPHS="true"
-    fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     if [[ $CONC -ge 64 ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
@@ -100,6 +92,12 @@ MAX_NUM_TOKENS=$(( ($CONC+$ISL+64+63)/64*64 ))
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
+fi
+
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
     # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
     capture_tokens=(1 2 4 8 16 32 64 128)
@@ -146,7 +144,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

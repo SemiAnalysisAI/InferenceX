@@ -28,6 +28,10 @@ export VLLM_ROCM_USE_AITER=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -38,6 +42,7 @@ vllm serve $MODEL --port $PORT \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
 --disable-log-requests \
+--no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -60,7 +65,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

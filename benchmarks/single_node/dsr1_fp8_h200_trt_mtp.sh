@@ -80,6 +80,11 @@ fi
 
 MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -116,7 +121,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

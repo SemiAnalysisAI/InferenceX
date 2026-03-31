@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-export HF_HUB_CACHE_MOUNT="/home/gharunner/gharunners/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"

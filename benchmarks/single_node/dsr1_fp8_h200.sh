@@ -15,7 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-pip3 install --user sentencepiece
+pip3 install --user --break-system-packages sentencepiece
 
 hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
@@ -26,6 +26,12 @@ start_gpu_monitor
 
 export TORCH_CUDA_ARCH_LIST="9.0"
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+fi
+
 set -x
 if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
@@ -35,7 +41,7 @@ if [[ $ISL -eq 1024 && $OSL -eq 1024 ]]; then
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
     --decode-log-interval 1 \
-    > $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 else
     PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
     --host 0.0.0.0 --port $PORT --trust-remote-code \
@@ -44,7 +50,7 @@ else
     --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
     --attention-backend flashinfer --stream-interval 10 \
     --decode-log-interval 1 \
-    > $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 fi
 
 SERVER_PID=$!
@@ -66,7 +72,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 

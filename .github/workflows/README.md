@@ -40,7 +40,7 @@ usage: generate_sweep_configs.py full-sweep
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
     [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
-    [--seq-lens {1k1k,1k8k,8k1k} [{1k1k,1k8k,8k1k} ...]]
+    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
     [--step-size STEP_SIZE]
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
@@ -62,9 +62,9 @@ full-sweep --config-files .github/configs/nvidia-master.yaml
 full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
 ```
 
-**Test all single-node fp8 precision configs for 1k8k workloads:**
+**Test all single-node fp8 precision configs for 8k1k workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 1k8k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**

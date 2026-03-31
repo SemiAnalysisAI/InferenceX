@@ -360,6 +360,7 @@ class ChangelogMatrixEntry(BaseModel):
                       ] = Field(default_factory=dict)
     multi_node: dict[str, list[MultiNodeMatrixEntry]
                      ] = Field(default_factory=dict)
+    evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 

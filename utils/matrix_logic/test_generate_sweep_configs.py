@@ -158,13 +158,11 @@ class TestSeqLenMappings:
     def test_seq_len_stoi_values(self):
         """Verify seq_len_stoi has expected mappings."""
         assert seq_len_stoi["1k1k"] == (1024, 1024)
-        assert seq_len_stoi["1k8k"] == (1024, 8192)
         assert seq_len_stoi["8k1k"] == (8192, 1024)
 
     def test_seq_len_itos_reverse_mapping(self):
         """Verify seq_len_itos is reverse of stoi."""
         assert seq_len_itos[(1024, 1024)] == "1k1k"
-        assert seq_len_itos[(1024, 8192)] == "1k8k"
         assert seq_len_itos[(8192, 1024)] == "8k1k"
 
 
@@ -174,7 +172,6 @@ class TestSeqLenToStr:
     def test_known_sequence_lengths(self):
         """Known sequence lengths should return short name."""
         assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(1024, 8192) == "1k8k"
         assert seq_len_to_str(8192, 1024) == "8k1k"
 
     def test_unknown_sequence_lengths(self):

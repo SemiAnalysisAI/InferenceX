@@ -31,6 +31,11 @@ else
 fi
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -40,7 +45,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.
 --cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
 --chunked-prefill-size 16384 \
 --ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 > $SERVER_LOG 2>&1 &
+--enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -63,7 +68,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
