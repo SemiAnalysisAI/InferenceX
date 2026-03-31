@@ -155,16 +155,18 @@ set -x
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-    if [ ! -d "$LOGS_DIR" ]; then
-        echo "Warning: Logs directory not found at $LOGS_DIR"
-        exit 1
-    fi
-
+if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
-
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+else
+    echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [ ! -d "$LOGS_DIR" ]; then
+        exit 1
+    fi
 
     # Find all result subdirectories
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
