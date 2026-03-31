@@ -1220,3 +1220,10 @@
     - "Uses nvidia/GLM-5-NVFP4 model with modelopt_fp4 quantization"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "DeepSeek R1 MI355X FP8 ATOM-MTP config to support MTP 3 tokens"
+    - "Image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/984
