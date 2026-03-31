@@ -172,6 +172,7 @@ REPLAY_CMD+=" --max-concurrent-requests 0"
 REPLAY_CMD+=" --max-new-tokens-per-period 999999999"
 REPLAY_CMD+=" --advance-min $ADVANCE_MIN"
 REPLAY_CMD+=" --advance-max $ADVANCE_MAX"
+REPLAY_CMD+=" --advance-all-users"
 REPLAY_CMD+=" --seed 42"
 REPLAY_CMD+=" --no-color"
 
