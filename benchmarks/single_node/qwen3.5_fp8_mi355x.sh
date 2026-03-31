@@ -9,7 +9,8 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -26,6 +27,7 @@ EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+else EVAL_CONTEXT_ARGS="--context-length $CONTEXT_LENGTH"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -36,6 +38,8 @@ python3 -m sglang.launch_server \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
+    --ep-size $EP_SIZE \
+    --data-parallel-size 1 \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
@@ -44,7 +48,7 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.8 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
