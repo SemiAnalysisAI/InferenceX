@@ -1225,5 +1225,5 @@
     - qwen3.5-bf16-mi355x-sglang
   description:
     - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/942
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/980
 
