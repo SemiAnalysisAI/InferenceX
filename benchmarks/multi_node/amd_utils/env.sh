@@ -20,6 +20,9 @@ if [[ -z "$IBDEVICES" ]]; then
         export IBDEVICES=ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7
     elif [[ $NODENAME == mia1* ]]; then
         export IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+    elif [[ $NODENAME == chi-mi325x* ]]; then
+        # Vultr/CPE MI325X cluster: Broadcom RoCE (bnxt_re); bnxt_re6 is DOWN, skip it
+        export IBDEVICES=bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8
     else
         echo "ERROR: Unable to detect cluster from hostname $NODENAME and IBDEVICES not set" >&2
         exit 1

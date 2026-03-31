@@ -72,11 +72,12 @@ fi
 # Load model config via inline Python (PyYAML is available in SGLang containers)
 # Formula evaluation (e.g. "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK * TP * xP")
 # is done here in Python to avoid bash glob-expanding the * characters.
+_MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
 eval "$(python3 -c "
 import yaml, sys, os
 
 config_path = '${MODELS_YAML}'
-model_name = '${MODEL_NAME}'
+model_name = '${_MODEL_YAML_KEY}'
 
 with open(config_path) as f:
     models = yaml.safe_load(f)

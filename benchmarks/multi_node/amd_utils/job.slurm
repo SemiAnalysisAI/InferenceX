@@ -30,14 +30,18 @@ if [[ ! -f "$MODELS_YAML" ]]; then
     exit 1
 fi
 
-# Validate MODEL_NAME exists as a top-level key in models.yaml
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in models.yaml"
+# MODEL_YAML_KEY is the models.yaml lookup key (bare model name, e.g. DeepSeek-R1-0528).
+# MODEL_NAME may be a longer HF cache path (e.g. models--org--repo/snapshots/<hash>).
+_MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+
+# Validate the yaml key exists as a top-level key in models.yaml
+if ! grep -q "^${_MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    echo "Error: Model '$_MODEL_YAML_KEY' not found in models.yaml"
     echo "Available models:"
     grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
     exit 1
 fi
-echo "Model found: $MODEL_NAME"
+echo "Model found: $_MODEL_YAML_KEY"
 
 # All models use server.sh as the entrypoint
 RUN_FILE="server.sh"
@@ -249,10 +253,9 @@ echo "NNODES is ${NNODES}"
 echo "REPO Directory is ${DI_REPO_DIR}"
 echo "USER_NAME is ${USER_NAME}"
 
-# Get the RDMA priority and DSCP value from the NIC
+# Get the RDMA priority and DSCP value from the NIC (optional - env.sh handles absence gracefully)
 if ! command -v nicctl >/dev/null 2>&1; then
-    echo "Error: nicctl command not found. Please ensure nicctl is installed and available." >&2
-    exit 1
+    echo "[INFO] nicctl not found. RDMA QoS configuration will be skipped inside the container." >&2
 fi
 
 # Reduce log spam
@@ -357,7 +360,7 @@ exec sudo docker run --rm \
     --privileged \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    -v $(which nicctl):/usr/sbin/nicctl \
+    $(command -v nicctl &>/dev/null && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
@@ -373,6 +376,7 @@ exec sudo docker run --rm \
     -e xP=\$xP \
     -e yD=\$yD \
     -e MODEL_NAME=\$MODEL_NAME \
+    -e MODEL_YAML_KEY=${_MODEL_YAML_KEY} \
     -e IPADDRS=\$IPADDRS \
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE \
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP \
