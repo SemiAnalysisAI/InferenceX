@@ -74,6 +74,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
+    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -111,6 +112,9 @@ EOF
 
     echo "Running make setup..."
     make setup ARCH=x86_64
+
+    # Export eval-related env vars for srt-slurm post-benchmark eval
+    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
 
@@ -183,44 +187,62 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+        # Find all result subdirectories
+        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
+        if [ -z "$RESULT_SUBDIRS" ]; then
+            echo "Warning: No result subdirectories found in $LOGS_DIR"
+        else
+            # Process results from all configurations
+            for result_subdir in $RESULT_SUBDIRS; do
+                echo "Processing result subdirectory: $result_subdir"
 
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
+                # Extract configuration info from directory name
+                CONFIG_NAME=$(basename "$result_subdir")
 
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+                # Find all result JSON files
+                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
 
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+                for result_file in $RESULT_FILES; do
+                    if [ -f "$result_file" ]; then
+                        # Extract metadata from filename
+                        # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                        filename=$(basename "$result_file")
+                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                        cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
+                        echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                    fi
+                done
             done
-        done
+        fi
+
+        echo "All result files processed"
+    else
+        echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
-    echo "All result files processed"
+    # Collect eval results if eval was requested
+    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+        EVAL_DIR="$LOGS_DIR/eval_results"
+        if [ -d "$EVAL_DIR" ]; then
+            echo "Extracting eval results from $EVAL_DIR"
+            for eval_file in "$EVAL_DIR"/*; do
+                [ -f "$eval_file" ] && cp "$eval_file" "$GITHUB_WORKSPACE/"
+                echo "Copied eval artifact: $(basename "$eval_file")"
+            done
+        else
+            echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
+        fi
+    fi
 
     # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
     # from blocking the next job's checkout on this runner
