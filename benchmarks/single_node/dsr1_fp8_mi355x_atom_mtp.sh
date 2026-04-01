@@ -53,6 +53,7 @@ python3 -m atom.entrypoints.openai_server \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --method mtp \
+    --num-speculative-tokens 3 \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -83,5 +84,3 @@ fi
 # Stop GPU monitoring
 stop_gpu_monitor
 set +x
-
-set -x
