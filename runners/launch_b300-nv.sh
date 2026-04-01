@@ -16,11 +16,11 @@ fi
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared B300 cluster.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/models/deepseek-r1-0528-nvfp4-v2"
+    export MODEL_PATH="/data/models/dsr1-fp4"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/deepseek-r1-0528"
+    export MODEL_PATH="/data/models/dsr1-fp8"
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
