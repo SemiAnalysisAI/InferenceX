@@ -347,31 +347,18 @@ if [[ -n "${LOCAL_MODEL_CACHE_DIR:-}" ]]; then
         sudo mkdir -p "$CACHE_DIR" 2>/dev/null || mkdir -p "$CACHE_DIR"
         sudo chown -R "$(whoami)" "$CACHE_DIR" 2>/dev/null || true
 
-        SRC_COUNT=$(find "$SRC" -type f 2>/dev/null | wc -l)
-        DST_COUNT=$(find "$DST" -type f 2>/dev/null | wc -l)
+        echo "[cache] $(hostname): Syncing model to local NVMe..."
+        START=$(date +%s)
 
-        if [[ "$SRC_COUNT" -eq "$DST_COUNT" ]] && [[ "$DST_COUNT" -gt 0 ]]; then
-            echo "[cache] $(hostname): Already cached ($DST_COUNT files)"
-        else
-            echo "[cache] $(hostname): Syncing $SRC_COUNT files..."
-            START=$(date +%s)
+        rclone sync "$SRC/" "$DST/" \
+            --transfers 32 \
+            --checkers 32 \
+            --links \
+            --progress
 
-            if [[ -d "$SRC/blobs" ]]; then
-                # HuggingFace hub cache layout: parallel-sync large blobs
-                mkdir -p "$DST/blobs"
-                find "$SRC/blobs" -type f -printf "%f\n" | \
-                    xargs -P '"${CACHE_PARALLEL_JOBS:-4}"' -I{} \
-                    rsync -a --whole-file --ignore-existing "$SRC/blobs/{}" "$DST/blobs/{}"
-                rsync -a --whole-file --ignore-existing --exclude="blobs/" "$SRC/" "$DST/"
-            else
-                # Flat model directory
-                rsync -a --whole-file --ignore-existing "$SRC/" "$DST/"
-            fi
-
-            ELAPSED=$(( $(date +%s) - START ))
-            SIZE=$(du -sh "$DST" 2>/dev/null | cut -f1)
-            echo "[cache] $(hostname): Done in ${ELAPSED}s ($SIZE)"
-        fi
+        ELAPSED=$(( $(date +%s) - START ))
+        SIZE=$(du -sh "$DST" 2>/dev/null | cut -f1)
+        echo "[cache] $(hostname): Done in ${ELAPSED}s ($SIZE)"
     ' 2>&1
 
     if [[ $? -eq 0 ]]; then
