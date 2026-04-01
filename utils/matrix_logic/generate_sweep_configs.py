@@ -40,12 +40,14 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Mark all entries at the median CONC (all TPs)
     - Multi-node: for each unique (model, runner, framework, precision,
       spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
-      Mark the entry with the highest max concurrency.
+      Mark the entry with the highest max concurrency. Sets eval-conc to the
+      median of the conc list to avoid OOM during eval.
     """
     from collections import defaultdict
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
     eval_indices = set()
+    mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
 
     def _max_conc(ie):
         c = ie[1][Fields.CONC.value]
@@ -102,11 +104,18 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         mn_groups[key].append((i, entry))
 
     for entries in mn_groups.values():
-        eval_indices.add(max(entries, key=_max_conc)[0])
+        best_idx, best_entry = max(entries, key=_max_conc)
+        eval_indices.add(best_idx)
+        # Set eval-conc to median of the conc list to avoid OOM during eval
+        conc = best_entry[Fields.CONC.value]
+        sorted_conc = sorted(conc) if isinstance(conc, list) else [conc]
+        mn_eval_conc[best_idx] = sorted_conc[len(sorted_conc) // 2]
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
         entry[Fields.RUN_EVAL.value] = i in eval_indices
+        if i in mn_eval_conc:
+            entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 
     return matrix_values
 

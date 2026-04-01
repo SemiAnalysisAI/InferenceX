@@ -86,6 +86,11 @@ on:
         type: boolean
         required: false
         default: false
+      eval-conc:
+        description: "Concurrency to use for eval requests (overrides default max-of-conc-list)"
+        type: string
+        required: false
+        default: ""
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -107,6 +112,7 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_CONC: ${{ inputs.eval-conc }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

@@ -503,8 +503,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
             # Source eval functions from benchmark_lib.sh
             source /workspace/benchmarks/benchmark_lib.sh
 
-            # Use max concurrency from benchmark config (conc values are x-separated)
-            export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
+            if [[ -n "${EVAL_CONC}" ]]; then
+                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+            else
+                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"

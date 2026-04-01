@@ -53,6 +53,7 @@ class Fields(Enum):
 
     # Eval
     RUN_EVAL = 'run-eval'
+    EVAL_CONC = 'eval-conc'
 
 
 """
@@ -126,6 +127,7 @@ class MultiNodeMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
+    eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
