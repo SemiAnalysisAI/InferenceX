@@ -1124,12 +1124,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/960
 
 - config-keys:
-    - kimik2.5-fp4-mi355x-atom
-    - minimaxm2.5-fp8-mi355x-atom
-  description:
-    - "New model support on ATOM framework"
-    - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
     - kimik2.5-int4-mi325x-vllm
     - kimik2.5-int4-mi355x-vllm
     - kimik2.5-int4-h200-vllm
