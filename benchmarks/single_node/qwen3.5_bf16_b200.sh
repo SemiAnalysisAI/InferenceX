@@ -41,6 +41,10 @@ MAX_PREFILL_TOKENS=32768
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MAX_RUNNING_REQUESTS=128
 CONTEXT_LENGTH=$((ISL + OSL + 20))
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
+fi
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
@@ -79,7 +83,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
