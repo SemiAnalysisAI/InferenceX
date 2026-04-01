@@ -52,6 +52,10 @@ fi
 export SGLANG_MORI_FP4_DISP=False
 export SGLANG_MORI_FP8_COMB=False
 
+# Enable spec v2 
+export SGLANG_ENABLE_SPEC_V2=1
+export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
+
 # Per-role dispatch token limits (prefill uses higher throughput, decode uses lower)
 export MORI_MAX_DISPATCH_TOKENS_PREFILL=16384
 if [[ "$MODEL_NAME" == *mxfp4* ]]; then
