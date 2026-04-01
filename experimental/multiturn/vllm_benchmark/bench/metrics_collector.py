@@ -10,7 +10,6 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
 
 import aiohttp
 import matplotlib.pyplot as plt
