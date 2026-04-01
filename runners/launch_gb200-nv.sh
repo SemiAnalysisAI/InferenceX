@@ -107,6 +107,14 @@ PY
 fi
 
 
+# srt-slurm path requires a CONFIG_FILE pointing to a recipe YAML.
+# Without it, srtctl apply scans every YAML in the repo and submits hundreds of jobs.
+if [[ -z "$CONFIG_FILE" ]]; then
+    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+    echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
+    exit 1
+fi
+
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 if [ -d "$SRT_REPO_DIR" ]; then
