@@ -181,7 +181,6 @@ AIPERF_CMD+=" --endpoint-type chat"
 AIPERF_CMD+=" --streaming"
 AIPERF_CMD+=" --input-file $TRACE_FILE"
 AIPERF_CMD+=" --custom-dataset-type mooncake_trace"
-AIPERF_CMD+=" --fixed-schedule"
 AIPERF_CMD+=" --concurrency $USERS"
 if [ -n "${DURATION:-}" ]; then
     AIPERF_CMD+=" --benchmark-duration $DURATION"
