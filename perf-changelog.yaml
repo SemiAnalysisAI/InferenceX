@@ -1,4 +1,12 @@
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Add Qwen3.5 397B MXFP4 single-node MI355X SGLang benchmark (TP8)"
+    - "Uses nightly SGLang ROCm image with AMD MXFP4 support (sgl-project/sglang#21234)"
+    - "Model: amd/Qwen3.5-397B-A17B-MXFP4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
