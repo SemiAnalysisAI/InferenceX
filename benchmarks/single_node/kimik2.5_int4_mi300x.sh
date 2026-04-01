@@ -8,60 +8,51 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    EP_SIZE \
-    DP_ATTENTION
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
+hf download "$MODEL"
+
+# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
+if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export OMP_NUM_THREADS=1
-
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
-else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
-fi
-
+# following AMD andy luo's recipe
+# https://x.com/linluo77/status/2017024513595301985
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
-fi
-
-if [ "$EP_SIZE" -gt 1 ]; then
-  EP=" --enable-expert-parallel"
-else
-  EP=" "
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-
-python3 -m atom.entrypoints.openai_server \
-    --model $MODEL \
-    --server-port $PORT \
-    -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --method mtp \
-    --num-speculative-tokens 3 \
-    > $SERVER_LOG 2>&1 &
+export VLLM_ROCM_USE_AITER=1
+vllm serve $MODEL --port $PORT \
+--tensor-parallel-size=$TP \
+--gpu-memory-utilization 0.95 \
+--max-model-len $MAX_MODEL_LEN \
+--block-size=64 \
+--trust-remote-code \
+--no-enable-prefix-caching \
+--max-num-seqs 256 \
+--mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
- 
-export PYTHONDONTWRITEBYTECODE=1
+
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -73,7 +64,7 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --use-chat-template 
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
