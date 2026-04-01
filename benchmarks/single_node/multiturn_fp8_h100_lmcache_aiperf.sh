@@ -11,7 +11,6 @@ set -x
 # Optional:
 #   PORT (default 8888), REQUEST_TIMEOUT (default 3600)
 #   DURATION (if set, runs for this many seconds; otherwise runs to completion)
-#   REQUEST_RATE (default: 0 = no rate limit, concurrency-burst mode)
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -25,7 +24,6 @@ check_env_vars \
 
 PORT=${PORT:-8888}
 REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
-REQUEST_RATE=${REQUEST_RATE:-0}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -183,17 +181,14 @@ AIPERF_CMD+=" --endpoint-type chat"
 AIPERF_CMD+=" --streaming"
 AIPERF_CMD+=" --input-file $TRACE_FILE"
 AIPERF_CMD+=" --custom-dataset-type mooncake_trace"
+AIPERF_CMD+=" --fixed-schedule"
 AIPERF_CMD+=" --concurrency $USERS"
-if [ "$REQUEST_RATE" != "0" ]; then
-    AIPERF_CMD+=" --request-rate $REQUEST_RATE"
-fi
 if [ -n "${DURATION:-}" ]; then
     AIPERF_CMD+=" --benchmark-duration $DURATION"
     AIPERF_CMD+=" --benchmark-grace-period 0"
 fi
 AIPERF_CMD+=" --request-timeout-seconds $REQUEST_TIMEOUT"
 AIPERF_CMD+=" --output-artifact-dir $RESULT_DIR/aiperf_artifacts"
-AIPERF_CMD+=" --extra-inputs ignore_eos:true"
 AIPERF_CMD+=" --export-level records"
 AIPERF_CMD+=" --ui-type simple"
 AIPERF_CMD+=" --random-seed 42"
