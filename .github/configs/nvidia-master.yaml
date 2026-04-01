@@ -3101,7 +3101,7 @@ gptoss-fp4-b200-vllm:
     - { tp: 8, conc-start: 4, conc-end: 4 }
 
 minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.18.0-cu130
+  image: vllm/vllm-openai:nightly-5b8c30d62b754b575e043ce2fc0dcbf8a64f6306
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b200
