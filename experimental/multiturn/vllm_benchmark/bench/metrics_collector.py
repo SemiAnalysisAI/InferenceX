@@ -1,6 +1,7 @@
 """
-Metrics collector for vLLM server during benchmarks.
+Metrics collector for inference servers during benchmarks.
 Polls /metrics endpoint and generates visualizations.
+Supports vLLM and sglang backends (auto-detected from metrics prefix).
 """
 
 import asyncio
@@ -9,6 +10,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol
 
 import aiohttp
 import matplotlib.pyplot as plt
@@ -43,6 +45,125 @@ class MetricsSnapshot:
     prefill_kv_computed_tokens_count: int = 0
 
 
+# =============================================================================
+# Metrics Parsers — one per backend
+# =============================================================================
+
+def _get_value(text: str, pattern: str, default: float = 0.0) -> float:
+    """Extract a gauge/counter value from Prometheus text using a regex."""
+    match = re.search(pattern, text)
+    return float(match.group(1)) if match else default
+
+
+class VLLMMetricsParser:
+    """Parse vLLM Prometheus metrics (prefix: vllm:)."""
+
+    def parse(self, text: str) -> MetricsSnapshot:
+        snapshot = MetricsSnapshot(timestamp=time.time())
+        g = lambda p, d=0.0: _get_value(text, p, d)
+
+        # KV cache usage (0-1 scale)
+        snapshot.kv_cache_usage = g(r'vllm:gpu_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)')
+        if snapshot.kv_cache_usage == 0.0:
+            snapshot.kv_cache_usage = g(r'vllm:kv_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)')
+
+        snapshot.cpu_kv_cache_usage = g(r'vllm:cpu_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)')
+
+        snapshot.num_requests_running = int(g(r'vllm:num_requests_running\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.num_requests_waiting = int(g(r'vllm:num_requests_waiting\{[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.prefix_cache_hits = int(g(r'vllm:prefix_cache_hits_total\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prefix_cache_queries = int(g(r'vllm:prefix_cache_queries_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.cpu_prefix_cache_hits = int(g(r'vllm:external_prefix_cache_hits_total\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.cpu_prefix_cache_queries = int(g(r'vllm:external_prefix_cache_queries_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.prompt_tokens = int(g(r'vllm:prompt_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.generation_tokens = int(g(r'vllm:generation_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.num_preemptions = int(g(r'vllm:num_preemptions_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        for match in re.finditer(
+            r'vllm:request_success_total\{[^}]*finished_reason="[^"]*"[^}]*\}\s+([\d.e+-]+)', text
+        ):
+            snapshot.request_success += int(float(match.group(1)))
+
+        snapshot.kv_offload_bytes_gpu_to_cpu = g(r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)')
+        snapshot.kv_offload_bytes_cpu_to_gpu = g(r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)')
+        snapshot.kv_offload_time_gpu_to_cpu = g(r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)')
+        snapshot.kv_offload_time_cpu_to_gpu = g(r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)')
+
+        snapshot.prompt_tokens_local_compute = int(g(r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_compute"[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prompt_tokens_local_cache_hit = int(g(r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_cache_hit"[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prompt_tokens_external_kv_transfer = int(g(r'vllm:prompt_tokens_by_source_total\{[^}]*source="external_kv_transfer"[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.prefill_kv_computed_tokens_sum = int(g(r'vllm:request_prefill_kv_computed_tokens_sum\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prefill_kv_computed_tokens_count = int(g(r'vllm:request_prefill_kv_computed_tokens_count\{[^}]*\}\s+([\d.e+-]+)'))
+
+        return snapshot
+
+
+class SGLangMetricsParser:
+    """Parse sglang Prometheus metrics (prefix: sglang:)."""
+
+    def parse(self, text: str) -> MetricsSnapshot:
+        snapshot = MetricsSnapshot(timestamp=time.time())
+        g = lambda p, d=0.0: _get_value(text, p, d)
+
+        # KV cache usage — sglang reports token_usage as a ratio (0-1)
+        snapshot.kv_cache_usage = g(r'sglang:token_usage\{[^}]*\}\s+([\d.e+-]+)')
+        # Fallback: compute from num_used_tokens / max_total_num_tokens
+        if snapshot.kv_cache_usage == 0.0:
+            used = g(r'sglang:num_used_tokens\{[^}]*\}\s+([\d.e+-]+)')
+            total = g(r'sglang:max_total_num_tokens\{[^}]*\}\s+([\d.e+-]+)')
+            if total > 0:
+                snapshot.kv_cache_usage = used / total
+
+        snapshot.num_requests_running = int(g(r'sglang:num_running_reqs\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.num_requests_waiting = int(g(r'sglang:num_queue_reqs\{[^}]*\}\s+([\d.e+-]+)'))
+
+        # sglang exposes cache_hit_rate as a direct gauge (0-1)
+        # We convert to cumulative-style by tracking hits/queries from token sources
+        cache_hit_rate = g(r'sglang:cache_hit_rate\{[^}]*\}\s+([\d.e+-]+)')
+        prompt_tokens = int(g(r'sglang:prompt_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prompt_tokens = prompt_tokens
+        # Approximate cumulative cache hits from rate × total prompts
+        if prompt_tokens > 0 and cache_hit_rate > 0:
+            snapshot.prefix_cache_queries = prompt_tokens
+            snapshot.prefix_cache_hits = int(prompt_tokens * cache_hit_rate)
+
+        snapshot.generation_tokens = int(g(r'sglang:generation_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        # Preemptions — sglang calls them "retractions"
+        snapshot.num_preemptions = int(g(r'sglang:num_retracted_reqs\{[^}]*\}\s+([\d.e+-]+)'))
+
+        snapshot.request_success = int(g(r'sglang:num_requests_total\{[^}]*\}\s+([\d.e+-]+)'))
+
+        # Token source breakdown from realtime_tokens_total
+        snapshot.prompt_tokens_local_compute = int(g(
+            r'sglang:realtime_tokens_total\{[^}]*mode="prefill_compute"[^}]*\}\s+([\d.e+-]+)'))
+        snapshot.prompt_tokens_local_cache_hit = int(g(
+            r'sglang:realtime_tokens_total\{[^}]*mode="prefill_cache"[^}]*\}\s+([\d.e+-]+)'))
+
+        return snapshot
+
+
+def detect_backend(text: str) -> str:
+    """Auto-detect backend from metrics text."""
+    if 'vllm:' in text:
+        return 'vllm'
+    elif 'sglang:' in text:
+        return 'sglang'
+    return 'unknown'
+
+
+def get_parser(backend: str):
+    """Get the appropriate parser for the backend."""
+    if backend == 'sglang':
+        return SGLangMetricsParser()
+    return VLLMMetricsParser()  # default
+
+
 @dataclass
 class MetricsCollector:
     base_url: str
@@ -50,115 +171,17 @@ class MetricsCollector:
     snapshots: list[MetricsSnapshot] = field(default_factory=list)
     _running: bool = False
     _task: asyncio.Task | None = None
-    gpu_transfer_collector: GpuTransferCollector | None = None
-    gpu_id: int = 0
+    _parser: VLLMMetricsParser | SGLangMetricsParser | None = None
+    _backend: str = ""
 
     def _parse_metrics(self, text: str) -> MetricsSnapshot:
-        """Parse Prometheus metrics text format."""
-        snapshot = MetricsSnapshot(timestamp=time.time())
-
-        # Helper to extract gauge/counter value
-        def get_value(pattern: str, default: float = 0.0) -> float:
-            match = re.search(pattern, text)
-            if match:
-                return float(match.group(1))
-            return default
-
-        # KV cache usage (0-1 scale)
-        snapshot.kv_cache_usage = get_value(
-            r'vllm:gpu_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)'
-        )
-        # Fallback to old metric name if new one not found
-        if snapshot.kv_cache_usage == 0.0:
-            snapshot.kv_cache_usage = get_value(
-                r'vllm:kv_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)'
-            )
-
-        # CPU/offloaded KV cache usage
-        snapshot.cpu_kv_cache_usage = get_value(
-            r'vllm:cpu_cache_usage_perc\{[^}]*\}\s+([\d.e+-]+)'
-        )
-
-        # Running/waiting requests
-        snapshot.num_requests_running = int(get_value(
-            r'vllm:num_requests_running\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.num_requests_waiting = int(get_value(
-            r'vllm:num_requests_waiting\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Prefix cache (cumulative counters) - GPU
-        snapshot.prefix_cache_hits = int(get_value(
-            r'vllm:prefix_cache_hits_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.prefix_cache_queries = int(get_value(
-            r'vllm:prefix_cache_queries_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Prefix cache - external/offloaded (KV connector cross-instance cache)
-        snapshot.cpu_prefix_cache_hits = int(get_value(
-            r'vllm:external_prefix_cache_hits_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.cpu_prefix_cache_queries = int(get_value(
-            r'vllm:external_prefix_cache_queries_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Token counters
-        snapshot.prompt_tokens = int(get_value(
-            r'vllm:prompt_tokens_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.generation_tokens = int(get_value(
-            r'vllm:generation_tokens_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Preemptions
-        snapshot.num_preemptions = int(get_value(
-            r'vllm:num_preemptions_total\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Request success (sum all finish reasons)
-        for match in re.finditer(
-            r'vllm:request_success_total\{[^}]*finished_reason="[^"]*"[^}]*\}\s+([\d.e+-]+)',
-            text
-        ):
-            snapshot.request_success += int(float(match.group(1)))
-
-        # KV offload bytes transferred (cumulative counters by direction)
-        snapshot.kv_offload_bytes_gpu_to_cpu = get_value(
-            r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)'
-        )
-        snapshot.kv_offload_bytes_cpu_to_gpu = get_value(
-            r'vllm:kv_offload_total_bytes_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)'
-        )
-
-        # KV offload time (cumulative, seconds)
-        snapshot.kv_offload_time_gpu_to_cpu = get_value(
-            r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="GPU_to_CPU"[^}]*\}\s+([\d.e+-]+)'
-        )
-        snapshot.kv_offload_time_cpu_to_gpu = get_value(
-            r'vllm:kv_offload_total_time_total\{[^}]*transfer_type="CPU_to_GPU"[^}]*\}\s+([\d.e+-]+)'
-        )
-
-        # Prompt tokens by source (cumulative)
-        snapshot.prompt_tokens_local_compute = int(get_value(
-            r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_compute"[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.prompt_tokens_local_cache_hit = int(get_value(
-            r'vllm:prompt_tokens_by_source_total\{[^}]*source="local_cache_hit"[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.prompt_tokens_external_kv_transfer = int(get_value(
-            r'vllm:prompt_tokens_by_source_total\{[^}]*source="external_kv_transfer"[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        # Prefill KV computed tokens (histogram sum and count)
-        snapshot.prefill_kv_computed_tokens_sum = int(get_value(
-            r'vllm:request_prefill_kv_computed_tokens_sum\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-        snapshot.prefill_kv_computed_tokens_count = int(get_value(
-            r'vllm:request_prefill_kv_computed_tokens_count\{[^}]*\}\s+([\d.e+-]+)'
-        ))
-
-        return snapshot
+        """Parse Prometheus metrics text, auto-detecting backend on first call."""
+        if self._parser is None:
+            self._backend = detect_backend(text)
+            self._parser = get_parser(self._backend)
+            if self._backend != 'unknown':
+                print(f"Auto-detected metrics backend: {self._backend}")
+        return self._parser.parse(text)
 
     async def _poll_loop(self) -> None:
         """Background polling loop."""
