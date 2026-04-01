@@ -1,4 +1,10 @@
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Move MI300X model checkpoint cache from NFS /home to local RAID /raid"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
