@@ -74,7 +74,8 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
 
     export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
-    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
+    # NFS-safe cleanup: use timeout to avoid hanging on stale NFS locks
+    timeout --kill-after=5 30 sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
 
@@ -137,7 +138,8 @@ PY
     set -x
     echo "Canceled the slurm job $JOB_ID"
 
-    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
+    # NFS-safe cleanup: use timeout to avoid hanging on stale NFS locks
+    timeout --kill-after=5 30 sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
         ARTIFACT_DIR="$GITHUB_WORKSPACE/benchmark_artifacts"

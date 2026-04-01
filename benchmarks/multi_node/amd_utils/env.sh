@@ -104,6 +104,11 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == chi-mi325x* ]]; then
+            # Vultr/CPE MI325X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+            export MORI_RDMA_TC=104
+            export MORI_RDMA_SL=3
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
         fi
@@ -117,6 +122,11 @@ else
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == chi-mi325x* ]]; then
+        # Vultr/CPE MI325X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+        export MORI_RDMA_TC=104
+        export MORI_RDMA_SL=3
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
         echo "       This is normal for clusters without QoS or outside Docker containers."

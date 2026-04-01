@@ -299,8 +299,8 @@ SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning stale logs folder..."
-  # clean up the logs folder
-  sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  # NFS-safe cleanup: use timeout to avoid hanging on stale NFS locks
+  timeout --kill-after=5 30 sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
 
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
