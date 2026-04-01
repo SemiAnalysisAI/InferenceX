@@ -1232,7 +1232,6 @@
     - kimik2.5-fp4-mi355x-atom
     - minimaxm2.5-fp8-mi355x-atom
   description:
-    - "ATOM support for Kimi-K2.5 FP4 and MiniMax-M2.5 FP8 on MI355X"
-    - "Uses ATOM framework with rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1 image"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/989
-  
+    - "New model support on ATOM framework"
+    - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
