@@ -89,10 +89,12 @@ dsr1-fp8-mi325x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
