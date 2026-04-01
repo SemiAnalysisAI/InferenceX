@@ -6,117 +6,12 @@ Polls /metrics endpoint and generates visualizations.
 import asyncio
 import csv
 import re
-import subprocess
-import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import aiohttp
 import matplotlib.pyplot as plt
-
-
-@dataclass
-class GpuTransferSnapshot:
-    timestamp: float
-    gpu_id: int = 0
-    tx_pci: float = 0.0  # PCIe TX (MB/s)
-    rx_pci: float = 0.0  # PCIe RX (MB/s)
-
-
-class GpuTransferCollector:
-    """DEPRECATED: Collects GPU transfer stats using nvidia-smi dmon.
-
-    Replaced by vLLM's native kv_offload metrics (vllm:kv_offload_total_bytes_total,
-    vllm:kv_offload_total_time_total) which are more precise and don't require
-    spawning a subprocess.
-    """
-
-    def __init__(self, gpu_id: int = 0, poll_interval: int = 1):
-        self.gpu_id = gpu_id
-        self.poll_interval = poll_interval
-        self.snapshots: list[GpuTransferSnapshot] = []
-        self._process: subprocess.Popen | None = None
-        self._thread: threading.Thread | None = None
-        self._running = False
-
-    def _parse_line(self, line: str) -> GpuTransferSnapshot | None:
-        """Parse a line of nvidia-smi dmon CSV output.
-
-        Format: gpu, rxpci, txpci (values in MB/s)
-        Example: 0, 406, 32013
-        """
-        line = line.strip()
-        if not line or line.startswith('#'):  # Skip header/comments
-            return None
-
-        parts = [p.strip() for p in line.split(',')]
-        if len(parts) < 3:
-            return None
-
-        try:
-            return GpuTransferSnapshot(
-                timestamp=time.time(),
-                gpu_id=int(parts[0]),
-                rx_pci=float(parts[1]) if parts[1] != '-' else 0.0,
-                tx_pci=float(parts[2]) if parts[2] != '-' else 0.0,
-            )
-        except (ValueError, IndexError):
-            return None
-
-    def _reader_thread(self) -> None:
-        """Background thread to read nvidia-smi output."""
-        if self._process is None:
-            return
-
-        for line in iter(self._process.stdout.readline, ''):
-            if not self._running:
-                break
-            snapshot = self._parse_line(line)
-            if snapshot and snapshot.gpu_id == self.gpu_id:
-                self.snapshots.append(snapshot)
-
-    def start(self) -> None:
-        """Start collecting GPU transfer stats."""
-        if self._running:
-            return
-
-        self._running = True
-        self.snapshots = []
-
-        try:
-            self._process = subprocess.Popen(
-                [
-                    'nvidia-smi', 'dmon',
-                    '-i', str(self.gpu_id),
-                    '-s', 't',
-                    '-d', str(self.poll_interval),
-                    '--format', 'csv',
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            self._thread = threading.Thread(target=self._reader_thread, daemon=True)
-            self._thread.start()
-        except FileNotFoundError:
-            print("nvidia-smi not found, GPU transfer monitoring disabled")
-            self._running = False
-
-    def stop(self) -> None:
-        """Stop collecting GPU transfer stats."""
-        self._running = False
-        if self._process:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-            self._process = None
-
-        if self._thread:
-            self._thread.join(timeout=2)
-            self._thread = None
 
 
 @dataclass
