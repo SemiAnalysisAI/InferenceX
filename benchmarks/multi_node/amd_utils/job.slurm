@@ -321,6 +321,67 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo "NFS cache refreshed on $(hostname)"
 '
 
+# =============================================================================
+# Optional: Pre-stage model to local NVMe for faster loading
+# =============================================================================
+# LOCAL_MODEL_CACHE_DIR: mount point for fast local storage (NVMe/SSD) on compute nodes.
+# Set per-cluster via the runner/launch script. When set, model weights are rsync'd
+# from shared storage to local NVMe before Docker starts. This is idempotent —
+# subsequent runs skip files already cached locally.
+#
+# If unset or the local path doesn't exist, the model is served directly from
+# shared storage (NFS/Lustre) as before.
+if [[ -n "${LOCAL_MODEL_CACHE_DIR:-}" ]]; then
+    LOCAL_MODEL_FULL="${LOCAL_MODEL_CACHE_DIR}/${MODEL_NAME}"
+    echo "[cache] Pre-staging model to local NVMe on all nodes..."
+    echo "[cache]   Source: $MODEL_PATH"
+    echo "[cache]   Dest:   $LOCAL_MODEL_FULL"
+
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+        set -euo pipefail
+        SRC="'"$MODEL_PATH"'"
+        DST="'"$LOCAL_MODEL_FULL"'"
+        CACHE_DIR="'"${LOCAL_MODEL_CACHE_DIR}"'"
+
+        # Create destination directory
+        sudo mkdir -p "$CACHE_DIR" 2>/dev/null || mkdir -p "$CACHE_DIR"
+        sudo chown -R "$(whoami)" "$CACHE_DIR" 2>/dev/null || true
+
+        SRC_COUNT=$(find "$SRC" -type f 2>/dev/null | wc -l)
+        DST_COUNT=$(find "$DST" -type f 2>/dev/null | wc -l)
+
+        if [[ "$SRC_COUNT" -eq "$DST_COUNT" ]] && [[ "$DST_COUNT" -gt 0 ]]; then
+            echo "[cache] $(hostname): Already cached ($DST_COUNT files)"
+        else
+            echo "[cache] $(hostname): Syncing $SRC_COUNT files..."
+            START=$(date +%s)
+
+            if [[ -d "$SRC/blobs" ]]; then
+                # HuggingFace hub cache layout: parallel-sync large blobs
+                mkdir -p "$DST/blobs"
+                find "$SRC/blobs" -type f -printf "%f\n" | \
+                    xargs -P '"${CACHE_PARALLEL_JOBS:-4}"' -I{} \
+                    rsync -a --whole-file --ignore-existing "$SRC/blobs/{}" "$DST/blobs/{}"
+                rsync -a --whole-file --ignore-existing --exclude="blobs/" "$SRC/" "$DST/"
+            else
+                # Flat model directory
+                rsync -a --whole-file --ignore-existing "$SRC/" "$DST/"
+            fi
+
+            ELAPSED=$(( $(date +%s) - START ))
+            SIZE=$(du -sh "$DST" 2>/dev/null | cut -f1)
+            echo "[cache] $(hostname): Done in ${ELAPSED}s ($SIZE)"
+        fi
+    ' 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        echo "[cache] Model pre-staged successfully. Updating MODEL_DIR."
+        MODEL_DIR="${LOCAL_MODEL_CACHE_DIR}"
+    else
+        echo "[cache] WARNING: Local caching failed on some nodes. Falling back to shared storage."
+    fi
+fi
+
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \

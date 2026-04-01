@@ -3,6 +3,11 @@
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
 export PORT=8888
 
+# Local NVMe cache for model weights (set to empty to disable)
+# MI325X nodes have 8x 3.5TB NVMe drives; /local-nvme must be set up
+# via: sudo bash utils/setup_local_nvme.sh /local-nvme
+export LOCAL_MODEL_CACHE_DIR="${LOCAL_MODEL_CACHE_DIR:-/local-nvme/models}"
+
 PARTITION="compute"
 
 # Detect benchmark subdir from where the script lives
