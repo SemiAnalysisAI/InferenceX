@@ -206,7 +206,7 @@ jobs:
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]
-        if: ${{ always() }}
+        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped') }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
