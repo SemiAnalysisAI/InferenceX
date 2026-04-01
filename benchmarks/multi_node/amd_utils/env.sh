@@ -34,7 +34,6 @@ export IBDEVICES
 export GLOO_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
 export NCCL_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
 
-set +x
 
 export NCCL_IB_HCA=$IBDEVICES
 
@@ -53,6 +52,10 @@ fi
 export SGLANG_MORI_FP4_DISP=False
 export SGLANG_MORI_FP8_COMB=False
 
+# Enable spec v2 
+export SGLANG_ENABLE_SPEC_V2=1
+export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
+
 # Per-role dispatch token limits (prefill uses higher throughput, decode uses lower)
 export MORI_MAX_DISPATCH_TOKENS_PREFILL=16384
 if [[ "$MODEL_NAME" == *mxfp4* ]]; then
@@ -64,6 +67,8 @@ export MORI_MAX_DISPATCH_TOKENS_DECODE=160
 export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
 
 export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
+
+#TODO(billishyahao): The following IO env will be deprecated soon.
 export MORI_IO_QP_MAX_SEND_WR=16384
 export MORI_IO_QP_MAX_CQE=32768
 export MORI_IO_QP_MAX_SGE=4
@@ -89,17 +94,21 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
         TC=$(( 4 * ND_DSCP ))
         export MORI_RDMA_SL=$ND_PRIO
+        export MORI_IO_SL=$ND_PRIO
         export MORI_RDMA_TC=$TC
-        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL"
+        export MORI_IO_TC=$TC
+        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
     else
         echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
         # Fall back to hostname-based detection
         NODENAME=$(hostname -s)
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
@@ -110,9 +119,11 @@ else
     NODENAME=$(hostname -s)
     if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
         export MORI_RDMA_TC=96
+        export MORI_IO_TC=96
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
+        export MORI_IO_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
@@ -124,3 +135,4 @@ fi
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
 
+set +x

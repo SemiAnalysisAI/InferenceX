@@ -504,7 +504,7 @@ dsr1-fp8-mi355x-atom-mtp:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
 dsr1-fp8-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0327
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -659,7 +659,7 @@ dsr1-fp8-mi355x-sglang-disagg:
 
 
 dsr1-fp8-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0327
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -812,10 +812,9 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=2"
 
-
 dsr1-fp4-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
-  model: amd/DeepSeek-R1-0528-MXFP4
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0327-2
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
   precision: fp4
@@ -1021,9 +1020,10 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
+
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
-  model: amd/DeepSeek-R1-0528-MXFP4
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0327-2
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
   precision: fp4
