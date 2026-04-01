@@ -12,6 +12,10 @@ dsr1-fp4-mi355x-sglang:
     search-space:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -31,6 +35,11 @@ dsr1-fp4-mi355x-atom:
     search-space:
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 128, conc-end: 256 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -52,6 +61,11 @@ dsr1-fp4-mi355x-atom-mtp:
     search-space:
     - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    # - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
@@ -69,6 +83,10 @@ dsr1-fp8-mi300x-sglang:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -89,6 +107,10 @@ dsr1-fp8-mi325x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -105,6 +127,10 @@ dsr1-fp8-mi355x-sglang:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -126,6 +152,10 @@ qwen3.5-bf16-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -142,6 +172,10 @@ qwen3.5-bf16-mi300x-sglang:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -162,6 +196,10 @@ qwen3.5-bf16-mi325x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -178,6 +216,10 @@ qwen3.5-fp8-mi325x-sglang:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -198,6 +240,10 @@ qwen3.5-fp8-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -214,6 +260,10 @@ qwen3.5-fp8-mi300x-sglang:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -234,10 +284,36 @@ glm5-fp8-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+
+glm5-fp8-mi355x-atom:
+  image: TBD
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: mi355x
+  precision: fp8
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
 
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -250,6 +326,10 @@ kimik2.5-int4-mi355x-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -270,22 +350,8 @@ kimik2.5-int4-mi325x-vllm:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
-
-kimik2.5-int4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
-  model: moonshotai/Kimi-K2.5
-  model-prefix: kimik2.5
-  runner: mi300x
-  precision: int4
-  framework: vllm
-  multinode: false
-  seq-len-configs:
   - isl: 1024
-    osl: 1024
+    osl: 8192
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
@@ -307,11 +373,42 @@ kimik2.5-fp4-mi355x-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
+
+kimik2.5-fp4-mi355x-atom:
+  image: TBD
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
 
 minimaxm2.5-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -328,11 +425,45 @@ minimaxm2.5-fp8-mi355x-vllm:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+
+minimaxm2.5-fp8-mi355x-atom:
+  image: TBD
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp8
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
 minimaxm2.5-fp8-mi300x-vllm:
@@ -349,6 +480,11 @@ minimaxm2.5-fp8-mi300x-vllm:
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -356,7 +492,7 @@ minimaxm2.5-fp8-mi300x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:v0.16.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -368,12 +504,17 @@ minimaxm2.5-fp8-mi325x-vllm:
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -386,6 +527,13 @@ gptoss-fp4-mi300x-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
@@ -415,6 +563,13 @@ gptoss-fp4-mi325x-vllm:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 1, conc-start: 64, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 64, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -434,6 +589,12 @@ gptoss-fp4-mi355x-vllm:
   seq-len-configs:
   - isl: 1024
     osl: 1024
+    search-space:
+    - { tp: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 8 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
+  - isl: 1024
+    osl: 8192
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 128 }
     - { tp: 4, conc-start: 4, conc-end: 8 }
@@ -459,6 +620,11 @@ gptoss-fp4-mi355x-atom:
     search-space:
     - { tp: 1, conc-start: 16, conc-end: 128 }
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 1, conc-start: 16, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -479,17 +645,22 @@ dsr1-fp8-mi355x-atom:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 128 }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 128 }
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
   precision: fp8
+  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   seq-len-configs:
@@ -497,6 +668,10 @@ dsr1-fp8-mi355x-atom-mtp:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 1024
+    osl: 8192
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
   - isl: 8192
     osl: 1024
     search-space:
@@ -810,6 +985,129 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         additional-settings:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=2"
+
+  # FIXME(billishyahao): disable 1k8k for now
+  # - isl: 1024
+  #   osl: 8192
+  #   search-space:
+  #   # MTP configurations
+  #   # "Top of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
+  #   - spec-decoding: "mtp"
+  #     conc-list: [ 2048 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 16
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=1"
+
+
+  #   # "Middle of curve" (1 prefill worker at DEP8 and 2 decode workers each at DEP8)
+  #   - spec-decoding: "mtp"
+  #     conc-list: [ 256, 512, 1024 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 2
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=1"
+
+
+  #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
+  #   - spec-decoding: "mtp"
+  #     conc-list: [ 32, 64, 128 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+
+  #     decode:
+  #       num-worker: 2
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=1"
+
+  #   # non-MTP configurations
+  #   # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
+  #   - spec-decoding: "none"
+  #     conc-list: [ 2048 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 16
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=0"
+
+  #   # "Middle of curve" (1 prefill workers each at DEP8 and 2 decode workers at DEP8)
+  #   - spec-decoding: "none"
+  #     conc-list: [ 256, 512, 1024 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 2
+  #       tp: 1
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=0"
+
+  #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
+  #   - spec-decoding: "none"
+  #     conc-list: [ 32, 64, 128 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 2
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=0"
 
 
 dsr1-fp4-mi355x-sglang-disagg:
@@ -1229,4 +1527,50 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         additional-settings:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=1"
+
+
+  # FIXME(billishyahao): disable FP4 1k8k for now
+  # - isl: 1024
+  #   osl: 8192
+  #   search-space:
+  #   # MTP configurations
+  #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
+  #   - spec-decoding: "mtp"
+  #     conc-list: [ 32, 64, 128 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+
+  #     decode:
+  #       num-worker: 2
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=1"
+
+  #   # non-MTP configurations
+  #   # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
+  #   - spec-decoding: "none"
+  #     conc-list: [ 32, 64, 128 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 2
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: false
+  #       additional-settings:
+  #       - "DECODE_NODES=2"
+  #       - "DECODE_MTP_SIZE=0"
 
