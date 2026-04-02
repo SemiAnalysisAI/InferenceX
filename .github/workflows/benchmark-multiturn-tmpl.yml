@@ -156,18 +156,17 @@ jobs:
             results/metrics_server_metrics.csv
             results/metrics_plots.png
             results/benchmark.log
-            results/server.log
             results/config.yaml
             results/vllm_command.txt
             results/benchmark_command.txt
             results/benchmark_metadata.json
             results/metrics_workload.png
-            results/responses.json
-            results/aiperf_artifacts/
-            results/conversations.jsonl
+            results/aiperf_artifacts/profile_export_aiperf.csv
+            results/aiperf_artifacts/profile_export_aiperf.json
+            results/aiperf_artifacts/profile_export.jsonl
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
-            results/trace_replay/
+            results/trace_replay/detailed_results.csv
             results/status.txt
           if-no-files-found: ignore
 
