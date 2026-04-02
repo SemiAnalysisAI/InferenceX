@@ -94,9 +94,16 @@ try:
     sessions = set()
     with open(out_path, 'w') as f:
         for row in ds:
+            # vLLM v0.18+ follows the newer OpenAI API spec where 'system' role
+            # was renamed to 'developer'. Convert to avoid 400 validation errors.
+            messages = []
+            for msg in row['input']:
+                if msg.get('role') == 'system':
+                    msg = {**msg, 'role': 'developer'}
+                messages.append(msg)
             entry = {
                 'session_id': row['session_id'],
-                'messages': row['input'],
+                'messages': messages,
                 'output_length': row['output_length'],
             }
             f.write(json.dumps(entry) + '\n')
