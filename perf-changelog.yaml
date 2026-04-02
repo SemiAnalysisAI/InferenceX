@@ -1220,6 +1220,7 @@
     - "Uses nvidia/GLM-5-NVFP4 model with modelopt_fp4 quantization"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973
+<<<<<<< nv/h200-qwen35
   
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
@@ -1227,3 +1228,20 @@
     - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/921 
 
+=======
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "DeepSeek R1 MI355X FP8 ATOM-MTP config to support MTP 3 tokens"
+    - "Image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/984
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-atom
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "New model support on ATOM framework"
+    - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
+>>>>>>> main
