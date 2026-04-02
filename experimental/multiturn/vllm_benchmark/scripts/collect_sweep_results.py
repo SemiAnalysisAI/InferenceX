@@ -39,25 +39,44 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     Returns a dict with pre-computed metrics matching the result schema,
     or None if the file can't be parsed.
     """
-    df = pd.read_csv(csv_path)
-    if len(df) == 0:
+    # The CSV has multiple sections with different column counts.
+    # Read raw lines and split into per-metric and scalar sections.
+    lines = csv_path.read_text().strip().split('\n')
+    if len(lines) < 2:
         return None
 
-    # The CSV has two sections:
-    # 1. Per-metric rows with columns: Metric, avg, min, max, sum, p1..p99, std
-    # 2. Scalar rows with columns: Metric, Value
-    # Split by finding rows where only Metric and Value are populated
-    per_metric = df[df["avg"].notna()].set_index("Metric")
-    scalars = df[df["avg"].isna() & df["Metric"].notna()].set_index("Metric")
+    # Section 1: per-metric stats (header + data rows with 14 columns)
+    header = lines[0].split(',')
+    per_metric = {}
+    scalars = {}
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split(',')
+        if len(parts) == len(header):
+            # Per-metric row
+            per_metric[parts[0]] = {h: parts[i] for i, h in enumerate(header)}
+        elif len(parts) == 2:
+            # Scalar row (Metric, Value)
+            scalars[parts[0]] = parts[1]
+        else:
+            # Different section (GPU metrics) — stop
+            break
 
     def metric_stat(metric_name, stat):
-        if metric_name in per_metric.index:
-            return float(per_metric.loc[metric_name, stat])
+        if metric_name in per_metric:
+            try:
+                return float(per_metric[metric_name].get(stat, 0))
+            except (ValueError, TypeError):
+                return 0
         return 0
 
     def scalar_val(metric_name):
-        if metric_name in scalars.index:
-            return float(scalars.loc[metric_name, "min"])  # "min" column holds Value
+        if metric_name in scalars:
+            try:
+                return float(scalars[metric_name])
+            except (ValueError, TypeError):
+                return 0
         return 0
 
     return {

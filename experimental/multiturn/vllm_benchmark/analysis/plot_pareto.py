@@ -21,21 +21,40 @@ def _load_aiperf_summary_csv(csv_path: Path, exp_dir: Path, tp: int,
                              gpu_hit_rate: float | None,
                              cpu_hit_rate: float | None) -> dict | None:
     """Load aggregate metrics directly from aiperf's profile_export_aiperf.csv."""
-    df = pd.read_csv(csv_path)
-    if len(df) == 0:
+    # The CSV has multiple sections with different column counts.
+    # Read raw lines and split into per-metric and scalar sections.
+    lines = csv_path.read_text().strip().split('\n')
+    if len(lines) < 2:
         return None
 
-    per_metric = df[df["avg"].notna()].set_index("Metric")
-    scalars = df[df["avg"].isna() & df["Metric"].notna()].set_index("Metric")
+    header = lines[0].split(',')
+    per_metric = {}
+    scalars = {}
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split(',')
+        if len(parts) == len(header):
+            per_metric[parts[0]] = {h: parts[i] for i, h in enumerate(header)}
+        elif len(parts) == 2:
+            scalars[parts[0]] = parts[1]
+        else:
+            break
 
     def metric_stat(metric_name, stat):
-        if metric_name in per_metric.index:
-            return float(per_metric.loc[metric_name, stat])
+        if metric_name in per_metric:
+            try:
+                return float(per_metric[metric_name].get(stat, 0))
+            except (ValueError, TypeError):
+                return 0
         return 0
 
     def scalar_val(metric_name):
-        if metric_name in scalars.index:
-            return float(scalars.loc[metric_name, "min"])
+        if metric_name in scalars:
+            try:
+                return float(scalars[metric_name])
+            except (ValueError, TypeError):
+                return 0
         return 0
 
     exp_name = exp_dir.name
