@@ -185,15 +185,15 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # Container Synchronization
 # =============================================================================
 
-echo "Waiting at the container creation barrier on $host_name"
-python3 $VLLM_WS_PATH/sync.py barrier \
-    --local-ip ${host_ip} \
-    --local-port 5000 \
-    --enable-port \
-    --node-ips ${IPADDRS} \
-    --node-ports 5000 \
-    --wait-for-all-ports \
-    --timeout 600
+# echo "Waiting at the container creation barrier on $host_name"
+# python3 $VLLM_WS_PATH/sync.py barrier \
+#     --local-ip ${host_ip} \
+#     --local-port 5000 \
+#     --enable-port \
+#     --node-ips ${IPADDRS} \
+#     --node-ports 5000 \
+#     --wait-for-all-ports \
+#     --timeout 600
 
 # =============================================================================
 # ETCD Server Setup
@@ -283,8 +283,16 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
     echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
-        python3 $VLLM_WS_PATH/moriio_proxy.py"
+    # PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
+    #     python3 $VLLM_WS_PATH/moriio_proxy.py"
+    PROXY_CMD="RUST_LOG=debug /app/vllm-router \
+        --vllm-pd-disaggregation \
+        --vllm-discovery-address 0.0.0.0:$PROXY_PING_PORT \
+        --port $ROUTER_PORT \
+        --host 0.0.0.0 \
+        --policy consistent_hash \
+        --prefill-policy consistent_hash \
+        --decode-policy consistent_hash"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PROXY_CMD"
@@ -297,7 +305,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         sleep 3
     fi
 
-    PREFILL_CMD="vllm serve ${MODEL_PATH} \
+    PREFILL_CMD="vllm serve deepseek-ai/DeepSeek-R1-0528 \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
@@ -438,7 +446,7 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
-    DECODE_CMD="vllm serve ${MODEL_PATH} \
+    DECODE_CMD="vllm serve deepseek-ai/DeepSeek-R1-0528 \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
