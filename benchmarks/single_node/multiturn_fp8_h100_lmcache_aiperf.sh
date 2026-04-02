@@ -14,6 +14,10 @@ set -x
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
+export CUDA_LAUNCH_BLOCKING=1
+
+ulimit -a
+
 check_env_vars \
     MODEL \
     TP \
