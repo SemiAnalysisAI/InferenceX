@@ -3120,6 +3120,26 @@ minimaxm2.5-fp8-b200-vllm:
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
+minimaxm2.5-fp4-b200-vllm:
+  image: vllm/vllm-openai:v0.18.0
+  model: nvidia/MiniMax-M2.5-NVFP4
+  model-prefix: minimaxm2.5
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 256 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 256 }
+
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
