@@ -17,53 +17,69 @@ import numpy as np
 from pathlib import Path
 
 
-def _load_aiperf_jsonl(jsonl_path: Path) -> pd.DataFrame | None:
-    """Load per-request metrics from aiperf profile_export JSONL."""
-    records = []
-    with open(jsonl_path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            entry = json.loads(line)
-            meta = entry.get("metadata", {})
-            metrics = entry.get("metrics", {})
-
-            if meta.get("benchmark_phase") != "profiling":
-                continue
-            if meta.get("was_cancelled", False):
-                continue
-
-            def val(key, default=0):
-                m = metrics.get(key)
-                if m is None:
-                    return default
-                return m.get("value", default) if isinstance(m, dict) else m
-
-            itl = metrics.get("inter_token_latency")
-            if itl and isinstance(itl, dict):
-                tpot_ms = itl.get("value", 0)
-            else:
-                osl = val("output_sequence_length", 1)
-                ttft = val("time_to_first_token", 0)
-                latency = val("request_latency", 0)
-                tpot_ms = (latency - ttft) / max(osl - 1, 1) if osl > 1 else 0
-
-            start_ns = meta.get("request_start_ns", 0)
-            start_ms = start_ns / 1e6
-
-            records.append({
-                "start_time_ms": start_ms,
-                "ttft_ms": val("time_to_first_token"),
-                "tpot_ms": tpot_ms,
-                "latency_ms": val("request_latency"),
-                "input_num_tokens": val("input_sequence_length"),
-                "output_num_tokens": val("output_sequence_length"),
-            })
-
-    if not records:
+def _load_aiperf_summary_csv(csv_path: Path, exp_dir: Path, tp: int,
+                             gpu_hit_rate: float | None,
+                             cpu_hit_rate: float | None) -> dict | None:
+    """Load aggregate metrics directly from aiperf's profile_export_aiperf.csv."""
+    df = pd.read_csv(csv_path)
+    if len(df) == 0:
         return None
-    return pd.DataFrame(records)
+
+    per_metric = df[df["avg"].notna()].set_index("Metric")
+    scalars = df[df["avg"].isna() & df["Metric"].notna()].set_index("Metric")
+
+    def metric_stat(metric_name, stat):
+        if metric_name in per_metric.index:
+            return float(per_metric.loc[metric_name, stat])
+        return 0
+
+    def scalar_val(metric_name):
+        if metric_name in scalars.index:
+            return float(scalars.loc[metric_name, "min"])
+        return 0
+
+    exp_name = exp_dir.name
+    parts = exp_name.split("_")
+    tp_parsed = int(parts[0].replace("tp", ""))
+    bs = int(parts[1].replace("bs", ""))
+    offload = parts[2].replace("offload", "")
+
+    num_requests = int(scalar_val("Request Count"))
+    throughput_rps = scalar_val("Request Throughput (requests/sec)")
+    output_throughput_tps = scalar_val("Output Token Throughput (tokens/sec)")
+    total_throughput_tps = scalar_val("Total Token Throughput (tokens/sec)")
+    input_throughput_tps = total_throughput_tps - output_throughput_tps
+
+    return {
+        "exp_name": exp_name,
+        "tp": tp_parsed,
+        "bs": bs,
+        "offload": offload,
+        "num_requests": num_requests,
+        "throughput_rps": throughput_rps,
+        "input_throughput_tps": input_throughput_tps,
+        "total_throughput_tps": total_throughput_tps,
+        "input_tps_per_gpu": input_throughput_tps / tp_parsed,
+        "output_tps_per_gpu": output_throughput_tps / tp_parsed,
+        "total_tps_per_gpu": total_throughput_tps / tp_parsed,
+        "mean_ttft_ms": metric_stat("Time to First Token (ms)", "avg"),
+        "p50_ttft_ms": metric_stat("Time to First Token (ms)", "p50"),
+        "p90_ttft_ms": metric_stat("Time to First Token (ms)", "p90"),
+        "p99_ttft_ms": metric_stat("Time to First Token (ms)", "p99"),
+        "mean_tpot_ms": metric_stat("Inter Token Latency (ms)", "avg"),
+        "p50_tpot_ms": metric_stat("Inter Token Latency (ms)", "p50"),
+        "p90_tpot_ms": metric_stat("Inter Token Latency (ms)", "p90"),
+        "p99_tpot_ms": metric_stat("Inter Token Latency (ms)", "p99"),
+        "p999_tpot_ms": metric_stat("Inter Token Latency (ms)", "p99"),  # p999 not available, use p99
+        "mean_latency_ms": metric_stat("Request Latency (ms)", "avg"),
+        "p50_latency_ms": metric_stat("Request Latency (ms)", "p50"),
+        "p90_latency_ms": metric_stat("Request Latency (ms)", "p90"),
+        "p99_latency_ms": metric_stat("Request Latency (ms)", "p99"),
+        "p999_latency_ms": metric_stat("Request Latency (ms)", "p99"),  # p999 not available, use p99
+        "p999_ttft_ms": metric_stat("Time to First Token (ms)", "p99"),  # p999 not available, use p99
+        "gpu_hit_rate": gpu_hit_rate,
+        "cpu_hit_rate": cpu_hit_rate,
+    }
 
 
 def _load_trace_replay_csv(csv_path: Path) -> pd.DataFrame | None:
@@ -103,43 +119,46 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
     if status != "SUCCESS":
         return None
 
-    # Also check for aiperf output
-    aiperf_jsonl = None
+    # Check for aiperf summary CSV (preferred)
+    aiperf_summary_csv = None
     aiperf_artifacts = exp_dir / "aiperf_artifacts"
     if aiperf_artifacts.exists():
-        candidates = list(aiperf_artifacts.glob("profile_export_aiperf.jsonl"))
-        if not candidates:
-            candidates = list(aiperf_artifacts.glob("profile_export*.jsonl"))
-        if candidates:
-            aiperf_jsonl = candidates[0]
+        candidate = aiperf_artifacts / "profile_export_aiperf.csv"
+        if candidate.exists():
+            aiperf_summary_csv = candidate
 
     # Check for trace replay output
     trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
 
-    if not client_metrics_file.exists() and aiperf_jsonl is None and not trace_replay_csv.exists():
+    if not client_metrics_file.exists() and aiperf_summary_csv is None and not trace_replay_csv.exists():
         return None
 
     try:
-        if client_metrics_file.exists():
-            df = pd.read_csv(client_metrics_file)
-        elif aiperf_jsonl is not None:
-            df = _load_aiperf_jsonl(aiperf_jsonl)
-        elif trace_replay_csv.exists():
-            df = _load_trace_replay_csv(trace_replay_csv)
-        else:
-            return None
-
         # Load server metrics for cache hit rates
         gpu_hit_rate = None
         cpu_hit_rate = None
         if server_metrics_file.exists():
             server_df = pd.read_csv(server_metrics_file)
-            # Get final cumulative values
             final_row = server_df.iloc[-1]
             if final_row["prefix_cache_queries"] > 0:
                 gpu_hit_rate = 100 * final_row["prefix_cache_hits"] / final_row["prefix_cache_queries"]
             if final_row["cpu_prefix_cache_queries"] > 0:
                 cpu_hit_rate = 100 * final_row["cpu_prefix_cache_hits"] / final_row["cpu_prefix_cache_queries"]
+
+        # Use aiperf summary CSV directly if available
+        if aiperf_summary_csv is not None and not client_metrics_file.exists():
+            exp_name = exp_dir.name
+            parts = exp_name.split("_")
+            tp = int(parts[0].replace("tp", ""))
+            return _load_aiperf_summary_csv(aiperf_summary_csv, exp_dir, tp, gpu_hit_rate, cpu_hit_rate)
+
+        if client_metrics_file.exists():
+            df = pd.read_csv(client_metrics_file)
+        elif trace_replay_csv.exists():
+            df = _load_trace_replay_csv(trace_replay_csv)
+        else:
+            return None
+
         if len(df) == 0:
             return None
 
@@ -151,7 +170,6 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
         offload = parts[2].replace("offload", "")
 
         # Calculate metrics
-        # Prefer benchmark_metadata.json for precise wall-clock duration
         metadata_file = exp_dir / "benchmark_metadata.json"
         total_time_sec = None
         if metadata_file.exists():
@@ -162,33 +180,20 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
             except Exception:
                 pass
 
-        # Fallback: derive from per-request data (first start to last finish)
         if not total_time_sec or total_time_sec <= 0:
             first_start_ms = df["start_time_ms"].min()
             last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
             total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
         if total_time_sec <= 0:
-            total_time_sec = df["latency_ms"].sum() / 1000  # fallback
+            total_time_sec = df["latency_ms"].sum() / 1000
 
         num_requests = len(df)
         throughput_rps = num_requests / total_time_sec if total_time_sec > 0 else 0
-
-        # Input token throughput (prefill)
         total_input_tokens = df["input_num_tokens"].sum()
         input_throughput_tps = total_input_tokens / total_time_sec if total_time_sec > 0 else 0
-
-        # Output token throughput (decode only)
         total_output_tokens = df["output_num_tokens"].sum()
         output_throughput_tps = total_output_tokens / total_time_sec if total_time_sec > 0 else 0
-
-        # Total token throughput (input + output)
-        total_tokens = total_input_tokens + total_output_tokens
-        total_throughput_tps = total_tokens / total_time_sec if total_time_sec > 0 else 0
-
-        # Normalized throughput (per GPU)
-        input_tps_per_gpu = input_throughput_tps / tp
-        output_tps_per_gpu = output_throughput_tps / tp
-        total_tps_per_gpu = total_throughput_tps / tp
+        total_throughput_tps = (total_input_tokens + total_output_tokens) / total_time_sec if total_time_sec > 0 else 0
 
         return {
             "exp_name": exp_name,
@@ -199,9 +204,9 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
             "throughput_rps": throughput_rps,
             "input_throughput_tps": input_throughput_tps,
             "total_throughput_tps": total_throughput_tps,
-            "input_tps_per_gpu": input_tps_per_gpu,
-            "output_tps_per_gpu": output_tps_per_gpu,
-            "total_tps_per_gpu": total_tps_per_gpu,
+            "input_tps_per_gpu": input_throughput_tps / tp,
+            "output_tps_per_gpu": output_throughput_tps / tp,
+            "total_tps_per_gpu": total_throughput_tps / tp,
             "mean_ttft_ms": df["ttft_ms"].mean(),
             "p50_ttft_ms": df["ttft_ms"].median(),
             "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
@@ -217,7 +222,6 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
             "p99_latency_ms": df["latency_ms"].quantile(0.99),
             "p999_latency_ms": df["latency_ms"].quantile(0.999),
             "p999_ttft_ms": df["ttft_ms"].quantile(0.999),
-            # Cache hit rates
             "gpu_hit_rate": gpu_hit_rate,
             "cpu_hit_rate": cpu_hit_rate,
         }

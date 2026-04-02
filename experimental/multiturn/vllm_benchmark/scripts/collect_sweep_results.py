@@ -33,63 +33,52 @@ def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | N
     return df
 
 
-def _load_aiperf_jsonl(jsonl_path: Path) -> pd.DataFrame | None:
-    """Load per-request metrics from aiperf profile_export JSONL.
+def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
+    """Load aggregate metrics directly from aiperf's profile_export_aiperf.csv.
 
-    Converts aiperf's per-record format into the same column schema
-    used by the custom benchmark client CSV.
+    Returns a dict with pre-computed metrics matching the result schema,
+    or None if the file can't be parsed.
     """
-    records = []
-    with open(jsonl_path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            entry = json.loads(line)
-            meta = entry.get("metadata", {})
-            metrics = entry.get("metrics", {})
-
-            # Skip non-profiling records or cancelled requests
-            if meta.get("benchmark_phase") != "profiling":
-                continue
-            if meta.get("was_cancelled", False):
-                continue
-
-            # Extract values (aiperf stores metrics as {value, unit} dicts)
-            def val(key, default=0):
-                m = metrics.get(key)
-                if m is None:
-                    return default
-                return m.get("value", default) if isinstance(m, dict) else m
-
-            # Compute TPOT from ITL if available
-            itl = metrics.get("inter_token_latency")
-            if itl and isinstance(itl, dict):
-                tpot_ms = itl.get("value", 0)
-            else:
-                # Fallback: (latency - ttft) / (output_tokens - 1)
-                osl = val("output_sequence_length", 1)
-                ttft = val("time_to_first_token", 0)
-                latency = val("request_latency", 0)
-                tpot_ms = (latency - ttft) / max(osl - 1, 1) if osl > 1 else 0
-
-            # Convert request_start_ns to ms (epoch)
-            start_ns = meta.get("request_start_ns", 0)
-            start_ms = start_ns / 1e6
-
-            records.append({
-                "start_time_ms": start_ms,
-                "ttft_ms": val("time_to_first_token"),
-                "tpot_ms": tpot_ms,
-                "latency_ms": val("request_latency"),
-                "input_num_tokens": val("input_sequence_length"),
-                "output_num_tokens": val("output_sequence_length"),
-            })
-
-    if not records:
+    df = pd.read_csv(csv_path)
+    if len(df) == 0:
         return None
 
-    return pd.DataFrame(records)
+    # The CSV has two sections:
+    # 1. Per-metric rows with columns: Metric, avg, min, max, sum, p1..p99, std
+    # 2. Scalar rows with columns: Metric, Value
+    # Split by finding rows where only Metric and Value are populated
+    per_metric = df[df["avg"].notna()].set_index("Metric")
+    scalars = df[df["avg"].isna() & df["Metric"].notna()].set_index("Metric")
+
+    def metric_stat(metric_name, stat):
+        if metric_name in per_metric.index:
+            return float(per_metric.loc[metric_name, stat])
+        return 0
+
+    def scalar_val(metric_name):
+        if metric_name in scalars.index:
+            return float(scalars.loc[metric_name, "min"])  # "min" column holds Value
+        return 0
+
+    return {
+        "num_requests": int(scalar_val("Request Count")),
+        "throughput_rps": scalar_val("Request Throughput (requests/sec)"),
+        "output_throughput_tps": scalar_val("Output Token Throughput (tokens/sec)"),
+        "total_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)"),
+        "input_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)") - scalar_val("Output Token Throughput (tokens/sec)"),
+        "mean_ttft_ms": metric_stat("Time to First Token (ms)", "avg"),
+        "p50_ttft_ms": metric_stat("Time to First Token (ms)", "p50"),
+        "p90_ttft_ms": metric_stat("Time to First Token (ms)", "p90"),
+        "p99_ttft_ms": metric_stat("Time to First Token (ms)", "p99"),
+        "mean_tpot_ms": metric_stat("Inter Token Latency (ms)", "avg"),
+        "p50_tpot_ms": metric_stat("Inter Token Latency (ms)", "p50"),
+        "p90_tpot_ms": metric_stat("Inter Token Latency (ms)", "p90"),
+        "p99_tpot_ms": metric_stat("Inter Token Latency (ms)", "p99"),
+        "mean_latency_ms": metric_stat("Request Latency (ms)", "avg"),
+        "p50_latency_ms": metric_stat("Request Latency (ms)", "p50"),
+        "p90_latency_ms": metric_stat("Request Latency (ms)", "p90"),
+        "p99_latency_ms": metric_stat("Request Latency (ms)", "p99"),
+    }
 
 
 def _load_trace_replay_csv(csv_path: Path) -> pd.DataFrame | None:
@@ -125,20 +114,18 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return None
     status = status_file.read_text().strip()
 
-    # Also check for aiperf output
-    aiperf_jsonl = None
+    # Check for aiperf summary CSV (preferred) or per-record JSONL (fallback)
+    aiperf_summary_csv = None
     aiperf_artifacts = exp_dir / "aiperf_artifacts"
     if aiperf_artifacts.exists():
-        candidates = list(aiperf_artifacts.glob("profile_export_aiperf.jsonl"))
-        if not candidates:
-            candidates = list(aiperf_artifacts.glob("profile_export*.jsonl"))
-        if candidates:
-            aiperf_jsonl = candidates[0]
+        candidate = aiperf_artifacts / "profile_export_aiperf.csv"
+        if candidate.exists():
+            aiperf_summary_csv = candidate
 
     # Check for trace replay output
     trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
 
-    if not client_csv.exists() and aiperf_jsonl is None and not trace_replay_csv.exists():
+    if not client_csv.exists() and aiperf_summary_csv is None and not trace_replay_csv.exists():
         return None
 
     # Parse experiment name from directory: multiturn_tp{N}_users{M}_offload{mode}
@@ -168,58 +155,99 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: custom client CSV, aiperf JSONL, or trace replay CSV
+        # Determine data source: custom client CSV, aiperf summary CSV, or trace replay CSV
         if client_csv.exists():
             df = _load_custom_client_csv(client_csv, exp_dir)
-        elif aiperf_jsonl is not None:
-            df = _load_aiperf_jsonl(aiperf_jsonl)
+            if df is None or len(df) == 0:
+                return result
+
+            # Prefer benchmark_metadata.json for precise wall-clock duration
+            metadata_file = exp_dir / "benchmark_metadata.json"
+            total_time_sec = None
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file) as f:
+                        metadata = json.load(f)
+                    total_time_sec = metadata.get("benchmark_runtime_sec")
+                except Exception:
+                    pass
+
+            if not total_time_sec or total_time_sec <= 0:
+                first_start_ms = df["start_time_ms"].min()
+                last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
+                total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
+            if total_time_sec <= 0:
+                total_time_sec = df["latency_ms"].sum() / 1000
+
+            num_requests = len(df)
+            result.update({
+                "num_requests": num_requests,
+                "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
+                "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
+                "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
+                "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
+                "mean_ttft_ms": df["ttft_ms"].mean(),
+                "p50_ttft_ms": df["ttft_ms"].median(),
+                "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
+                "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
+                "mean_tpot_ms": df["tpot_ms"].mean(),
+                "p50_tpot_ms": df["tpot_ms"].median(),
+                "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
+                "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
+                "mean_latency_ms": df["latency_ms"].mean(),
+                "p50_latency_ms": df["latency_ms"].median(),
+                "p90_latency_ms": df["latency_ms"].quantile(0.9),
+                "p99_latency_ms": df["latency_ms"].quantile(0.99),
+            })
+        elif aiperf_summary_csv is not None:
+            aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
+            if aiperf_metrics is None:
+                return result
+            result.update(aiperf_metrics)
         elif trace_replay_csv.exists():
             df = _load_trace_replay_csv(trace_replay_csv)
+            if df is None or len(df) == 0:
+                return result
+
+            metadata_file = exp_dir / "benchmark_metadata.json"
+            total_time_sec = None
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file) as f:
+                        metadata = json.load(f)
+                    total_time_sec = metadata.get("benchmark_runtime_sec")
+                except Exception:
+                    pass
+
+            if not total_time_sec or total_time_sec <= 0:
+                first_start_ms = df["start_time_ms"].min()
+                last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
+                total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
+            if total_time_sec <= 0:
+                total_time_sec = df["latency_ms"].sum() / 1000
+
+            num_requests = len(df)
+            result.update({
+                "num_requests": num_requests,
+                "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
+                "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
+                "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
+                "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
+                "mean_ttft_ms": df["ttft_ms"].mean(),
+                "p50_ttft_ms": df["ttft_ms"].median(),
+                "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
+                "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
+                "mean_tpot_ms": df["tpot_ms"].mean(),
+                "p50_tpot_ms": df["tpot_ms"].median(),
+                "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
+                "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
+                "mean_latency_ms": df["latency_ms"].mean(),
+                "p50_latency_ms": df["latency_ms"].median(),
+                "p90_latency_ms": df["latency_ms"].quantile(0.9),
+                "p99_latency_ms": df["latency_ms"].quantile(0.99),
+            })
         else:
             return result
-
-        if df is None or len(df) == 0:
-            return result
-
-        # Prefer benchmark_metadata.json for precise wall-clock duration
-        metadata_file = exp_dir / "benchmark_metadata.json"
-        total_time_sec = None
-        if metadata_file.exists():
-            try:
-                with open(metadata_file) as f:
-                    metadata = json.load(f)
-                total_time_sec = metadata.get("benchmark_runtime_sec")
-            except Exception:
-                pass
-
-        # Fallback: derive from per-request data (first start to last finish)
-        if not total_time_sec or total_time_sec <= 0:
-            first_start_ms = df["start_time_ms"].min()
-            last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
-            total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
-        if total_time_sec <= 0:
-            total_time_sec = df["latency_ms"].sum() / 1000
-
-        num_requests = len(df)
-        result.update({
-            "num_requests": num_requests,
-            "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
-            "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-            "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-            "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
-            "mean_ttft_ms": df["ttft_ms"].mean(),
-            "p50_ttft_ms": df["ttft_ms"].median(),
-            "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
-            "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
-            "mean_tpot_ms": df["tpot_ms"].mean(),
-            "p50_tpot_ms": df["tpot_ms"].median(),
-            "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
-            "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
-            "mean_latency_ms": df["latency_ms"].mean(),
-            "p50_latency_ms": df["latency_ms"].median(),
-            "p90_latency_ms": df["latency_ms"].quantile(0.9),
-            "p99_latency_ms": df["latency_ms"].quantile(0.99),
-        })
 
         # Cache hit rates from server metrics
         if server_csv.exists():

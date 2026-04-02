@@ -163,7 +163,6 @@ jobs:
             results/metrics_workload.png
             results/aiperf_artifacts/profile_export_aiperf.csv
             results/aiperf_artifacts/profile_export_aiperf.json
-            results/aiperf_artifacts/profile_export.jsonl
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
             results/trace_replay/detailed_results.csv
