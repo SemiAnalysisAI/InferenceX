@@ -23,10 +23,10 @@ MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
 CHUNK_SIZE=32768
 
 EVAL_CONTEXT_ARGS=""
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
-fi
+#if [ "${EVAL_ONLY}" = "true" ]; then
+#    setup_eval_context
+#    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+#fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
