@@ -30,7 +30,7 @@ export SGLANG_AITER_MLA_PERSIST=1
 MTP_ARGS=""
 CHAT_TEMPLATE_ARGS=""
 if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
-    MTP_ARGS="--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-steps 1 --speculative-num-draft-tokens 2"
+    MTP_ARGS="--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-steps 3 --speculative-num-draft-tokens 4"
     CHAT_TEMPLATE_ARGS="--use-chat-template"
 fi
 
