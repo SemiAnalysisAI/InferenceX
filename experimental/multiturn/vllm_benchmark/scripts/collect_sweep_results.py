@@ -155,8 +155,13 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: custom client CSV, aiperf summary CSV, or trace replay CSV
-        if client_csv.exists():
+        # Determine data source: aiperf summary CSV (preferred), custom client CSV, or trace replay CSV
+        if aiperf_summary_csv is not None:
+            aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
+            if aiperf_metrics is None:
+                return result
+            result.update(aiperf_metrics)
+        elif client_csv.exists():
             df = _load_custom_client_csv(client_csv, exp_dir)
             if df is None or len(df) == 0:
                 return result
@@ -199,11 +204,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 "p90_latency_ms": df["latency_ms"].quantile(0.9),
                 "p99_latency_ms": df["latency_ms"].quantile(0.99),
             })
-        elif aiperf_summary_csv is not None:
-            aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
-            if aiperf_metrics is None:
-                return result
-            result.update(aiperf_metrics)
         elif trace_replay_csv.exists():
             df = _load_trace_replay_csv(trace_replay_csv)
             if df is None or len(df) == 0:

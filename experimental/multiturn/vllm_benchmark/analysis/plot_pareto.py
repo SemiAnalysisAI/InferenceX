@@ -145,8 +145,8 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
             if final_row["cpu_prefix_cache_queries"] > 0:
                 cpu_hit_rate = 100 * final_row["cpu_prefix_cache_hits"] / final_row["cpu_prefix_cache_queries"]
 
-        # Use aiperf summary CSV directly if available
-        if aiperf_summary_csv is not None and not client_metrics_file.exists():
+        # Use aiperf summary CSV directly if available (preferred over client CSV)
+        if aiperf_summary_csv is not None:
             exp_name = exp_dir.name
             parts = exp_name.split("_")
             tp = int(parts[0].replace("tp", ""))
