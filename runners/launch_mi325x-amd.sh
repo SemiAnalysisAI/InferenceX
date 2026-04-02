@@ -10,14 +10,19 @@ export LOCAL_MODEL_CACHE_DIR="${LOCAL_MODEL_CACHE_DIR:-/local-nvme/models}"
 
 PARTITION="compute"
 
-# Detect benchmark subdir from where the script lives
-SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi325x_${FRAMEWORK}.sh"
-if [[ -f "benchmarks/multi_node/${SCRIPT_NAME}" ]]; then
+# Detect benchmark subdir from where the script lives.
+# Multi-node scripts include the framework suffix (e.g. _sglang-disagg.sh);
+# single-node scripts do not (e.g. dsr1_fp8_mi325x.sh).
+SCRIPT_NAME_WITH_FW="${EXP_NAME%%_*}_${PRECISION}_mi325x_${FRAMEWORK}.sh"
+SCRIPT_NAME_BASE="${EXP_NAME%%_*}_${PRECISION}_mi325x.sh"
+if [[ -f "benchmarks/multi_node/${SCRIPT_NAME_WITH_FW}" ]]; then
     BENCHMARK_SUBDIR="multi_node"
-elif [[ -f "benchmarks/single_node/${SCRIPT_NAME}" ]]; then
+    SCRIPT_NAME="${SCRIPT_NAME_WITH_FW}"
+elif [[ -f "benchmarks/single_node/${SCRIPT_NAME_BASE}" ]]; then
     BENCHMARK_SUBDIR="single_node"
+    SCRIPT_NAME="${SCRIPT_NAME_BASE}"
 else
-    echo "ERROR: ${SCRIPT_NAME} not found in benchmarks/multi_node or benchmarks/single_node"
+    echo "ERROR: neither benchmarks/multi_node/${SCRIPT_NAME_WITH_FW} nor benchmarks/single_node/${SCRIPT_NAME_BASE} found"
     exit 1
 fi
 
