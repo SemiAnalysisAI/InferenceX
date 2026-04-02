@@ -20,6 +20,17 @@ mi355x-fp8-llama70b:
     users: [1, 2, 4, 8, 16, 32, 64, 96, 128, 160, 256, 512]
     offload: ["on", "off"]
 
+h200-fp8-llama70b-lmcache:
+  tp2:
+    users: [2, 4, 6, 8, 10, 12, 16, 20, 24, 32]
+    offload: ["on", "off"]
+  tp4:
+    users: [4, 8, 16, 24, 32, 40, 48, 56]
+    offload: ["on", "off"]
+  tp8:
+    users: [2, 4, 8, 16, 32, 48, 64, 80]
+    offload: ["on", "off"]
+
 h100-fp8-llama70b-lmcache:
   tp2:
     users: [1, 2, 4, 6, 8, 10, 12, 16, 20, 32, 64]
