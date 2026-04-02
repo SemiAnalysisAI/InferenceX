@@ -288,6 +288,7 @@ export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 # Eval-related env vars (threaded from submit.sh)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
+export EVAL_CONC="${EVAL_CONC:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
@@ -401,6 +402,7 @@ exec sudo docker run --rm \
     -e BENCHMARK_LOGS_DIR=/benchmark_logs \
     -e RUN_EVAL=\$RUN_EVAL \
     -e EVAL_ONLY=\$EVAL_ONLY \
+    -e EVAL_CONC=\$EVAL_CONC \
     -e FRAMEWORK=\$FRAMEWORK \
     -e PRECISION=\$PRECISION \
     -e MODEL_PREFIX=\$MODEL_PREFIX \

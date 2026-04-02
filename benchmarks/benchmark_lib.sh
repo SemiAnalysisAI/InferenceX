@@ -717,8 +717,32 @@ append_lm_eval_summary() {
     # Write minimal meta for collectors that expect it
     local meta_json="${out_dir}/meta_env.json"
     local model_name="${MODEL_NAME:-$MODEL}"
+    local is_multinode_json="false"
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        is_multinode_json="true"
+    fi
+
+    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
+    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
+    local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
+    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
+
     local dp_json="false"
-    if [ "${DP_ATTENTION}" = "true" ]; then dp_json="true"; fi
+    if [ "${DP_ATTENTION:-false}" = "true" ]; then dp_json="true"; fi
+    local prefill_dp_json="$dp_json"
+    if [ "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
+        prefill_dp_json="true"
+    else
+        prefill_dp_json="false"
+    fi
+    local decode_dp_json="$dp_json"
+    if [ "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
+        decode_dp_json="true"
+    else
+        decode_dp_json="false"
+    fi
 
     # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
     # RESULT_FILENAME format (from workflow):
@@ -743,6 +767,7 @@ append_lm_eval_summary() {
     fi
     cat > "${meta_json}" <<META
 {
+  "is_multinode": ${is_multinode_json},
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING}",
@@ -750,6 +775,14 @@ append_lm_eval_summary() {
   "conc": ${CONC:-1},
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
+  "prefill_tp": ${prefill_tp},
+  "prefill_ep": ${prefill_ep},
+  "prefill_dp_attention": ${prefill_dp_json},
+  "prefill_num_workers": ${prefill_num_workers},
+  "decode_tp": ${decode_tp},
+  "decode_ep": ${decode_ep},
+  "decode_dp_attention": ${decode_dp_json},
+  "decode_num_workers": ${decode_num_workers},
   "model": "${model_name:-}",
   "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
   "hw": "${RUNNER_TYPE:-unknown}",

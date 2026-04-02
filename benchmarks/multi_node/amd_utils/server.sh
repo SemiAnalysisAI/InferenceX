@@ -504,7 +504,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             source /workspace/benchmarks/benchmark_lib.sh
 
             # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
-            if [[ -n "${EVAL_CONC}" ]]; then
+            if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
@@ -518,10 +518,20 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
                 # Set metadata env vars for append_lm_eval_summary
                 export TP="${PREFILL_TP_SIZE}"
-                export CONC="${EVAL_CONC}"
+                export CONC="${EVAL_CONCURRENT_REQUESTS}"
                 export EP_SIZE=1
                 [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
+                export PREFILL_TP="${PREFILL_TP_SIZE}"
+                export PREFILL_EP=1
+                [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
+                export PREFILL_NUM_WORKERS="${xP}"
+                export DECODE_TP="${DECODE_TP_SIZE}"
+                export DECODE_EP=1
+                [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
+                export DECODE_NUM_WORKERS="${yD}"
                 export DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
                 export ISL="${BENCH_INPUT_LEN}"
                 export OSL="${BENCH_OUTPUT_LEN}"
                 # FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE, RESULT_FILENAME

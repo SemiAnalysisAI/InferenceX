@@ -107,6 +107,8 @@ export BENCH_REQUEST_RATE=${REQUEST_RATE}
 
 # Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
+export EVAL_ONLY="${EVAL_ONLY:-false}"
+export EVAL_CONC="${EVAL_CONC:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"

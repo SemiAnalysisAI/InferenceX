@@ -163,6 +163,13 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           clean: false
 
+      - name: Cleanup stale eval outputs (pre-run)
+        if: ${{ inputs.run-eval || inputs.eval-only }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
+
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -239,7 +246,7 @@ jobs:
         run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ env.RUN_EVAL == 'true' || inputs.eval-only }}
+        if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
