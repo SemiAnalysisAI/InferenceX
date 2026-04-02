@@ -247,7 +247,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100.sh
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100${SCRIPT_SUFFIX:-}.sh
 
     scancel $JOB_ID
 

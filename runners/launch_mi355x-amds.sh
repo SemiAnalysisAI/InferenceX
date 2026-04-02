@@ -57,7 +57,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME%.sh}${SCRIPT_SUFFIX:-}.sh")
 
     # Wait for job to complete
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"

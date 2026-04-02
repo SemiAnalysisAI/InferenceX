@@ -63,7 +63,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     else
         BENCHMARK_SUBDIR="single_node"
     fi
-    bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
+    bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME%.sh}${SCRIPT_SUFFIX:-}.sh"
     # Wait for all jobs to complete
     echo "Waiting for all jobs to complete..."
     while [ -n "$(squeue -u $USER --noheader --format='%i')" ]; do
