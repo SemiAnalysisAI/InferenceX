@@ -83,31 +83,45 @@ fi
 
 mkdir -p "$RESULT_DIR"
 
-# ---- Convert LMCache traces to mooncake format -----------------------------
-echo "Downloading and converting LMCache traces..."
+# ---- Download and convert LMCache traces to mooncake format ----------------
+echo "Downloading LMCache traces..."
+hf download sammshen/lmcache-agentic-traces --repo-type dataset
+
+echo "Converting LMCache traces to mooncake format..."
 python3 -c "
-import json, os
-try:
+import json, glob, os
+hf_cache = os.environ.get('HF_HUB_CACHE', os.path.expanduser('~/.cache/huggingface/hub'))
+# Find the downloaded parquet/jsonl files in the HF cache
+candidates = glob.glob(os.path.join(hf_cache, 'datasets--sammshen--lmcache-agentic-traces', '**', '*.parquet'), recursive=True)
+if not candidates:
+    candidates = glob.glob(os.path.join(hf_cache, 'datasets--sammshen--lmcache-agentic-traces', '**', '*.jsonl'), recursive=True)
+if not candidates:
+    # Fallback: use datasets library to load from cache
     from datasets import load_dataset
     ds = load_dataset('sammshen/lmcache-agentic-traces', split='train')
-    out_path = '$TRACE_FILE'
-    sessions = set()
-    with open(out_path, 'w') as f:
-        for row in ds:
-            # Strip None fields — vLLM's Pydantic validation rejects explicit nulls
-            # for optional fields like tool_calls, tool_call_id, name
-            messages = [{k: v for k, v in msg.items() if v is not None} for msg in row['input']]
-            entry = {
-                'session_id': row['session_id'],
-                'messages': messages,
-                'output_length': row['output_length'],
-            }
-            f.write(json.dumps(entry) + '\n')
-            sessions.add(row['session_id'])
-    print(f'Converted {len(ds)} iterations from {len(sessions)} sessions to {out_path}')
-except Exception as e:
-    print(f'ERROR converting traces: {e}')
-    exit(1)
+    rows = list(ds)
+else:
+    import pyarrow.parquet as pq
+    rows = []
+    for f in sorted(candidates):
+        table = pq.read_table(f)
+        rows.extend(table.to_pylist())
+    print(f'Loaded {len(rows)} rows from {len(candidates)} cached files')
+
+out_path = '$TRACE_FILE'
+sessions = set()
+with open(out_path, 'w') as f:
+    for row in rows:
+        # Strip None fields — vLLM's Pydantic validation rejects explicit nulls
+        messages = [{k: v for k, v in msg.items() if v is not None} for msg in row['input']]
+        entry = {
+            'session_id': row['session_id'],
+            'messages': messages,
+            'output_length': row['output_length'],
+        }
+        f.write(json.dumps(entry) + '\n')
+        sessions.add(row['session_id'])
+print(f'Converted {len(rows)} iterations from {len(sessions)} sessions to {out_path}')
 "
 
 SERVER_LOG="$RESULT_DIR/server.log"
