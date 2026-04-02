@@ -20,7 +20,7 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
-CHUNK_SIZE=8192
+CHUNK_SIZE=32768
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -30,6 +30,7 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+set -x
 sglang serve \
     --attention-backend triton \
     --model-path $MODEL \
