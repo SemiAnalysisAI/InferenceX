@@ -1241,5 +1241,5 @@
   description:
     - "MiniMax-M2.5 NVFP4 benchmark config for B200"
     - "Uses nvidia/MiniMax-M2.5-NVFP4 model checkpoint"
-    - "Image: vllm/vllm-openai:v0.18.0"
+    - "Image: vllm/vllm-openai:nightly-5b8c30d62b754b575e043ce2fc0dcbf8a64f6306"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxx

@@ -3121,7 +3121,7 @@ minimaxm2.5-fp8-b200-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:nightly-5b8c30d62b754b575e043ce2fc0dcbf8a64f6306
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
@@ -3132,8 +3132,8 @@ minimaxm2.5-fp4-b200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 256 }
-    - { tp: 4, conc-start: 4, conc-end: 256 }
+    - { tp: 2, conc-start: 4, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:

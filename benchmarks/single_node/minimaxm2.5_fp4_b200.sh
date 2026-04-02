@@ -24,8 +24,7 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export VLLM_USE_FLASHINFER_MOE_FP8=0
-export VLLM_MOE_USE_DEEP_GEMM=0
+export VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl
 
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
@@ -47,7 +46,8 @@ $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
---no-enable-prefix-caching \
+--kv-cache-dtype fp8 \
+--stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
