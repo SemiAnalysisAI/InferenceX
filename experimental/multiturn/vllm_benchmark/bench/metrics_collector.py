@@ -172,6 +172,7 @@ class MetricsCollector:
     _task: asyncio.Task | None = None
     _parser: VLLMMetricsParser | SGLangMetricsParser | None = None
     _backend: str = ""
+    gpu_transfer_collector: object = None
 
     def _parse_metrics(self, text: str) -> MetricsSnapshot:
         """Parse Prometheus metrics text, auto-detecting backend on first call."""
