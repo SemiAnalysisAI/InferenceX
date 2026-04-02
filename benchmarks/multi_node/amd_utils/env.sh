@@ -20,6 +20,12 @@ if [[ -z "$IBDEVICES" ]]; then
         export IBDEVICES=ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7
     elif [[ $NODENAME == mia1* ]]; then
         export IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+    elif [[ $NODENAME == chi-mi325x* ]]; then
+        # Vultr/CPE MI325X cluster: Broadcom RoCE (bnxt_re); bnxt_re6 is DOWN, skip it
+        export IBDEVICES=bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8
+    elif [[ $NODENAME == chi-mi300x* ]]; then
+        # Vultr/CPE MI300X cluster: Broadcom RoCE (bnxt_re); all 8 devices present
+        export IBDEVICES=bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re6,bnxt_re7
     else
         echo "ERROR: Unable to detect cluster from hostname $NODENAME and IBDEVICES not set" >&2
         exit 1
@@ -101,6 +107,11 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == chi-mi325x* ]] || [[ $NODENAME == chi-mi300x* ]]; then
+            # Vultr/CPE MI325X/MI300X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+            export MORI_RDMA_TC=104
+            export MORI_RDMA_SL=3
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
         fi
@@ -114,6 +125,11 @@ else
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == chi-mi325x* ]] || [[ $NODENAME == chi-mi300x* ]]; then
+        # Vultr/CPE MI325X/MI300X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+        export MORI_RDMA_TC=104
+        export MORI_RDMA_SL=3
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
         echo "       This is normal for clusters without QoS or outside Docker containers."

@@ -76,6 +76,24 @@ dsr1-fp8-mi300x-sglang:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+dsr1-fp8-mi300x-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi300x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1272,3 +1290,187 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=1"
 
+
+dsr1-fp8-mi300x-sglang-disagg:
+  image: ghcr.io/jordannanos/sgl-mi300x-mori:v0.5.9-bnxt
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi300x-disagg
+  precision: fp8
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
+    - spec-decoding: "none"
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    # "Low concurrency" (1 prefill worker at TP4, 1 decode worker at TP8)
+    - spec-decoding: "none"
+      conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=0"
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
+    - spec-decoding: "none"
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    # "Low concurrency" (1 prefill worker at TP4, 1 decode worker at TP8)
+    - spec-decoding: "none"
+      conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=0"
+
+dsr1-fp8-mi300x-sglang-disagg-mtp:
+  image: ghcr.io/jordannanos/sgl-mi300x-mori:v0.5.9-bnxt
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi300x-disagg
+  precision: fp8
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
+    - spec-decoding: "mtp"
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=3"
+
+    # "Low concurrency" (1 prefill worker at TP4, 1 decode worker at TP8)
+    - spec-decoding: "mtp"
+      conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=3"
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
+    - spec-decoding: "mtp"
+      conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=3"
+
+    # "Low concurrency" (1 prefill worker at TP4, 1 decode worker at TP8)
+    - spec-decoding: "mtp"
+      conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=1"
+        - "DECODE_MTP_SIZE=3"

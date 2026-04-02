@@ -72,11 +72,12 @@ fi
 # Load model config via inline Python (PyYAML is available in SGLang containers)
 # Formula evaluation (e.g. "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK * TP * xP")
 # is done here in Python to avoid bash glob-expanding the * characters.
+_MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
 eval "$(python3 -c "
 import yaml, sys, os
 
 config_path = '${MODELS_YAML}'
-model_name = '${MODEL_NAME}'
+model_name = '${_MODEL_YAML_KEY}'
 
 with open(config_path) as f:
     models = yaml.safe_load(f)
@@ -210,6 +211,13 @@ fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
+fi
+
+# DP attention forces chunked_prefill_size to 1024 inside SGLang, which must be
+# <= SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK. Bump the decode dispatch
+# token limit when DP is enabled to satisfy this assertion.
+if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$MORI_MAX_DISPATCH_TOKENS_DECODE" -lt 1024 ]]; then
+    MORI_MAX_DISPATCH_TOKENS_DECODE=1024
 fi
 
 # =============================================================================
