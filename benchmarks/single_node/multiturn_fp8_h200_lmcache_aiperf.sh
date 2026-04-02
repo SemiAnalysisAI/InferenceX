@@ -94,9 +94,12 @@ try:
     sessions = set()
     with open(out_path, 'w') as f:
         for row in ds:
+            # Strip None fields — vLLM's Pydantic validation rejects explicit nulls
+            # for optional fields like tool_calls, tool_call_id, name
+            messages = [{k: v for k, v in msg.items() if v is not None} for msg in row['input']]
             entry = {
                 'session_id': row['session_id'],
-                'messages': row['input'],
+                'messages': messages,
                 'output_length': row['output_length'],
             }
             f.write(json.dumps(entry) + '\n')
