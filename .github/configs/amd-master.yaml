@@ -1107,7 +1107,7 @@ dsr1-fp8-mi355x-vllm-disagg:
 
 
 minimaxm25-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: minimax-m25-disagg:latest  # custom build: docker/minimax-m25-disagg/build.sh
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm25
   runner: mi355x-disagg
