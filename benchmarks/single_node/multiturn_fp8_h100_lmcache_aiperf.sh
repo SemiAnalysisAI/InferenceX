@@ -81,6 +81,8 @@ with open(sys.argv[1], 'w') as f:
 PYEOF
 fi
 
+mkdir -p "$RESULT_DIR"
+
 # ---- Convert LMCache traces to mooncake format -----------------------------
 echo "Downloading and converting LMCache traces..."
 python3 -c "
