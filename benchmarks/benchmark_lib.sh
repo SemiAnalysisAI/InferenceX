@@ -593,14 +593,23 @@ PY
 
 get_native_max_context_length() {
     local model_path="$1"
+    # Prefer MODEL_PATH (local model directory) when available, since the
+    # argument may be a served-model name that is neither a valid HF repo
+    # ID nor a local path (e.g. "deepseek-r1-fp4" on the B300 cluster).
+    if [ -n "${MODEL_PATH:-}" ] && [ -d "${MODEL_PATH}" ]; then
+        model_path="${MODEL_PATH}"
+    fi
     python3 -c "
-from transformers import AutoConfig
-config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
-for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
-    if hasattr(config, attr):
-        print(getattr(config, attr))
-        break
-else:
+try:
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
+    for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+        if hasattr(config, attr):
+            print(getattr(config, attr))
+            break
+    else:
+        print(0)
+except Exception:
     print(0)
 "
 }
