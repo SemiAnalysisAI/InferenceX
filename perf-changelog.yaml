@@ -1235,3 +1235,10 @@
     - "New model support on ATOM framework"
     - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Qwen3.5 fp8 mi355x performance update"
+    - "Relevant Issue: https://github.com/sgl-project/sglang/issues/19633"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/9xx
