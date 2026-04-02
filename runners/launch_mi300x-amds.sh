@@ -88,13 +88,17 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
     timeout --kill-after=5 30 sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    if [[ -z "$JOB_ID" ]]; then
+        echo "ERROR: benchmark script produced no job ID"
+        exit 1
+    fi
 
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
 
     sleep 10
 
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
+        if ! squeue -u "$USER" --noheader --format='%i' | grep -qx "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
             scontrol show job "$JOB_ID"
             exit 1
@@ -105,7 +109,7 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
     set +x
 
     (
-        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+        while squeue -u $USER --noheader --format='%i' | grep -qx "$JOB_ID"; do
             sleep 10
         done
     ) &

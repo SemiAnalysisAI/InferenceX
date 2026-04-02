@@ -10,7 +10,7 @@
     - "Image (single-node): lmsysorg/sglang:v0.5.9-rocm700-mi30x"
     - "Full pareto sweep: non-MTP and MTP configs across 2 curve points (no EP/DP), ISL 1k/1k and 8k/1k"
     - "Runners: mi300x-amds_0, mi300x-amds_2, mi300x-amds_3 (3 working nodes)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/issues/982
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/998
 
 - config-keys:
     - kimik2.5-int4-mi300x-vllm
