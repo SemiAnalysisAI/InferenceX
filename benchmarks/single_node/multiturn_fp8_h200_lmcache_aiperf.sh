@@ -110,10 +110,14 @@ else:
 
 out_path = '$TRACE_FILE'
 sessions = set()
+skipped = 0
 with open(out_path, 'w') as f:
     for row in rows:
         # Strip None fields — vLLM's Pydantic validation rejects explicit nulls
         messages = [{k: v for k, v in msg.items() if v is not None} for msg in row['input']]
+        if not messages:
+            skipped += 1
+            continue
         entry = {
             'session_id': row['session_id'],
             'messages': messages,
@@ -121,7 +125,9 @@ with open(out_path, 'w') as f:
         }
         f.write(json.dumps(entry) + '\n')
         sessions.add(row['session_id'])
-print(f'Converted {len(rows)} iterations from {len(sessions)} sessions to {out_path}')
+if skipped:
+    print(f'Skipped {skipped} entries with empty messages')
+print(f'Converted {len(rows) - skipped} iterations from {len(sessions)} sessions to {out_path}')
 "
 
 SERVER_LOG="$RESULT_DIR/server.log"
