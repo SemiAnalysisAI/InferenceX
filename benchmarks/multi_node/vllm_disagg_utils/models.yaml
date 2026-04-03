@@ -42,8 +42,8 @@ Kimi-K2.5-MXFP4:
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
 MiniMax-M2.5:
-  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching"
-  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching"
+  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--MiniMaxAI--MiniMax-M2.5"
 
