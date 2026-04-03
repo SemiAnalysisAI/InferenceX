@@ -49,6 +49,7 @@ vllm serve $MODEL --port $PORT \
 $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
 --block-size=32 \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
