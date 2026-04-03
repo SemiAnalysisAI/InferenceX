@@ -334,7 +334,7 @@ kimik2.5-fp4-mi355x-atom:
     - { tp: 4, conc-start: 4, conc-end: 128 }
 
 minimaxm2.5-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:v0.19.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -342,18 +342,19 @@ minimaxm2.5-fp8-mi355x-vllm:
   framework: vllm
   multinode: false
   seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+  # - isl: 1024
+  #   osl: 1024
+  #   search-space:
+  #   - { tp: 2, conc-start: 16, conc-end: 32 }
+    # - { tp: 4, conc-start: 4, conc-end: 64 }
+    # - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+    - { tp: 2, conc-start: 16, conc-end: 32 }
+    # - { tp: 2, conc-start: 4, conc-end: 64 }
+    # - { tp: 4, conc-start: 4, conc-end: 64 }
+    # - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
 minimaxm2.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
