@@ -832,6 +832,45 @@ except Exception as e:
     _SETUP_INSTALLED+=("idle-kv-reaper")
 }
 
+# ---------------------------------------------------------------------------
+# 13. Patch MiniMax M2.5 WideEP + MoRI + EPLB support
+#     Replaces the upstream minimax_m2.py with our patched version that adds
+#     GateLinear, EP group integration, sequence parallelism, and the
+#     MixtureOfExperts EPLB protocol. Idempotent: skips if already patched.
+# ---------------------------------------------------------------------------
+patch_minimax_m2_wideep_mori() {
+    local patch_file="${VLLM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}/patches/minimax_m2.py"
+    if [[ ! -f "$patch_file" ]]; then
+        # Also check the Docker-baked location
+        patch_file="/opt/vllm_disagg/patches/minimax_m2.py"
+    fi
+    if [[ ! -f "$patch_file" ]]; then
+        echo "[SETUP] minimax_m2.py patch not found, skipping (WideEP/MoRI not patched)"
+        return 0
+    fi
+
+    python3 -c '
+import os, sys, shutil
+
+try:
+    import vllm.model_executor.models.minimax_m2 as mmod
+    target = mmod.__file__
+    src = sys.argv[1]
+
+    with open(target) as f:
+        if "get_ep_group" in f.read():
+            print("[SETUP] minimax_m2.py already has WideEP+MoRI support")
+            sys.exit(0)
+
+    shutil.copy2(src, target)
+    print(f"[SETUP] Patched minimax_m2.py: {src} -> {target}")
+
+except Exception as e:
+    print(f"[SETUP] WARN patch minimax_m2: {e}", file=sys.stderr)
+' "$patch_file"
+    _SETUP_INSTALLED+=("minimax-m2-wideep-mori")
+}
+
 # =============================================================================
 # Run installers
 # =============================================================================
@@ -849,6 +888,7 @@ patch_moriio_transfer_timeout
 patch_moriio_load_kv_timeout
 patch_scheduler_read_mode_fix
 patch_prefill_idle_kv_reaper
+patch_minimax_m2_wideep_mori
 
 # =============================================================================
 # Export paths (persists for server.sh since this file is sourced)
