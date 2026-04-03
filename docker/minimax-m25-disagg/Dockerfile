@@ -76,7 +76,7 @@ RUN pip install --no-cache-dir nixl && \
 # 6. Copy disagg orchestration scripts into the image
 # ----------------------------------------------------------------
 COPY benchmarks/multi_node/vllm_disagg_utils/ /opt/vllm_disagg/
-COPY benchmarks/multi_node/minimaxm25_fp8_mi355x_vllm-disagg.sh /opt/vllm_disagg/
+COPY benchmarks/multi_node/minimaxm2.5_fp8_mi355x_vllm-disagg.sh /opt/vllm_disagg/
 
 # ----------------------------------------------------------------
 # 7. Environment
