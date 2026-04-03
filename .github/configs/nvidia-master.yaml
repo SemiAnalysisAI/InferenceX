@@ -1790,7 +1790,7 @@ qwen3.5-fp8-b200-sglang:
     - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu129-amd64
+  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
