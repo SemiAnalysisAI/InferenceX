@@ -1292,7 +1292,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp8-mi300x-sglang-disagg:
-  image: ghcr.io/jordannanos/sgl-mi300x-mori:v0.5.9-bnxt
+  image: docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.9-bnxt
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x-disagg
@@ -1384,7 +1384,7 @@ dsr1-fp8-mi300x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp8-mi300x-sglang-disagg-mtp:
-  image: ghcr.io/jordannanos/sgl-mi300x-mori:v0.5.9-bnxt
+  image: docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.9-bnxt
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x-disagg
