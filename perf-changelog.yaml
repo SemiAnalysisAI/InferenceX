@@ -7,7 +7,7 @@
     - "Add MI325X DeepSeek-R1 FP8 single-node and disaggregated inference with Broadcom Thor 2 IBGDA"
     - "Single-node: SGLang with aiter backend, MLA persist kernel, TP8, FP8 KV cache"
     - "Disaggregated: Custom container image built from akao-amd/sglang with MORI + bnxt_rocelib patches"
-    - "Image (disagg): ghcr.io/jordannanos/sgl-mi325x-mori:v0.5.9-bnxt-good"
+    - "Image (disagg): semianalysiswork/sgl-cdna3-mori:v0.5.9-bnxt"
     - "Image (single-node): lmsysorg/sglang:v0.5.9-rocm700-mi30x"
     - "Full pareto sweep: non-MTP and MTP configs across 4 curve points, ISL 1k/1k and 8k/1k"
     - "Dockerfile patches: https://github.com/JordanNanos/sglang/tree/main/docker"
