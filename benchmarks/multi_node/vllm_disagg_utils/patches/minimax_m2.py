@@ -128,7 +128,7 @@ class MiniMaxM2MoE(nn.Module):
         self.gate = GateLinear(
             config.hidden_size,
             config.num_local_experts,
-            params_dtype=torch.float32,
+            out_dtype=torch.float32,
             prefix=f"{prefix}.gate",
         )
 
