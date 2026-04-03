@@ -1243,11 +1243,10 @@
     - "Add tp4 ep4 search-space entries (conc 32-256) for all seq-len configs"
     - "Remove ISL 1024 / OSL 8192 seq-len config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/947
-  
-  
-  - config-keys:
+
+
+- config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1001
-  
