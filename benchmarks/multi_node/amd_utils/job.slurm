@@ -137,6 +137,20 @@ check_model_path() {
     fi
 }
 
+# If MODEL_NAME is a plain name (not already a HF cache path), try to resolve
+# the HF hub cache layout on this node: models--{org}--{repo}/snapshots/<hash>
+# This handles clusters where the cache is node-local and can't be resolved
+# from the job launcher (which may run on a different host).
+if [[ "$MODEL_NAME" != models--* ]] && [[ "$MODEL_NAME" != *snapshots* ]]; then
+    _HF_ORG_REPO="${MODEL_YAML_KEY:-$MODEL_NAME}"
+    _HF_DIR="models--$(echo "${_HF_ORG_REPO}" | tr '/' '--')"
+    _SNAPSHOT=$(ls "${MODEL_DIR}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
+    if [[ -n "${_SNAPSHOT}" ]]; then
+        MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
+        echo "Resolved MODEL_NAME from local HF cache: ${MODEL_NAME}"
+    fi
+fi
+
 # Check model weights exist on "$MODEL_DIR/$MODEL_NAME"
 if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
     MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
