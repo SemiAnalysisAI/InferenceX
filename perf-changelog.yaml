@@ -1235,3 +1235,9 @@
     - "New model support on ATOM framework"
     - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/921
