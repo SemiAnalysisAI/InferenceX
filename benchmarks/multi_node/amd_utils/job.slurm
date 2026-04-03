@@ -142,12 +142,15 @@ check_model_path() {
 # This handles clusters where the cache is node-local and can't be resolved
 # from the job launcher (which may run on a different host).
 if [[ "$MODEL_NAME" != models--* ]] && [[ "$MODEL_NAME" != *snapshots* ]]; then
-    _HF_ORG_REPO="${MODEL_YAML_KEY:-$MODEL_NAME}"
-    _HF_DIR="models--$(echo "${_HF_ORG_REPO}" | tr '/' '--')"
-    _SNAPSHOT=$(ls "${MODEL_DIR}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
-    if [[ -n "${_SNAPSHOT}" ]]; then
-        MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
-        echo "Resolved MODEL_NAME from local HF cache: ${MODEL_NAME}"
+    # Glob for any HF cache dir ending in --${MODEL_NAME} (handles unknown org prefix)
+    _HF_DIR_GLOB=$(ls -d "${MODEL_DIR}/models--"*"--${MODEL_NAME}" 2>/dev/null | head -1)
+    if [[ -n "${_HF_DIR_GLOB}" ]]; then
+        _HF_DIR=$(basename "${_HF_DIR_GLOB}")
+        _SNAPSHOT=$(ls "${MODEL_DIR}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
+        if [[ -n "${_SNAPSHOT}" ]]; then
+            MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
+            echo "Resolved MODEL_NAME from local HF cache: ${MODEL_NAME}"
+        fi
     fi
 fi
 
