@@ -10,58 +10,54 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE \
-    DP_ATTENTION
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
+nvidia-smi
+
+hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export OMP_NUM_THREADS=1
+echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
-else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
-fi
-
+EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-
-if [ "$EP_SIZE" -gt 1 ]; then
-  EP=" --enable-expert-parallel"
-else
-  EP=" "
-fi
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-set -x
+# following https://huggingface.co/nvidia/GLM-5-NVFP4#usage recipe
+# except using latest nightly at the time of writing
+# since the recommended nightly image in that recipe doesn't exist.
 
-python3 -m atom.entrypoints.openai_server \
-    --model $MODEL \
-    --server-port $PORT \
-    -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --method mtp \
-    --num-speculative-tokens 3 \
-    > $SERVER_LOG 2>&1 &
+set -x
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP \
+--data-parallel-size 1 --expert-parallel-size 1 \
+--tool-call-parser glm47 \
+--reasoning-parser glm45 \
+--quantization modelopt_fp4 \
+--cuda-graph-max-bs $CONC --max-running-requests $CONC \
+--mem-fraction-static 0.80 \
+--chunked-prefill-size 131072 \
+--stream-interval 30 \
+--model-loader-extra-config '{"enable_multithread_load": true}' $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
- 
-export PYTHONDONTWRITEBYTECODE=1
+
+pip install -q datasets pandas
+
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -72,8 +68,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template 
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

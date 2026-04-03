@@ -275,6 +275,24 @@ kimik2.5-int4-mi325x-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+kimik2.5-int4-mi300x-vllm:
+  image: vllm/vllm-openai-rocm:v0.18.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: mi300x
+  precision: int4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
 kimik2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
   model: amd/Kimi-K2.5-MXFP4
@@ -294,6 +312,26 @@ kimik2.5-fp4-mi355x-vllm:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
+
+kimik2.5-fp4-mi355x-atom:
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
 
 minimaxm2.5-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -317,6 +355,28 @@ minimaxm2.5-fp8-mi355x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
+minimaxm2.5-fp8-mi355x-atom:
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp8
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 128 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+
 minimaxm2.5-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -338,7 +398,7 @@ minimaxm2.5-fp8-mi300x-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.16.0
+  image: vllm/vllm-openai-rocm:v0.18.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -350,12 +410,12 @@ minimaxm2.5-fp8-mi325x-vllm:
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -467,12 +527,11 @@ dsr1-fp8-mi355x-atom:
     - { tp: 8, conc-start: 4, conc-end: 128 }
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
   precision: fp8
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   seq-len-configs:
