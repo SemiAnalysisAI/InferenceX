@@ -414,6 +414,155 @@ def generate_pareto_only_figure(df: pd.DataFrame, results_dir: Path):
     plt.close()
 
 
+def generate_pareto_only_figure_p50(df: pd.DataFrame, results_dir: Path):
+    """Generate a clean figure showing only Pareto frontier points with median (p50) latencies."""
+
+    df = df.copy()
+    df["interactivity"] = 1000.0 / df["p50_tpot_ms"]
+
+    available_modes = sorted(df["offload"].unique())
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
+
+    num_cols = len(available_modes)
+    fig, axes = plt.subplots(4, num_cols, figsize=(6 * num_cols, 18))
+    fig.suptitle("Pareto Frontiers (Median Latencies) with Concurrency Labels", fontsize=14)
+
+    if num_cols == 1:
+        axes = axes.reshape(-1, 1)
+
+    tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
+    tp_markers = {1: "o", 2: "s", 4: "^", 8: "D"}
+
+    metrics_configs = [
+        (0, "p50_ttft_ms", "input_tps_per_gpu", "TTFT", "Median TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
+        (1, "interactivity", "total_tps_per_gpu", "Interactivity", "Interactivity (1000/Median TPOT)", "Total Throughput/GPU (tok/s)", True),
+        (2, "p50_latency_ms", "total_tps_per_gpu", "E2E Latency", "Median E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput", "Interactivity (1000/Median TPOT)", "Output Throughput/GPU (tok/s)", True),
+    ]
+
+    for row, x_col, y_col, metric_name, x_label, y_label, maximize_x in metrics_configs:
+        for col, mode in enumerate(available_modes):
+            ax = axes[row, col]
+            df_subset = df_subsets[mode]
+            title = f"{metric_name} ({mode_titles.get(mode, mode)})"
+
+            frontier_df = compute_pareto_frontier_with_metadata(df_subset, x_col, y_col, maximize_x)
+
+            if len(frontier_df) > 0:
+                ax.plot(frontier_df[x_col], frontier_df[y_col],
+                       linestyle='-', linewidth=2, alpha=0.5, color="black")
+
+                for tp in sorted(frontier_df["tp"].unique()):
+                    tp_data = frontier_df[frontier_df["tp"] == tp]
+                    ax.scatter(tp_data[x_col], tp_data[y_col],
+                              c=tp_colors.get(tp, "purple"), marker=tp_markers.get(tp, "x"),
+                              s=150, alpha=0.9, edgecolors="black", linewidths=1,
+                              label=f"TP={tp}", zorder=5)
+
+                for _, point in frontier_df.iterrows():
+                    ax.annotate(f"conc={point['bs']}",
+                               (point[x_col], point[y_col]),
+                               textcoords="offset points",
+                               xytext=(5, 5),
+                               fontsize=8,
+                               alpha=0.8)
+
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            if len(frontier_df) > 0:
+                ax.legend(fontsize=8, loc="lower right" if not maximize_x else "upper right")
+
+    plt.tight_layout()
+
+    output_file = results_dir / "pareto_frontiers_clean_p50.png"
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"Saved clean Median Pareto plot to {output_file}")
+    plt.close()
+
+
+def generate_pareto_overlay_figure_p50(df: pd.DataFrame, results_dir: Path):
+    """Generate a figure with all prefix cache modes overlaid using median (p50) latencies."""
+
+    df = df.copy()
+    df["interactivity"] = 1000.0 / df["p50_tpot_ms"]
+
+    available_modes = df["offload"].unique()
+
+    mode_styles = {
+        "on": ("-", "black", "black", (5, 8), "normal"),
+        "off": ("--", "none", "gray", (5, -12), "italic"),
+        "noprefix": (":", "red", "red", (5, -25), "oblique"),
+    }
+    mode_labels = {
+        "on": "Prefix+Offload",
+        "off": "Prefix Only",
+        "noprefix": "No Prefix",
+    }
+
+    fig, axes = plt.subplots(4, 1, figsize=(10, 18))
+    fig.suptitle("Pareto Frontiers (Median Latencies): Mode Comparison", fontsize=14)
+
+    tp_colors = {1: "blue", 2: "green", 4: "orange", 8: "red"}
+    tp_markers = {1: "o", 2: "s", 4: "^", 8: "D"}
+
+    plot_configs = [
+        (0, "p50_ttft_ms", "input_tps_per_gpu", "TTFT vs Input Throughput/GPU", "Median TTFT (ms)", "Input Throughput/GPU (tok/s)", False),
+        (1, "interactivity", "total_tps_per_gpu", "Interactivity vs Total Throughput/GPU", "Interactivity (1000/Median TPOT)", "Total Throughput/GPU (tok/s)", True),
+        (2, "p50_latency_ms", "total_tps_per_gpu", "E2E Latency vs Total Throughput/GPU", "Median E2E Latency (ms)", "Total Throughput/GPU (tok/s)", False),
+        (3, "interactivity", "output_tps_per_gpu", "Output Throughput vs Interactivity", "Interactivity (1000/Median TPOT)", "Output Throughput/GPU (tok/s)", True),
+    ]
+
+    for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
+        ax = axes[row]
+
+        for mode in ["on", "off", "noprefix"]:
+            if mode not in available_modes:
+                continue
+
+            df_subset = df[df["offload"] == mode]
+            linestyle, marker_edge, line_color, label_offset, font_style = mode_styles[mode]
+
+            frontier_df = compute_pareto_frontier_with_metadata(df_subset, x_col, y_col, maximize_x)
+
+            if len(frontier_df) > 0:
+                ax.plot(frontier_df[x_col], frontier_df[y_col],
+                       linestyle=linestyle, linewidth=2, alpha=0.6, color=line_color,
+                       label=f"Pareto ({mode_labels[mode]})")
+
+                for tp in sorted(frontier_df["tp"].unique()):
+                    tp_data = frontier_df[frontier_df["tp"] == tp]
+                    label = f"TP={tp}" if mode == "on" else None
+                    ax.scatter(tp_data[x_col], tp_data[y_col],
+                              c=tp_colors.get(tp, "purple"), marker=tp_markers.get(tp, "x"),
+                              s=150, alpha=0.9, edgecolors=marker_edge, linewidths=1.5,
+                              label=label, zorder=5)
+
+                for _, point in frontier_df.iterrows():
+                    ax.annotate(f"conc={point['bs']}",
+                               (point[x_col], point[y_col]),
+                               textcoords="offset points",
+                               xytext=label_offset,
+                               fontsize=7,
+                               alpha=0.7,
+                               style=font_style)
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="lower right" if not maximize_x else "upper right")
+
+    plt.tight_layout()
+
+    output_file = results_dir / "pareto_frontiers_overlay_p50.png"
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"Saved overlay Median Pareto plot to {output_file}")
+    plt.close()
+
+
 def generate_pareto_only_figure_p90(df: pd.DataFrame, results_dir: Path):
     """Generate a clean figure showing only Pareto frontier points with p90 latencies."""
 
@@ -1171,6 +1320,10 @@ def main(results_dir: Path):
 
     # Generate overlay figure (on vs off comparison)
     generate_pareto_overlay_figure(df, results_dir)
+
+    # Generate P50 (Median) versions
+    generate_pareto_only_figure_p50(df, results_dir)
+    generate_pareto_overlay_figure_p50(df, results_dir)
 
     # Generate P90 versions
     generate_pareto_only_figure_p90(df, results_dir)
