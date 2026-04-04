@@ -108,30 +108,19 @@ TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
 echo "Total allocated nodes: $TOTAL_NODES"
 echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
 
-# Function to check model path on all nodes
+# Function to check model path — checks on the batch node (NFS path is shared across all nodes).
 check_model_path() {
     local path=$1
     local check_name=$2
 
     echo "Checking $check_name: $path"
 
-    # Run check on all nodes in parallel
-    srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
-        if [ -d '$path' ]; then
-            echo \"\$(hostname): ✓ Found $path\"
-            exit 0
-        else
-            echo \"\$(hostname): ✗ Missing $path\"
-            exit 1
-        fi
-    "
-
-    # Check if all nodes succeeded (exit code 0)
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
+    if [ -d "$path" ]; then
+        echo "$(hostname): ✓ Found $path"
         echo "✓ $check_name available on ALL nodes"
         return 0
     else
+        echo "$(hostname): ✗ Missing $path"
         echo "✗ $check_name NOT available on all nodes"
         return 1
     fi
@@ -244,15 +233,26 @@ echo ""
 # Node information
 USER_NAME=$(whoami)
 MASTER_NODE=$(echo "$SELECTED_NODES" | head -n 1)
-NODE0_ADDR=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$MASTER_NODE" bash -c 'ip route get 1.1.1.1')
-NODE0_ADDR=$(echo "$NODE0_ADDR" | awk '/src/ {print $7}')
+
+# Use scontrol to get node IPs — avoids srun timeouts when nodes are temporarily slow.
+get_node_ip() {
+    local node=$1
+    scontrol show node "$node" 2>/dev/null | awk '/NodeAddr=/ {match($0, /NodeAddr=([^ ]+)/, a); print a[1]}'
+}
+
+NODE0_ADDR=$(get_node_ip "$MASTER_NODE")
+if [[ -z "$NODE0_ADDR" ]]; then
+    echo "ERROR: Could not resolve IP for master node $MASTER_NODE via scontrol" >&2
+    exit 1
+fi
 
 IPS=()
-
-GW_NIC=$(ip route | awk '/^default/ {print $5; exit}')
 for NODE in $SELECTED_NODES; do
-    IP=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$NODE" bash -c 'ip route get 1.1.1.1')
-    IP=$(echo "$IP" | awk '/src/ {print $7}')
+    IP=$(get_node_ip "$NODE")
+    if [[ -z "$IP" ]]; then
+        echo "ERROR: Could not resolve IP for node $NODE via scontrol" >&2
+        exit 1
+    fi
     IPS+=("$IP")
 done
 
@@ -336,7 +336,7 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     # Drop caches if we have permission (optional, requires root)
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
-'
+' || echo "[WARN] NFS refresh srun failed (non-fatal); continuing."
 
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
