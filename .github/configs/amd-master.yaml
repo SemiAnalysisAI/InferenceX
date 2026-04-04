@@ -1340,8 +1340,8 @@ dsr1-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
-    # Single-node EP8/DP decode (test: isolates whether EP/DP itself works on MI325X
-    # or if only the multi-node distributed init is broken with Broadcom Thor 2)
+    # Single-node EP8/DP decode — workaround: use default a2a kernels instead of
+    # MoRI a2a (which hangs on Broadcom bnxt_re). See sgl-project/sglang#22072
     - spec-decoding: "none"
       conc-list: [ 512, 256, 128, 64 ]
       prefill:
@@ -1351,6 +1351,7 @@ dsr1-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
+        - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
       decode:
         num-worker: 1
         tp: 8
@@ -1359,6 +1360,7 @@ dsr1-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
+        - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
 
   - isl: 8192
     osl: 1024
@@ -1513,7 +1515,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=3"
 
-    # Single-node EP8/DP decode with MTP (test: isolates EP/DP vs multi-node init)
+    # Single-node EP8/DP decode with MTP — workaround: default a2a kernels
     - spec-decoding: "mtp"
       conc-list: [ 512, 256, 128, 64 ]
       prefill:
@@ -1523,6 +1525,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
+        - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
       decode:
         num-worker: 1
         tp: 8
@@ -1531,6 +1534,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         additional-settings:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=3"
+        - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
 
   - isl: 8192
     osl: 1024
