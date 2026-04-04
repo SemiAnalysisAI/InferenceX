@@ -75,6 +75,11 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
         _SNAPSHOT=$(ls "${MODEL_PATH}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
         if [[ -n "${_SNAPSHOT}" ]]; then
             export MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
+        elif [[ -d "${MODEL_PATH}/${MODEL##*/}" ]]; then
+            # Cluster stores models as flat dirs named after the repo (e.g. DeepSeek-R1-0528),
+            # not in HF hub cache layout. Use repo name so MODEL_YAML_KEY can differ from
+            # the path (e.g. DeepSeek-R1-0528-bnxt yaml key → DeepSeek-R1-0528 dir).
+            export MODEL_NAME="${MODEL##*/}"
         else
             export MODEL_NAME="${MODEL_YAML_KEY}"
         fi
