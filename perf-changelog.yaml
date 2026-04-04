@@ -1143,7 +1143,7 @@
   description:
     - "Disable prefix caching (--no-enable-prefix-caching) for all MiniMax benchmarks using random datasets"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/966
-  
+
 - config-keys:
     # NVIDIA single-node
     - dsr1-fp4-b200-sglang
@@ -1220,3 +1220,28 @@
     - "Uses nvidia/GLM-5-NVFP4 model with modelopt_fp4 quantization"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/973
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "DeepSeek R1 MI355X FP8 ATOM-MTP config to support MTP 3 tokens"
+    - "Image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/984
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-atom
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "New model support on ATOM framework"
+    - "Kimi-K2.5 FP4, and MiniMax-M2.5 FP8 configs added for MI355X ATOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/963
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Update vLLM image from v0.17.0 to v0.19.0 for MiniMax-M2.5 FP8 B200"
+    - "Add tp4 ep4 search-space entries (conc 32-256) for all seq-len configs"
+    - "Remove ISL 1024 / OSL 8192 seq-len config"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/947
+
+
