@@ -1352,6 +1352,7 @@ dsr1-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
+        - "MODEL_NAME=DeepSeek-R1-0528"
       decode:
         num-worker: 1
         tp: 8
@@ -1361,6 +1362,7 @@ dsr1-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
+        - "MODEL_NAME=DeepSeek-R1-0528"
 
   - isl: 8192
     osl: 1024
@@ -1526,6 +1528,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
+        - "MODEL_NAME=DeepSeek-R1-0528"
       decode:
         num-worker: 1
         tp: 8
@@ -1535,6 +1538,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=3"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
+        - "MODEL_NAME=DeepSeek-R1-0528"
 
   - isl: 8192
     osl: 1024
