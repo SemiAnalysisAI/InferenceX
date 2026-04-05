@@ -1249,4 +1249,4 @@
   description:
     - "Optimize MiniMax-M2.5 FP8 MI355X vLLM search-space"
     - "Add tp2 ep2 search-space entries (conc 2-256) for all seq-len configs"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1002
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1003
