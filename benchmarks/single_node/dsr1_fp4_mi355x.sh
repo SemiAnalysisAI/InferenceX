@@ -20,6 +20,9 @@ hf download "$MODEL"
 export SGLANG_USE_AITER=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
+# Inject MoE shape logging if MOE_DEBUG_LOG is set
+_patch_moe_shape_logging
+
 PREFILL_SIZE=196608
 if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
 	if [[ "$CONC" -gt "32" ]]; then

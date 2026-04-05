@@ -493,6 +493,137 @@ move_profile_trace_for_relay() {
     echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
 }
 
+# Inject a sitecustomize.py that monkey-patches SGLang/aiter fused_moe to log
+# tensor shapes on TP rank 0.  Activated when MOE_DEBUG_LOG is set to a file path.
+# The log file is written inside the container and can be uploaded as an artifact.
+_patch_moe_shape_logging() {
+    if [[ -z "${MOE_DEBUG_LOG:-}" ]]; then
+        return 0
+    fi
+    local patch_dir
+    patch_dir="$(mktemp -d)"
+    cat > "$patch_dir/sitecustomize.py" <<'PY'
+import os as _os, sys as _sys
+
+_MOE_LOG = _os.environ.get("MOE_DEBUG_LOG", "")
+if _MOE_LOG:
+    import atexit as _atexit, threading as _threading
+
+    _moe_lock = _threading.Lock()
+    _moe_shapes = {}   # key -> count
+    _moe_logged = 0
+    _MOE_MAX_LOG = 200  # stop collecting after this many unique shapes
+
+    def _log_moe_shapes(hidden, w1, w2, topk_w, topk_ids, **kw):
+        """Collect shape tuples from fused_moe calls."""
+        global _moe_logged
+        if _moe_logged >= _MOE_MAX_LOG:
+            return
+        key = (
+            "hidden=" + str(tuple(hidden.shape)),
+            "w1=" + str(tuple(w1.shape)),
+            "w2=" + str(tuple(w2.shape)),
+            "topk_w=" + str(tuple(topk_w.shape)),
+            "topk_ids=" + str(tuple(topk_ids.shape)),
+            "hidden_dtype=" + str(hidden.dtype),
+            "w1_dtype=" + str(w1.dtype),
+        )
+        with _moe_lock:
+            _moe_shapes[key] = _moe_shapes.get(key, 0) + 1
+            _moe_logged = len(_moe_shapes)
+
+    def _flush_moe_log():
+        if not _moe_shapes:
+            return
+        try:
+            with open(_MOE_LOG, "a") as f:
+                f.write("=== fused_moe shape log (rank 0) ===\n")
+                for key, cnt in sorted(_moe_shapes.items(), key=lambda x: -x[1]):
+                    f.write(f"  count={cnt:>5d}  {' '.join(key)}\n")
+                f.write(f"=== total unique shapes: {len(_moe_shapes)} ===\n")
+        except Exception as e:
+            print(f"[MOE_DEBUG] flush error: {e}", file=_sys.stderr)
+
+    _atexit.register(_flush_moe_log)
+
+    # ---------- Patch aiter.fused_moe.fused_moe (AMD/ROCm path) ----------
+    def _try_patch_aiter():
+        try:
+            import aiter.fused_moe as _afm
+            _orig = _afm.fused_moe
+            from functools import wraps as _wraps
+
+            @_wraps(_orig)
+            def _patched(*args, **kwargs):
+                # fused_moe(hidden_states, w1, w2, topk_weight, topk_ids, ...)
+                if len(args) >= 5:
+                    _log_moe_shapes(args[0], args[1], args[2], args[3], args[4], **kwargs)
+                elif len(args) >= 1:
+                    _log_moe_shapes(
+                        args[0],
+                        kwargs.get("w1", args[1] if len(args) > 1 else None),
+                        kwargs.get("w2", args[2] if len(args) > 2 else None),
+                        kwargs.get("topk_weight", args[3] if len(args) > 3 else None),
+                        kwargs.get("topk_ids", args[4] if len(args) > 4 else None),
+                    )
+                return _orig(*args, **kwargs)
+
+            _afm.fused_moe = _patched
+            print("[MOE_DEBUG] Patched aiter.fused_moe.fused_moe", file=_sys.stderr)
+        except Exception as e:
+            print(f"[MOE_DEBUG] aiter patch skipped: {e}", file=_sys.stderr)
+
+    # ---------- Patch sglang Mxfp4MoEMethod.apply (fallback) ----------
+    def _try_patch_sglang_mxfp4():
+        try:
+            from sglang.srt.layers.quantization import mxfp4 as _mxfp4
+            _cls = _mxfp4.Mxfp4MoEMethod
+            _orig_apply = _cls.apply
+            from functools import wraps as _wraps
+
+            @_wraps(_orig_apply)
+            def _patched_apply(self, layer, dispatch_output, **kwargs):
+                x = dispatch_output.hidden_states if hasattr(dispatch_output, 'hidden_states') else None
+                topk_w = dispatch_output.topk_weights if hasattr(dispatch_output, 'topk_weights') else None
+                topk_ids = dispatch_output.topk_ids if hasattr(dispatch_output, 'topk_ids') else None
+                if x is not None and hasattr(layer, 'w13_weight') and hasattr(layer, 'w2_weight'):
+                    _log_moe_shapes(x, layer.w13_weight, layer.w2_weight,
+                                     topk_w if topk_w is not None else x,
+                                     topk_ids if topk_ids is not None else x)
+                return _orig_apply(self, layer, dispatch_output, **kwargs)
+
+            _cls.apply = _patched_apply
+            print("[MOE_DEBUG] Patched Mxfp4MoEMethod.apply", file=_sys.stderr)
+        except Exception as e:
+            print(f"[MOE_DEBUG] sglang mxfp4 patch skipped: {e}", file=_sys.stderr)
+
+    # Delay patching until the modules are actually imported
+    import importlib as _importlib
+
+    class _MoEPatchFinder:
+        """Meta path finder that triggers patching after aiter/sglang modules load."""
+        _patched_aiter = False
+        _patched_sglang = False
+
+        def find_module(self, fullname, path=None):
+            if fullname == "aiter.fused_moe" and not self._patched_aiter:
+                self._patched_aiter = True
+                # Schedule patch after module finishes loading
+                import threading
+                threading.Timer(0.5, _try_patch_aiter).start()
+            if fullname.startswith("sglang.srt.layers.quantization.mxfp4") and not self._patched_sglang:
+                self._patched_sglang = True
+                import threading
+                threading.Timer(1.0, _try_patch_sglang_mxfp4).start()
+            return None
+
+    _sys.meta_path.insert(0, _MoEPatchFinder())
+    print(f"[MOE_DEBUG] MoE shape logger armed -> {_MOE_LOG}", file=_sys.stderr)
+PY
+    export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
+    echo "[MOE_DEBUG] Shape logging patch installed (PYTHONPATH=${patch_dir})"
+}
+
 
 # ------------------------------
 # Eval (lm-eval-harness) helpers

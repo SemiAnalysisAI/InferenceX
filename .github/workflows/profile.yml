@@ -115,7 +115,7 @@ jobs:
       CONC: ${{ matrix.config.conc }}
       SPEC_DECODING: ${{ matrix.config.spec-decoding }}
       DISAGG: ${{ matrix.config.disagg }}
-      MOE_DEBUG: '0'
+      MOE_DEBUG: ${{ (inputs.moe-debug) && '1' || '0' }}
       MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
       - name: Resource cleanup
