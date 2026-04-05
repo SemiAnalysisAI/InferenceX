@@ -181,87 +181,14 @@ else
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
 
-    # DEBUG: hardcode manual eval commands for qwen3.5 fp4 to isolate CI vs manual difference
-    # Test: keep --container-mount-home, remove --export=ALL to get clean container env
-    if [[ "$MODEL" == "amd/Qwen3.5-397B-A17B-MXFP4" && "$EVAL_ONLY" == "true" ]]; then
-        srun --jobid=$JOB_ID \
-            --container-image=$SQUASH_FILE \
-            --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-            --container-mount-home \
-            --container-writable \
-            --container-workdir=/workspace/ \
-            --no-container-entrypoint --export=ALL \
-            --cpu-bind=none \
-            bash -c '
-set -ex
-
-export SGLANG_USE_AITER=1
-export HF_HUB_CACHE=/mnt/hf_hub_cache/
-export HF_TOKEN='"${HF_TOKEN}"'
-PORT=9000
-
-# Launch server (same flags as manual test that passed)
-python3 -m sglang.launch_server \
-    --model-path amd/Qwen3.5-397B-A17B-MXFP4 \
-    --trust-remote-code \
-    --host 0.0.0.0 --port $PORT \
-    --tensor-parallel-size 4 \
-    --attention-backend aiter \
-    --mem-fraction-static 0.9 \
-    --model-loader-extra-config '"'"'{"enable_multithread_load": true}'"'"' \
-    --watchdog-timeout 1200 \
-    --context-length 9416 \
-    > /tmp/server.log 2>&1 &
-SERVER_PID=$!
-
-# Wait for server ready
-echo "Waiting for server (PID=$SERVER_PID) on port $PORT ..."
-for i in $(seq 1 120); do
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "Server process died. Last 50 lines:"
-        tail -50 /tmp/server.log
-        exit 1
-    fi
-    if curl -sf http://0.0.0.0:$PORT/health > /dev/null 2>&1; then
-        echo "Server ready after ${i}x5s"
-        break
-    fi
-    sleep 5
-done
-if ! curl -sf http://0.0.0.0:$PORT/health > /dev/null 2>&1; then
-    echo "Server failed to start. Last 100 lines:"
-    tail -100 /tmp/server.log
-    exit 1
-fi
-
-# Install lm-eval (same versions as benchmark_lib.sh)
-pip install -q --no-cache-dir "lm-eval[api]" || true
-pip install -q --no-cache-dir --no-deps --force-reinstall \
-    "git+https://github.com/EleutherAI/lm-evaluation-harness.git@b315ef3b05176acc9732bb7fdec116abe1ecc476" || true
-
-# Run eval WITHOUT the sitecustomize patch (matches manual test that passed)
-export OPENAI_API_KEY=EMPTY
-python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-    --tasks utils/evals/gsm8k.yaml \
-    --output_path /tmp/eval_results \
-    --log_samples --limit 200\
-    --model_args "model=amd/Qwen3.5-397B-A17B-MXFP4,base_url=http://0.0.0.0:${PORT}/v1/chat/completions,api_key=EMPTY,eos_string=,max_retries=5,num_concurrent=64,timeout=1800,tokenized_requests=False,max_length=9416" \
-    --gen_kwargs "max_tokens=5320,temperature=0,top_p=1"
-
-# Copy eval results to workspace for artifact upload (lm-eval nests in subdirs)
-find /tmp/eval_results -name "results*.json" -exec cp {} /workspace/ \;
-find /tmp/eval_results -name "samples*.jsonl" -exec cp {} /workspace/ \;
-'
-    else
-        srun --jobid=$JOB_ID \
-            --container-image=$SQUASH_FILE \
-            --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-            --container-mount-home \
-            --container-writable \
-            --container-workdir=/workspace/ \
-            --no-container-entrypoint --export=ALL \
-            bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
-    fi
+    srun --jobid=$JOB_ID -N1 -n1 -c128 \
+        --container-image=$SQUASH_FILE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mount-home \
+        --container-writable \
+        --container-workdir=/workspace/ \
+        --no-container-entrypoint --export=ALL \
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 
