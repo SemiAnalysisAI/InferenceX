@@ -20,6 +20,13 @@ hf download "$MODEL"
 export SGLANG_USE_AITER=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
+# Optionally inject allreduce shape logging (set AR_SHAPE_LOGGING=1 to enable)
+if [[ "${AR_SHAPE_LOGGING:-}" == "1" ]]; then
+    echo "[AR_SHAPE] Injecting allreduce shape logger..."
+    python3 /workspace/benchmarks/patches/inject_ar_shape_logging.py
+    echo "[AR_SHAPE] Injection complete"
+fi
+
 PREFILL_SIZE=196608
 if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
 	if [[ "$CONC" -gt "32" ]]; then
