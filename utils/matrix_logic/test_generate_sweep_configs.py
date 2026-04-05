@@ -2,11 +2,13 @@
 import pytest
 import argparse
 from generate_sweep_configs import (
+    MIN_EVAL_CONC,
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    mark_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
 )
@@ -178,6 +180,161 @@ class TestSeqLenToStr:
         """Unknown sequence lengths should return isl_osl format."""
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
+
+
+# =============================================================================
+# Test mark_eval_entries
+# =============================================================================
+
+class TestMarkEvalEntries:
+    """Tests for eval matrix selection policy."""
+
+    def test_single_node_skips_eval_entries_below_min_conc(self):
+        """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 8,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": MIN_EVAL_CONC,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 32,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 64,
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert result[1]["run-eval"] is False
+        assert result[2]["run-eval"] is True
+        assert result[3]["run-eval"] is True
+
+    def test_multi_node_skips_groups_with_only_conc_below_min_conc(self):
+        """Multinode eval selection should skip groups whose conc lists are all below MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [1],
+            }
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert "eval-conc" not in result[0]
+
+    def test_multi_node_eval_conc_uses_only_conc_values_at_or_above_min_conc(self):
+        """Multinode eval-conc should be chosen from conc values >= MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": True,
+                },
+                "decode": {
+                    "num-worker": 4,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [8, 16, 32],
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": True,
+                },
+                "decode": {
+                    "num-worker": 4,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [8],
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is True
+        assert result[0]["eval-conc"] == 32
+        assert result[1]["run-eval"] is False
 
 
 # =============================================================================

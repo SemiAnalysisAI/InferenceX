@@ -20,6 +20,8 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
+MIN_EVAL_CONC = 16
+
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
@@ -36,12 +38,14 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
+        - Ignore entries with conc < MIN_EVAL_CONC
         - Mark all entries at the highest CONC (all TPs)
         - Mark all entries at the median CONC (all TPs)
     - Multi-node: for each unique (model, runner, framework, precision,
       spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
-      Mark the entry with the highest max concurrency. Sets eval-conc to the
-      median of the conc list to avoid OOM during eval.
+      Ignore entries with all conc values < MIN_EVAL_CONC. Mark the entry with
+      the highest max concurrency among the remaining entries. Sets eval-conc to
+      the median of the eligible conc list to avoid OOM during eval.
     """
     from collections import defaultdict
 
@@ -49,9 +53,13 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     eval_indices = set()
     mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
 
-    def _max_conc(ie):
-        c = ie[1][Fields.CONC.value]
-        return max(c) if isinstance(c, list) else c
+    def _eligible_eval_concs(entry):
+        conc = entry[Fields.CONC.value]
+        conc_values = conc if isinstance(conc, list) else [conc]
+        return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
+
+    def _max_eval_conc(ie):
+        return max(_eligible_eval_concs(ie[1]))
 
     # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only 8k1k entries with a top-level TP (single-node schema).
@@ -60,6 +68,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if Fields.TP.value not in entry:
             continue
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+            continue
+        if not _eligible_eval_concs(entry):
             continue
         key = (
             entry[Fields.MODEL.value],
@@ -92,6 +102,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             continue
+        if not _eligible_eval_concs(entry):
+            continue
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
@@ -104,12 +116,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         mn_groups[key].append((i, entry))
 
     for entries in mn_groups.values():
-        best_idx, best_entry = max(entries, key=_max_conc)
+        best_idx, best_entry = max(entries, key=_max_eval_conc)
         eval_indices.add(best_idx)
-        # Set eval-conc to median of the conc list to avoid OOM during eval
-        conc = best_entry[Fields.CONC.value]
-        sorted_conc = sorted(conc) if isinstance(conc, list) else [conc]
-        mn_eval_conc[best_idx] = sorted_conc[len(sorted_conc) // 2]
+        # Set eval-conc to median of eligible conc values to avoid OOM during eval
+        eval_concs = _eligible_eval_concs(best_entry)
+        mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
