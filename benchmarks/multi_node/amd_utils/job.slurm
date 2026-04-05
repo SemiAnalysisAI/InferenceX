@@ -328,7 +328,7 @@ trap cleanup INT TERM HUP
 
 # Force NFS cache refresh on all nodes before running Docker to avoid stale file handle errors
 echo "Refreshing NFS caches on all nodes..."
-srun --nodelist="$SELECTED_NODELIST_SRUN" --timeout=30 bash -c '
+timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     sync
     # Force re-stat of the mounted directory to refresh NFS handles
     timeout 10 ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
