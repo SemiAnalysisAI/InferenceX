@@ -197,8 +197,10 @@ grep Cpus_allowed_list /proc/self/status
 echo "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=${HSA_OVERRIDE_CPU_AFFINITY_DEBUG:-unset}"
 echo "=== END DIAGNOSTICS ==="
 
-# Fix CPU affinity: let ROCm threads inherit unrestricted affinity
-export HSA_OVERRIDE_CPU_AFFINITY_DEBUG=1
+# Unset SLURM_CPUS_PER_TASK — when set to 128, sglang/PyTorch/aiter may
+# over-subscribe CPU threads, which corrupts MXFP4 inference.
+# Interactive --pty sessions do not have this variable set.
+unset SLURM_CPUS_PER_TASK
 
 exec bash benchmarks/single_node/'"${EXP_NAME%%_*}"'_'"${PRECISION}"'_mi355x'"${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}"'.sh
 '
