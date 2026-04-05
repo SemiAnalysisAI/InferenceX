@@ -67,8 +67,11 @@ export MORI_MAX_DISPATCH_TOKENS_DECODE=160
 export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
 
 export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
-export MORI_IO_QP_MAX_SEND_WR=16384
-export MORI_IO_QP_MAX_CQE=32768
+# Broadcom bnxt_re NICs cap SQ depth at ~4351 entries. Lower from upstream
+# defaults (16384/32768) to avoid SQ overflow under EP8 RDMA traffic.
+# See sgl-project/sglang#22072
+export MORI_IO_QP_MAX_SEND_WR=4096
+export MORI_IO_QP_MAX_CQE=8192
 export MORI_IO_QP_MAX_SGE=4
 
 export MORI_APP_LOG_LEVEL=INFO
