@@ -193,6 +193,15 @@ else
             bash -c '
 set -ex
 
+# DEBUG: wipe CI env vars — keep only what sglang/lm-eval need
+# Save needed values before clearing
+_HF_TOKEN="${HF_TOKEN:-}"
+# Clear all GITHUB_, RUNNER_, and workflow env vars that could interfere
+for _var in $(env | grep -oP "^(GITHUB_|RUNNER_|CI|ACTIONS_|MODEL|TP|EP_SIZE|ISL|OSL|CONC|MAX_MODEL_LEN|PRECISION|FRAMEWORK|EXP_NAME|RESULT_FILENAME|RUN_EVAL|EVAL_ONLY|DISAGG|SPEC_DECODING|DP_ATTENTION|MODEL_PREFIX|IMAGE|RANDOM_RANGE_RATIO|PYTHONDONTWRITEBYTECODE|PYTHONPYCACHEPREFIX|VLLM_CACHE_ROOT)[^=]*"); do
+    unset "$_var"
+done
+export HF_TOKEN="$_HF_TOKEN"
+
 export SGLANG_USE_AITER=1
 export HF_HUB_CACHE=/mnt/hf_hub_cache/
 PORT=9000
