@@ -188,21 +188,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash -c '
-# Diagnostics: print step shape and CPU affinity
-echo "=== SLURM STEP DIAGNOSTICS ==="
-echo "host=$(hostname) procid=${SLURM_PROCID:-unset} ntasks=${SLURM_NTASKS:-unset} cpt=${SLURM_CPUS_PER_TASK:-unset}"
-for fd in 0 1 2; do echo "fd$fd -> $(readlink /proc/self/fd/$fd)"; done
-grep Cpus_allowed_list /proc/self/status
-echo "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=${HSA_OVERRIDE_CPU_AFFINITY_DEBUG:-unset}"
-echo "=== END DIAGNOSTICS ==="
-
-# Wrap in script(1) to allocate a PTY — without a PTY, MXFP4/aiter
-# produces degraded inference (~15% GSM8K vs ~97% with PTY).
-# See debug-mxfp4-eval-failure.md for full investigation.
-unset SLURM_CPUS_PER_TASK
-exec script -qefc "bash benchmarks/single_node/'"${EXP_NAME%%_*}"'_'"${PRECISION}"'_mi355x'"${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}"'.sh" /dev/null
-'
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 
