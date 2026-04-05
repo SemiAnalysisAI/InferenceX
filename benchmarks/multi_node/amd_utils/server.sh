@@ -43,6 +43,7 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # =============================================================================
 # Dependencies and Environment Setup
 # =============================================================================
+source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
