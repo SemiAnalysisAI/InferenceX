@@ -98,7 +98,7 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
     sleep 10
 
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -qx "$JOB_ID"; then
+        if ! squeue -j "$JOB_ID" --noheader --format='%i' 2>/dev/null | grep -qx "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
             scontrol show job "$JOB_ID"
             exit 1
@@ -109,7 +109,7 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
     set +x
 
     (
-        while squeue -u $USER --noheader --format='%i' | grep -qx "$JOB_ID"; do
+        while squeue -j "$JOB_ID" --noheader --format='%i' 2>/dev/null | grep -qx "$JOB_ID"; do
             sleep 10
         done
     ) &
