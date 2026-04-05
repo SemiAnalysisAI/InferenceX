@@ -190,8 +190,8 @@ else
             --container-mount-home \
             --container-writable \
             --container-workdir=/workspace/ \
-            --no-container-entrypoint \
-            bash -c '
+            --no-container-entrypoint --export=ALL \
+            bash --login -c '
 set -ex
 
 export SGLANG_USE_AITER=1
@@ -243,7 +243,7 @@ export OPENAI_API_KEY=EMPTY
 python3 -m lm_eval --model local-chat-completions --apply_chat_template \
     --tasks utils/evals/gsm8k.yaml \
     --output_path /tmp/eval_results \
-    --log_samples \
+    --log_samples --limit 200\
     --model_args "model=amd/Qwen3.5-397B-A17B-MXFP4,base_url=http://0.0.0.0:${PORT}/v1/chat/completions,api_key=EMPTY,eos_string=,max_retries=5,num_concurrent=64,timeout=1800,tokenized_requests=False,max_length=9416" \
     --gen_kwargs "max_tokens=5320,temperature=0,top_p=1"
 
