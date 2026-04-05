@@ -507,18 +507,14 @@ import os as _os, sys as _sys
 
 _MOE_LOG = _os.environ.get("MOE_DEBUG_LOG", "")
 if _MOE_LOG:
-    import atexit as _atexit, threading as _threading
+    import threading as _threading
 
     _moe_lock = _threading.Lock()
     _moe_shapes = {}   # key -> count
-    _moe_logged = 0
     _MOE_MAX_LOG = 200  # stop collecting after this many unique shapes
 
     def _log_moe_shapes(hidden, w1, w2, topk_w, topk_ids, **kw):
-        """Collect shape tuples from fused_moe calls."""
-        global _moe_logged
-        if _moe_logged >= _MOE_MAX_LOG:
-            return
+        """Log shape tuples from fused_moe calls immediately to stderr + file."""
         key = (
             "hidden=" + str(tuple(hidden.shape)),
             "w1=" + str(tuple(w1.shape)),
@@ -529,22 +525,19 @@ if _MOE_LOG:
             "w1_dtype=" + str(w1.dtype),
         )
         with _moe_lock:
-            _moe_shapes[key] = _moe_shapes.get(key, 0) + 1
-            _moe_logged = len(_moe_shapes)
-
-    def _flush_moe_log():
-        if not _moe_shapes:
-            return
-        try:
-            with open(_MOE_LOG, "a") as f:
-                f.write("=== fused_moe shape log (rank 0) ===\n")
-                for key, cnt in sorted(_moe_shapes.items(), key=lambda x: -x[1]):
-                    f.write(f"  count={cnt:>5d}  {' '.join(key)}\n")
-                f.write(f"=== total unique shapes: {len(_moe_shapes)} ===\n")
-        except Exception as e:
-            print(f"[MOE_DEBUG] flush error: {e}", file=_sys.stderr)
-
-    _atexit.register(_flush_moe_log)
+            prev = _moe_shapes.get(key, 0)
+            _moe_shapes[key] = prev + 1
+            if len(_moe_shapes) > _MOE_MAX_LOG:
+                return
+            # Log new shapes immediately + periodic count updates
+            if prev == 0 or prev in (10, 100, 1000):
+                msg = f"[MOE_SHAPE] count={prev+1:>5d}  {' '.join(key)}"
+                print(msg, file=_sys.stderr, flush=True)
+                try:
+                    with open(_MOE_LOG, "a") as f:
+                        f.write(msg + "\n")
+                except Exception:
+                    pass
 
     # ---------- Patch aiter.fused_moe.fused_moe (AMD/ROCm path) ----------
     def _try_patch_aiter():
