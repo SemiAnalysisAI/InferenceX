@@ -289,6 +289,15 @@ SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
 
+# Auto-detect whether sudo is available (passwordless).
+# CI runners have passwordless sudo; local users typically do not.
+if sudo -n true 2>/dev/null; then
+    SUDO=sudo
+else
+    echo "[INFO] Passwordless sudo not available; running docker without sudo."
+    SUDO=
+fi
+export SUDO
 
 # Use only the selected nodes for srun execution
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
@@ -296,8 +305,7 @@ SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning stale logs folder..."
-  # clean up the logs folder
-  sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  $SUDO rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
 
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -314,7 +322,7 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
     cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
     # Drop caches if we have permission (optional, requires root)
-    echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
+    echo 3 | '"$SUDO"' tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
 '
 
@@ -328,11 +336,14 @@ set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
-# Pre-clean (idempotent)
-sudo docker ps -aq --filter \"name=^container_sbatch_\" | xargs -r sudo docker rm -f || true
-sudo docker ps -aq | xargs -r sudo docker stop || true
+# Auto-detect sudo availability on compute node
+if sudo -n true 2>/dev/null; then _SUDO=sudo; else _SUDO=; fi
 
-exec sudo docker run --rm \
+# Pre-clean (idempotent)
+\$_SUDO docker ps -aq --filter \"name=^container_sbatch_\" | xargs -r \$_SUDO docker rm -f || true
+\$_SUDO docker ps -aq | xargs -r \$_SUDO docker stop || true
+
+exec \$_SUDO docker run --rm \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -402,4 +413,4 @@ if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
 fi
 "
 
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'sudo docker rm -f $DOCKER_CONT_NAME 2>/dev/null || true'
+srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'if sudo -n true 2>/dev/null; then sudo docker rm -f $DOCKER_CONT_NAME 2>/dev/null; else docker rm -f $DOCKER_CONT_NAME 2>/dev/null; fi || true'
