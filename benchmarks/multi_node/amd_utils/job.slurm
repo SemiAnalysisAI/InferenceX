@@ -328,12 +328,12 @@ trap cleanup INT TERM HUP
 
 # Force NFS cache refresh on all nodes before running Docker to avoid stale file handle errors
 echo "Refreshing NFS caches on all nodes..."
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+srun --nodelist="$SELECTED_NODELIST_SRUN" --timeout=30 bash -c '
     sync
     # Force re-stat of the mounted directory to refresh NFS handles
-    ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
-    stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
-    cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
+    timeout 10 ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
+    timeout 10 stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
+    timeout 10 cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
     # Drop caches if we have permission (optional, requires root)
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
