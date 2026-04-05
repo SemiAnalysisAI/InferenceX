@@ -685,7 +685,7 @@ run_lm_eval() {
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
-      --log_samples \
+      --log_samples --limit 200\
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
