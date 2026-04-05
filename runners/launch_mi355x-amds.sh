@@ -181,14 +181,27 @@ else
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
 
-    srun --jobid=$JOB_ID -N1 -n1 -c128 \
+    srun --jobid=$JOB_ID -N1 -n1 -c128 --cpu-bind=none \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --container-mount-home \
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash -c '
+# Diagnostics: print step shape and CPU affinity
+echo "=== SLURM STEP DIAGNOSTICS ==="
+echo "host=$(hostname) procid=${SLURM_PROCID:-unset} ntasks=${SLURM_NTASKS:-unset} cpt=${SLURM_CPUS_PER_TASK:-unset}"
+for fd in 0 1 2; do echo "fd$fd -> $(readlink /proc/self/fd/$fd)"; done
+grep Cpus_allowed_list /proc/self/status
+echo "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=${HSA_OVERRIDE_CPU_AFFINITY_DEBUG:-unset}"
+echo "=== END DIAGNOSTICS ==="
+
+# Fix CPU affinity: let ROCm threads inherit unrestricted affinity
+export HSA_OVERRIDE_CPU_AFFINITY_DEBUG=1
+
+exec bash benchmarks/single_node/'"${EXP_NAME%%_*}"'_'"${PRECISION}"'_mi355x'"${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}"'.sh
+'
 
     scancel $JOB_ID
 
