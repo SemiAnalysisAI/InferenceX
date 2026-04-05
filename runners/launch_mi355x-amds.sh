@@ -191,7 +191,8 @@ else
             --container-writable \
             --container-workdir=/workspace/ \
             --no-container-entrypoint --export=ALL \
-            bash --login -c '
+            --cpu-bind=none \
+            bash -c '
 set -ex
 
 export SGLANG_USE_AITER=1
