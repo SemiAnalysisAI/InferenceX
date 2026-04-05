@@ -231,7 +231,7 @@ export OPENAI_API_KEY=EMPTY
 python3 -m lm_eval --model local-chat-completions --apply_chat_template \
     --tasks utils/evals/gsm8k.yaml \
     --output_path /tmp/eval_results \
-    --log_samples \
+    --log_samples --limit 200 \
     --model_args "model=amd/Qwen3.5-397B-A17B-MXFP4,base_url=http://0.0.0.0:9000/v1/chat/completions,api_key=EMPTY,eos_string=,max_retries=5,num_concurrent=64,timeout=1800,tokenized_requests=False,max_length=9416" \
     --gen_kwargs "max_tokens=5320,temperature=0,top_p=1"
 
