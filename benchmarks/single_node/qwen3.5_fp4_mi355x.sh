@@ -32,13 +32,14 @@ fi
 start_gpu_monitor
 
 set -x
+wget https://qwen.readthedocs.io/en/latest/_downloads/c101120b5bebcc2f12ec504fc93a965e/qwen3_nonthinking.jinja
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --host=0.0.0.0 --port=$PORT \
 --tensor-parallel-size=$TP \
 --attention-backend aiter \
 --mem-fraction-static=0.9 \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
---chat-template-kwargs '{"enable_thinking": false}' \
+--chat-template qwen3_nonthinking.jinja \
 --watchdog-timeout 1200 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
