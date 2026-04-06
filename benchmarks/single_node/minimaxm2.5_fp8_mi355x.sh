@@ -45,6 +45,8 @@ else
   EP=" "
 fi
 
+amd-smi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -52,7 +54,7 @@ set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.80 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
 --block-size=32 \
