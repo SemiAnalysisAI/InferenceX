@@ -21,40 +21,30 @@ export SGLANG_USE_AITER=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
-MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
-CHUNK_SIZE=32768
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-sglang serve \
-    --attention-backend aiter \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --mem-fraction-static $MEM_FRAC_STATIC \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs $CONC \
-    --max-running-requests $CONC \
-    --chunked-prefill-size $CHUNK_SIZE \
-    --max-prefill-tokens $CHUNK_SIZE \
-    --num-continuous-decode-steps 2 \
-    --disable-radix-cache \
-    > $SERVER_LOG 2>&1 &
+python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
+--host=0.0.0.0 --port=$PORT \
+--tensor-parallel-size=$TP \
+--attention-backend aiter \
+--mem-fraction-static=0.9 \
+--model-loader-extra-config '{"enable_multithread_load": true}' \
+--watchdog-timeout 1200 $EVAL_CONTEXT_ARGS \
+--disable-radix-cache \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" --sleep-interval 60
 
 run_benchmark_serving \
     --model "$MODEL" \
