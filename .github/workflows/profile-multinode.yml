@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       config-key:
-        description: "Config key from config yaml (e.g. dsr1-fp4-gb200-dynamo-trt-mtp)"
+        description: "Config key from config yaml (e.g. dsr1-fp4-b200-dynamo-trt)"
         required: true
         type: string
       config-file:
@@ -55,9 +55,9 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
   # TODO: Remove these test defaults after testing (used by push trigger)
-  TEST_CONFIG_KEY: 'dsr1-fp4-gb200-dynamo-trt-mtp'
+  TEST_CONFIG_KEY: 'dsr1-fp4-b200-dynamo-trt'
   TEST_CONFIG_FILE: '.github/configs/nvidia-master.yaml'
-  TEST_CONC: '180'
+  TEST_CONC: '6'
   TEST_PROFILE_TYPE: 'torch'
   TEST_PROFILE_START: '5'
   TEST_PROFILE_STOP: '50'
