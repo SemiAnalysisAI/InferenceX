@@ -1265,7 +1265,7 @@
   description:
     - "Add MiniMax M2.5 MXFP4 vLLM benchmark for MI355X"
     - "Model: amd/MiniMax-M2.5-MXFP4 with --trust-remote-code and --block-size=32"
-    - "Image: vllm/vllm-openai-rocm:v0.18.1"
+    - "Image: vllm/vllm-openai-rocm:nightly-f6983f01de2bf2e92ab468fa735ebac39cddd670"
     - "Environment: VLLM_ROCM_USE_AITER=1"
     - "TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
