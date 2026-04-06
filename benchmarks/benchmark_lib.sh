@@ -415,13 +415,20 @@ inject_srtctl_profiling() {
     local prof_type="${PROFILE_INJECT_TYPE:-torch}"
     local prof_start="${PROFILE_INJECT_START:-5}"
     local prof_stop="${PROFILE_INJECT_STOP:-50}"
-    echo "[profile] Injecting profiling into ${CONFIG_FILE} (type=${prof_type}, steps=${prof_start}-${prof_stop})..."
+    local prof_isl="${ISL:-4096}"
+    local prof_osl="${OSL:-1024}"
+    local prof_conc="${CONC:-${CONC_LIST%% *}}"  # first value from CONC_LIST if CONC not set
+    prof_conc="${prof_conc:-64}"
+    echo "[profile] Injecting profiling into ${CONFIG_FILE} (type=${prof_type}, steps=${prof_start}-${prof_stop}, isl=${prof_isl}, osl=${prof_osl}, conc=${prof_conc})..."
     python3 -c "
 import yaml, sys
 with open('${CONFIG_FILE}') as f:
     cfg = yaml.safe_load(f)
 cfg['profiling'] = {
     'type': '${prof_type}',
+    'isl': ${prof_isl},
+    'osl': ${prof_osl},
+    'concurrency': ${prof_conc},
     'prefill': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
     'decode': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
 }
