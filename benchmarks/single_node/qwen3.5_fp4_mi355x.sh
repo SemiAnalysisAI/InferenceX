@@ -27,7 +27,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     # Override
     export EVAL_MAX_MODEL_LEN=16384
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+    #EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
@@ -40,14 +40,14 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --attention-backend aiter \
 --mem-fraction-static=0.9 \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
---watchdog-timeout 1200 $EVAL_CONTEXT_ARGS \
+--watchdog-timeout 1200  \
 --disable-radix-cache \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" 
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" --sleep-interval 60
 
 run_benchmark_serving \
     --model "$MODEL" \
