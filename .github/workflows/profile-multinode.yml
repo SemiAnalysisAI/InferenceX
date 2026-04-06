@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - '.github/workflows/profile-multinode.yml'
+      - 'benchmarks/benchmark_lib.sh'
+      - 'runners/launch_*.sh'
   workflow_dispatch:
     inputs:
       config-key:
