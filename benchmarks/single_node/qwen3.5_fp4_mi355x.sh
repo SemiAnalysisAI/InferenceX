@@ -25,8 +25,11 @@ PORT=${PORT:-8888}
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
+    # Override
+    export EVAL_MAX_MODEL_LEN=16384
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -44,7 +47,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 SERVER_PID=$!
 
 # Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" --sleep-interval 60
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" 
 
 run_benchmark_serving \
     --model "$MODEL" \
