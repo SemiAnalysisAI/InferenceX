@@ -30,6 +30,7 @@ export VLLM_ROCM_USE_AITER=1
 export HSA_ENABLE_DEBUG=1
 export HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2
 export ROCM_DEBUG_AGENT_OPTIONS="--all"
+ls -la /opt/rocm/lib/librocm-debug-agent.so.2  
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -57,7 +58,7 @@ $EP \
 --block-size=32 \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
---trust-remote-code > $SERVER_LOG 2>&1 &
+--trust-remote-code
 
 SERVER_PID=$!
 
