@@ -3,6 +3,13 @@
 SQUASH_FILE="/var/lib/squash/rocm_sgl-dev_v0.5.10rc0-rocm720-mi35x-20260402.sqsh"
 PARTITION="compute"
 
+echo "=== CODEBASE HASH (login node) ==="
+find "$(pwd)" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) \
+    ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/__pycache__/*' \
+    -print0 | sort -z | xargs -0 sha256sum | tee /tmp/codebase_hashes.txt
+sha256sum /tmp/codebase_hashes.txt | awk '{print "CODEBASE_COMBINED_HASH=" $1}'
+echo "=== END CODEBASE HASH (login node) ==="
+
 set -x
 salloc --partition=$PARTITION --gres=gpu:4 --exclusive \
     --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
@@ -18,6 +25,13 @@ srun --jobid=$JOB_ID \
     --export=ALL \
     --pty bash -c '
 set -ex
+
+echo "=== CODEBASE HASH (inside container) ==="
+find /workspace/ -type f \( -name "*.sh" -o -name "*.py" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
+    ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/__pycache__/*" \
+    -print0 | sort -z | xargs -0 sha256sum | tee /tmp/codebase_hashes_container.txt
+sha256sum /tmp/codebase_hashes_container.txt | awk "{print \"CODEBASE_COMBINED_HASH_CONTAINER=\" \$1}"
+echo "=== END CODEBASE HASH (inside container) ==="
 
 export SGLANG_USE_AITER=1
 export HF_HUB_CACHE=/mnt/hf_hub_cache/
@@ -92,5 +106,4 @@ find /tmp/eval_results -name "results*.json" -exec cp {} /workspace/ \;
 find /tmp/eval_results -name "samples*.jsonl" -exec cp {} /workspace/ \;
 '
 
-    scancel $JOB_ID
-fi
+scancel $JOB_ID
