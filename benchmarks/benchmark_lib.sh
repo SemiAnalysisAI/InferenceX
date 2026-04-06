@@ -397,8 +397,39 @@ run_benchmark_serving() {
 
 
 # --------------------------------
-# Profiling trace helpers
+# Profiling helpers
 # --------------------------------
+
+# Inject srtctl profiling config into CONFIG_FILE before srtctl apply.
+# Call this after cloning srt-slurm and before running srtctl apply.
+# Requires: PROFILE=1, CONFIG_FILE set and exists.
+# Optional env vars: PROFILE_INJECT_TYPE (torch|nsys), PROFILE_INJECT_START, PROFILE_INJECT_STOP
+inject_srtctl_profiling() {
+    if [[ "${PROFILE:-}" != "1" ]]; then
+        return 0
+    fi
+    if [[ -z "${CONFIG_FILE:-}" || ! -f "${CONFIG_FILE}" ]]; then
+        echo "[profile] CONFIG_FILE not set or not found, skipping srtctl profiling injection"
+        return 0
+    fi
+    local prof_type="${PROFILE_INJECT_TYPE:-torch}"
+    local prof_start="${PROFILE_INJECT_START:-5}"
+    local prof_stop="${PROFILE_INJECT_STOP:-50}"
+    echo "[profile] Injecting profiling into ${CONFIG_FILE} (type=${prof_type}, steps=${prof_start}-${prof_stop})..."
+    python3 -c "
+import yaml, sys
+with open('${CONFIG_FILE}') as f:
+    cfg = yaml.safe_load(f)
+cfg['profiling'] = {
+    'type': '${prof_type}',
+    'prefill': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
+    'decode': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
+}
+with open('${CONFIG_FILE}', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+print('[profile] Done')
+" || echo "[profile] Warning: profiling injection failed"
+}
 
 _find_latest_profile_trace() {
     local latest=""

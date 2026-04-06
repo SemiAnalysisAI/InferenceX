@@ -2,6 +2,8 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 export SLURM_PARTITION="batch"
@@ -99,6 +101,7 @@ echo "Submitting job with srtctl..."
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+inject_srtctl_profiling
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"

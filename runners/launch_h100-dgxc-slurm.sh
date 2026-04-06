@@ -5,6 +5,8 @@ SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
 SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -116,6 +118,7 @@ EOF
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
+    inject_srtctl_profiling
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 

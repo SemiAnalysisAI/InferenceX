@@ -207,31 +207,16 @@ jobs:
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
-          # Export additional settings first (sets CONFIG_FILE for srt-slurm recipes)
+          # Export additional settings (sets CONFIG_FILE for srt-slurm recipes)
           additional="${{ join(matrix.config.prefill.additional-settings || fromJson('[]'), ' ') }} ${{ join(matrix.config.decode.additional-settings || fromJson('[]'), ' ') }}"
           if [ -n "${additional// /}" ]; then
             export $additional
           fi
 
-          # If CONFIG_FILE is set (srt-slurm recipe), inject profiling section
-          if [[ -n "${CONFIG_FILE:-}" && -f "${CONFIG_FILE}" ]]; then
-            echo "Injecting profiling config into ${CONFIG_FILE}..."
-            python3 <<PYEOF
-          import yaml
-          with open("${CONFIG_FILE}") as f:
-              cfg = yaml.safe_load(f)
-          cfg["profiling"] = {
-              "type": "${PROFILE_TYPE}",
-              "prefill": {"start_step": int("${PROFILE_START_STEP}"), "stop_step": int("${PROFILE_STOP_STEP}")},
-              "decode": {"start_step": int("${PROFILE_START_STEP}"), "stop_step": int("${PROFILE_STOP_STEP}")},
-          }
-          with open("${CONFIG_FILE}", "w") as f:
-              yaml.dump(cfg, f, default_flow_style=False)
-          print(f"Profiling injected: type=${PROFILE_TYPE} steps=${PROFILE_START_STEP}-${PROFILE_STOP_STEP}")
-          PYEOF
-          else
-            echo "Warning: CONFIG_FILE not set or not found, profiling injection skipped"
-          fi
+          # Export profiling env vars for the launch scripts to pick up
+          export PROFILE_INJECT_TYPE="${PROFILE_TYPE}"
+          export PROFILE_INJECT_START="${PROFILE_START_STEP}"
+          export PROFILE_INJECT_STOP="${PROFILE_STOP_STEP}"
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 

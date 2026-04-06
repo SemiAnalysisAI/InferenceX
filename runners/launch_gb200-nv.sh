@@ -2,6 +2,8 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
@@ -168,6 +170,7 @@ echo "Submitting job with srtctl..."
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+inject_srtctl_profiling
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
