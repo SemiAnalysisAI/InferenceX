@@ -32,7 +32,7 @@ start_gpu_monitor
 
 set -x
 sglang serve \
-    --attention-backend triton \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
