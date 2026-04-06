@@ -433,16 +433,10 @@ cfg['profiling'] = {
     'decode': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
 }
 # Profiling requires exactly 1 prefill + 1 decode worker
-if 'prefill' in cfg:
-    cfg['prefill']['num_workers'] = 1
-if 'decode' in cfg:
-    cfg['decode']['num_workers'] = 1
-# Also check snake_case variants
-for section in ['prefill', 'decode']:
-    if section in cfg and isinstance(cfg[section], dict):
-        for key in ['num-workers', 'num_workers', 'num-worker', 'num_worker']:
-            if key in cfg[section]:
-                cfg[section][key] = 1
+if 'resources' not in cfg:
+    cfg['resources'] = {}
+cfg['resources']['prefill_workers'] = 1
+cfg['resources']['decode_workers'] = 1
 with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
 print('[profile] Done')
