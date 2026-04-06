@@ -1,26 +1,13 @@
 #!/usr/bin/env bash
 
 SQUASH_FILE="/var/lib/squash/rocm_sgl-dev_v0.5.10rc0-rocm720-mi35x-20260402.sqsh"
-PARTITION="compute"
-
-echo "=== CODEBASE HASH (login node) ==="
-find "$(pwd)" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) \
-    ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/__pycache__/*' \
-    -print0 | sort -z | xargs -0 sha256sum | tee /tmp/codebase_hashes.txt
-sha256sum /tmp/codebase_hashes.txt | awk '{print "CODEBASE_COMBINED_HASH=" $1}'
-echo "=== END CODEBASE HASH (login node) ==="
 
 set -x
-salloc --partition=$PARTITION --gres=gpu:4 --exclusive \
+salloc --partition="compute" --gres=gpu:4 --exclusive \
     --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
 JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
-SRUN_PTY_ARGS=()
-if [[ "${FORCE_SRUN_PTY:-0}" == "1" ]]; then
-  SRUN_PTY_ARGS+=(--pty)
-fi
-
-srun --jobid=$JOB_ID "${SRUN_PTY_ARGS[@]}" \
+srun --jobid=$JOB_ID \
   --container-image=$SQUASH_FILE \
   --container-mounts=$(pwd):/workspace/,/var/lib/hf-hub-cache/:/mnt/hf_hub_cache/ \
   --container-mount-home \
@@ -30,13 +17,6 @@ srun --jobid=$JOB_ID "${SRUN_PTY_ARGS[@]}" \
   --export=ALL \
   bash -lc '
 set -ex
-
-echo "=== CODEBASE HASH (inside container) ==="
-find /workspace/ -type f \( -name "*.sh" -o -name "*.py" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
-    ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/__pycache__/*" \
-    -print0 | sort -z | xargs -0 sha256sum | tee /tmp/codebase_hashes_container.txt
-sha256sum /tmp/codebase_hashes_container.txt | awk "{print \"CODEBASE_COMBINED_HASH_CONTAINER=\" \$1}"
-echo "=== END CODEBASE HASH (inside container) ==="
 
 export SGLANG_USE_AITER=1
 export HF_HUB_CACHE=/mnt/hf_hub_cache/
@@ -74,7 +54,7 @@ for i in $(seq 1 120); do
     sleep 5
 done
 
-tail -20 /tmp/server.log
+tail /tmp/server.log
 
 # Smoke test
 python3 - <<'"'"'PY'"'"'
