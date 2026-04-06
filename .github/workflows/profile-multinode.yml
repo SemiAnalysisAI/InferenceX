@@ -139,17 +139,17 @@ jobs:
       TP: ${{ matrix.config.tp }}
       EP_SIZE: ${{ matrix.config.ep }}
       DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
-      CONC: ${{ matrix.config.conc }}
-      # Multi-node fields (empty for single-node)
-      CONC_LIST: ${{ matrix.config.conc }}
-      PREFILL_NUM_WORKERS: ${{ matrix.config.prefill-num-worker }}
-      PREFILL_TP: ${{ matrix.config.prefill-tp }}
-      PREFILL_EP: ${{ matrix.config.prefill-ep }}
-      PREFILL_DP_ATTN: ${{ matrix.config.prefill-dp-attn }}
-      DECODE_NUM_WORKERS: ${{ matrix.config.decode-num-worker }}
-      DECODE_TP: ${{ matrix.config.decode-tp }}
-      DECODE_EP: ${{ matrix.config.decode-ep }}
-      DECODE_DP_ATTN: ${{ matrix.config.decode-dp-attn }}
+      CONC: ${{ matrix.config.conc[0] }}
+      # Multi-node fields
+      CONC_LIST: ${{ join(matrix.config.conc, ' ') }}
+      PREFILL_NUM_WORKERS: ${{ matrix.config.prefill.num-worker }}
+      PREFILL_TP: ${{ matrix.config.prefill.tp }}
+      PREFILL_EP: ${{ matrix.config.prefill.ep }}
+      PREFILL_DP_ATTN: ${{ matrix.config.prefill.dp-attn }}
+      DECODE_NUM_WORKERS: ${{ matrix.config.decode.num-worker }}
+      DECODE_TP: ${{ matrix.config.decode.tp }}
+      DECODE_EP: ${{ matrix.config.decode.ep }}
+      DECODE_DP_ATTN: ${{ matrix.config.decode.dp-attn }}
     steps:
       - name: Resource cleanup
         run: |
@@ -185,7 +185,7 @@ jobs:
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
-          IS_MULTINODE: ${{ matrix.config.multinode }}
+          IS_MULTINODE: ${{ matrix.config.disagg }}
           PROFILE: '1'
           PROFILE_TYPE: ${{ inputs.profile-type || env.TEST_PROFILE_TYPE }}
           PROFILE_START_STEP: ${{ inputs.profile-start-step || env.TEST_PROFILE_START }}
@@ -226,7 +226,7 @@ jobs:
           fi
 
           # Export additional settings from matrix config if present
-          additional="${{ join(fromJson(matrix.config.prefill-additional-settings || '[]'), ' ') }} ${{ join(fromJson(matrix.config.decode-additional-settings || '[]'), ' ') }}"
+          additional="${{ join(matrix.config.prefill.additional-settings || fromJson('[]'), ' ') }} ${{ join(matrix.config.decode.additional-settings || fromJson('[]'), ' ') }}"
           if [ -n "${additional// /}" ]; then
             export $additional
           fi
@@ -266,7 +266,7 @@ jobs:
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: |
-          if [[ "${{ matrix.config.multinode }}" == "true" ]]; then
+          if [[ "${{ matrix.config.disagg }}" == "true" ]]; then
             for result_file in ${RESULT_FILENAME}_*.json; do
               if [ -f "$result_file" ]; then
                 gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
