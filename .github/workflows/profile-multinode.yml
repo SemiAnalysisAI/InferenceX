@@ -1,6 +1,7 @@
 name: Profile Multinode
 
 on:
+  # TODO: Remove push trigger after testing
   push:
     paths:
       - '.github/workflows/profile-multinode.yml'
@@ -53,6 +54,13 @@ env:
   PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  # TODO: Remove these test defaults after testing (used by push trigger)
+  TEST_CONFIG_KEY: 'dsr1-fp4-gb200-dynamo-trt-mtp'
+  TEST_CONFIG_FILE: '.github/configs/nvidia-master.yaml'
+  TEST_CONC: '180'
+  TEST_PROFILE_TYPE: 'torch'
+  TEST_PROFILE_START: '5'
+  TEST_PROFILE_STOP: '50'
 
 jobs:
   get-jobs:
@@ -70,7 +78,7 @@ jobs:
         name: Generate matrix via script
         run: |
           pip install pydantic
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
+          CLI_ARGS="test-config --config-files ${{ inputs.config-file || env.TEST_CONFIG_FILE }} --config-keys ${{ inputs.config-key || env.TEST_CONFIG_KEY }} --conc ${{ inputs.conc || env.TEST_CONC }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
@@ -104,7 +112,7 @@ jobs:
       - name: Fail if no matching entries
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
+          echo "No entries produced for config-key=${{ inputs.config-key || env.TEST_CONFIG_KEY }}, conc=${{ inputs.conc || env.TEST_CONC }}." >&2
           exit 1
 
   profile:
@@ -179,9 +187,9 @@ jobs:
           RUNNER_NAME: ${{ runner.name }}
           IS_MULTINODE: ${{ matrix.config.multinode }}
           PROFILE: '1'
-          PROFILE_TYPE: ${{ inputs.profile-type }}
-          PROFILE_START_STEP: ${{ inputs.profile-start-step }}
-          PROFILE_STOP_STEP: ${{ inputs.profile-stop-step }}
+          PROFILE_TYPE: ${{ inputs.profile-type || env.TEST_PROFILE_TYPE }}
+          PROFILE_START_STEP: ${{ inputs.profile-start-step || env.TEST_PROFILE_START }}
+          PROFILE_STOP_STEP: ${{ inputs.profile-stop-step || env.TEST_PROFILE_STOP }}
           SGLANG_TORCH_PROFILER_DIR: /workspace/
           VLLM_TORCH_PROFILER_DIR: /workspace/
           VLLM_RPC_TIMEOUT: '1800000'
