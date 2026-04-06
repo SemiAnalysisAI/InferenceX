@@ -341,7 +341,7 @@ fi
 
 echo "Waiting at the container creation barrier on $host_name"
 python3 $SGLANG_WS_PATH/sync.py barrier \
-    --local-ip ${host_ip} \
+    --local-ip 0.0.0.0 \
     --local-port 5000 \
     --enable-port \
     --node-ips ${IPADDRS} \
