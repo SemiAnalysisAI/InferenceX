@@ -29,6 +29,7 @@ export VLLM_ROCM_USE_AITER=1
 
 export HSA_ENABLE_DEBUG=1
 export HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2
+export ROCM_DEBUG_AGENT_OPTIONS="--all"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
