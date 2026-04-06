@@ -362,6 +362,33 @@ timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo "NFS cache refreshed on $(hostname)"
 ' || echo "[WARN] NFS refresh srun failed (non-fatal); continuing."
 
+# -----------------------------------------------------------------------
+# Cross-node firewall setup: allow external IPs for SGLang bootstrap.
+# The MoRI bootstrap server binds to the default NIC (external IP), but
+# UFW may only allow internal subnet traffic. Collect each node's external
+# IP and add UFW allow rules on all nodes before starting Docker.
+# -----------------------------------------------------------------------
+_UFW_DIR="${BENCHMARK_LOGS_DIR}/.ufw_${SLURM_JOB_ID}"
+mkdir -p "$_UFW_DIR"
+timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+    _IFACE=$(ip route show default 2>/dev/null | awk "NR==1{print \$5}")
+    _EXT_IP=$(ip -4 addr show "$_IFACE" 2>/dev/null | awk "/inet /{sub(/\/.*$/, \"\", \$2); print \$2; exit}")
+    if [[ -n "$_EXT_IP" ]]; then
+        echo "$_EXT_IP" > '"$_UFW_DIR"'/$SLURM_PROCID.ip
+        echo "[INFO] $(hostname): external IP $_EXT_IP (rank $SLURM_PROCID)"
+    fi
+' 2>/dev/null || echo "[WARN] External IP collection failed (non-fatal)."
+for _IP_FILE in "$_UFW_DIR"/*.ip; do
+    [[ -f "$_IP_FILE" ]] || continue
+    _PEER_IP=$(cat "$_IP_FILE")
+    [[ -z "$_PEER_IP" ]] && continue
+    timeout 15 srun --nodelist="$SELECTED_NODELIST_SRUN" \
+        bash -c "ufw allow from '$_PEER_IP' 2>/dev/null || true; echo \"[INFO] UFW: allowed $_PEER_IP on \$(hostname)\"" \
+        2>/dev/null || true
+done
+rm -rf "$_UFW_DIR"
+echo "Cross-node firewall setup complete."
+
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
