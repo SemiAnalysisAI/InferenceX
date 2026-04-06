@@ -52,13 +52,13 @@ set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
 --block-size=32 \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
---trust-remote-code
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
