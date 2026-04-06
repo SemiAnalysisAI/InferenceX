@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       config-key:
-        description: "Config key from config yaml (e.g. dsr1-fp4-gb200-dynamo-trt-mtp)"
+        description: "Config key from config yaml"
         required: true
         type: string
       config-file:
@@ -17,24 +17,11 @@ on:
         required: false
         type: string
         default: '64'
-      profile-type:
-        description: "Profiler type"
+      moe-debug:
+        description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
-        type: choice
-        options:
-          - torch
-          - nsys
-        default: 'torch'
-      profile-start-step:
-        description: "Profiling start step"
-        required: false
-        type: string
-        default: '5'
-      profile-stop-step:
-        description: "Profiling stop step"
-        required: false
-        type: string
-        default: '50'
+        type: boolean
+        default: false
       ref:
         description: "Ref (branch/sha) to checkout"
         required: false
@@ -92,6 +79,7 @@ jobs:
             raise SystemExit(1)
 
           filt = data[:1]
+
           out = json.dumps(filt)
           print(out)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -111,7 +99,6 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     runs-on: ${{ matrix.config.runner }}
-    timeout-minutes: 480
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}
@@ -122,38 +109,39 @@ jobs:
       IMAGE: ${{ matrix.config.image }}
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
-      SPEC_DECODING: ${{ matrix.config.spec-decoding }}
-      DISAGG: ${{ matrix.config.disagg }}
-      # Single-node fields
       TP: ${{ matrix.config.tp }}
       EP_SIZE: ${{ matrix.config.ep }}
       DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
       CONC: ${{ matrix.config.conc }}
-      # Multi-node fields (empty for single-node)
-      CONC_LIST: ${{ matrix.config.conc }}
-      PREFILL_NUM_WORKERS: ${{ matrix.config.prefill-num-worker }}
-      PREFILL_TP: ${{ matrix.config.prefill-tp }}
-      PREFILL_EP: ${{ matrix.config.prefill-ep }}
-      PREFILL_DP_ATTN: ${{ matrix.config.prefill-dp-attn }}
-      DECODE_NUM_WORKERS: ${{ matrix.config.decode-num-worker }}
-      DECODE_TP: ${{ matrix.config.decode-tp }}
-      DECODE_EP: ${{ matrix.config.decode-ep }}
-      DECODE_DP_ATTN: ${{ matrix.config.decode-dp-attn }}
+      SPEC_DECODING: ${{ matrix.config.spec-decoding }}
+      DISAGG: ${{ matrix.config.disagg }}
+      MOE_DEBUG: '0'
+      MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
       - name: Resource cleanup
         run: |
+          # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
             docker ps -aq | xargs -r docker rm -f
             docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
           fi
+
+          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
+            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
               scancel --name="${{ runner.name }}" || true
               while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
                 squeue --name="${{ runner.name }}"
                 sleep 5
               done
             else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
               scancel -u "$USER" || true
               while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
                 squeue -u "$USER"
@@ -165,138 +153,93 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
           clean: false
 
-      - name: Launch + Profile
+      - name: Launch + Profile (single-node sglang/vllm)
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
-          IS_MULTINODE: ${{ matrix.config.multinode }}
           PROFILE: '1'
-          PROFILE_TYPE: ${{ inputs.profile-type }}
-          PROFILE_START_STEP: ${{ inputs.profile-start-step }}
-          PROFILE_STOP_STEP: ${{ inputs.profile-stop-step }}
           SGLANG_TORCH_PROFILER_DIR: /workspace/
           VLLM_TORCH_PROFILER_DIR: /workspace/
           VLLM_RPC_TIMEOUT: '1800000'
+        shell: bash
         run: |
           set -euo pipefail
-
-          # Build result filename
-          ep_val="${EP_SIZE:-${DECODE_EP:-1}}"
-          tp_val="${TP:-${DECODE_TP:-1}}"
-          if [[ "${IS_MULTINODE}" == "true" ]]; then
-            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_prefill-tp${PREFILL_TP}-ep${PREFILL_EP}-dp${PREFILL_DP_ATTN}-nw${PREFILL_NUM_WORKERS}_decode-tp${DECODE_TP}-ep${DECODE_EP}-dp${DECODE_DP_ATTN}-nw${DECODE_NUM_WORKERS}_disagg-${DISAGG}_spec-${SPEC_DECODING}_conc${CONC}_${RUNNER_NAME}"
-          else
-            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${tp_val}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
-          fi
+          ep_val="${EP_SIZE:-1}"
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
-          # If CONFIG_FILE is set (srt-slurm recipe), inject profiling section
-          if [[ -n "${CONFIG_FILE:-}" && -f "${CONFIG_FILE}" ]]; then
-            echo "Injecting profiling config into ${CONFIG_FILE}..."
-            python3 <<PYEOF
-          import yaml
-          with open("${CONFIG_FILE}") as f:
-              cfg = yaml.safe_load(f)
-          cfg["profiling"] = {
-              "type": "${PROFILE_TYPE}",
-              "prefill": {"start_step": int("${PROFILE_START_STEP}"), "stop_step": int("${PROFILE_STOP_STEP}")},
-              "decode": {"start_step": int("${PROFILE_START_STEP}"), "stop_step": int("${PROFILE_STOP_STEP}")},
-          }
-          with open("${CONFIG_FILE}", "w") as f:
-              yaml.dump(cfg, f, default_flow_style=False)
-          print(f"Profiling injected: type=${PROFILE_TYPE} steps=${PROFILE_START_STEP}-${PROFILE_STOP_STEP}")
-          PYEOF
-          fi
-
-          # Export additional settings from matrix config if present
-          additional="${{ join(fromJson(matrix.config.prefill-additional-settings || '[]'), ' ') }} ${{ join(fromJson(matrix.config.decode-additional-settings || '[]'), ' ') }}"
-          if [ -n "${additional// /}" ]; then
-            export $additional
-          fi
-
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
-          # Locate results (multinode produces multiple files, single-node produces one)
-          if ls ${res_name}*.json 1> /dev/null 2>&1; then
-            echo "Found result files: $(ls ${res_name}*.json)"
-          else
-            echo "Warning: No result files matching ${res_name}*.json" >&2
+          if [ ! -f "${res_name}.json" ]; then
+            echo "Run failed: Benchmark result ${res_name}.json not found." >&2
+            exit 1
           fi
 
-          # Locate profile traces
-          # Single-node: benchmark_lib.sh puts trace at profile_${res_name}.trace.json.gz
-          # Multi-node: srtctl puts traces in outputs/JOB_ID/logs/profiles/
           trace_path="profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
-          else
-            # Search srtctl output directories
-            for job_dir in outputs/*/logs; do
-              if [ -d "$job_dir" ]; then
-                traces=$(find "$job_dir" -name "*.trace.json*" -o -name "*profile*" 2>/dev/null)
-                if [ -n "$traces" ]; then
-                  archive="profile_${res_name}.tar.gz"
-                  tar czf "$GITHUB_WORKSPACE/$archive" -C "$(dirname $job_dir)" "$(basename $job_dir)"
-                  echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
-                  echo "Found multi-node traces, archived to $archive"
-                  break
+            if [ "${FRAMEWORK}" = "sglang" ]; then
+              # Try to locate corresponding TP-0 traces produced by SGLang profiler
+              merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
+              if [ -n "${merged_latest}" ] && [ -f "${merged_latest}" ]; then
+                ts_name="${merged_latest##*/}"
+                ts_name="${ts_name#merged-}"
+                ts_name="${ts_name%.trace.json.gz}"
+                tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
+                tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
+                if [ -f "${tp0_decode}" ]; then
+                  echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
+                fi
+                if [ -f "${tp0_extend}" ]; then
+                  echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
                 fi
               fi
-            done
+            fi
+          else
+            echo "Profile trace not found: $trace_path" >&2
           fi
 
-      - name: Process results
+      - name: Process result (json -> agg)
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: |
-          if [[ "${{ matrix.config.multinode }}" == "true" ]]; then
-            for result_file in ${RESULT_FILENAME}_*.json; do
-              if [ -f "$result_file" ]; then
-                gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
-                prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
-                decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
-                if [ -n "$gpus" ]; then
-                  RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
-                fi
-              fi
-            done
-          else
-            python3 utils/process_result.py
-          fi
+          python3 utils/process_result.py
 
-      - name: Upload profile trace (single-node)
+      - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: profile_${{ env.RESULT_FILENAME }}
-          path: ${{ steps.run.outputs.trace }}
-
-      - name: Upload profile traces (multi-node)
-        if: ${{ steps.run.outputs.trace_archive != '' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: profile_${{ env.RESULT_FILENAME }}
-          path: ${{ steps.run.outputs.trace_archive }}
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bmk_${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}*.json
+          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
           if-no-files-found: ignore
 
-      - name: Upload server logs
-        if: always()
+      - name: Upload TP-0-DECODE trace as artifact
+        if: ${{ steps.run.outputs.tp0_decode != '' }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: logs_${{ env.RESULT_FILENAME }}
-          path: multinode_server_logs.tar.gz
+          name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
+          path: ${{ steps.run.outputs.tp0_decode }}
+          if-no-files-found: ignore
+
+      - name: Upload TP-0-EXTEND trace as artifact
+        if: ${{ steps.run.outputs.tp0_extend != '' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
+          path: ${{ steps.run.outputs.tp0_extend }}
+          if-no-files-found: ignore
+
+      - name: Upload MoE debug log as artifact
+        if: ${{ env.MOE_DEBUG == '1' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: moe_debug_${{ env.RESULT_FILENAME }}
+          path: "moe_debug.tp0.log"
           if-no-files-found: ignore
 
       - name: Checkout storage repo
@@ -314,39 +257,43 @@ jobs:
         id: push
         env:
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
+        shell: bash
         run: |
           set -euo pipefail
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ env.RESULT_FILENAME }}"
+
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+
           pushd storage >/dev/null
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "Add profile: ${{ env.RESULT_FILENAME }}" || echo "Nothing to commit"
+          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
           git push
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
-          RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ env.RESULT_FILENAME }}/trace.json.gz"
-          TITLE="${{ env.RESULT_FILENAME }}"
-          enc_src="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${RAW_URL}', safe=''))")"
-          enc_title="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${TITLE}', safe=''))")"
+
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+
+          enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
+          enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
+
           relay="${PERFETTO_RELAY_URL%/}"
-          echo "relay_url=${relay}/?src=${enc_src}&title=${enc_title}" >> "$GITHUB_OUTPUT"
+          RELAY_URL="${relay}/?src=${enc_src}&title=${enc_title}"
 
-      - name: Print Perfetto link
+          echo "raw_url=$RAW_URL" >> "$GITHUB_OUTPUT"
+          echo "relay_url=$RELAY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print Perfetto link (relay)
         if: ${{ steps.push.outputs.relay_url != '' }}
+        env:
+          RELAY_URL: ${{ steps.push.outputs.relay_url }}
+          RAW_URL: ${{ steps.push.outputs.raw_url }}
+        shell: bash
         run: |
-          echo "Perfetto Relay URL: ${{ steps.push.outputs.relay_url }}"
-          printf "\n**Perfetto (Relay):** %s\n" "${{ steps.push.outputs.relay_url }}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Resource cleanup (post-run)
-        if: always()
-        run: |
-          if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
-              scancel --name="${{ runner.name }}" || true
-            else
-              scancel -u "$USER" || true
-            fi
-          fi
+          set -euo pipefail
+          echo "RAW trace URL: $RAW_URL"
+          echo "Perfetto Relay URL: $RELAY_URL"
+          printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"

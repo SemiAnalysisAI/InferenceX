@@ -1,6 +1,9 @@
 name: Profile Multinode
 
 on:
+  push:
+    paths:
+      - '.github/workflows/profile-multinode.yml'
   workflow_dispatch:
     inputs:
       config-key:
