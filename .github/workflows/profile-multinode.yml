@@ -1,4 +1,4 @@
-name: Profile
+name: Profile Multinode
 
 on:
   workflow_dispatch:
