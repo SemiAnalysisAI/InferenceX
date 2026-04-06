@@ -161,6 +161,29 @@ fi
 echo "Final MODEL_PATH: $MODEL_PATH"
 echo ""
 
+# Verify model weights are actually readable (not just symlinks to missing blobs).
+# The HF cache may have snapshot symlinks pointing to blob files that no longer exist.
+_MODEL_WEIGHT_SAMPLE=$(ls "$MODEL_PATH"/model-00001-of-*.safetensors 2>/dev/null | head -1)
+if [[ -n "$_MODEL_WEIGHT_SAMPLE" ]] && ! head -c 1 "$_MODEL_WEIGHT_SAMPLE" > /dev/null 2>&1; then
+    echo "[WARN] Model weights at $MODEL_PATH have broken symlinks (blobs missing)"
+    echo "[INFO] Searching /vfs/models_blog/ for a matching model..."
+    # Strip trailing date suffix (e.g. -0528, -1105) for fuzzy directory match
+    _VFS_KEY=$(echo "$MODEL_YAML_KEY" | sed 's/-[0-9]\{4\}$//')
+    _VFS_MODEL=$(ls -d /vfs/models_blog/*"${_VFS_KEY}"* 2>/dev/null | head -1)
+    if [[ -n "$_VFS_MODEL" ]] && [[ -d "$_VFS_MODEL" ]]; then
+        if ls "$_VFS_MODEL"/model-00001-of-*.safetensors &>/dev/null 2>&1; then
+            MODEL_PATH="$_VFS_MODEL"
+            MODEL_DIR="/vfs/models_blog"
+            MODEL_NAME=$(basename "$_VFS_MODEL")
+            echo "[INFO] /vfs fallback: MODEL_PATH=$MODEL_PATH, MODEL_NAME=$MODEL_NAME"
+        else
+            echo "[WARN] /vfs fallback also has no weights at $_VFS_MODEL"
+        fi
+    else
+        echo "[WARN] No matching model found in /vfs/models_blog/ for key '$_VFS_KEY'"
+    fi
+fi
+
 NUM_NODES="${NUM_NODES}"
 
 # ------------------------
