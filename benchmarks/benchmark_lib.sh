@@ -412,7 +412,7 @@ inject_srtctl_profiling() {
         echo "[profile] CONFIG_FILE not set or not found, skipping srtctl profiling injection"
         return 0
     fi
-    local prof_type="${PROFILE_INJECT_TYPE:-torch}"
+    local prof_type="torch"
     local prof_start="${PROFILE_INJECT_START:-5}"
     local prof_stop="${PROFILE_INJECT_STOP:-50}"
     local prof_isl="${ISL:-4096}"
