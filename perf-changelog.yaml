@@ -1245,10 +1245,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/947
 
 - config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Optimize MiniMax-M2.5 FP8 MI355X vLLM search-space"
+    - "Add tp2 ep2 search-space entries (conc 2-256) for all seq-len configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1002
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Optimize MiniMax-M2.5 FP8 MI355X vLLM search-space"
+    - "Add tp2 ep2 search-space entries (conc 2-256) for all seq-len configs"
+    - "Upgrade vLLM image to v0.19.0"
+    - "Enable FP8 KV cache + AITER FA for minimaxm2.5-fp8-mi355x-vllm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1003
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1001
+
+- config-keys:
     - minimaxm2.5-fp4-b200-vllm
   description:
-    - "Add MiniMax-M2.5 NVFP4 vLLM benchmark config for B200"
-    - "Uses nvidia/MiniMax-M2.5-NVFP4 model checkpoint"
-    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "Optimize MiniMax-M2.5 NVFP4 B200 vLLM search-space"
+    - "Expand from tp2/tp4 to tp1/tp2/tp4/tp8 with expert parallel and dp-attn variants"
+    - "Add ep2, ep4, and dp-attn configurations for higher concurrency sweeps"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/996
 
