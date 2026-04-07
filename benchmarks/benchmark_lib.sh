@@ -437,6 +437,8 @@ if 'resources' not in cfg:
     cfg['resources'] = {}
 cfg['resources']['prefill_workers'] = 1
 cfg['resources']['decode_workers'] = 1
+cfg['resources']['prefill_nodes'] = 1
+cfg['resources']['decode_nodes'] = 1
 with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
 print('[profile] Done')
