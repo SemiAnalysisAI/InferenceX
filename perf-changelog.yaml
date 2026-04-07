@@ -1270,5 +1270,5 @@
     - minimaxm2.5-fp8-b200-vllm
   description:
     - "Update MiniMax-M2.5 FP8 B200 config with new search spaces and vllm args"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxxx
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1010
 
