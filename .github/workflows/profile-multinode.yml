@@ -230,27 +230,34 @@ jobs:
           fi
 
           # Locate profile traces
-          # Single-node: benchmark_lib.sh puts trace at profile_${res_name}.trace.json.gz
-          # Multi-node: srtctl puts traces in outputs/JOB_ID/logs/profiles/
-          #   (launch script copies logs to $GITHUB_WORKSPACE/LOGS before cleanup)
           trace_path="profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
           else
-            # Search copied logs directory and srtctl output directories
-            for search_dir in "$GITHUB_WORKSPACE/LOGS" outputs/*/logs; do
-              if [ -d "$search_dir" ]; then
-                traces=$(find "$search_dir" -name "*.trace.json*" -o -name "*profile*.json*" 2>/dev/null)
-                if [ -n "$traces" ]; then
-                  archive="profile_${res_name}.tar.gz"
-                  tar czf "$GITHUB_WORKSPACE/$archive" -C "$search_dir" .
-                  echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
-                  echo "Found traces in $search_dir, archived to $archive"
-                  echo "$traces"
-                  break
-                fi
+            # Debug: show what's in LOGS
+            echo "=== Contents of LOGS directory ==="
+            find "$GITHUB_WORKSPACE/LOGS" -type f 2>/dev/null | head -50 || echo "LOGS dir not found"
+            echo "==================================="
+
+            # Search copied logs directory (profiles/) for any trace files
+            profiles_dir="$GITHUB_WORKSPACE/LOGS/profiles"
+            if [ -d "$profiles_dir" ]; then
+              archive="profile_${res_name}.tar.gz"
+              tar czf "$GITHUB_WORKSPACE/$archive" -C "$profiles_dir" .
+              echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
+              echo "Archived profiles from $profiles_dir"
+              find "$profiles_dir" -type f | head -20
+            else
+              # Fallback: archive entire LOGS if profiles/ subdir doesn't exist
+              if [ -d "$GITHUB_WORKSPACE/LOGS" ]; then
+                archive="profile_${res_name}.tar.gz"
+                tar czf "$GITHUB_WORKSPACE/$archive" -C "$GITHUB_WORKSPACE/LOGS" .
+                echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
+                echo "No profiles/ subdir found, archived full LOGS"
+              else
+                echo "Warning: No LOGS directory found"
               fi
-            done
+            fi
           fi
 
       - name: Process results
