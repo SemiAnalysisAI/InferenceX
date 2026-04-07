@@ -179,7 +179,10 @@ else
         fi
     "
 
-    if [ "$FRAMEWORK" != "atom" ]; then
+    if [ "$FRAMEWORK" == "atom" ]; then
+        export VLLM_CACHE_ROOT=${GITHUB_WORKSPACE}/.cache/vllm
+        mkdir -p $VLLM_CACHE_ROOT
+    else
         export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
     fi
 
