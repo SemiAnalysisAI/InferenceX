@@ -40,9 +40,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/Oseltamivir/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/Oseltamivir/srt-slurm-nvidia.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q1-2026
+    git checkout nvidia-pr
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh

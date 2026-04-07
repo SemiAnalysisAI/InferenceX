@@ -186,7 +186,7 @@ When working with benchmark configurations, use these valid values:
 
 ### Registering Recipes from srtslurm
 
-For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/ishandhanani/srt-slurm) repository. To stage these recipes in InferenceX:
+For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/Oseltamivir/srt-slurm-nvidia) repository. To stage these recipes in InferenceX:
 
 **1. Locate source recipes in srtslurm:**
 ```bash
