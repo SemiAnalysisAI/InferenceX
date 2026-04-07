@@ -232,19 +232,21 @@ jobs:
           # Locate profile traces
           # Single-node: benchmark_lib.sh puts trace at profile_${res_name}.trace.json.gz
           # Multi-node: srtctl puts traces in outputs/JOB_ID/logs/profiles/
+          #   (launch script copies logs to $GITHUB_WORKSPACE/LOGS before cleanup)
           trace_path="profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
           else
-            # Search srtctl output directories
-            for job_dir in outputs/*/logs; do
-              if [ -d "$job_dir" ]; then
-                traces=$(find "$job_dir" -name "*.trace.json*" -o -name "*profile*" 2>/dev/null)
+            # Search copied logs directory and srtctl output directories
+            for search_dir in "$GITHUB_WORKSPACE/LOGS" outputs/*/logs; do
+              if [ -d "$search_dir" ]; then
+                traces=$(find "$search_dir" -name "*.trace.json*" -o -name "*profile*.json*" 2>/dev/null)
                 if [ -n "$traces" ]; then
                   archive="profile_${res_name}.tar.gz"
-                  tar czf "$GITHUB_WORKSPACE/$archive" -C "$(dirname $job_dir)" "$(basename $job_dir)"
+                  tar czf "$GITHUB_WORKSPACE/$archive" -C "$search_dir" .
                   echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
-                  echo "Found multi-node traces, archived to $archive"
+                  echo "Found traces in $search_dir, archived to $archive"
+                  echo "$traces"
                   break
                 fi
               fi
