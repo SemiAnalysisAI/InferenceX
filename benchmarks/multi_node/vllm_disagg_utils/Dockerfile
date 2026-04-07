@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai-rocm:v0.17.1
+FROM vllm/vllm-openai-rocm:v0.18.1
 
 # RDMA drivers for broadcom devices
 RUN apt-get update && apt-get install -y autoconf libibverbs-dev ibverbs-utils libtool unzip wget
