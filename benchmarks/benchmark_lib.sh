@@ -443,6 +443,71 @@ with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
 print('[profile] Done')
 " || echo "[profile] Warning: profiling injection failed"
+
+    # Copy profiling patches into srt-slurm scripts dir (mounted at /srtctl-benchmarks in container)
+    local patches_src="${GITHUB_WORKSPACE:-$(dirname "$0")/..}/patches"
+    local srt_scripts_dir="src/srtctl/benchmarks/scripts"
+    if [[ -d "$patches_src" && -d "$srt_scripts_dir" ]]; then
+        cp -v "$patches_src"/*-profiling.py "$srt_scripts_dir/" 2>/dev/null || true
+        echo "[profile] Copied profiling patches to $srt_scripts_dir/"
+    fi
+
+    # For TRT-LLM: install sitecustomize.py that auto-applies the profiling patch
+    # when Python starts inside the container. The scripts dir is mounted at
+    # /srtctl-benchmarks, and we add it to PYTHONPATH via the config YAML.
+    if [[ "${FRAMEWORK:-}" == *"trt"* && -d "$srt_scripts_dir" ]]; then
+        mkdir -p "$srt_scripts_dir/profiling_sitecustomize"
+        cat > "$srt_scripts_dir/profiling_sitecustomize/sitecustomize.py" <<'SITEPY'
+import os
+if os.environ.get("PROFILING_MODE"):
+    import importlib.util, types
+    patch_path = "/srtctl-benchmarks/trtllm-profiling.py"
+    if os.path.isfile(patch_path):
+        spec = importlib.util.spec_from_file_location("_trtllm_profiling", patch_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if hasattr(mod, "patch"):
+            mod.patch()
+SITEPY
+        # Inject PYTHONPATH into the srtctl config so the container picks up sitecustomize
+        python3 -c "
+import yaml
+with open('${CONFIG_FILE}') as f:
+    cfg = yaml.safe_load(f)
+# Add PYTHONPATH to backend environment for both prefill and decode
+backend = cfg.get('backend', {})
+for env_key in ['prefill_environment', 'decode_environment']:
+    env = backend.get(env_key, {})
+    existing = env.get('PYTHONPATH', '')
+    env['PYTHONPATH'] = '/srtctl-benchmarks/profiling_sitecustomize' + (':' + existing if existing else '')
+    backend[env_key] = env
+cfg['backend'] = backend
+with open('${CONFIG_FILE}', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+print('[profile] Injected PYTHONPATH for TRT-LLM profiling patch')
+" || echo "[profile] Warning: failed to inject PYTHONPATH"
+    fi
+
+    # For SGLang: enable layerwise NVTX markers via sglang_config CLI args
+    if [[ "${FRAMEWORK:-}" == *"sglang"* ]]; then
+        python3 -c "
+import yaml
+with open('${CONFIG_FILE}') as f:
+    cfg = yaml.safe_load(f)
+backend = cfg.get('backend', {})
+sglang_cfg = backend.get('sglang_config', {})
+# Add --enable-layerwise-nvtx-marker to both prefill and decode configs
+for mode in ['prefill', 'decode', 'aggregated']:
+    mode_cfg = sglang_cfg.get(mode, {})
+    mode_cfg['enable-layerwise-nvtx-marker'] = True
+    sglang_cfg[mode] = mode_cfg
+backend['sglang_config'] = sglang_cfg
+cfg['backend'] = backend
+with open('${CONFIG_FILE}', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+print('[profile] Enabled SGLang --enable-layerwise-nvtx-marker')
+" || echo "[profile] Warning: failed to inject SGLang NVTX markers"
+    fi
 }
 
 _find_latest_profile_trace() {

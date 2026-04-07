@@ -38,9 +38,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+    # TODO: Revert to upstream after nsys profiling PR is merged
+    # git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/hbarclay/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q1-2026
+    git checkout fix/trtllm-nsys-profiling
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
