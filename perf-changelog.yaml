@@ -1265,3 +1265,16 @@
   description:
     - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1001
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-vllm
+  description:
+    - "Add Kimi K2.5 NVFP4 GB200 disaggregated multinode vLLM benchmark via Dynamo frontend"
+    - "Image: vllm/vllm-openai:v0.18.0-cu130"
+    - "Model: nvidia/Kimi-K2.5-NVFP4 with NixlConnector KV transfer, FLASHINFER_MLA attention"
+    - "1k1k configs: high-throughput DEP (1P1D dep4/dep16), low-latency TEP (1P4D dep4/tep4)"
+    - "8k1k configs: low-latency TEP (1P4D), mid-curve DEP (3P1D dep16), high-throughput (5P1D dep8, 6P1D dep16)"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "New framework: dynamo-vllm (Dynamo frontend + vLLM backend)"
+    - "Runner script updated to clone NVIDIA/srt-slurm and map vLLM container image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1008
