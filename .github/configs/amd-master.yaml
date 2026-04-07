@@ -252,11 +252,11 @@ glm5-fp8-mi355x-atom:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 128, conc-end: 256 }
+    - { tp: 8, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 128, conc-end: 256 }
+    - { tp: 8, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
