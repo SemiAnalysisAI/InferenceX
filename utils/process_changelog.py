@@ -164,8 +164,8 @@ def main():
         else:
             final_results["single_node"][seq_len_str].append(result)
 
-    final_results["evals"] = [e for e in all_eval_results if "prefill" not in e or e.get("prefill") is None]
-    final_results["multinode_evals"] = [e for e in all_eval_results if "prefill" in e and e.get("prefill") is not None]
+    final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
+    final_results["multinode_evals"] = [e for e in all_eval_results if e.get("prefill") is not None]
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)

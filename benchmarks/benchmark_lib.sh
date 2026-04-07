@@ -615,7 +615,7 @@ except Exception:
 }
 
 # Compute the context length for eval-only mode.
-# Uses 5x the benchmark context capped at the model's native max.
+# Uses the requested benchmark context capped at the model's native max.
 # Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
 # Echoes the computed value for scripts to capture.
 #

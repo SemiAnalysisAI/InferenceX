@@ -307,8 +307,9 @@ Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mo
 - Only on `8k1k` sequence length
 
 **Multi-node** eval selection:
-- Entry with **highest max concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
+- Entry with **highest max eligible concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
 - Only `8k1k` sequence length
+- Eval runs at `eval-conc`, the upper median concurrency from the selected config
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
@@ -320,7 +321,7 @@ This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate
 
 **Multi-node eval infrastructure**:
 - AMD (MI355X): `server.sh` skips `bench.sh` when `EVAL_ONLY=true`, runs lm-eval directly
-- NVIDIA (GB200/GB300): Uses srt-slurm `infmax-eval` benchmark type with expanded `eval_context_length`
+- NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200): srt-slurm invokes its `lm-eval` runner from `do_sweep.py` as a post/eval-only step using `INFMAX_WORKSPACE`
 
 ### Eval Framework: lm-eval
 
@@ -360,8 +361,8 @@ if [ "${RUN_EVAL}" = "true" ]; then
 fi
 
 # Eval-only mode (EVAL_ONLY=true):
-# 1. Compute expanded context via compute_eval_context_length
-# 2. Start server with expanded context (--context-length or --max-model-len)
+# 1. Compute eval context via compute_eval_context_length
+# 2. Start server with that context (--context-length or --max-model-len)
 # 3. wait_for_server_ready
 # 4. run_benchmark_serving returns immediately (skipped)
 # 5. run_eval + append_lm_eval_summary
@@ -372,10 +373,10 @@ fi
 - Runs lm-eval via `run_eval` against the router on port 30000
 - Copies eval artifacts to `/run_logs/slurm_job-*/eval_results/`
 
-**Multi-node NVIDIA** (GB200/GB300 via srt-slurm):
-- Uses `benchmark.type: "infmax-eval"` in srt-slurm config
-- `benchmark.eval_context_length` expands server context for eval
-- `infmax-eval` benchmark runner sources `benchmark_lib.sh` from `INFMAX_WORKSPACE`
+**Multi-node NVIDIA Slurm** (GB200, GB300, B200, B300, H100, H200 via srt-slurm):
+- Uses the srt-slurm `lm-eval` runner as a post/eval-only step from `do_sweep.py`
+- Mounts the InferenceX checkout from `INFMAX_WORKSPACE` at `/infmax-workspace`
+- `lm-eval` runner sources `benchmark_lib.sh` from `/infmax-workspace`
 
 ### Key Eval Functions in `benchmarks/benchmark_lib.sh`
 
@@ -386,7 +387,7 @@ fi
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
-| `compute_eval_context_length` | Computes eval context length (5x benchmark context, capped at model native max) |
+| `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Eval Results Collection
