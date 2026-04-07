@@ -21,6 +21,14 @@ set -ex
 export SGLANG_USE_AITER=1
 export HF_HUB_CACHE=/mnt/hf_hub_cache/
 
+# Revert sglang commit 5bdc07d (GDN fused projection bug causing low eval scores)
+SGLANG_SITE=$(python3 -c "import sglang; print(sglang.__path__[0])")
+curl -sL "https://raw.githubusercontent.com/sgl-project/sglang/8662ba7db4ec2eee9cd608498cac7487caed3ac7/python/sglang/srt/models/qwen3_5.py" \
+    -o "$SGLANG_SITE/srt/models/qwen3_5.py"
+curl -sL "https://raw.githubusercontent.com/sgl-project/sglang/8662ba7db4ec2eee9cd608498cac7487caed3ac7/python/sglang/srt/models/qwen3_next.py" \
+    -o "$SGLANG_SITE/srt/models/qwen3_next.py"
+rm -f "$SGLANG_SITE/jit_kernel/triton/gdn_fused_proj.py"
+
 python3 -m sglang.launch_server \
     --model-path amd/Qwen3.5-397B-A17B-MXFP4 \
     --trust-remote-code \
