@@ -28,7 +28,7 @@ export VLLM_ROCM_USE_AITER=1
 # export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 
 export HSA_ENABLE_DEBUG=1
-export HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2
+export HSA_TOOLS_LIB="/opt/rocm/lib/librocm-debug-agent.so.2"
 export ROCM_DEBUG_AGENT_OPTIONS="--all"
 ls -la /opt/rocm/lib/librocm-debug-agent.so.2  
 SERVER_LOG=/workspace/server.log
@@ -46,6 +46,57 @@ else
 fi
 
 amd-smi
+
+python3 -c "
+import pathlib
+f = pathlib.Path('/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_model_runner.py')
+code = f.read_text()
+
+# 点A: forward pass 完成后立即 sync
+code = code.replace(
+    '''        hidden_states, last_hidden_states = self._dummy_run(
+            self.max_num_tokens, is_profile=True
+        )
+        if get_pp_group().is_last_rank:''',
+    '''        hidden_states, last_hidden_states = self._dummy_run(
+            self.max_num_tokens, is_profile=True
+        )
+        import torch as _torch_dbg; _torch_dbg.cuda.synchronize(); print('[DEBUG-A] dummy_run sync OK', flush=True)
+        if get_pp_group().is_last_rank:'''
+)
+
+# 点B: sampler 完成后 sync
+code = code.replace(
+    '''                output = self._dummy_sampler_run(last_hidden_states)
+        else:
+            output = None
+        self._sync_device()''',
+    '''                output = self._dummy_sampler_run(last_hidden_states)
+                import torch as _torch_dbg; _torch_dbg.cuda.synchronize(); print('[DEBUG-B] sampler_run sync OK', flush=True)
+        else:
+            output = None
+        self._sync_device()'''
+)
+
+# 点D: memory_profiling 退出后 (在 gpu_worker.py)
+f.write_text(code)
+print('gpu_model_runner.py patched OK')
+
+# patch gpu_worker.py
+f2 = pathlib.Path('/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py')
+code2 = f2.read_text()
+code2 = code2.replace(
+    '''            self.model_runner.profile_run()
+
+            profile_torch_peak = torch.accelerator.memory_stats(self.device).get(''',
+    '''            self.model_runner.profile_run()
+            print('[DEBUG-D] profile_run returned OK', flush=True)
+
+            profile_torch_peak = torch.accelerator.memory_stats(self.device).get('''
+)
+f2.write_text(code2)
+print('gpu_worker.py patched OK')
+"
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
