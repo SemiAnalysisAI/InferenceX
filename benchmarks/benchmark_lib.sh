@@ -458,16 +458,27 @@ print('[profile] Done')
     if [[ "${FRAMEWORK:-}" == *"trt"* && -d "$srt_scripts_dir" ]]; then
         mkdir -p "$srt_scripts_dir/profiling_sitecustomize"
         cat > "$srt_scripts_dir/profiling_sitecustomize/sitecustomize.py" <<'SITEPY'
-import os
-if os.environ.get("PROFILING_MODE"):
-    import importlib.util, types
+import os, sys
+_mode = os.environ.get("PROFILING_MODE", "")
+print(f"[sitecustomize] loaded, PROFILING_MODE={_mode}, PYTHONPATH={os.environ.get('PYTHONPATH','')}", file=sys.stderr, flush=True)
+if _mode:
     patch_path = "/srtctl-benchmarks/trtllm-profiling.py"
+    print(f"[sitecustomize] patch exists: {os.path.isfile(patch_path)}", file=sys.stderr, flush=True)
     if os.path.isfile(patch_path):
-        spec = importlib.util.spec_from_file_location("_trtllm_profiling", patch_path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        if hasattr(mod, "patch"):
-            mod.patch()
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_trtllm_profiling", patch_path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "patch"):
+                mod.patch()
+                print("[sitecustomize] patch applied successfully", file=sys.stderr, flush=True)
+            else:
+                print("[sitecustomize] patch module has no patch() function", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[sitecustomize] patch failed: {e}", file=sys.stderr, flush=True)
+    else:
+        print(f"[sitecustomize] patch file not found at {patch_path}", file=sys.stderr, flush=True)
 SITEPY
         # Inject PYTHONPATH into the srtctl config so the container picks up sitecustomize
         python3 -c "
