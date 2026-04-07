@@ -41,7 +41,7 @@ fi
 start_gpu_monitor
 
 set -x
-
+pip install -U transformers
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
