@@ -241,7 +241,7 @@ glm5-fp8-mi355x-sglang:
 
 glm5-fp8-mi355x-atom:
   #TODO: update to the public Atom image once it's available. The current image is an internal test image with the same SW stack as the public image.
-  image: rocm/atom-dev:vllm-v0.17.0-nightly_20260406
+  image: rocm/atom-dev:nightly_202604061538
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
