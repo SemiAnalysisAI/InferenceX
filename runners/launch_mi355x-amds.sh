@@ -179,7 +179,9 @@ else
         fi
     "
 
-    export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+    if [ "$FRAMEWORK" != "atom" ]; then
+        export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+    fi
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
