@@ -2,6 +2,70 @@
 
 # Shared benchmarking utilities for InferenceMAX
 
+# Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
+# root inside containers, and root-owned cache directories break future checkout
+# cleanup on self-hosted runners.
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+
+# --------------------------------
+# GPU monitoring helpers
+# --------------------------------
+
+GPU_MONITOR_PID=""
+GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+
+# Start background GPU monitoring that logs metrics every second to CSV.
+# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
+# Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
+start_gpu_monitor() {
+    local output="$GPU_METRICS_CSV"
+    local interval=1
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --output)   output="$2"; shift 2 ;;
+            --interval) interval="$2"; shift 2 ;;
+            *)          shift ;;
+        esac
+    done
+
+    GPU_METRICS_CSV="$output"
+
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+            --format=csv -l "$interval" > "$output" 2>/dev/null &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    elif command -v amd-smi &>/dev/null; then
+        # Use amd-smi native watch mode (-w) which includes timestamps automatically.
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
+        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        GPU_MONITOR_PID=$!
+        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
+    else
+        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
+        return 0
+    fi
+}
+
+# Stop the background GPU monitor and report file size.
+stop_gpu_monitor() {
+    if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        kill "$GPU_MONITOR_PID" 2>/dev/null
+        wait "$GPU_MONITOR_PID" 2>/dev/null || true
+        echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
+        if [[ -f "$GPU_METRICS_CSV" ]]; then
+            local lines
+            lines=$(wc -l < "$GPU_METRICS_CSV")
+            echo "[GPU Monitor] Collected $lines rows -> $GPU_METRICS_CSV"
+        fi
+    fi
+    GPU_MONITOR_PID=""
+}
+
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set
@@ -77,6 +141,15 @@ wait_for_server_ready() {
         return 1
     fi
 
+    # Wait for server log file to be created (container startup may delay this)
+    while [ ! -f "$server_log" ]; do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "Server died before creating log file. Exiting."
+            exit 1
+        fi
+        sleep 1
+    done
+
     # Show logs until server is ready
     tail -f -n +1 "$server_log" &
     local TAIL_PID=$!
@@ -108,6 +181,12 @@ wait_for_server_ready() {
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
+    # In eval-only mode, skip the throughput benchmark entirely.
+    if [ "${EVAL_ONLY}" = "true" ]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+        return 0
+    fi
+
     set +x
     local model=""
     local port=""
@@ -235,6 +314,18 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
+    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
+    # and cap num_prompts to keep traces small.
+    local profile_flag=()
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
+        if [[ -n "$_prof_dir" ]]; then
+            mkdir -p "$_prof_dir"
+        fi
+        profile_flag+=(--profile)
+        num_prompts="$max_concurrency"
+    fi
+
     # Build benchmark command
     local benchmark_cmd=(
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
@@ -249,6 +340,7 @@ run_benchmark_serving() {
         --max-concurrency "$max_concurrency"
         --request-rate inf
         --ignore-eos
+        "${profile_flag[@]}"
         --save-result
         --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
@@ -295,7 +387,110 @@ run_benchmark_serving() {
     fi
     set +x
 
+    # If profiling, move trace to relay-upload location
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        move_profile_trace_for_relay
+    fi
+
     return $benchmark_exit_code
+}
+
+
+# --------------------------------
+# Profiling trace helpers
+# --------------------------------
+
+_find_latest_profile_trace() {
+    local latest=""
+    local dir="" candidate="" base=""
+    local -a search_roots=()
+
+    for dir in "$@"; do
+        search_roots=()
+        if [[ -d "$dir" ]]; then
+            search_roots+=("$dir")
+        fi
+        if [[ -d "$dir/profiles" ]]; then
+            search_roots+=("$dir/profiles")
+        fi
+        if [[ ${#search_roots[@]} -eq 0 ]]; then
+            continue
+        fi
+
+        while IFS= read -r -d '' candidate; do
+            base="$(basename "$candidate")"
+            if [[ "$base" == profile_*.trace.json.gz ]]; then
+                continue
+            fi
+            if [[ -z "$latest" || "$candidate" -nt "$latest" ]]; then
+                latest="$candidate"
+            fi
+        done < <(
+            find "${search_roots[@]}" -maxdepth 1 -type f \
+                \( -name "*.trace.json" -o -name "*.trace.json.gz" -o -name "*trace*.json" -o -name "*trace*.json.gz" -o -name "*profile*.json" -o -name "*profile*.json.gz" \) \
+                -print0 2>/dev/null
+        )
+    done
+
+    printf '%s' "$latest"
+}
+
+# Move profiler trace into a stable workspace path for workflow relay/upload.
+move_profile_trace_for_relay() {
+    if [[ "${PROFILE:-}" != "1" ]]; then
+        return 0
+    fi
+
+    if [[ -z "${RESULT_FILENAME:-}" ]]; then
+        echo "[PROFILE] RESULT_FILENAME is not set; skipping relay trace staging." >&2
+        return 0
+    fi
+
+    local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
+    local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    local -a search_dirs=()
+    local dir="" existing=""
+    local seen=0
+
+    for dir in "$sglang_dir" "$vllm_dir" "/workspace"; do
+        if [[ -z "$dir" ]]; then
+            continue
+        fi
+        seen=0
+        for existing in "${search_dirs[@]}"; do
+            if [[ "$existing" == "$dir" ]]; then
+                seen=1
+                break
+            fi
+        done
+        if [[ "$seen" -eq 0 ]]; then
+            search_dirs+=("$dir")
+        fi
+    done
+
+    local trace_file=""
+    local wait_attempts=10
+    for (( i=1; i<=wait_attempts; i++ )); do
+        trace_file="$(_find_latest_profile_trace "${search_dirs[@]}")"
+        if [[ -n "$trace_file" ]]; then
+            break
+        fi
+        sleep 10
+    done
+
+    if [[ -z "$trace_file" ]]; then
+        echo "[PROFILE] No trace found for relay under: ${search_dirs[*]}" >&2
+        return 0
+    fi
+
+    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    if [[ "$trace_file" == *.gz ]]; then
+        cp -f "$trace_file" "$dest_trace"
+    else
+        gzip -c "$trace_file" > "$dest_trace"
+    fi
+
+    echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
 }
 
 
@@ -304,6 +499,10 @@ run_benchmark_serving() {
 # ------------------------------
 
 _install_lm_eval_deps() {
+    # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
+    if [[ "${IMAGE:-}" == *atom* ]]; then
+        python3 -m pip uninstall -y torchvision 2>/dev/null || true
+    fi
     python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
@@ -392,26 +591,74 @@ PY
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
 
+get_native_max_context_length() {
+    local model_path="$1"
+    python3 -c "
+from transformers import AutoConfig
+config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
+for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+    if hasattr(config, attr):
+        print(getattr(config, attr))
+        break
+else:
+    print(0)
+"
+}
+
+# Compute the context length for eval-only mode.
+# Uses 5x the benchmark context capped at the model's native max.
+# Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
+# Echoes the computed value for scripts to capture.
+#
+# Usage: local ctx=$(compute_eval_context_length "$MODEL" "${current_ctx}")
+compute_eval_context_length() {
+    local model="$1"
+    local benchmark_ctx="${2:-0}"
+    local native_max
+    native_max=$(get_native_max_context_length "$model")
+    native_max="${native_max:-0}"
+
+    if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
+        benchmark_ctx="${native_max:-0}"
+    fi
+    local eval_ctx=$(( benchmark_ctx * 1 ))
+    if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
+        eval_ctx="$native_max"
+    fi
+    # If eval_ctx is still 0 (both benchmark_ctx and native_max were 0), fall back
+    if [ "$eval_ctx" -le 0 ] 2>/dev/null; then
+        echo "WARN: compute_eval_context_length could not determine context length for $model" >&2
+        eval_ctx="${MAX_MODEL_LEN:-16384}"
+    fi
+    EVAL_MAX_MODEL_LEN="$eval_ctx"
+    echo "$eval_ctx"
+}
+
+# Convenience wrapper: compute eval context from ISL/OSL and export EVAL_MAX_MODEL_LEN.
+# Call directly (not in a subshell) so the export persists.
+# Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
+setup_eval_context() {
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
+    export EVAL_MAX_MODEL_LEN
+}
+
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local task="${EVAL_TASK:-gsm8k}"
-    local num_fewshot="${NUM_FEWSHOT:-2}"
+    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local gen_max_tokens=16384
+    local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests=32
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --port)           port="$2"; shift 2 ;;
-            --task)           task="$2"; shift 2 ;;
-            --num-fewshot)    num_fewshot="$2"; shift 2 ;;
+            --task)           tasks_dir="$2"; shift 2 ;;
             --results-dir)    results_dir="$2"; shift 2 ;;
-            --gen-max-tokens) gen_max_tokens="$2"; shift 2 ;;
+            --gen-max-tokens) eval_context_len="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
-            --concurrent-requests) concurrent_requests="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -424,15 +671,23 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
+    # Cap output tokens: must fit within context window (leave room for input),
+    # and avoid excessive KV cache reservation per request on TRT.
+    local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
+    if [ "$max_output_tokens" -gt 16384 ]; then
+        max_output_tokens=16384
+    fi
+    echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
+
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "utils/evals/${task}.yaml" \
-      --num_fewshot "${num_fewshot}" \
+      --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=600,tokenized_requests=False,max_length=${gen_max_tokens}" \
-      --gen_kwargs "max_tokens=8192,temperature=${temperature},top_p=${top_p}"
+      --log_samples \
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -440,8 +695,15 @@ run_lm_eval() {
 
 append_lm_eval_summary() {
     local results_dir="${EVAL_RESULT_DIR}"
+    if [ -z "${results_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR is empty; skipping artifact collection" >&2
+        return 1
+    fi
     local out_dir="${results_dir}"
-    mkdir -p "$out_dir" || true
+    if [ ! -d "${out_dir}" ]; then
+        echo "WARN: EVAL_RESULT_DIR='${out_dir}' does not exist; skipping artifact collection" >&2
+        return 1
+    fi
 
     # Write minimal meta for collectors that expect it
     local meta_json="${out_dir}/meta_env.json"
@@ -480,6 +742,7 @@ append_lm_eval_summary() {
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
   "hw": "${RUNNER_TYPE:-unknown}",
   "isl": "${ISL:-0}",
   "osl": "${OSL:-0}"
@@ -488,13 +751,13 @@ META
 
     # Move eval artifacts into PWD (no new directories in workspace)
     if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || true
+        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
     fi
     if [ -d "${out_dir}" ]; then
         while IFS= read -r -d '' jf; do
             base=$(basename "$jf")
             if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || true
+                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
             fi
         done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
     fi
@@ -522,8 +785,23 @@ run_eval() {
         esac
     done
 
+    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
+    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+        compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
+    fi
+
+    local eval_rc=0
     case "$framework" in
-        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" ;;
-        *)               echo "Unknown framework '${framework}'"; return 1 ;;
+        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
+        *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
+
+    if [ "$eval_rc" -ne 0 ]; then
+        echo "ERROR: run_eval failed with exit code $eval_rc" >&2
+        if [ "${EVAL_ONLY}" = "true" ]; then
+            echo "Eval-only mode: failing after artifact collection" >&2
+            return "$eval_rc"
+        fi
+    fi
+    return $eval_rc
 }

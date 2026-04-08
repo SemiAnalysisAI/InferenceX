@@ -1,4 +1,5 @@
 from ast import For
+import fnmatch
 import json
 import argparse
 import sys
@@ -16,7 +17,6 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "1k8k": (1024, 8192),
     "8k1k": (8192, 1024)
 }
 
@@ -34,25 +34,19 @@ def seq_len_to_str(isl: int, osl: int) -> str:
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy (single-node only):
-    - Only consider 1k8k (isl=1024, osl=8192).
-    - For each unique (model, runner, framework, precision, isl, osl, spec-decoding):
-        - Mark highest TP with highest conc
-        - Mark lowest TP with highest conc
-        
-    Grouping includes spec-decoding so MTP (mtp) and non-MTP (none) are treated
-    independently.
+    - Only consider 8k1k (isl=8192, osl=1024).
+    - For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
+        - Mark all entries at the highest CONC (all TPs)
+        - Mark all entries at the median CONC (all TPs)
     """
     from collections import defaultdict
 
-    # Only run evals on 1k8k
-    target_isl, target_osl = seq_len_stoi["1k8k"]
-    # Group entries by (model, runner, framework, precision, isl, osl)
+    # Only run evals on 8k1k
+    target_isl, target_osl = seq_len_stoi["8k1k"]
+    # Group entries by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only include entries that have a top-level TP (i.e., single-node schema).
-    # This avoids relying on structural hints like prefill/decode which may be
-    # reused by future single-node disaggregated modes.
     groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
-        # Skip entries without a top-level TP field
         if Fields.TP.value not in entry:
             continue
 
@@ -71,32 +65,19 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         )
         groups[key].append((i, entry))
 
-    # For each group, find highest TP/highest conc and lowest TP/highest conc
+    # For each group, select entries at highest CONC and median CONC (all TPs)
     eval_indices = set()
     for key, entries in groups.items():
         if not entries:
             continue
 
-        # Find min and max TP values
-        min_tp = min(e[Fields.TP.value] for _, e in entries)
-        max_tp = max(e[Fields.TP.value] for _, e in entries)
+        conc_values = sorted(set(e[Fields.CONC.value] for _, e in entries))
+        median_conc = conc_values[len(conc_values) // 2]
+        target_concs = {conc_values[-1], median_conc}
 
-        # Find highest conc for highest TP
-        highest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == max_tp]
-        if highest_tp_entries:
-            max_conc_highest_tp = max(e[Fields.CONC.value] for _, e in highest_tp_entries)
-            for i, e in highest_tp_entries:
-                if e[Fields.CONC.value] == max_conc_highest_tp:
-                    eval_indices.add(i)
-
-        # Find highest conc for lowest TP (only if different from max_tp)
-        if min_tp != max_tp:
-            lowest_tp_entries = [(i, e) for i, e in entries if e[Fields.TP.value] == min_tp]
-            if lowest_tp_entries:
-                max_conc_lowest_tp = max(e[Fields.CONC.value] for _, e in lowest_tp_entries)
-                for i, e in lowest_tp_entries:
-                    if e[Fields.CONC.value] == max_conc_lowest_tp:
-                        eval_indices.add(i)
+        for i, e in entries:
+            if e[Fields.CONC.value] in target_concs:
+                eval_indices.add(i)
 
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
@@ -185,11 +166,13 @@ def generate_full_sweep(args, all_config_data, runner_data):
             bmk_space = seq_config[Fields.SEARCH_SPACE.value]
 
             for bmk in bmk_space:
-                if is_multinode:
-                    # Skip multinode configs when --single-node is specified
-                    if not args.multi_node:
-                        continue
+                # Skip configs that don't match the requested node type
+                if is_multinode and not args.multi_node:
+                    continue
+                if not is_multinode and not args.single_node:
+                    continue
 
+                if is_multinode:
                     # Multinode configuration
                     # spec_decoding defaults to "none" if not specified
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -283,7 +266,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                         validate_matrix_entry(entry, is_multinode)
                         matrix_values.append(entry)
-                elif args.single_node:
+                else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
                     conc_start = bmk[Fields.CONC_START.value]
@@ -433,9 +416,9 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
         # Skip configs that don't match the requested node type
-        if args.single_node and is_multinode:
+        if is_multinode and not args.multi_node:
             continue
-        if args.multi_node and not is_multinode:
+        if not is_multinode and not args.single_node:
             continue
 
         # Get model code for exp_name
@@ -558,18 +541,11 @@ def generate_test_config_sweep(args, all_config_data):
     Validates that all specified config keys exist before generating.
     Expands all configs fully without any filtering.
     """
-    # Validate all config keys exist
-    missing_keys = [key for key in args.config_keys if key not in all_config_data]
-    if missing_keys:
-        available_keys = sorted(all_config_data.keys())
-        raise ValueError(
-            f"Config key(s) not found: {', '.join(missing_keys)}.\n"
-            f"Available keys: {', '.join(available_keys)}"
-        )
+    resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
 
     matrix_values = []
 
-    for key in args.config_keys:
+    for key in resolved_keys:
         val = all_config_data[key]
         is_multinode = val.get(Fields.MULTINODE.value, False)
 
@@ -690,6 +666,46 @@ def generate_test_config_sweep(args, all_config_data):
     return matrix_values
 
 
+def expand_config_keys(config_keys, available_keys):
+    """Expand config key patterns (glob wildcards) against available keys.
+
+    Keys containing '*' or '?' are treated as glob patterns and expanded via
+    fnmatch.filter(). Plain keys are validated for existence. Results are
+    deduplicated while preserving order.
+
+    Raises ValueError if a pattern matches nothing or an exact key is missing.
+    """
+    available = list(available_keys)
+    seen = {}  # use dict to preserve insertion order
+    for key in config_keys:
+        if '*' in key or '?' in key:
+            matches = fnmatch.filter(available, key)
+            if not matches:
+                raise ValueError(
+                    f"Pattern '{key}' matched no config keys.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            for m in matches:
+                seen.setdefault(m, None)
+        else:
+            if key not in available:
+                raise ValueError(
+                    f"Config key(s) not found: {key}.\n"
+                    f"Available keys: {', '.join(sorted(available))}"
+                )
+            seen.setdefault(key, None)
+    return list(seen)
+
+
+def apply_node_type_defaults(args):
+    """Default both single_node and multi_node to True when neither is specified."""
+    if hasattr(args, 'single_node') and hasattr(args, 'multi_node'):
+        if not args.single_node and not args.multi_node:
+            args.single_node = True
+            args.multi_node = True
+    return args
+
+
 def main():
     # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
@@ -706,9 +722,9 @@ def main():
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(
-        '--run-evals',
+        '--no-evals',
         action='store_true',
-        help='When specified, run evals on a subset of configs (in addition to all configs).'
+        help='When specified, skip evals (throughput benchmarks only).'
     )
     eval_group.add_argument(
         '--evals-only',
@@ -801,16 +817,15 @@ def main():
         required=False,
         help='Maximum expert parallelism value to include (single-node only)'
     )
-    node_type_group = full_sweep_parser.add_mutually_exclusive_group(required=True)
-    node_type_group.add_argument(
+    full_sweep_parser.add_argument(
         '--single-node',
         action='store_true',
-        help='Only generate single-node configurations'
+        help='Only generate single-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
-    node_type_group.add_argument(
+    full_sweep_parser.add_argument(
         '--multi-node',
         action='store_true',
-        help='Only generate multi-node configurations'
+        help='Only generate multi-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
     full_sweep_parser.add_argument(
         '-h', '--help',
@@ -854,17 +869,15 @@ def main():
         required=False,
         help='Override concurrency value for all runs (default: uses lowest concurrency from config)'
     )
-    test_node_group = test_config_parser.add_mutually_exclusive_group(
-        required=True)
-    test_node_group.add_argument(
+    test_config_parser.add_argument(
         '--single-node',
         action='store_true',
-        help='Generate single-node configurations only'
+        help='Generate single-node configurations only. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
-    test_node_group.add_argument(
+    test_config_parser.add_argument(
         '--multi-node',
         action='store_true',
-        help='Generate multi-node configurations only'
+        help='Generate multi-node configurations only. If neither --single-node nor --multi-node is specified, both types are generated.'
     )
     test_config_parser.add_argument(
         '-h', '--help',
@@ -899,6 +912,7 @@ def main():
     )
 
     args = parser.parse_args()
+    apply_node_type_defaults(args)
 
     # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
@@ -915,10 +929,9 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle eval options (mutually exclusive)
-    if args.run_evals or args.evals_only:
+    # Handle eval options (mutually exclusive: --no-evals or --evals-only)
+    if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
-        # IF --evals-only is specified, filter to only eval entries
         if args.evals_only:
             matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
 

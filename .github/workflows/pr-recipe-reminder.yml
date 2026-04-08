@@ -1,0 +1,45 @@
+name: PR Recipe Reminder
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, review_requested]
+    paths:
+      - '.github/configs/amd-master.yaml'
+      - '.github/configs/nvidia-master.yaml'
+      - 'benchmarks/**'
+      - 'perf-changelog.yaml'
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment recipe reminder
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            // Check if we already left this comment to avoid duplicates
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const marker = '<!-- recipe-reminder -->';
+            const alreadyCommented = comments.data.some(c => c.body.includes(marker));
+            if (alreadyCommented) {
+              core.info('Recipe reminder already posted, skipping.');
+              return;
+            }
+
+            const body = `${marker}
+            Thanks for the contribution! For vLLM & SGLang, please ensure that your recipes is similar to the official vLLM recipes and/or the SGLang cookbook
+            - https://cookbook.sglang.io/
+            - https://docs.vllm.ai/projects/recipes/en/latest/
+
+            If it is not, please create a PR first before we can merge your PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
+            - https://github.com/vllm-project/recipes
+            - https://github.com/sgl-project/sgl-cookbook`.replace(/^            /gm, '');
+
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });

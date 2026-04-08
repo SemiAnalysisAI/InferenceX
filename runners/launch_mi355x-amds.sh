@@ -34,29 +34,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
-    export MODEL_NAME="DeepSeek-R1"
-    export MODEL_PATH="/nfsdata"
-
-    # Detect cluster type and set cluster-specific configuration
-    NODENAME=$(sinfo -N -h -t idle,mix -o "%N" | head -1)
-    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-        # AMD GPU cluster configuration
-        export MODEL_PATH="/nfsdata"
-        export IBDEVICES="ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7"
-        export MORI_RDMA_TC=96
-    elif [[ $NODENAME == mia1* ]]; then
-        # AMD MIA cluster configuration
-        export MODEL_PATH="/it-share/data"
-        export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
-        export MORI_RDMA_TC=104
-    else
-        echo "[Error] No available nodes for launching slurm jobs"
-        echo "[Info] For other clusters, modify runners/launch_mi355x-amds.sh to set:"
-        echo "       - MODEL_PATH (model storage path)"
-        echo "       - IBDEVICES (RDMA device names)"
-        echo "       - MORI_RDMA_TC (optional RDMA traffic class)"
-        exit 1
-    fi
+    export MODEL_NAME=${MODEL##*/}
+    export MODEL_PATH="/it-share/data"
+    export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+    export MORI_RDMA_TC=104
 
     # Set additional required env vars for multi_node scripts
     export MODEL_DIR="$MODEL_PATH"  # job.slurm uses MODEL_DIR
@@ -175,28 +156,41 @@ else
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
 
-    if [[ "$FRAMEWORK" == "atom" ]]; then
-        srun --jobid=$JOB_ID bash -c "rm $SQUASH_FILE"
-    fi
+    # Use flock to serialize concurrent imports to the same squash file
+    srun --jobid=$JOB_ID bash -c "
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if [[ \"$FRAMEWORK\" == \"atom\" ]]; then
+            rm -f \"$SQUASH_FILE\"
+        fi
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+        fi
+    "
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+
+    if [[ "$FRAMEWORK" == "atom" ]]; then
+        SLRUM_HOME_MOUNT=""
+    else
+        SLRUM_HOME_MOUNT=" --container-mount-home "
     fi
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-        --container-mount-home \
+        $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \

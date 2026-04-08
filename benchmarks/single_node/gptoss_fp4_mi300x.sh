@@ -33,23 +33,30 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+export AMDGCN_USE_BUFFER_OPS=0
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1
-export VLLM_ROCM_USE_AITER_MHA=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+ATTN_BACKEND="--attention-backend ROCM_AITER_UNIFIED_ATTN"
+FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True -cc.use_inductor_graph_partition=True"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
---compilation-config  '{"cudagraph_mode": "FULL_AND_PIECEWISE"}' \
---block-size=64 \
---no-enable-prefix-caching \
---disable-log-requests > $SERVER_LOG 2>&1 &
+  $ATTN_BACKEND $FUSE_ROPE_KVCACHE \
+  --tensor-parallel-size=$TP \
+  --gpu-memory-utilization 0.95 \
+  --max-model-len $MAX_MODEL_LEN \
+  --block-size=64 \
+  --no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -70,7 +77,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

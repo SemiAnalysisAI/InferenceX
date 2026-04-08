@@ -17,12 +17,18 @@ fi
 
 hf download "$MODEL"
 
+MAX_MODEL_LEN=10240
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
 cat > config.yaml << EOF
-async-scheduling: true
 no-enable-prefix-caching: true
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
-max-model-len: 10240
+max-model-len: $MAX_MODEL_LEN
 EOF
 
 export PYTHONNOUSERSITE=1
@@ -30,13 +36,15 @@ export VLLM_MXFP4_USE_MARLIN=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
 --config config.yaml \
 --gpu-memory-utilization=0.9 \
 --tensor-parallel-size=$TP \
---max-num-seqs=$CONC  \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--max-num-seqs=$CONC > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -59,7 +67,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

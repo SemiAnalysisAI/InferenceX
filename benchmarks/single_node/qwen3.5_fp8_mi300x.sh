@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/benchmark_lib.sh"
+source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -8,7 +8,6 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -18,24 +17,28 @@ fi
 
 hf download "$MODEL"
 
-# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
-if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
-export VLLM_ROCM_USE_AITER=1
-
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-set -x
-vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
---block-size=32 \
---disable-log-requests \
---trust-remote-code > $SERVER_LOG 2>&1 &
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
+# following AMD Andy linkedin's recipe
+# https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
+python3 -m sglang.launch_server \
+    --attention-backend triton \
+    --model-path $MODEL \
+    --host=0.0.0.0 \
+    --port $PORT \
+    --tensor-parallel-size $TP \
+    --trust-remote-code \
+    --mem-fraction-static 0.8 \
+    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -52,12 +55,14 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --trust-remote-code
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

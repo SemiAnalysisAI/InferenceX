@@ -35,7 +35,9 @@ jobs:
     get-jobs:
         runs-on: ubuntu-latest
         outputs:
-            search-space-config: ${{ steps.get-jobs.outputs.search-space-config }}
+            single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
+            multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
+            eval-config: ${{ steps.get-jobs.outputs.eval-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -52,20 +54,22 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('run-eval', False)]))")
+                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x]))")
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('run-eval', False)]))")
+                  echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
+                  echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
+                  echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
         needs: get-jobs
-        # Use existence (or non-existence) of 'prefill' field as a proxy to determined multi-node tests.
-        # We only need to check the first entry because by design, all entries in the matrix will be of the same type (there will
-        # never be a mix of multi-node and single-node entries as output from generate_sweep_configs.py).
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill != null }}
+        if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: ${{ inputs.generate-cli-command }} multi-node
+        name: multi-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
         with:
             isl: ${{ matrix.config.isl }}
@@ -97,13 +101,13 @@ jobs:
 
     test-sweep-single-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.search-space-config != '[]' && fromJson(needs.get-jobs.outputs.search-space-config)[0].prefill == null }}
+        if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
-        name: ${{ inputs.generate-cli-command }} single-node
+        name: single-node /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.search-space-config) }}
+                config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
@@ -122,7 +126,38 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
-            run-eval: ${{ matrix.config.run-eval }}
+            run-eval: false
+            ref: ${{ inputs.ref }}
+
+    test-sweep-evals:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: eval /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+            run-eval: true
+            eval-only: true
             ref: ${{ inputs.ref }}
 
     collect-results:
@@ -134,8 +169,8 @@ jobs:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [test-sweep-multi-node, test-sweep-single-node]
-        if: ${{ always() }}
+        needs: [test-sweep-evals]
+        if: ${{ always() && needs.test-sweep-evals.result != 'skipped' }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
@@ -156,7 +191,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Download results artifacts
-              uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
               with:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
@@ -167,7 +202,7 @@ jobs:
             - name: Calculate success rate
               run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
-            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+            - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json

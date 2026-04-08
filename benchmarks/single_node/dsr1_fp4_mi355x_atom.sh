@@ -31,11 +31,19 @@ else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
+fi
+
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
   EP=" "
 fi
+
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
 
 set -x
 
@@ -66,7 +74,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

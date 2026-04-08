@@ -97,7 +97,7 @@ jobs:
             The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,runner-model-sweep,test-config}`
 
             **Subcommand reference:**
-            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-len`. This is the primary subcommand for running benchmarks.
+            - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-lens`. This is the primary subcommand for running benchmarks.
             - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'. Uses the flags `--config-files` and `--config-keys`, does NOT accept any other arguments.
 
             Examples:
@@ -119,7 +119,7 @@ jobs:
 
             **Specify concurrency and sequence length:**
             ```
-            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-len 1k1k"
+            generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 1k1k"
             ```
 
             **Test specific config keys (MUST USE `--conc`):**
@@ -130,7 +130,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - When using `full-sweep`, you can use `--seq-len` to specify a single sequence length (choices: 1k1k, 1k8k, 8k1k). Unless prompted otherwise, use `--seq-len 1k1k`
+            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -160,6 +160,50 @@ jobs:
             - Do NOT claim completion until the most recent job finishes and results are analyzed
             - If jobs cannot be run, say exactly what you could not run and why
             - **Important** Modify perf-changelog.yaml for any config changes affecting performance
+
+            ## Profiling (SGLang only)
+            When asked to profile a config, dispatch the `profile.yml` workflow. **Only SGLang configs can be profiled** — the profiler uses SGLang's `/start_profile` and `/stop_profile` HTTP endpoints. Reject profiling requests for vLLM, TRT, or other frameworks.
+
+            **Syntax:**
+            ```
+            mcp__github__run_workflow(
+                owner="SemiAnalysisAI",
+                repo="InferenceX",
+                workflow_id="profile.yml",
+                ref="main",
+                inputs={
+                    "config-key": "<config-key-ending-in-sglang>",
+                    "config-file": "<.github/configs/nvidia-master.yaml or amd-master.yaml>",
+                    "conc": "<concurrency>"
+                }
+            )
+            ```
+
+            **How to map a natural-language request to inputs:**
+            The user will say something like "profile sglang b200 deepseek fp4 conc=4". Parse it as:
+            - Model: "deepseek" / "dsr1" → model-prefix `dsr1`; "gptoss" → `gptoss`; "qwen" → `qwen3.5`
+            - Precision: "fp4" / "fp8" / "bf16"
+            - Runner/hardware: "b200", "h200", "h100", "mi300x", "mi325x", "mi355x", etc.
+            - Framework: must be "sglang" (reject if not)
+            - Concurrency: "conc=N" → `"conc": "N"`. Default to `"64"` if not specified.
+
+            Construct the config-key as: `{model-prefix}-{precision}-{runner}-sglang`
+            Choose config-file: NVIDIA runners (b200, h200, h100, gb200, gb300) → `nvidia-master.yaml`; AMD runners (mi300x, mi325x, mi355x) → `amd-master.yaml`
+
+            **Available SGLang config keys:**
+            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-bf16-b200-sglang`
+            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-bf16-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
+
+            **Examples:**
+            - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: .github/configs/nvidia-master.yaml`, `conc: 4`
+            - "profile sglang mi355x dsr1 fp8" → `config-key: dsr1-fp8-mi355x-sglang`, `config-file: .github/configs/amd-master.yaml`, `conc: 64`
+
+            **After dispatch:**
+            Monitor with `mcp__github__get_workflow_run`. The profile workflow takes ~15-30 minutes. When complete, the **Perfetto relay link** is in the workflow run's step summary. Retrieve it with:
+            ```bash
+            gh run view <RUN_ID> --repo SemiAnalysisAI/InferenceX --log | grep "Perfetto Relay URL:"
+            ```
+            Post the Perfetto relay link back to the user in the comment.
 
             ## vLLM and SGLang Source Code Access
 
@@ -230,3 +274,20 @@ jobs:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
             - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).
 
+            ### Expert Parallelism in Benchmark Scripts
+            vLLM and SGLang handle expert parallelism differently. When writing or reviewing benchmark scripts for MoE models:
+
+            - **vLLM** (`vllm serve`): Uses `--enable-expert-parallel` (a boolean flag). vLLM does NOT accept `--expert-parallel-size`. When EP is enabled, vLLM automatically determines the EP size based on TP and the number of available GPUs.
+            - **SGLang** (`sglang.launch_server`): Uses `--expert-parallel-size N` (an explicit integer). Pass the `EP_SIZE` env var value directly.
+            - **ATOM** (AMD vLLM fork): Uses `--enable-expert-parallel` (same as vLLM).
+
+            **Required pattern for vLLM/ATOM scripts:** Scripts must conditionally enable `--enable-expert-parallel` based on the `EP_SIZE` env var from the config YAML, rather than hardcoding it:
+            ```bash
+            if [ "$EP_SIZE" -gt 1 ]; then
+              EP=" --enable-expert-parallel"
+            else
+              EP=" "
+            fi
+            # Then use $EP in the vllm serve command
+            ```
+            This ensures the script respects the `ep` setting in the master config YAML's search-space.
