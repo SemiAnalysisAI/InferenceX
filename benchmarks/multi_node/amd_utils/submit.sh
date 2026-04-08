@@ -126,8 +126,10 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
 fi
 
 # Construct the sbatch command
+# Run as root so the job executes as root on worker nodes (munge is only
+# installed for root on the worker nodes, so srun steps require root).
 sbatch_cmd=(
-    sbatch
+    sudo -E sbatch
     --parsable
     --exclusive
     -N "$NUM_NODES"

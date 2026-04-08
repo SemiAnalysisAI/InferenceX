@@ -70,6 +70,10 @@ mi300x:
 - 'mi300x-amds_1'
 - 'mi300x-amds_2'
 - 'mi300x-amds_3'
+mi300x-disagg:
+- 'mi300x-amds_0'
+- 'mi300x-amds_2'
+- 'mi300x-amds_3'
 mi325x:
 - 'mi325x-amd_0'
 - 'mi325x-amd_1'

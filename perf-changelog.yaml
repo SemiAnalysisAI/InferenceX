@@ -1,4 +1,18 @@
 - config-keys:
+    - dsr1-fp8-mi300x-sglang-mtp
+    - dsr1-fp8-mi300x-sglang-disagg
+    - dsr1-fp8-mi300x-sglang-disagg-mtp
+  description:
+    - "Add MI300X DeepSeek-R1 FP8 single-node MTP and disaggregated inference with Broadcom Thor 2 IBGDA"
+    - "Single-node MTP: SGLang with aiter backend, MLA persist kernel, TP8, FP8 KV cache, NEXTN speculative decoding"
+    - "Disaggregated: Custom container image (same gfx942 arch as MI325X) with MORI + bnxt_rocelib patches"
+    - "Image (disagg): ghcr.io/jordannanos/sgl-mi300x-mori:v0.5.9-bnxt"
+    - "Image (single-node): lmsysorg/sglang:v0.5.9-rocm700-mi30x"
+    - "Full pareto sweep: non-MTP and MTP configs across 2 curve points (no EP/DP), ISL 1k/1k and 8k/1k"
+    - "Runners: mi300x-amds_0, mi300x-amds_2, mi300x-amds_3 (3 working nodes)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/998
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"

@@ -30,14 +30,18 @@ if [[ ! -f "$MODELS_YAML" ]]; then
     exit 1
 fi
 
-# Validate MODEL_NAME exists as a top-level key in models.yaml
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in models.yaml"
+# MODEL_YAML_KEY: top-level key in models.yaml for server config lookup.
+# MODEL_NAME may be a longer HF cache path (e.g. models--org--repo/snapshots/<hash>).
+_MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+
+# Validate the yaml key exists as a top-level key in models.yaml
+if ! grep -q "^${_MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    echo "Error: Model '$_MODEL_YAML_KEY' not found in models.yaml"
     echo "Available models:"
     grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
     exit 1
 fi
-echo "Model found: $MODEL_NAME"
+echo "Model found: $_MODEL_YAML_KEY"
 
 # All models use server.sh as the entrypoint
 RUN_FILE="server.sh"
@@ -104,34 +108,40 @@ TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
 echo "Total allocated nodes: $TOTAL_NODES"
 echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
 
-# Function to check model path on all nodes
+# Function to check model path — checks on the batch node (NFS path is shared across all nodes).
 check_model_path() {
     local path=$1
     local check_name=$2
 
     echo "Checking $check_name: $path"
 
-    # Run check on all nodes in parallel
-    srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
-        if [ -d '$path' ]; then
-            echo \"\$(hostname): ✓ Found $path\"
-            exit 0
-        else
-            echo \"\$(hostname): ✗ Missing $path\"
-            exit 1
-        fi
-    "
-
-    # Check if all nodes succeeded (exit code 0)
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
+    if [ -d "$path" ]; then
+        echo "$(hostname): ✓ Found $path"
         echo "✓ $check_name available on ALL nodes"
         return 0
     else
+        echo "$(hostname): ✗ Missing $path"
         echo "✗ $check_name NOT available on all nodes"
         return 1
     fi
 }
+
+# If MODEL_NAME is a plain name (not already a HF cache path), try to resolve
+# the HF hub cache layout on this node: models--{org}--{repo}/snapshots/<hash>
+# This handles clusters where the cache is node-local and can't be resolved
+# from the job launcher (which may run on a different host).
+if [[ "$MODEL_NAME" != models--* ]] && [[ "$MODEL_NAME" != *snapshots* ]]; then
+    # Glob for any HF cache dir ending in --${MODEL_NAME} (handles unknown org prefix)
+    _HF_DIR_GLOB=$(ls -d "${MODEL_DIR}/models--"*"--${MODEL_NAME}" 2>/dev/null | head -1)
+    if [[ -n "${_HF_DIR_GLOB}" ]]; then
+        _HF_DIR=$(basename "${_HF_DIR_GLOB}")
+        _SNAPSHOT=$(ls "${MODEL_DIR}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
+        if [[ -n "${_SNAPSHOT}" ]]; then
+            MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
+            echo "Resolved MODEL_NAME from local HF cache: ${MODEL_NAME}"
+        fi
+    fi
+fi
 
 # Check model weights exist on "$MODEL_DIR/$MODEL_NAME"
 if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
@@ -150,6 +160,29 @@ fi
 
 echo "Final MODEL_PATH: $MODEL_PATH"
 echo ""
+
+# Verify model weights are actually readable (not just symlinks to missing blobs).
+# The HF cache may have snapshot symlinks pointing to blob files that no longer exist.
+_MODEL_WEIGHT_SAMPLE=$(ls "$MODEL_PATH"/model-00001-of-*.safetensors 2>/dev/null | head -1)
+if [[ -n "$_MODEL_WEIGHT_SAMPLE" ]] && ! head -c 1 "$_MODEL_WEIGHT_SAMPLE" > /dev/null 2>&1; then
+    echo "[WARN] Model weights at $MODEL_PATH have broken symlinks (blobs missing)"
+    echo "[INFO] Searching /vfs/models_blog/ for a matching model..."
+    # Strip trailing date suffix (e.g. -0528, -1105) for fuzzy directory match
+    _VFS_KEY=$(echo "$MODEL_YAML_KEY" | sed 's/-[0-9]\{4\}$//')
+    _VFS_MODEL=$(ls -d /vfs/models_blog/*"${_VFS_KEY}"* 2>/dev/null | head -1)
+    if [[ -n "$_VFS_MODEL" ]] && [[ -d "$_VFS_MODEL" ]]; then
+        if ls "$_VFS_MODEL"/model-00001-of-*.safetensors &>/dev/null 2>&1; then
+            MODEL_PATH="$_VFS_MODEL"
+            MODEL_DIR="/vfs/models_blog"
+            MODEL_NAME=$(basename "$_VFS_MODEL")
+            echo "[INFO] /vfs fallback: MODEL_PATH=$MODEL_PATH, MODEL_NAME=$MODEL_NAME"
+        else
+            echo "[WARN] /vfs fallback also has no weights at $_VFS_MODEL"
+        fi
+    else
+        echo "[WARN] No matching model found in /vfs/models_blog/ for key '$_VFS_KEY'"
+    fi
+fi
 
 NUM_NODES="${NUM_NODES}"
 
@@ -223,15 +256,26 @@ echo ""
 # Node information
 USER_NAME=$(whoami)
 MASTER_NODE=$(echo "$SELECTED_NODES" | head -n 1)
-NODE0_ADDR=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$MASTER_NODE" bash -c 'ip route get 1.1.1.1')
-NODE0_ADDR=$(echo "$NODE0_ADDR" | awk '/src/ {print $7}')
+
+# Use scontrol to get node IPs — avoids srun timeouts when nodes are temporarily slow.
+get_node_ip() {
+    local node=$1
+    scontrol show node "$node" 2>/dev/null | awk '/NodeAddr=/ {match($0, /NodeAddr=([^ ]+)/, a); print a[1]}'
+}
+
+NODE0_ADDR=$(get_node_ip "$MASTER_NODE")
+if [[ -z "$NODE0_ADDR" ]]; then
+    echo "ERROR: Could not resolve IP for master node $MASTER_NODE via scontrol" >&2
+    exit 1
+fi
 
 IPS=()
-
-GW_NIC=$(ip route | awk '/^default/ {print $5; exit}')
 for NODE in $SELECTED_NODES; do
-    IP=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$NODE" bash -c 'ip route get 1.1.1.1')
-    IP=$(echo "$IP" | awk '/src/ {print $7}')
+    IP=$(get_node_ip "$NODE")
+    if [[ -z "$IP" ]]; then
+        echo "ERROR: Could not resolve IP for node $NODE via scontrol" >&2
+        exit 1
+    fi
     IPS+=("$IP")
 done
 
@@ -249,10 +293,9 @@ echo "NNODES is ${NNODES}"
 echo "REPO Directory is ${DI_REPO_DIR}"
 echo "USER_NAME is ${USER_NAME}"
 
-# Get the RDMA priority and DSCP value from the NIC
+# Get the RDMA priority and DSCP value from the NIC (optional - env.sh handles absence gracefully)
 if ! command -v nicctl >/dev/null 2>&1; then
-    echo "Error: nicctl command not found. Please ensure nicctl is installed and available." >&2
-    exit 1
+    echo "[INFO] nicctl not found. RDMA QoS configuration will be skipped inside the container." >&2
 fi
 
 # Reduce log spam
@@ -286,7 +329,8 @@ export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(echo "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
 
 
@@ -296,8 +340,8 @@ SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning stale logs folder..."
-  # clean up the logs folder
-  sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  # NFS-safe cleanup: use timeout to avoid hanging on stale NFS locks
+  timeout --kill-after=5 30 sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
 
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -307,16 +351,45 @@ trap cleanup INT TERM HUP
 
 # Force NFS cache refresh on all nodes before running Docker to avoid stale file handle errors
 echo "Refreshing NFS caches on all nodes..."
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     sync
     # Force re-stat of the mounted directory to refresh NFS handles
-    ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
-    stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
-    cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
+    timeout 10 ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
+    timeout 10 stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
+    timeout 10 cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
     # Drop caches if we have permission (optional, requires root)
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
-'
+' || echo "[WARN] NFS refresh srun failed (non-fatal); continuing."
+
+# -----------------------------------------------------------------------
+# Cross-node firewall setup: allow external IPs for SGLang bootstrap.
+# The MoRI bootstrap server binds to the default NIC (external IP), but
+# UFW may only allow internal subnet traffic. Collect each node's external
+# IP and add UFW allow rules on all nodes before starting Docker.
+# UFW rules persist across reboots, but we run this per-job so that newly
+# added or re-imaged nodes automatically receive the correct peer rules.
+# -----------------------------------------------------------------------
+_UFW_DIR="${BENCHMARK_LOGS_DIR}/.ufw_${SLURM_JOB_ID}"
+mkdir -p "$_UFW_DIR"
+timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+    _IFACE=$(ip route show default 2>/dev/null | awk "NR==1{print \$5}")
+    _EXT_IP=$(ip -4 addr show "$_IFACE" 2>/dev/null | awk "/inet /{sub(/\/.*$/, \"\", \$2); print \$2; exit}")
+    if [[ -n "$_EXT_IP" ]]; then
+        echo "$_EXT_IP" > '"$_UFW_DIR"'/$SLURM_PROCID.ip
+        echo "[INFO] $(hostname): external IP $_EXT_IP (rank $SLURM_PROCID)"
+    fi
+' 2>/dev/null || echo "[WARN] External IP collection failed (non-fatal)."
+for _IP_FILE in "$_UFW_DIR"/*.ip; do
+    [[ -f "$_IP_FILE" ]] || continue
+    _PEER_IP=$(cat "$_IP_FILE")
+    [[ -z "$_PEER_IP" ]] && continue
+    timeout 15 srun --nodelist="$SELECTED_NODELIST_SRUN" \
+        bash -c "ufw allow from '$_PEER_IP' 2>/dev/null || true; echo \"[INFO] UFW: allowed $_PEER_IP on \$(hostname)\"" \
+        2>/dev/null || true
+done
+rm -rf "$_UFW_DIR"
+echo "Cross-node firewall setup complete."
 
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
@@ -357,7 +430,7 @@ exec sudo docker run --rm \
     --privileged \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    -v $(which nicctl):/usr/sbin/nicctl \
+    $(command -v nicctl &>/dev/null && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
@@ -373,6 +446,7 @@ exec sudo docker run --rm \
     -e xP=\$xP \
     -e yD=\$yD \
     -e MODEL_NAME=\$MODEL_NAME \
+    -e MODEL_YAML_KEY=${_MODEL_YAML_KEY} \
     -e IPADDRS=\$IPADDRS \
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE \
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP \

@@ -33,6 +33,14 @@ fi
 export SGLANG_USE_AITER=1
 export SGLANG_AITER_MLA_PERSIST=1
 
+# MTP (speculative decoding) flags
+MTP_ARGS=""
+CHAT_TEMPLATE_ARGS=""
+if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
+    MTP_ARGS="--speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-num-steps 3 --speculative-num-draft-tokens 4"
+    CHAT_TEMPLATE_ARGS="--use-chat-template"
+fi
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
@@ -55,7 +63,8 @@ python3 -m sglang.launch_server \
 --max-prefill-tokens=131072 \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
---disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+--disable-radix-cache \
+$MTP_ARGS $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -72,7 +81,8 @@ run_benchmark_serving \
     --num-prompts $(( $CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    $CHAT_TEMPLATE_ARGS
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
