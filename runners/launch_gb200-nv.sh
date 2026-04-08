@@ -160,7 +160,7 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+if [[ $FRAMEWORK == "dynamo-vllm" ]] || [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
@@ -223,6 +223,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dev: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 EOF
@@ -238,91 +239,119 @@ echo "Submitting job with srtctl..."
 SETUP_SCRIPT=""
 
 # --- Qwen3.5 EPD (Encoder/Prefill/Decode) disaggregation support ---
-# If EPD is enabled, we generate a minimal srtctl config on the fly and start a dedicated
-# encoder-only node (1 full GB200 node = 4 GPUs). This is intentionally *not* optimized; it is
-# meant to be a working reference.
+# Generates a recipe based on the upstream DEP4 nixl config but adds EPD-specific
+# fields: language-only mode, encoder-urls, and a dedicated infra/encoder node.
 if [[ "${EPD:-}" == "1" || "${EPD:-}" == "true" ]]; then
     if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
         echo "[INFO] EPD enabled for qwen3.5: generating recipe at '${CONFIG_FILE}'"
         mkdir -p "$(dirname "${CONFIG_FILE}")"
 
-        # Compute stage node counts (heuristic): nodes_per_worker = ceil(max(tp, ep) / 4)
-        GPUS_PER_NODE=4
-        PREFILL_TP_VAL=${PREFILL_TP:-4}
-        PREFILL_EP_VAL=${PREFILL_EP:-${PREFILL_TP_VAL}}
-        DECODE_TP_VAL=${DECODE_TP:-4}
-        DECODE_EP_VAL=${DECODE_EP:-${DECODE_TP_VAL}}
-
-        PREFILL_WORLD=${PREFILL_TP_VAL}
-        if [[ ${PREFILL_EP_VAL} -gt ${PREFILL_WORLD} ]]; then PREFILL_WORLD=${PREFILL_EP_VAL}; fi
-        DECODE_WORLD=${DECODE_TP_VAL}
-        if [[ ${DECODE_EP_VAL} -gt ${DECODE_WORLD} ]]; then DECODE_WORLD=${DECODE_EP_VAL}; fi
-
-        PREFILL_NODES_PER_WORKER=$(( (PREFILL_WORLD + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
-        DECODE_NODES_PER_WORKER=$(( (DECODE_WORLD + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
-
         GEN_PREFILL_WORKERS=${PREFILL_NUM_WORKERS:-1}
         GEN_DECODE_WORKERS=${DECODE_NUM_WORKERS:-1}
-        GEN_PREFILL_NODES=$(( PREFILL_NODES_PER_WORKER * GEN_PREFILL_WORKERS ))
-        GEN_DECODE_NODES=$(( DECODE_NODES_PER_WORKER * GEN_DECODE_WORKERS ))
 
-        # Build quantization args based on precision
-        if [[ "${PRECISION}" == "fp8" ]]; then
-            EPD_QUANT_ARGS="quantization: fp8
-      kv-cache-dtype: fp8_e4m3"
-        else
-            EPD_QUANT_ARGS=""
-        fi
-
-        # Pick stable disaggregation bootstrap ports once so all nodes agree.
-        PREFILL_BOOTSTRAP_PORT=${EPD_PREFILL_BOOTSTRAP_PORT:-$((52000 + RANDOM % 1000))}
-        DECODE_BOOTSTRAP_PORT=${EPD_DECODE_BOOTSTRAP_PORT:-$((53000 + RANDOM % 1000))}
-        echo "[INFO] Using EPD bootstrap ports: prefill=${PREFILL_BOOTSTRAP_PORT}, decode=${DECODE_BOOTSTRAP_PORT}"
-
-        # Convert space-separated CONC_LIST to JSON array for srtctl recipe
-        EPD_CONC_JSON="[$(echo "${CONC_LIST:-512}" | tr ' ' ',')]"
+        # Convert space-separated CONC_LIST to srtctl format
+        EPD_CONC_LIST="$(echo "${CONC_LIST:-64}" | tr ' ' 'x')"
 
         cat > "${CONFIG_FILE}" <<EOF
-name: qwen3.5-epd-${PRECISION}-gb200
+name: qwen3.5-epd-fp8-gb200
 model:
   path: ${SRT_SLURM_MODEL_PREFIX}
-  container: dynamo-sglang
-  precision: ${PRECISION}
+  container: dev
+  precision: fp8
 resources:
   gpu_type: gb200
   gpus_per_node: 4
-  prefill_nodes: ${GEN_PREFILL_NODES}
+  prefill_nodes: ${GEN_PREFILL_WORKERS}
   prefill_workers: ${GEN_PREFILL_WORKERS}
-  decode_nodes: ${GEN_DECODE_NODES}
+  decode_nodes: ${GEN_DECODE_WORKERS}
   decode_workers: ${GEN_DECODE_WORKERS}
 infra:
-  # Reserve one full node for infra (etcd/nats). We also run the vision encoder there.
   etcd_nats_dedicated_node: true
 backend:
-  type: sglang
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
+    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
+    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
   sglang_config:
     prefill:
-      tp-size: ${PREFILL_TP_VAL}
-      ep-size: ${PREFILL_EP_VAL}
+      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      model-path: "/model/"
+      attention-backend: trtllm_mha
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      moe-runner-backend: flashinfer_trtllm
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      mamba-scheduler-strategy: no_buffer
+      mamba-track-interval: 2048
+      mamba-ssm-dtype: bfloat16
       disaggregation-mode: prefill
       disaggregation-transfer-backend: nixl
-      disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}   
+      disable-radix-cache: true
+      disaggregation-decode-tp: 4
+      disaggregation-decode-dp: 4
       language-only: true
-      # 4 encoder instances (1 GPU each) on the dedicated infra node
       encoder-urls:
         - "http://{head_node_ip}:40000"
         - "http://{head_node_ip}:40001"
         - "http://{head_node_ip}:40002"
         - "http://{head_node_ip}:40003"
       trust-remote-code: true
-      ${EPD_QUANT_ARGS}
-      context-length: ${MAX_MODEL_LEN}
+      mem-fraction-static: 0.80
+      chunked-prefill-size: 16384
+      context-length: 2020
+      load-balance-method: round_robin
+      watchdog-timeout: 1000000
+      disable-cuda-graph: true
     decode:
-      tp-size: ${DECODE_TP_VAL}
-      ep-size: ${DECODE_EP_VAL}
+      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      model-path: "/model/"
+      attention-backend: trtllm_mha
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      moe-runner-backend: flashinfer_trtllm
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      mamba-scheduler-strategy: no_buffer
+      mamba-track-interval: 2048
+      mamba-ssm-dtype: bfloat16
       disaggregation-mode: decode
       disaggregation-transfer-backend: nixl
-      disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}
+      disable-radix-cache: true
       language-only: true
       encoder-urls:
         - "http://{head_node_ip}:40000"
@@ -330,66 +359,61 @@ backend:
         - "http://{head_node_ip}:40002"
         - "http://{head_node_ip}:40003"
       trust-remote-code: true
-      ${EPD_QUANT_ARGS}
-      context-length: ${MAX_MODEL_LEN}
+      mem-fraction-static: 0.80
+      chunked-prefill-size: 16384
+      context-length: 2020
+      cuda-graph-max-bs: 1024
+      watchdog-timeout: 1000000
+      decode-log-interval: 1
+      stream-interval: 50
 benchmark:
   type: sa-bench
   isl: ${ISL}
   osl: ${OSL}
-  concurrencies: ${EPD_CONC_JSON}
+  concurrencies: "${EPD_CONC_LIST}"
+  req_rate: "inf"
 EOF
 
-        # Setup script: install torchao and start 4 encoder-only servers on the infra node.
+        # Setup script: start 4 encoder-only servers on the infra node.
         cat > configs/qwen3.5-epd-setup.sh <<'EOF'
 #!/usr/bin/env bash
 set -euxo pipefail
 
-# Install torchao if the repo provides the helper (used for fp8 runs)
 if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
 
 # Start encoder-only servers on the first allocated node (reserved when infra.etcd_nats_dedicated_node=true)
-# Prefer scontrol if available; otherwise fall back to SLURM_NODEID==0.
 if command -v scontrol >/dev/null 2>&1; then
   HEAD_NODE="$(scontrol show hostnames "${SLURM_JOB_NODELIST}" | head -n1)"
 else
-  echo "[EPD] WARNING: scontrol not found; using SLURM_NODEID==0 to pick a single encoder node"
   HEAD_NODE=""
 fi
 THIS_NODE="$(hostname -s)"
 
-# Prefer HEAD_NODE_IP (present in env from srtctl/srt-slurm)
 if [[ -n "${HEAD_NODE_IP:-}" ]]; then
   if command -v ip >/dev/null 2>&1; then
     ip -4 addr show | grep -qw "${HEAD_NODE_IP}" || exit 0
   else
-    # fallback
     (hostname -I 2>/dev/null || true) | grep -qw "${HEAD_NODE_IP}" || exit 0
   fi
 else
-  # last resort if HEAD_NODE_IP isn't set
   if command -v scontrol >/dev/null 2>&1 && [[ -n "${SLURM_JOB_NODELIST:-}" ]]; then
     HEAD_NODE="$(scontrol show hostnames "${SLURM_JOB_NODELIST}" | head -n1)"
     [[ "${THIS_NODE}" == "${HEAD_NODE}" ]] || exit 0
   else
-    echo "[EPD] WARNING: cannot determine head node; skipping encoder launch to avoid port conflicts"
+    echo "[EPD] WARNING: cannot determine head node; skipping encoder launch"
     exit 0
   fi
 fi
 
 echo "[EPD] Starting encoder-only servers on ${THIS_NODE}"
-PORT_BASE=$((40000 + (SLURM_JOB_ID % 1000) * 10))
-
 for GPU_ID in 0 1 2 3; do
-  PORT=$((PORT_BASE + GPU_ID))
-
-  # Idempotency: if something is already listening, don't try to bind again.
+  PORT=$((40000 + GPU_ID))
   if (echo > /dev/tcp/127.0.0.1/${PORT}) >/dev/null 2>&1; then
     echo "[EPD] Port ${PORT} already listening; skipping GPU ${GPU_ID}"
     continue
   fi
-
   CUDA_VISIBLE_DEVICES="${GPU_ID}" \
     python3 -m sglang.launch_server \
       --model-path /model \
@@ -401,131 +425,19 @@ for GPU_ID in 0 1 2 3; do
       >"/logs/encoder_${GPU_ID}.log" 2>&1 &
 done
 
-# Best-effort wait for ports to open (no hard failure)
 for GPU_ID in 0 1 2 3; do
-  PORT=$((PORT_BASE + GPU_ID))
+  PORT=$((40000 + GPU_ID))
   for _ in $(seq 1 120); do
     (echo > /dev/tcp/127.0.0.1/${PORT}) >/dev/null 2>&1 && break || true
     sleep 1
   done
 done
-
 echo "[EPD] Encoder servers ready"
 
 EOF
         chmod +x configs/qwen3.5-epd-setup.sh
         SETUP_SCRIPT="qwen3.5-epd-setup.sh"
     fi
-fi
-
-# --- Qwen3.5 PD (Prefill/Decode) text-only disaggregation ---
-# Same on-the-fly recipe generation as EPD but without encoder servers,
-# language-only mode, or encoder-urls.
-if [[ -z "${EPD:-}" && "$MODEL_PREFIX" == "qwen3.5" && -n "${CONFIG_FILE:-}" ]]; then
-    echo "[INFO] Qwen3.5 PD mode: generating recipe at '${CONFIG_FILE}'"
-    mkdir -p "$(dirname "${CONFIG_FILE}")"
-
-    # All values come from env vars set by the workflow (from nvidia-master.yaml).
-    # To change the layout, edit only the yaml — no defaults to update here.
-    GPUS_PER_NODE=4
-
-    # PREFILL_TP / PREFILL_EP / DECODE_TP / DECODE_EP are set by the workflow
-    # from the yaml config's prefill.tp, prefill.ep, decode.tp, decode.ep fields.
-    PREFILL_TP_VAL=${PREFILL_TP:?PREFILL_TP must be set}
-    PREFILL_EP_VAL=${PREFILL_EP:?PREFILL_EP must be set}
-    DECODE_TP_VAL=${DECODE_TP:?DECODE_TP must be set}
-    DECODE_EP_VAL=${DECODE_EP:?DECODE_EP must be set}
-
-    # Compute nodes per worker from tp_size (= total GPUs per worker)
-    PREFILL_NODES_PER_WORKER=$(( PREFILL_TP_VAL / GPUS_PER_NODE ))
-    if [[ ${PREFILL_NODES_PER_WORKER} -lt 1 ]]; then PREFILL_NODES_PER_WORKER=1; fi
-    DECODE_NODES_PER_WORKER=$(( DECODE_TP_VAL / GPUS_PER_NODE ))
-    if [[ ${DECODE_NODES_PER_WORKER} -lt 1 ]]; then DECODE_NODES_PER_WORKER=1; fi
-
-    GEN_PREFILL_WORKERS=${PREFILL_NUM_WORKERS:?PREFILL_NUM_WORKERS must be set}
-    GEN_DECODE_WORKERS=${DECODE_NUM_WORKERS:?DECODE_NUM_WORKERS must be set}
-    GEN_PREFILL_NODES=$(( PREFILL_NODES_PER_WORKER * GEN_PREFILL_WORKERS ))
-    GEN_DECODE_NODES=$(( DECODE_NODES_PER_WORKER * GEN_DECODE_WORKERS ))
-
-    # Build quantization args based on precision
-    if [[ "${PRECISION}" == "fp8" ]]; then
-        PD_QUANT_ARGS="quantization: fp8
-      kv-cache-dtype: fp8_e4m3"
-    else
-        PD_QUANT_ARGS=""
-    fi
-
-    # dp_size must be set explicitly (via PREFILL_DP / DECODE_DP in additional-settings).
-    # attn_tp = tp_size / dp_size, so dp_size controls the attention TP degree.
-    PREFILL_DP_VAL=${PREFILL_DP:?PREFILL_DP must be set in additional-settings}
-    DECODE_DP_VAL=${DECODE_DP:?DECODE_DP must be set in additional-settings}
-
-    DECODE_BOOTSTRAP_PORT=${PD_DECODE_BOOTSTRAP_PORT:-$((53000 + RANDOM % 1000))}
-    echo "[INFO] Using PD bootstrap port: decode=${DECODE_BOOTSTRAP_PORT}"
-
-    # Convert space-separated CONC_LIST to JSON array for srtctl recipe
-    PD_CONC_JSON="[$(echo "${CONC_LIST:-64}" | tr ' ' ',')]"
-
-    cat > "${CONFIG_FILE}" <<EOF
-name: qwen3.5-pd-${PRECISION}-gb200
-model:
-  path: ${SRT_SLURM_MODEL_PREFIX}
-  container: dynamo-sglang
-  precision: ${PRECISION}
-resources:
-  gpu_type: gb200
-  gpus_per_node: 4
-  prefill_nodes: ${GEN_PREFILL_NODES}
-  prefill_workers: ${GEN_PREFILL_WORKERS}
-  decode_nodes: ${GEN_DECODE_NODES}
-  decode_workers: ${GEN_DECODE_WORKERS}
-infra:
-  etcd_nats_dedicated_node: false
-backend:
-  type: sglang
-  sglang_config:
-    prefill:
-      tp-size: ${PREFILL_TP_VAL}
-      ep-size: ${PREFILL_EP_VAL}
-      dp-size: ${PREFILL_DP_VAL}
-      enable-dp-attention: true
-      disaggregation-mode: prefill
-      disaggregation-transfer-backend: nixl
-      disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}
-      trust-remote-code: true
-      ${PD_QUANT_ARGS}
-      context-length: ${MAX_MODEL_LEN}
-    decode:
-      tp-size: ${DECODE_TP_VAL}
-      ep-size: ${DECODE_EP_VAL}
-      dp-size: ${DECODE_DP_VAL}
-      enable-dp-attention: true
-      disaggregation-mode: decode
-      disaggregation-transfer-backend: nixl
-      disaggregation-bootstrap-port: ${DECODE_BOOTSTRAP_PORT}
-      trust-remote-code: true
-      ${PD_QUANT_ARGS}
-      context-length: ${MAX_MODEL_LEN}
-benchmark:
-  type: sa-bench
-  isl: ${ISL}
-  osl: ${OSL}
-  concurrencies: ${PD_CONC_JSON}
-EOF
-
-    # Setup script: torchao + bootstrap_room patch (no encoder servers)
-    cat > configs/qwen3.5-pd-setup.sh <<'EOF'
-#!/usr/bin/env bash
-set -euxo pipefail
-
-# Install torchao if the repo provides the helper (used for fp8 runs)
-if [[ -f /configs/install-torchao.sh ]]; then
-  bash /configs/install-torchao.sh
-fi
-
-EOF
-    chmod +x configs/qwen3.5-pd-setup.sh
-    SETUP_SCRIPT="qwen3.5-pd-setup.sh"
 fi
 
 # Default setup script for dynamo-sglang (fp8 tooling)
