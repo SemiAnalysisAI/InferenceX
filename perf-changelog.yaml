@@ -1278,3 +1278,10 @@
     - "New framework: dynamo-vllm (Dynamo frontend + vLLM backend)"
     - "Runner script updated to clone NVIDIA/srt-slurm and map vLLM container image"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1008
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Upgrade SGLang image to v0.5.10"
+    - "Resolve the issue: https://github.com/sgl-project/sglang/issues/19028"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1014
