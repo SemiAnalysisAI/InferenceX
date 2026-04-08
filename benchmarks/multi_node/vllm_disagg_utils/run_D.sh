@@ -5,8 +5,10 @@ export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 export MODEL_NAME="DeepSeek-R1-0528"   # key from models.yaml
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
 export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
-export NODE0_ADDR="10.21.9.8"          # prefill (rank-0) node's IP
-export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
+# export NODE0_ADDR="10.21.9.8"          # prefill (rank-0) node's IP
+# export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
+export NODE0_ADDR="10.21.9.47"          # this node's IP
+export IPADDRS="10.21.9.47,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
 export xP=1 yD=1
 export NNODES=2
 export GPUS_PER_NODE=8

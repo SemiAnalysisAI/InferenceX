@@ -6,8 +6,10 @@ export MODEL_NAME="DeepSeek-R1-0528"   # key from models.yaml
 # export MODEL_PATH="/root/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
 export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
-export NODE0_ADDR="10.21.9.8"          # this node's IP
-export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
+# export NODE0_ADDR="10.21.9.8"          # this node's IP
+#export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
+export NODE0_ADDR="10.21.9.47"          # this node's IP
+export IPADDRS="10.21.9.47,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
 export xP=1 yD=1
 export NNODES=2
 export GPUS_PER_NODE=8
@@ -72,7 +74,6 @@ docker run --rm \
     -e IBDEVICES=$IBDEVICES \
     -e DRY_RUN=$DRY_RUN \
     -e HF_HUB_CACHE=/models \
-    -e SERVED_MODEL_NAME=deepseek-ai/DeepSeek-R1-0528 \
     -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma \
     -e UCX_SOCKADDR_TLS_PRIORITY=tcp \
     -e UCX_MEMTYPE_CACHE=y \

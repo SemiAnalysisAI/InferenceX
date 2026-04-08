@@ -12,9 +12,8 @@ n_prefill=$1
 n_decode=$2
 prefill_gpus=$3
 decode_gpus=$4
-model_path=$5
+MODEL_PATH=$5
 model_name=$6
-MODEL_PATH="${SERVED_MODEL_NAME:-deepseek-ai/${model_name}}"
 log_path=$7
 
 chosen_isl=${8:-1024}

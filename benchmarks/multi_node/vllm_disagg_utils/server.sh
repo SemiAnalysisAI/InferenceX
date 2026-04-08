@@ -283,7 +283,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # Start vllm-router FIRST — workers register via ZMQ on startup
     echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    PROXY_CMD="RUST_LOG=debug /app/vllm-router \
+    PROXY_CMD="/app/vllm-router \
         --vllm-pd-disaggregation \
         --vllm-discovery-address 0.0.0.0:$PROXY_PING_PORT \
         --port $ROUTER_PORT \
@@ -303,7 +303,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         sleep 3
     fi
 
-    PREFILL_CMD="vllm serve deepseek-ai/DeepSeek-R1-0528 \
+    PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
@@ -353,7 +353,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     export ROUTER_PORT=$ROUTER_PORT
     BENCH_CMD="bash $VLLM_WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+        $MODEL_PATH $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
@@ -444,7 +444,7 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
-    DECODE_CMD="vllm serve deepseek-ai/DeepSeek-R1-0528 \
+    DECODE_CMD="vllm serve ${MODEL_PATH} \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
