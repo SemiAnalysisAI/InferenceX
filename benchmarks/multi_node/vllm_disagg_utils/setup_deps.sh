@@ -879,7 +879,6 @@ install_ucx
 install_rixl
 install_etcd
 install_libionic
-install_mori_proxy_deps
 install_mori
 install_amd_quark
 install_mori_proxy_deps
