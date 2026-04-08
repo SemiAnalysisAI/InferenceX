@@ -1278,3 +1278,10 @@
     - "New framework: dynamo-vllm (Dynamo frontend + vLLM backend)"
     - "Runner script updated to clone NVIDIA/srt-slurm and map vLLM container image"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1008
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Bump GLM-5 FP8 B200 SGLang concurrency from 128 to 256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1012
+
