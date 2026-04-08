@@ -42,9 +42,6 @@ start_gpu_monitor
 
 set -x
 pip install -U transformers
-export VLLM_DISABLE_COMPILE_CACHE=1
-export VLLM_CACHE_ROOT=/workspace/.cache/vllm
-mkdir -p $VLLM_CACHE_ROOT
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \

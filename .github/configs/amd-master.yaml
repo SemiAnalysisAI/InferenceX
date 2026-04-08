@@ -240,8 +240,7 @@ glm5-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-atom:
-  #TODO: update to the public Atom image once it's available. The current image is an internal test image with the same SW stack as the public image.
-  image: rocm/atom-dev:nightly_202604061538
+  image: rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2.post
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x

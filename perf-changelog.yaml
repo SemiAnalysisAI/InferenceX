@@ -1265,3 +1265,9 @@
   description:
     - "Add Qwen3.5-397B-A17B-FP8 H200 SGLang MTP (EAGLE speculative decoding)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1001
+
+- config-keys:
+    - glm5-fp8-mi355x-atom
+  description:
+    - "GLM5 FP8 configs added for MI355X ATOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1009
