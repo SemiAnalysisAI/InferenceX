@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/nvme_home/gharunner/gharunners/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
 
 PARTITION="compute"
-SQUASH_FILE="/nvme_home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 set -x

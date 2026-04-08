@@ -31,6 +31,11 @@ else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
+fi
+
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -48,6 +53,7 @@ python3 -m atom.entrypoints.openai_server \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --method mtp \
+    --num-speculative-tokens 3 \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -71,13 +77,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
 # Stop GPU monitoring
 stop_gpu_monitor
 set +x
-
-set -x
-rm -rf ./utils/bench_serving\

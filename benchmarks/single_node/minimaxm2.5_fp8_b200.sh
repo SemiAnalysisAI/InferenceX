@@ -24,15 +24,18 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export VLLM_USE_FLASHINFER_MOE_FP8=0
-export VLLM_MOE_USE_DEEP_GEMM=0
+export VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl
 
-if [ "$EP_SIZE" -ge 1 ]; then
+if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
   EP=" "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -40,9 +43,13 @@ set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
+--kv-cache-dtype fp8 \
+--max-cudagraph-capture-size 2048 \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -65,7 +72,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
