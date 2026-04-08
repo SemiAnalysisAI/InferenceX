@@ -1,3 +1,28 @@
+# Builder stage: Ubuntu 22.04 matches the vllm-openai-rocm base image,
+# ensuring shared libraries (OpenSSL 3.x, glibc 2.35) are compatible.
+FROM ubuntu:22.04 AS rust-builder
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libzmq3-dev \
+    protobuf-compiler \
+    python3 \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+ENV PATH="/root/.cargo/bin:$PATH"
+
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN git clone --branch feat/moriio-support https://github.com/mpashkovskii/router.git .
+
+RUN cargo build --release
+
 FROM vllm/vllm-openai-rocm:v0.18.0
 
 # RDMA drivers for broadcom devices
@@ -15,5 +40,4 @@ RUN wget https://docs.broadcom.com/docs-and-downloads/ethernet-network-adapters/
 RUN rm -rf bcm5760x_230.2.52.0a && \
     rm -rf bcm5760x_230.2.52.0a.zip
 
-# Copy pre-built router
-COPY vllm-router /app/
+COPY --from=rust-builder /app/target/release/vllm-router /app/vllm-router
