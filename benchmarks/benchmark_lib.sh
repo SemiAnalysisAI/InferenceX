@@ -503,16 +503,9 @@ echo "[profile-setup] Patch appended to $HANDLER"
 SETUP
         chmod +x "$configs_dir/apply-profiling-patch.sh"
 
-        # Inject setup_script into srtctl config
-        python3 -c "
-import yaml
-with open('${CONFIG_FILE}') as f:
-    cfg = yaml.safe_load(f)
-cfg['setup_script'] = 'apply-profiling-patch.sh'
-with open('${CONFIG_FILE}', 'w') as f:
-    yaml.dump(cfg, f, default_flow_style=False)
-print('[profile] Set setup_script=apply-profiling-patch.sh')
-" || echo "[profile] Warning: failed to inject setup_script"
+        # Export setup script name for launch scripts to pass to srtctl apply --setup-script
+        export PROFILING_SETUP_SCRIPT="apply-profiling-patch.sh"
+        echo "[profile] Set PROFILING_SETUP_SCRIPT=$PROFILING_SETUP_SCRIPT"
     fi
 
     # For SGLang: enable layerwise NVTX markers via sglang_config CLI args

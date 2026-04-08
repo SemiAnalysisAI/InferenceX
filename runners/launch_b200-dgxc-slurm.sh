@@ -104,7 +104,11 @@ EOF
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     inject_srtctl_profiling
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    local srtctl_extra_args=""
+    if [[ -n "${PROFILING_SETUP_SCRIPT:-}" ]]; then
+        srtctl_extra_args="--setup-script ${PROFILING_SETUP_SCRIPT}"
+    fi
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" ${srtctl_extra_args} 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
