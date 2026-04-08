@@ -10,8 +10,8 @@ Environment variables:
   PROFILE_PREFILL_STOP_STEP  / PROFILE_DECODE_STOP_STEP  - stop step
   SGLANG_TORCH_PROFILER_DIR - output dir for traces
 
-Applied automatically via sitecustomize.py when PROFILING_MODE is set.
-Uses a post-import hook so the patch applies after dynamo.trtllm loads.
+Applied by appending import+call to handler_base.py via setup script.
+Falls back to a post-import hook if used standalone.
 """
 
 import importlib
@@ -77,20 +77,30 @@ def _apply_patch():
 
 
 def patch():
-    """Install a post-import hook that patches HandlerBase after dynamo.trtllm loads."""
+    """Patch HandlerBase.generate with profiler wrapping.
+
+    When this file is appended to handler_base.py, HandlerBase is already
+    defined in the current module scope — so we apply the patch directly.
+    If called standalone before the module is imported, we install a
+    post-import hook as a fallback.
+    """
     mode = os.environ.get("PROFILING_MODE", "")
     if not mode:
         return
 
-    # If the module is already imported, patch immediately
-    if "dynamo.trtllm.request_handlers.handler_base" in sys.modules:
-        try:
-            _apply_patch()
-        except Exception as e:
-            print(f"[trtllm-patch] Failed: {e}", file=sys.stderr, flush=True)
+    # If HandlerBase is already importable (e.g. this code was appended to
+    # handler_base.py, or the module was already imported), patch immediately.
+    try:
+        from dynamo.trtllm.request_handlers.handler_base import HandlerBase  # noqa: F401
+        _apply_patch()
+        return
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[trtllm-patch] Direct patch failed: {e}", file=sys.stderr, flush=True)
         return
 
-    # Otherwise, install a meta path finder that triggers after the module loads
+    # Fallback: install a meta path finder for deferred patching
     class _PatchFinder:
         _patched = False
 
@@ -100,13 +110,10 @@ def patch():
             return None
 
         def load_module(self, fullname):
-            # Remove ourselves to avoid recursion
             self._patched = True
-            # Let the real import happen
             if self in sys.meta_path:
                 sys.meta_path.remove(self)
             mod = importlib.import_module(fullname)
-            # Now apply the patch
             try:
                 _apply_patch()
             except Exception as e:
