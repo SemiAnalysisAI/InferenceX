@@ -367,6 +367,8 @@ timeout 30 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
 # The MoRI bootstrap server binds to the default NIC (external IP), but
 # UFW may only allow internal subnet traffic. Collect each node's external
 # IP and add UFW allow rules on all nodes before starting Docker.
+# UFW rules persist across reboots, but we run this per-job so that newly
+# added or re-imaged nodes automatically receive the correct peer rules.
 # -----------------------------------------------------------------------
 _UFW_DIR="${BENCHMARK_LOGS_DIR}/.ufw_${SLURM_JOB_ID}"
 mkdir -p "$_UFW_DIR"
