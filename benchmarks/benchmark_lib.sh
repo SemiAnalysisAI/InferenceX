@@ -639,7 +639,9 @@ compute_eval_context_length() {
 # Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
 setup_eval_context() {
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
-    export EVAL_MAX_MODEL_LEN
+    # Override
+    #export EVAL_MAX_MODEL_LEN
+    export EVAL_MAX_MODEL_LEN=16384
 }
 
 run_lm_eval() {
@@ -677,6 +679,7 @@ run_lm_eval() {
     if [ "$max_output_tokens" -gt 16384 ]; then
         max_output_tokens=16384
     fi
+    local max_output_tokens=8192
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 
     # Export for append_lm_eval_summary to pick up
