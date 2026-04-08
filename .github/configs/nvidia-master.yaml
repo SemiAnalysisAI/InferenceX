@@ -6749,7 +6749,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang-epd:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260407-5cc246e0
+  image: lmsysorg/sglang:v0.5.9-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
@@ -6778,7 +6778,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-epd:
         dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260407-5cc246e0
+  image: lmsysorg/sglang:v0.5.9-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
