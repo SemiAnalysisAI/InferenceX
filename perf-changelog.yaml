@@ -1307,3 +1307,10 @@
     - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
     - "Configs: 1k1k (TP4 conc 4-128), 8k1k (TP4 conc 4-128)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
