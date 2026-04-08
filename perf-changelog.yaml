@@ -1286,18 +1286,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1008
 
 - config-keys:
-    - glm5-fp8-mi355x-sglang
-  description:
-    - "Upgrade SGLang image to v0.5.10"
-    - "Resolve the issue: https://github.com/sgl-project/sglang/issues/19028"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1014
-  
-- config-keys:
     - minimaxm2.5-fp8-b200-vllm
   description:
     - "Update MiniMax-M2.5 FP8 B200 config with new search spaces"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1010
-  
+
 - config-keys:
     - minimaxm2.5-fp4-b200-vllm
   description:

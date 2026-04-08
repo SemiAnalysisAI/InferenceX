@@ -222,7 +222,7 @@ qwen3.5-fp8-mi300x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang:v0.5.10-rocm720-mi35x
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
