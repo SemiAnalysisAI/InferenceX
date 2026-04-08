@@ -444,59 +444,75 @@ with open('${CONFIG_FILE}', 'w') as f:
 print('[profile] Done')
 " || echo "[profile] Warning: profiling injection failed"
 
-    # Copy profiling patches into srt-slurm scripts dir (mounted at /srtctl-benchmarks in container)
-    local patches_src="${GITHUB_WORKSPACE:-$(dirname "$0")/..}/patches"
-    local srt_scripts_dir="src/srtctl/benchmarks/scripts"
-    if [[ -d "$patches_src" && -d "$srt_scripts_dir" ]]; then
-        cp -v "$patches_src"/*-profiling.py "$srt_scripts_dir/"
-        echo "[profile] Copied profiling patches to $srt_scripts_dir/"
-    fi
+    # For TRT-LLM: use a setup script to directly patch handler_base.py inside the container.
+    # The setup_script runs inside the container before the worker starts.
+    if [[ "${FRAMEWORK:-}" == *"trt"* ]]; then
+        local patches_src="${GITHUB_WORKSPACE:-$(dirname "$0")/..}/patches"
+        local configs_dir="configs"
+        mkdir -p "$configs_dir"
 
-    # For TRT-LLM: install sitecustomize.py that auto-applies the profiling patch
-    # when Python starts inside the container. The scripts dir is mounted at
-    # /srtctl-benchmarks, and we add it to PYTHONPATH via the config YAML.
-    if [[ "${FRAMEWORK:-}" == *"trt"* && -d "$srt_scripts_dir" ]]; then
-        mkdir -p "$srt_scripts_dir/profiling_sitecustomize"
-        cat > "$srt_scripts_dir/profiling_sitecustomize/sitecustomize.py" <<'SITEPY'
-import os, sys
-_mode = os.environ.get("PROFILING_MODE", "")
-print(f"[sitecustomize] loaded, PROFILING_MODE={_mode}, PYTHONPATH={os.environ.get('PYTHONPATH','')}", file=sys.stderr, flush=True)
-if _mode:
-    patch_path = "/srtctl-benchmarks/trtllm-profiling.py"
-    print(f"[sitecustomize] patch exists: {os.path.isfile(patch_path)}", file=sys.stderr, flush=True)
-    if os.path.isfile(patch_path):
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("_trtllm_profiling", patch_path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            if hasattr(mod, "patch"):
-                mod.patch()
-                print("[sitecustomize] patch applied successfully", file=sys.stderr, flush=True)
-            else:
-                print("[sitecustomize] patch module has no patch() function", file=sys.stderr, flush=True)
-        except Exception as e:
-            print(f"[sitecustomize] patch failed: {e}", file=sys.stderr, flush=True)
-    else:
-        print(f"[sitecustomize] patch file not found at {patch_path}", file=sys.stderr, flush=True)
-SITEPY
-        # Inject PYTHONPATH into the srtctl config so the container picks up sitecustomize
+        # Copy the patch to configs dir (mounted at /configs in container)
+        if [[ -f "$patches_src/trtllm-profiling.py" ]]; then
+            cp "$patches_src/trtllm-profiling.py" "$configs_dir/"
+            echo "[profile] Copied trtllm-profiling.py to $configs_dir/"
+        fi
+
+        # Create a setup script that patches handler_base.py directly
+        cat > "$configs_dir/apply-profiling-patch.sh" <<'SETUP'
+#!/bin/bash
+echo "[profile-setup] Applying TRT-LLM profiling patch..."
+
+PATCH_SRC="/configs/trtllm-profiling.py"
+HANDLER="/opt/dynamo/venv/lib/python3.12/site-packages/dynamo/trtllm/request_handlers/handler_base.py"
+
+if [[ ! -f "$PATCH_SRC" ]]; then
+    echo "[profile-setup] ERROR: patch not found at $PATCH_SRC"
+    exit 0
+fi
+
+if [[ ! -f "$HANDLER" ]]; then
+    # Try to find it
+    HANDLER=$(find /opt -name "handler_base.py" -path "*/trtllm/*" 2>/dev/null | head -1)
+    if [[ -z "$HANDLER" ]]; then
+        echo "[profile-setup] ERROR: handler_base.py not found"
+        exit 0
+    fi
+fi
+
+echo "[profile-setup] Found handler at: $HANDLER"
+
+# Append the patch import and call to the end of handler_base.py
+# The patch installs a post-import hook that wraps generate() with torch.profiler
+cat >> "$HANDLER" <<'PATCH_APPEND'
+
+# --- InferenceX profiling patch (auto-appended) ---
+import os as _os
+if _os.environ.get("PROFILING_MODE"):
+    import importlib.util as _ilu
+    _patch_path = "/configs/trtllm-profiling.py"
+    if _os.path.isfile(_patch_path):
+        _spec = _ilu.spec_from_file_location("_trtllm_profiling", _patch_path)
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        if hasattr(_mod, "patch"):
+            _mod.patch()
+# --- End profiling patch ---
+PATCH_APPEND
+
+echo "[profile-setup] Patch appended to $HANDLER"
+SETUP
+        chmod +x "$configs_dir/apply-profiling-patch.sh"
+
+        # Inject setup_script into srtctl config
         python3 -c "
 import yaml
 with open('${CONFIG_FILE}') as f:
     cfg = yaml.safe_load(f)
-# Add PYTHONPATH to backend environment for both prefill and decode
-backend = cfg.get('backend', {})
-for env_key in ['prefill_environment', 'decode_environment']:
-    env = backend.get(env_key, {})
-    existing = env.get('PYTHONPATH', '')
-    env['PYTHONPATH'] = '/srtctl-benchmarks/profiling_sitecustomize' + (':' + existing if existing else '')
-    backend[env_key] = env
-cfg['backend'] = backend
+cfg['setup_script'] = 'apply-profiling-patch.sh'
 with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
-print('[profile] Injected PYTHONPATH for TRT-LLM profiling patch')
-" || echo "[profile] Warning: failed to inject PYTHONPATH"
+print('[profile] Set setup_script=apply-profiling-patch.sh')
+" || echo "[profile] Warning: failed to inject setup_script"
     fi
 
     # For SGLang: enable layerwise NVTX markers via sglang_config CLI args
