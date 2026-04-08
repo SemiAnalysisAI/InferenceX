@@ -1284,7 +1284,7 @@
     - qwen3.5-bf16-mi355x-sglang
     - qwen3.5-fp8-mi355x-sglang
   description:
-    - "Fix MI355X Qwen 3.5 image tag: v0.5.9-rocm720-mi35x-20260327 is not on Docker Hub (404)"
-    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260329"
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
+    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260327"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/980
 
