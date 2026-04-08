@@ -48,7 +48,6 @@ python3 -m sglang.launch_server \
     --tensor-parallel-size 4 \
     --attention-backend aiter \
     --mem-fraction-static 0.9 \
-    --model-loader-extra-config '"'"'{"enable_multithread_load": true}'"'"' \
     --watchdog-timeout 1200 \
     --context-length 9416 \
     > /tmp/server.log 2>&1 &
