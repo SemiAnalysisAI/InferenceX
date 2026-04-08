@@ -217,16 +217,25 @@ else
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    LOCK_FILE="${SQUASH_FILE}.lock"
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    enroot import -o $SQUASH_FILE docker://$IMAGE
-    if ! unsquashfs -l $SQUASH_FILE > /dev/null; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        rm -f $SQUASH_FILE
-        enroot import -o $SQUASH_FILE docker://$IMAGE
-    fi
+    # Use flock to serialize concurrent imports to the same squash file
+    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
+    srun --jobid=$JOB_ID bash -c "
+        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
+        mkdir -p \$ENROOT_CACHE_PATH
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+        fi
+    "
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
