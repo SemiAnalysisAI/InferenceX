@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai-rocm:v0.18.1
+FROM vllm/vllm-openai-rocm:v0.18.0
 
 # RDMA drivers for broadcom devices
 RUN apt-get update && apt-get install -y autoconf libibverbs-dev ibverbs-utils libtool unzip wget
@@ -15,4 +15,5 @@ RUN wget https://docs.broadcom.com/docs-and-downloads/ethernet-network-adapters/
 RUN rm -rf bcm5760x_230.2.52.0a && \
     rm -rf bcm5760x_230.2.52.0a.zip
 
+# Copy pre-built router
 COPY vllm-router /app/
