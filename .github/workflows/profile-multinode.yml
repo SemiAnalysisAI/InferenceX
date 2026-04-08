@@ -7,6 +7,7 @@ on:
       - '.github/workflows/profile-multinode.yml'
       - 'benchmarks/benchmark_lib.sh'
       - 'runners/launch_*.sh'
+      - 'patches/**'
   workflow_dispatch:
     inputs:
       config-key:
