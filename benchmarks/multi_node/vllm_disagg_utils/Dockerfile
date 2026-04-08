@@ -1,4 +1,6 @@
-# Builder stage: Ubuntu 22.04 matches the vllm-openai-rocm base image,
+# Build with `docker build -t vllm-router-rocm:0.1.0 --no-cache .` to use in run_P.sh
+
+# Router builder stage: Ubuntu 22.04 matches the vllm-openai-rocm base image,
 # ensuring shared libraries (OpenSSL 3.x, glibc 2.35) are compatible.
 FROM ubuntu:22.04 AS rust-builder
 
