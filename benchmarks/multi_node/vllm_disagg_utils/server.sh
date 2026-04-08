@@ -185,15 +185,15 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # Container Synchronization
 # =============================================================================
 
-# echo "Waiting at the container creation barrier on $host_name"
-# python3 $VLLM_WS_PATH/sync.py barrier \
-#     --local-ip ${host_ip} \
-#     --local-port 5000 \
-#     --enable-port \
-#     --node-ips ${IPADDRS} \
-#     --node-ports 5000 \
-#     --wait-for-all-ports \
-#     --timeout 600
+echo "Waiting at the container creation barrier on $host_name"
+python3 $VLLM_WS_PATH/sync.py barrier \
+    --local-ip ${host_ip} \
+    --local-port 5000 \
+    --enable-port \
+    --node-ips ${IPADDRS} \
+    --node-ports 5000 \
+    --wait-for-all-ports \
+    --timeout 600
 
 # =============================================================================
 # ETCD Server Setup
