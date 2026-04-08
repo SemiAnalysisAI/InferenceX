@@ -295,8 +295,6 @@ resources:
   prefill_workers: ${GEN_PREFILL_WORKERS}
   decode_nodes: ${GEN_DECODE_NODES}
   decode_workers: ${GEN_DECODE_WORKERS}
-dynamo:
-  hash: "35323da20c1537362d7333e85d44bebddbf6a9a8"
 infra:
   # Reserve one full node for infra (etcd/nats). We also run the vision encoder there.
   etcd_nats_dedicated_node: true
@@ -350,9 +348,6 @@ set -euxo pipefail
 if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
-
-# Install libclang for dynamo source build (bindgen/nixl-sys needs it)
-apt-get update -qq && apt-get install -y -qq libclang-dev >/dev/null 2>&1 || true
 
 # Start encoder-only servers on the first allocated node (reserved when infra.etcd_nats_dedicated_node=true)
 # Prefer scontrol if available; otherwise fall back to SLURM_NODEID==0.
@@ -484,8 +479,6 @@ resources:
   prefill_workers: ${GEN_PREFILL_WORKERS}
   decode_nodes: ${GEN_DECODE_NODES}
   decode_workers: ${GEN_DECODE_WORKERS}
-dynamo:
-  hash: "35323da20c1537362d7333e85d44bebddbf6a9a8"
 infra:
   etcd_nats_dedicated_node: false
 backend:
@@ -530,8 +523,6 @@ if [[ -f /configs/install-torchao.sh ]]; then
   bash /configs/install-torchao.sh
 fi
 
-# Install libclang for dynamo source build (bindgen/nixl-sys needs it)
-apt-get update -qq && apt-get install -y -qq libclang-dev >/dev/null 2>&1 || true
 EOF
     chmod +x configs/qwen3.5-pd-setup.sh
     SETUP_SCRIPT="qwen3.5-pd-setup.sh"
