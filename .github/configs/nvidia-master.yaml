@@ -1789,6 +1789,24 @@ qwen3.5-fp8-b200-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
     - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
 
+qwen3.5-fp4-b200-sglang:
+  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
   model: zai-org/GLM-5-FP8

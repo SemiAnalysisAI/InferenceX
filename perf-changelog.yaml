@@ -1298,3 +1298,12 @@
     - "Expand from tp2/tp4 to tp1/tp2/tp4/tp8 with expert parallel and dp-attn variants"
     - "Add ep2, ep4, and dp-attn configurations for higher concurrency sweeps"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/996
+  
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B200 SGLang benchmark config and launch script"
+    - "Image: lmsysorg/sglang:v0.5.9-cu129-amd64"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Configs: 1k1k (TP4 conc 4-128), 8k1k (TP4 conc 4-128)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
