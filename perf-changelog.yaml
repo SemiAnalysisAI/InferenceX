@@ -1271,6 +1271,8 @@
   description:
     - "GLM5 FP8 configs added for MI355X ATOM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1009
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-vllm
   description:
     - "Add Kimi K2.5 NVFP4 GB200 disaggregated multinode vLLM benchmark via Dynamo frontend"
