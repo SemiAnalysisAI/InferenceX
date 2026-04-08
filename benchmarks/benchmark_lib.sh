@@ -448,7 +448,7 @@ print('[profile] Done')
     local patches_src="${GITHUB_WORKSPACE:-$(dirname "$0")/..}/patches"
     local srt_scripts_dir="src/srtctl/benchmarks/scripts"
     if [[ -d "$patches_src" && -d "$srt_scripts_dir" ]]; then
-        cp -v "$patches_src"/*-profiling.py "$srt_scripts_dir/" 2>/dev/null || true
+        cp -v "$patches_src"/*-profiling.py "$srt_scripts_dir/"
         echo "[profile] Copied profiling patches to $srt_scripts_dir/"
     fi
 

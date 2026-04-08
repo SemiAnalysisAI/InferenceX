@@ -1,0 +1,82 @@
+"""
+Patch for dynamo.trtllm to add torch profiler support.
+
+Wraps inference with torch.profiler.profile() and writes chrome trace
+JSON to SGLANG_TORCH_PROFILER_DIR.
+
+Environment variables:
+  PROFILING_MODE          - "prefill" or "decode" (from srtctl)
+  PROFILE_PREFILL_START_STEP / PROFILE_DECODE_START_STEP - start step
+  PROFILE_PREFILL_STOP_STEP  / PROFILE_DECODE_STOP_STEP  - stop step
+  SGLANG_TORCH_PROFILER_DIR - output dir for traces
+
+Applied automatically via sitecustomize.py when PROFILING_MODE is set.
+"""
+
+import logging
+import os
+
+logger = logging.getLogger("trtllm-profiling-patch")
+
+
+def patch():
+    mode = os.environ.get("PROFILING_MODE", "")
+    if not mode:
+        return
+
+    start_step = int(os.environ.get(f"PROFILE_{mode.upper()}_START_STEP",
+                     os.environ.get("PROFILE_START_STEP", "5")))
+    stop_step = int(os.environ.get(f"PROFILE_{mode.upper()}_STOP_STEP",
+                    os.environ.get("PROFILE_STOP_STEP", "50")))
+    output_dir = os.environ.get("SGLANG_TORCH_PROFILER_DIR", "/tmp/trtllm_profiles")
+
+    logger.info(f"[trtllm-patch] Patching: mode={mode}, steps={start_step}-{stop_step}, output={output_dir}")
+
+    try:
+        import torch.profiler
+        from dynamo.trtllm.request_handlers.handler_base import HandlerBase
+
+        os.makedirs(output_dir, exist_ok=True)
+
+        _orig_generate = HandlerBase.generate
+        _state = {"step": 0, "started": False, "stopped": False, "profiler": None}
+
+        # Create profiler (not started yet)
+        _state["profiler"] = torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+            with_stack=False,
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(output_dir),
+        )
+
+        async def _patched_generate(self, request, *args, **kwargs):
+            _state["step"] += 1
+            step = _state["step"]
+
+            if step == start_step and not _state["started"]:
+                _state["profiler"].__enter__()
+                _state["started"] = True
+                logger.info(f"[trtllm-patch] Step {step}: profiler started")
+
+            result = _orig_generate(self, request, *args, **kwargs)
+            if hasattr(result, '__aiter__'):
+                async for chunk in result:
+                    yield chunk
+            else:
+                yield await result
+
+            if step == stop_step and not _state["stopped"]:
+                import torch.cuda
+                torch.cuda.synchronize()
+                _state["profiler"].__exit__(None, None, None)
+                _state["stopped"] = True
+                logger.info(f"[trtllm-patch] Step {step}: profiler stopped, traces in {output_dir}")
+
+        HandlerBase.generate = _patched_generate
+        logger.info("[trtllm-patch] Patched HandlerBase.generate")
+
+    except Exception as e:
+        logger.error(f"[trtllm-patch] Failed: {e}", exc_info=True)
