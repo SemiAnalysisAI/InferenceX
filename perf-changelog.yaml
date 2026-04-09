@@ -13,6 +13,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/998
 
 - config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg
+    - glm5-fp8-mi300x-sglang-disagg
+  description:
+    - "Add Qwen 3.5 FP8 and GLM-5 FP8 disaggregated inference on MI300X with Broadcom Thor 2 IBGDA"
+    - "Ported from MI355X disagg configs (chun-chang/sglang-disagg-qwen3.5 branch)"
+    - "Image: docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.9-bnxt + runtime patches (setup_deps.sh)"
+    - "Topologies: 1P(TP8)+2D(TP8) and 1P(TP4)+1D(TP8), ISL 1k/1k and 8k/1k"
+    - "GLM-5 runtime deps: transformers glm_moe_dsa, aiter gluon 3D instr_shape patch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/998
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"

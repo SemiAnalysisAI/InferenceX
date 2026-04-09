@@ -161,6 +161,68 @@ DeepSeek-R1-0528:
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
 
+Qwen3.5-397B-A17B-FP8:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  mtp_flags: ""
+  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    dp:
+      max_running_requests: 24
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 4096
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_DECODE * DECODE_TP_SIZE"
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      max_running_requests: 256
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+
+GLM-5-FP8:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --disaggregation-transfer-backend mori --tool-call-parser glm47 --reasoning-parser glm45 --model-loader-extra-config '{\\\"enable_multithread_load\\\": true, \\\"num_threads\\\": 8}'"
+  mtp_flags: ""
+  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    dp:
+      max_running_requests: 24
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 4096
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_DECODE * DECODE_TP_SIZE"
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      max_running_requests: 256
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+
 DeepSeek-R1-0528-MXFP4-Preview:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
