@@ -42,6 +42,8 @@ start_gpu_monitor
 
 set -x
 
+amd-smi
+rocm-smi
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \

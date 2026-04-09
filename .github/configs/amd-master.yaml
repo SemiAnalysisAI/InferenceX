@@ -367,7 +367,7 @@ minimaxm2.5-fp8-mi355x-atom:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 8 }
+    - { tp: 2, conc-start: 4, conc-end: 4 }
   #   - { tp: 4, conc-start: 4, conc-end: 128 }
   #   - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
   # - isl: 8192
