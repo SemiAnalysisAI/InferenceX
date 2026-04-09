@@ -38,7 +38,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --trust-remote-code \
 --tensor-parallel-size=$TP \
 --data-parallel-size 1 --expert-parallel-size $EP_SIZE \
---enable-dp-lm-head \
 --disable-radix-cache \
 --quantization modelopt_fp4 \
 --kv-cache-dtype fp8_e4m3 \
