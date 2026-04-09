@@ -5,34 +5,30 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    EP_SIZE \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE \
+    DP_ATTENTION
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
-
-# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
-if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+export OMP_NUM_THREADS=1
+
+# Calculate max-model-len based on ISL and OSL
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    CALCULATED_MAX_MODEL_LEN=""
+else
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -45,22 +41,22 @@ fi
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
-$EP \
---gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
---kv-cache-dtype fp8 \
---block-size=32 \
---no-enable-prefix-caching \
---attention-backend "ROCM_AITER_FA" \
---trust-remote-code > $SERVER_LOG 2>&1 &
+pip install -U transformers
+python3 -m atom.entrypoints.openai_server \
+    --model $MODEL \
+    --server-port $PORT \
+    -tp $TP \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    --default-chat-template-kwargs '{"enable_thinking": false}' \
+    --trust-remote-code \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+export PYTHONDONTWRITEBYTECODE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -76,7 +72,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
+    run_eval --framework lm-eval --port "$PORT" 
     append_lm_eval_summary
 fi
 
