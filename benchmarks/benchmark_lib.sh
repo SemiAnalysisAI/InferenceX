@@ -481,8 +481,13 @@ fi
 
 echo "[profile-setup] Found handler at: $HANDLER"
 
+# Guard: only append once (multiple MPI ranks run this script)
+if grep -q "InferenceX profiling patch" "$HANDLER" 2>/dev/null; then
+    echo "[profile-setup] Patch already applied, skipping"
+    exit 0
+fi
+
 # Append the patch import and call to the end of handler_base.py
-# The patch installs a post-import hook that wraps generate() with torch.profiler
 cat >> "$HANDLER" <<'PATCH_APPEND'
 
 # --- InferenceX profiling patch (auto-appended) ---

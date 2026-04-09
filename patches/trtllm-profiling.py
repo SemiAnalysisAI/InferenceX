@@ -1,8 +1,13 @@
 """
-Patch for dynamo.trtllm to add torch profiler support.
+Patch for dynamo.trtllm v0.8.1 to add torch profiler support.
 
-Wraps inference with torch.profiler.profile() and writes chrome trace
-JSON to SGLANG_TORCH_PROFILER_DIR.
+Wraps HandlerBase.generate_locally() with torch.profiler.profile() and
+writes chrome trace JSON to SGLANG_TORCH_PROFILER_DIR.
+
+Target: dynamo.trtllm.request_handlers.handler_base.HandlerBase.generate_locally
+  - Async generator: async def generate_locally(self, request, context, embeddings=None)
+  - Called by PrefillHandler.generate(), DecodeHandler.generate(), AggregatedHandler.generate()
+  - Each call = one request; "step" here counts requests processed
 
 Environment variables:
   PROFILING_MODE          - "prefill" or "decode" (from srtctl)
@@ -11,19 +16,14 @@ Environment variables:
   SGLANG_TORCH_PROFILER_DIR - output dir for traces
 
 Applied by appending import+call to handler_base.py via setup script.
-Falls back to a post-import hook if used standalone.
 """
 
-import importlib
-import logging
 import os
 import sys
 
-logger = logging.getLogger("trtllm-profiling-patch")
-
 
 def _apply_patch():
-    """Actually monkey-patch HandlerBase.generate with profiler wrapping."""
+    """Monkey-patch HandlerBase.generate_locally with profiler wrapping."""
     mode = os.environ.get("PROFILING_MODE", "")
     start_step = int(os.environ.get(f"PROFILE_{mode.upper()}_START_STEP",
                      os.environ.get("PROFILE_START_STEP", "5")))
@@ -34,9 +34,16 @@ def _apply_patch():
     import torch.profiler
     from dynamo.trtllm.request_handlers.handler_base import HandlerBase
 
+    if not hasattr(HandlerBase, "generate_locally"):
+        methods = [m for m in dir(HandlerBase)
+                   if not m.startswith('_') and callable(getattr(HandlerBase, m, None))]
+        print(f"[trtllm-patch] ERROR: HandlerBase has no generate_locally. "
+              f"Available: {methods}", file=sys.stderr, flush=True)
+        return
+
     os.makedirs(output_dir, exist_ok=True)
 
-    _orig_generate = HandlerBase.generate
+    _orig_generate_locally = HandlerBase.generate_locally
     _state = {"step": 0, "started": False, "stopped": False}
 
     _state["profiler"] = torch.profiler.profile(
@@ -49,76 +56,45 @@ def _apply_patch():
         on_trace_ready=torch.profiler.tensorboard_trace_handler(output_dir),
     )
 
-    async def _patched_generate(self, request, *args, **kwargs):
+    async def _patched_generate_locally(self, request, context, embeddings=None):
         _state["step"] += 1
         step = _state["step"]
 
         if step == start_step and not _state["started"]:
             _state["profiler"].__enter__()
             _state["started"] = True
-            print(f"[trtllm-patch] Step {step}: profiler started", file=sys.stderr, flush=True)
+            print(f"[trtllm-patch] Step {step}: profiler started",
+                  file=sys.stderr, flush=True)
 
-        result = _orig_generate(self, request, *args, **kwargs)
-        if hasattr(result, '__aiter__'):
-            async for chunk in result:
-                yield chunk
-        else:
-            yield await result
+        async for chunk in _orig_generate_locally(self, request, context, embeddings):
+            yield chunk
 
         if step == stop_step and not _state["stopped"]:
             import torch.cuda
             torch.cuda.synchronize()
             _state["profiler"].__exit__(None, None, None)
             _state["stopped"] = True
-            print(f"[trtllm-patch] Step {step}: profiler stopped, traces in {output_dir}", file=sys.stderr, flush=True)
+            print(f"[trtllm-patch] Step {step}: profiler stopped, "
+                  f"traces in {output_dir}", file=sys.stderr, flush=True)
 
-    HandlerBase.generate = _patched_generate
-    print(f"[trtllm-patch] Patched HandlerBase.generate (steps {start_step}-{stop_step}, output={output_dir})", file=sys.stderr, flush=True)
+    HandlerBase.generate_locally = _patched_generate_locally
+    print(f"[trtllm-patch] Patched HandlerBase.generate_locally "
+          f"(steps {start_step}-{stop_step}, output={output_dir})",
+          file=sys.stderr, flush=True)
 
 
 def patch():
-    """Patch HandlerBase.generate with profiler wrapping.
+    """Apply the profiling patch to HandlerBase.
 
-    When this file is appended to handler_base.py, HandlerBase is already
-    defined in the current module scope — so we apply the patch directly.
-    If called standalone before the module is imported, we install a
-    post-import hook as a fallback.
+    When appended to handler_base.py, HandlerBase is already defined,
+    so the import succeeds and we patch immediately.
     """
     mode = os.environ.get("PROFILING_MODE", "")
     if not mode:
         return
 
-    # If HandlerBase is already importable (e.g. this code was appended to
-    # handler_base.py, or the module was already imported), patch immediately.
     try:
-        from dynamo.trtllm.request_handlers.handler_base import HandlerBase  # noqa: F401
         _apply_patch()
-        return
-    except ImportError:
-        pass
     except Exception as e:
-        print(f"[trtllm-patch] Direct patch failed: {e}", file=sys.stderr, flush=True)
-        return
-
-    # Fallback: install a meta path finder for deferred patching
-    class _PatchFinder:
-        _patched = False
-
-        def find_module(self, fullname, path=None):
-            if fullname == "dynamo.trtllm.request_handlers.handler_base" and not self._patched:
-                return self
-            return None
-
-        def load_module(self, fullname):
-            self._patched = True
-            if self in sys.meta_path:
-                sys.meta_path.remove(self)
-            mod = importlib.import_module(fullname)
-            try:
-                _apply_patch()
-            except Exception as e:
-                print(f"[trtllm-patch] Failed: {e}", file=sys.stderr, flush=True)
-            return mod
-
-    sys.meta_path.insert(0, _PatchFinder())
-    print(f"[trtllm-patch] Installed post-import hook for HandlerBase", file=sys.stderr, flush=True)
+        print(f"[trtllm-patch] Failed to apply patch: {e}",
+              file=sys.stderr, flush=True)
