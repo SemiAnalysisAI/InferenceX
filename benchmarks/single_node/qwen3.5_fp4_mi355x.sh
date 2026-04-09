@@ -22,7 +22,6 @@ export SGLANG_USE_AITER=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
-CHUNK_SIZE=32768
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -38,11 +37,6 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --attention-backend aiter \
 --mem-fraction-static $MEM_FRAC_STATIC \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
---kv-cache-dtype fp8_e4m3 \
---cuda-graph-max-bs $CONC \
---max-running-requests $CONC \
---chunked-prefill-size $CHUNK_SIZE \
---max-prefill-tokens $CHUNK_SIZE \
 --watchdog-timeout 1200  \
 --disable-radix-cache \
 > $SERVER_LOG 2>&1 &
