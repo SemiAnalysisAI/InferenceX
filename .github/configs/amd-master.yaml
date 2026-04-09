@@ -112,6 +112,24 @@ dsr1-fp8-mi325x-sglang-mtp:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
+glm5-fp8-mi325x-sglang:
+  image: semianalysiswork/sgl-cdna3-mori:v0.5.9-bnxt
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528

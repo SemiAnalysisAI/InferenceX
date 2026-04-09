@@ -14,6 +14,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/985
 
 - config-keys:
+    - glm5-fp8-mi325x-sglang
+  description:
+    - "Add GLM-5 FP8 single-node MI325X SGLang benchmark (TP8)"
+    - "Model: zai-org/GLM-5-FP8 with NSA tilelang backends"
+    - "Image: semianalysiswork/sgl-cdna3-mori:v0.5.9-bnxt"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/985
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
