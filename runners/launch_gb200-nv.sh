@@ -50,10 +50,13 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
+    elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
+        export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+        hf_download_to_shared_cache "Qwen/Qwen3.5-397B-A17B-FP8"
+        export MODEL_PATH="${HF_MODEL_CACHE_ROOT:-/mnt/lustre01/users-public/sa-shared/hf-models}/Qwen__Qwen3.5-397B-A17B-FP8"
     elif [[ $MODEL_PREFIX == "qwen3.5" ]]; then
-        # Pull the model once to shared storage so all Slurm nodes can access it.
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-${PRECISION}"
-        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/hf-models/qwen3.5-397b-a17b"   
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/hf-models/qwen3.5-397b-a17b"
     else
         export MODEL_PATH=$MODEL
         export SRT_SLURM_MODEL_PREFIX="${SRT_SLURM_MODEL_PREFIX:-$MODEL_PREFIX}"
