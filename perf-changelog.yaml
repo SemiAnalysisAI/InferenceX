@@ -1240,7 +1240,9 @@
     - qwen3.5-fp4-mi355x-sglang
   description:
     - "Qwen3.5 fp4 support on SGL"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1005
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006
+
+- config-keys:
     - minimaxm2.5-fp8-b200-vllm
   description:
     - "Update vLLM image from v0.17.0 to v0.19.0 for MiniMax-M2.5 FP8 B200"
