@@ -38,7 +38,6 @@ python3 -m sglang.launch_server \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
-    --ep-size $EP_SIZE \
     --data-parallel-size 1 \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
