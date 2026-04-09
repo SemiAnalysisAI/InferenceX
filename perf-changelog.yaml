@@ -15,10 +15,13 @@
 
 - config-keys:
     - glm5-fp8-mi325x-sglang
+    - glm5-fp8-mi325x-sglang-disagg
+    - qwen3.5-fp8-mi325x-sglang-disagg
   description:
-    - "Add GLM-5 FP8 single-node MI325X SGLang benchmark (TP8)"
-    - "Model: zai-org/GLM-5-FP8 with NSA tilelang backends"
+    - "Add GLM-5 and Qwen3.5 FP8 MI325X benchmarks (single-node + disaggregated)"
+    - "Disagg: TP-only configs + single-node EP8/DP workaround (no MoRI a2a)"
     - "Image: semianalysiswork/sgl-cdna3-mori:v0.5.9-bnxt"
+    - "Ported from MI355X disagg configs (chun-chang/sglang-disagg-qwen3.5)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/985
 
 - config-keys:
