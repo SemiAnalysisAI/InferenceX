@@ -53,7 +53,6 @@ $EP \
 --kv-cache-dtype fp8 \
 --block-size=32 \
 --no-enable-prefix-caching \
---attention-backend "ROCM_AITER_FA" \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
