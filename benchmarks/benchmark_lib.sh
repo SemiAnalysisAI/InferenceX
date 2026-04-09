@@ -688,7 +688,6 @@ run_lm_eval() {
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}" \
-      --limit 100
     local eval_exit=$?
     set +x
     return $eval_exit
