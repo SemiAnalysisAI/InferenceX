@@ -33,23 +33,26 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# following https://huggingface.co/nvidia/GLM-5-NVFP4#usage recipe
-# except using latest nightly at the time of writing
-# since the recommended nightly image in that recipe doesn't exist.
-
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
 --tensor-parallel-size=$TP \
---data-parallel-size 1 --expert-parallel-size 1 \
---tool-call-parser glm47 \
---reasoning-parser glm45 \
+--data-parallel-size 1 --expert-parallel-size $EP_SIZE \
+--disable-radix-cache \
 --quantization modelopt_fp4 \
---cuda-graph-max-bs $CONC --max-running-requests $CONC \
---mem-fraction-static 0.80 \
---chunked-prefill-size 131072 \
+--kv-cache-dtype fp8_e4m3 \
+--nsa-decode-backend trtllm \
+--nsa-prefill-backend trtllm \
+--moe-runner-backend flashinfer_trtllm \
+--enable-flashinfer-allreduce-fusion \
+--cuda-graph-max-bs 256 \
+--max-prefill-tokens 32768 \
+--chunked-prefill-size 32768 \
+--mem-fraction-static 0.9 \
 --stream-interval 30 \
---model-loader-extra-config '{"enable_multithread_load": true}' $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+--scheduler-recv-interval 10 \
+--tokenizer-worker-num 6 \
+--tokenizer-path $MODEL $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
