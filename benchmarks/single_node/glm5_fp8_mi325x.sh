@@ -19,7 +19,13 @@ fi
 python3 -m pip install -U --no-cache-dir \
   "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
 
-hf download "$MODEL"
+# Skip HF hub validation if model is already cached (avoids stale NFS lock issues)
+if [[ -d "${HF_HUB_CACHE}/models--$(echo "$MODEL" | tr '/' '--')" ]]; then
+    echo "Model already cached, skipping download"
+    export HF_HUB_OFFLINE=1
+else
+    hf download "$MODEL"
+fi
 
 # ROCm / SGLang performance tuning for MI325X
 export SGLANG_USE_AITER=1
