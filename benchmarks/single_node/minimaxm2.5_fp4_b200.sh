@@ -6,6 +6,7 @@ check_env_vars \
     MODEL \
     TP \
     EP_SIZE \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -17,43 +18,37 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+nvidia-smi
+
 hf download "$MODEL"
-
-# Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
-if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+
+if [ "${DP_ATTENTION}" = "true" ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
+elif [ "$EP_SIZE" -gt 1 ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
+else
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
-
-if [ "$EP_SIZE" -gt 1 ]; then
-  EP=" --enable-expert-parallel"
-else
-  EP=" "
-fi
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
 vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
-$EP \
---gpu-memory-utilization 0.95 \
+$PARALLEL_ARGS \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
---block-size=32 \
---no-enable-prefix-caching \
---attention-backend "ROCM_AITER_FA" \
+--max-cudagraph-capture-size 2048 \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
