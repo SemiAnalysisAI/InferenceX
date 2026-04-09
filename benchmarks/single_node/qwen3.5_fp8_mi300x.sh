@@ -34,7 +34,7 @@ start_gpu_monitor
 # following AMD Andy linkedin's recipe
 # https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
 python3 -m sglang.launch_server \
-    --attention-backend triton \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
