@@ -22,12 +22,8 @@ export SGLANG_USE_AITER=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
-    export EVAL_MAX_MODEL_LEN=16384
     setup_eval_context
-    # Override
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
 
 # Start GPU monitoring (power, temperature, clocks every second)

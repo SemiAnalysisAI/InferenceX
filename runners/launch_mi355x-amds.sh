@@ -180,11 +180,11 @@ else
     "
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+        #--container-mount-home \
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-        --container-mount-home \
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
