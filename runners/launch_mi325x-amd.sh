@@ -71,7 +71,7 @@ if [[ "$BENCHMARK_SUBDIR" == "multi_node" ]]; then
     # MODEL_NAME: relative path under MODEL_PATH for --model-path inside the container.
     # Auto-resolved from HF hub cache layout so no symlink is needed.
     if [[ -z "${MODEL_NAME:-}" ]]; then
-        _HF_DIR="models--$(echo "${MODEL}" | tr '/' '--')"
+        _HF_DIR="models--$(echo "${MODEL}" | sed 's|/|--|g')"
         _SNAPSHOT=$(ls "${MODEL_PATH}/${_HF_DIR}/snapshots/" 2>/dev/null | sort | tail -1)
         if [[ -n "${_SNAPSHOT}" ]]; then
             export MODEL_NAME="${_HF_DIR}/snapshots/${_SNAPSHOT}"
