@@ -24,6 +24,7 @@ DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-true}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-true}"
 DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+ENABLE_DISAGG_DECODE_PARALLELISM_FLAGS="${ENABLE_DISAGG_DECODE_PARALLELISM_FLAGS:-false}"
 
 # Benchmark Configuration
 BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
@@ -188,13 +189,26 @@ else
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
 fi
 
-# Use Decode configuration to configure different TP/DP size between P and D
+is_truthy() {
+    case "$1" in
+        true|True|TRUE|1|yes|Yes|YES|y|Y|on|On|ON) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Use Decode configuration to configure different TP/DP size between P and D.
+# Newer SGLang images may support these prefill-side flags, but older ROCm
+# images reject them, so keep them opt-in per config/image.
 PREFILL_DECODE_DIFFERENT_TP=""
 if [[ "$PREFILL_ENABLE_DP" != "$DECODE_ENABLE_DP" ]]; then
-    if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
-        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp ${DECODE_TP_SIZE}"
+    if is_truthy "$ENABLE_DISAGG_DECODE_PARALLELISM_FLAGS"; then
+        if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
+            PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp ${DECODE_TP_SIZE}"
+        else
+            PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp 1"
+        fi
     else
-        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp 1"
+        echo "[INFO] Skipping --disaggregation-decode-tp/--disaggregation-decode-dp; set ENABLE_DISAGG_DECODE_PARALLELISM_FLAGS=true to enable them."
     fi
 fi
 
