@@ -258,7 +258,7 @@ glm5-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi300x-sglang:
-  image: docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.9-bnxt
+  image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi300x
