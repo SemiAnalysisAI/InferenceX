@@ -1316,3 +1316,9 @@
     - "Enable FP8 E4M3 KV cache, NSA backends (trtllm), flashinfer allreduce fusion, MoE flashinfer_trtllm runner"
     - "Tune mem-fraction-static to 0.9, chunked-prefill-size to 32768, add tokenizer-worker-num 6"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1011
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Qwen3.5 fp4 support on SGL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006

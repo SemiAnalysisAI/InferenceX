@@ -180,8 +180,9 @@ else
     "
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+        #--container-mount-home \
 
-    if [[ "$FRAMEWORK" == "atom" ]]; then
+    if [[ "$FRAMEWORK" == "atom" ]] || [[ "$FRAMEWORK" == "sglang" ]]; then
         SLRUM_HOME_MOUNT=""
     else
         SLRUM_HOME_MOUNT=" --container-mount-home "
