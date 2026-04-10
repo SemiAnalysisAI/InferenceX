@@ -1322,3 +1322,9 @@
   description:
     - "Qwen3.5 fp4 support on SGL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Upgrade GLM5 FP8 MI355X SGLang image to v0.5.10"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1023
