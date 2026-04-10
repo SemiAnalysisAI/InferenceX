@@ -1322,3 +1322,9 @@
   description:
     - "Qwen3.5 fp4 support on SGL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "TP2 seach space for Qwen3.5 fp4 on SGL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxxx
