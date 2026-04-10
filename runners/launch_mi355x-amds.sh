@@ -188,12 +188,6 @@ else
         SLRUM_HOME_MOUNT=" --container-mount-home "
     fi
 
-    if [[ "$FRAMEWORK" == "atom" ]]; then
-        SLRUM_HOME_MOUNT=""
-    else
-        SLRUM_HOME_MOUNT=" --container-mount-home "
-    fi
-
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
