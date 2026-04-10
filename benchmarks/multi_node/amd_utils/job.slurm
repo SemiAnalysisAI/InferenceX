@@ -289,7 +289,8 @@ export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(echo "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
 
 
