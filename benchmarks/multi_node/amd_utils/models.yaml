@@ -381,3 +381,67 @@ GLM-5-FP8-bnxt:
       max_running_requests: 128
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
+
+# MI325X no-MoRI variants: drop disaggregation-transfer-backend mori entirely
+# Use if router never becomes ready with MoRI KV transfer on bnxt_re
+Qwen3.5-397B-A17B-FP8-no-mori:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter"
+  mtp_flags: ""
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    dp:
+      max_running_requests: 24
+      chunked_prefill_size: 262144
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 4096
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      max_running_requests: 256
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+
+GLM-5-FP8-no-mori:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --tool-call-parser glm47 --reasoning-parser glm45 --model-loader-extra-config '{\"enable_multithread_load\": true, \"num_threads\": 8}'"
+  mtp_flags: ""
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    dp:
+      max_running_requests: 24
+      chunked_prefill_size: 262144
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 4096
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      max_running_requests: 256
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
