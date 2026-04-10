@@ -12,10 +12,11 @@ MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
 
 # GLM-5 requires transformers with glm_moe_dsa model type support
-if [[ "$MODEL_NAME" == *GLM-5* ]]; then
+if [[ "$MODEL_NAME" == *GLM-5* ]] || [[ "$MODEL_YAML_KEY" == *GLM-5* ]]; then
     echo "[setup] Installing transformers for GLM-5 model type support..."
-    pip install -U --no-cache-dir \
-      "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2" 2>&1 | tail -3
+    pip install -U --no-cache-dir --force-reinstall \
+      "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2" 2>&1 | tail -5
+    python3 -c "import transformers; print(f'[setup] transformers {transformers.__version__}, glm_moe_dsa supported: {hasattr(transformers, \"GlmMoeDsaConfig\")}')" 2>&1
 fi
 
 xP="${xP:-1}" #-> Number of Prefill Workers
