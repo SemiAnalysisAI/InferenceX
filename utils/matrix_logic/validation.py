@@ -53,6 +53,7 @@ class Fields(Enum):
 
     # Eval
     RUN_EVAL = 'run-eval'
+    EVAL_ONLY = 'eval-only'
 
 
 """
@@ -89,6 +90,7 @@ class SingleNodeMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
+    eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
 
 
 class WorkerConfig(BaseModel):
