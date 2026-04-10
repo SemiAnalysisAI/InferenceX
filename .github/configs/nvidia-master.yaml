@@ -1801,11 +1801,13 @@ qwen3.5-fp4-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
