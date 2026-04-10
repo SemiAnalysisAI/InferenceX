@@ -1371,7 +1371,6 @@ dsr1-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
-        - "MODEL_NAME=DeepSeek-R1-0528"
       decode:
         num-worker: 1
         tp: 8
@@ -1381,7 +1380,6 @@ dsr1-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
-        - "MODEL_NAME=DeepSeek-R1-0528"
 
   - isl: 8192
     osl: 1024
@@ -1548,7 +1546,6 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
-        - "MODEL_NAME=DeepSeek-R1-0528"
       decode:
         num-worker: 1
         tp: 8
@@ -1558,7 +1555,6 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=3"
         - "MODEL_YAML_KEY=DeepSeek-R1-0528-bnxt"
-        - "MODEL_NAME=DeepSeek-R1-0528"
 
   - isl: 8192
     osl: 1024
@@ -1685,7 +1681,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
         num-worker: 2
         tp: 8
@@ -1695,7 +1690,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
 
     # "Small scale" (1 prefill worker at TP4, 1 decode worker at TP8)
     - spec-decoding: "none"
@@ -1708,7 +1702,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -1718,7 +1711,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
 
     # Single-node EP8/DP workaround: no MoRI a2a, low conc
     - spec-decoding: "none"
@@ -1731,7 +1723,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-bnxt"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -1741,7 +1732,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-bnxt"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "MORI_MAX_DISPATCH_TOKENS_DECODE=160"
         - "MORI_IO_QP_MAX_SEND_WR=4096"
         - "MORI_IO_QP_MAX_CQE=8192"
@@ -1780,7 +1770,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
         num-worker: 2
         tp: 8
@@ -1790,7 +1779,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
 
     # "Small scale" (1 prefill worker at TP4, 1 decode worker at TP8)
     - spec-decoding: "none"
@@ -1803,7 +1791,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -1813,7 +1800,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
 
 glm5-fp8-mi325x-sglang-disagg:
   image: semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt
@@ -1878,7 +1864,6 @@ glm5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
       decode:
         num-worker: 2
         tp: 8
@@ -1888,7 +1873,6 @@ glm5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
 
     # "Small scale" (1 prefill worker at TP4, 1 decode worker at TP8)
     - spec-decoding: "none"
@@ -1901,7 +1885,6 @@ glm5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -1911,7 +1894,6 @@ glm5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
 
     # Single-node EP8/DP workaround: no MoRI a2a, low conc
     - spec-decoding: "none"
@@ -1924,7 +1906,6 @@ glm5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=GLM-5-FP8-bnxt"
-        - "MODEL_NAME=GLM-5-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -1934,7 +1915,6 @@ glm5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-bnxt"
-        - "MODEL_NAME=GLM-5-FP8"
         - "MORI_MAX_DISPATCH_TOKENS_DECODE=160"
         - "MORI_IO_QP_MAX_SEND_WR=4096"
         - "MORI_IO_QP_MAX_CQE=8192"
@@ -1973,7 +1953,6 @@ glm5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
       decode:
         num-worker: 2
         tp: 8
@@ -1983,7 +1962,6 @@ glm5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
 
     # "Small scale" (1 prefill worker at TP4, 1 decode worker at TP8)
     - spec-decoding: "none"
@@ -1996,7 +1974,6 @@ glm5-fp8-mi325x-sglang-disagg:
         additional-settings:
         - "PREFILL_NODES=1"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
       decode:
         num-worker: 1
         tp: 8
@@ -2006,4 +1983,3 @@ glm5-fp8-mi325x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
