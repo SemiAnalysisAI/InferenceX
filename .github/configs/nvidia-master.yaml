@@ -1789,6 +1789,24 @@ qwen3.5-fp8-b200-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
     - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
 
+qwen3.5-fp4-b200-sglang:
+  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
   model: zai-org/GLM-5-FP8
@@ -1819,11 +1837,13 @@ glm5-fp4-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.9-cu130
@@ -3131,14 +3151,43 @@ minimaxm2.5-fp8-b200-vllm:
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 256 }
     - { tp: 4, conc-start: 4, conc-end: 512 }
-    - { tp: 4, ep: 4, conc-start: 16, conc-end: 64 }
+    - { tp: 2, ep: 2, conc-start: 512, conc-end: 512 }
+    - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 256 }
-    - { tp: 4, conc-start: 4, conc-end: 256 }
+    - { tp: 2, conc-start: 4, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 512 }
+
+minimaxm2.5-fp4-b200-vllm:
+  image: vllm/vllm-openai:v0.19.0-cu130
+  model: nvidia/MiniMax-M2.5-NVFP4
+  model-prefix: minimaxm2.5
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 2, conc-start: 4, conc-end: 512 }
+    - { tp: 2, ep: 2, conc-start: 128, conc-end: 256 }
+    - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 512 }
+    - { tp: 4, ep: 4, conc-start: 32, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 1, conc-start: 4, conc-end: 32 }
+    - { tp: 1, conc-start: 256, conc-end: 512 }
+    - { tp: 2, conc-start: 4, conc-end: 512 }
+    - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 512 }
+    - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.18.0
