@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -25,24 +26,42 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 EXTRA_VLLM_ARGS=""
-if [ "$TP" -ge 4 ]; then
-    # AITER CK fused MoE kernels lack compiled tiles for N=intermediate_size/TP
-    # when TP>=4 (TP=4, N=384). Disable AITER MoE to fall back to triton, but keep
-    # AITER attention. See: https://github.com/vllm-project/vllm/issues/35637
-    export VLLM_ROCM_USE_AITER_MOE=0
-    EXTRA_VLLM_ARGS="--attention-backend ROCM_AITER_UNIFIED_ATTN"
-    pip install amd-quark 2>/dev/null || true
-fi
+# if [ "$TP" -ge 4 ]; then
+#     # AITER CK fused MoE kernels lack compiled tiles for N=intermediate_size/TP
+#     # when TP>=4 (TP=4, N=384). Disable AITER MoE to fall back to triton, but keep
+#     # AITER attention. See: https://github.com/vllm-project/vllm/issues/35637
+#     export VLLM_ROCM_USE_AITER_MOE=0
+#     EXTRA_VLLM_ARGS="--attention-backend ROCM_AITER_UNIFIED_ATTN"
+#     pip install amd-quark 2>/dev/null || true
+# fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
 --block-size=32 \
+--no-enable-prefix-caching \
+--attention-backend "ROCM_AITER_FA" \
 --trust-remote-code \
 $EXTRA_VLLM_ARGS > $SERVER_LOG 2>&1 &
 
@@ -69,4 +88,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x
