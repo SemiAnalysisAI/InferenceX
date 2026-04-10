@@ -9,7 +9,7 @@
 #
 # This image supports:
 #   - AMD Instinct MI325X (gfx942 CDNA3) — also works on MI300X (same arch)
-#   - SGLang v0.5.10 with Qwen3.5 MoE, GLM-5 MoE, DeepSeek-R1 model support
+#   - SGLang (latest main) with Qwen3.5 MoE, GLM-5 MoE, DeepSeek-R1 model support
 #   - MoRI disaggregated inference with Broadcom Thor 2 IBGDA/RoCEv2
 #   - AITER optimized kernels, TileLang NSA backends
 #
@@ -18,16 +18,19 @@
 #   bash build-sglang-bnxt-mi325x.sh
 #
 # The image is pushed to:
-#   docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori
+#   docker.io/semianalysiswork/sgl-bnxt-cdna3:latest-bnxt-mori
+#
+# Override defaults with env vars:
+#   SGL_BRANCH=v0.5.10 IMAGE_TAG=semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori bash build-sglang-bnxt-mi325x.sh
 #
 # Build reference: https://github.com/JordanNanos/sglang/tree/main/docker
 
 set -euo pipefail
 
 # ---------- Configuration ----------
-SGL_BRANCH="v0.5.10"
+SGL_BRANCH="${SGL_BRANCH:-main}"
 GPU_ARCH="gfx942"
-IMAGE_TAG="semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori"
+IMAGE_TAG="${IMAGE_TAG:-semianalysiswork/sgl-bnxt-cdna3:latest-bnxt-mori}"
 DOCKERFILE_REPO="https://github.com/JordanNanos/sglang.git"
 DOCKERFILE_REF="main"
 

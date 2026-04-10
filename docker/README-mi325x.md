@@ -1,8 +1,8 @@
 # MI325X Container Image Build
 
-## Image: `semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori`
+## Image: `semianalysiswork/sgl-bnxt-cdna3:latest-bnxt-mori`
 
-SGLang v0.5.10 container for AMD Instinct MI325X/MI300X (gfx942 CDNA3) with:
+SGLang (latest main) container for AMD Instinct MI325X/MI300X (gfx942 CDNA3) with:
 - Broadcom Thor 2 RDMA support (bnxt_rocelib for RoCEv2 IBGDA)
 - MoRI disaggregated inference (KV cache transfer)
 - Qwen3.5 MoE (`qwen3_5_moe`), GLM-5 (`glm_moe_dsa`), DeepSeek-R1 model support
@@ -33,8 +33,10 @@ sbatch build-sglang-bnxt-mi325x.sbatch
 The script:
 1. Clones [JordanNanos/sglang](https://github.com/JordanNanos/sglang) which contains the ROCm Dockerfile with bnxt patches
 2. Copies the BCM driver into the build context
-3. Builds with `SGL_BRANCH=v0.5.10`, `GPU_ARCH=gfx942`, `ENABLE_MORI=1`, `NIC_BACKEND=ibgda`
-4. Pushes to `docker.io/semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori`
+3. Builds with `SGL_BRANCH=main` (latest, supports all model types), `GPU_ARCH=gfx942`, `ENABLE_MORI=1`, `NIC_BACKEND=ibgda`
+4. Pushes to `docker.io/semianalysiswork/sgl-bnxt-cdna3:latest-bnxt-mori`
+
+Override defaults: `SGL_BRANCH=v0.5.10 IMAGE_TAG=semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt-mori bash build-sglang-bnxt-mi325x.sh`
 
 ### What the Dockerfile builds
 
