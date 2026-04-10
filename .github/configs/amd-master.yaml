@@ -1252,7 +1252,7 @@ dsr1-fp4-mi355x-sglang-disagg-exp:
     # non-MTP configurations
     # 4*DEP4 + 1*DEP8
     - spec-decoding: "none"
-      conc-list: [ 1024, 2048, 4096 ]
+      conc-list: [ 512, 1024, 2048 ]
       prefill:
         num-worker: 4
         tp: 4
@@ -1310,7 +1310,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-exp:
     # MTP configurations
     # 4*DEP4 + 1*DEP8
     - spec-decoding: "mtp"
-      conc-list: [ 1024, 2048, 4096 ]
+      conc-list: [ 512, 1024, 2048 ]
       prefill:
         num-worker: 4
         tp: 4
