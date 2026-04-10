@@ -79,6 +79,17 @@ docker build \
     -f "${BUILD_CONTEXT}/rocm.Dockerfile" \
     "${BUILD_CONTEXT}/"
 
+# ---------- Patch transformers for GLM-5/Qwen3.5 model type support ----------
+PATCH_DOCKERFILE="$(dirname "$0")/patch-transformers.Dockerfile"
+if [[ -f "${PATCH_DOCKERFILE}" ]]; then
+    echo "[build] Patching transformers for glm_moe_dsa/qwen3_5_moe support"
+    docker build \
+        --build-arg BASE_IMAGE="${IMAGE_TAG}" \
+        -t "${IMAGE_TAG}" \
+        -f "${PATCH_DOCKERFILE}" \
+        "$(dirname "$0")/"
+fi
+
 # ---------- Push ----------
 echo "[build] Pushing ${IMAGE_TAG}"
 docker push "${IMAGE_TAG}"
