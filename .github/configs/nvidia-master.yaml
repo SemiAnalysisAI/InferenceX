@@ -1912,12 +1912,12 @@ kimik2.5-fp4-b200-vllm:
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.9-cu130
