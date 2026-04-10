@@ -28,9 +28,9 @@
 set -euo pipefail
 
 # ---------- Configuration ----------
-SGL_BRANCH="${SGL_BRANCH:-main}"
+SGL_BRANCH="${SGL_BRANCH:-v0.5.10}"
 GPU_ARCH="gfx942"
-IMAGE_TAG="${IMAGE_TAG:-semianalysiswork/sgl-bnxt-cdna3:latest-bnxt-mori}"
+IMAGE_TAG="${IMAGE_TAG:-semianalysiswork/sgl-bnxt-cdna3:v0.5.10-bnxt}"
 DOCKERFILE_REPO="https://github.com/JordanNanos/sglang.git"
 DOCKERFILE_REF="main"
 
