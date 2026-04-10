@@ -1646,8 +1646,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: false
     #     additional-settings:
     #     - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #   decode:
     #     num-worker: 1
     #     tp: 8
@@ -1655,8 +1653,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # # "Middle of curve" (1 prefill worker at TP8, 2 decode workers at DEP8)
@@ -1669,8 +1665,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: false
     #     additional-settings:
     #     - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #   decode:
     #     num-worker: 2
     #     tp: 8
@@ -1678,8 +1672,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
@@ -1701,8 +1693,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
@@ -1726,8 +1716,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
@@ -1742,8 +1730,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-bnxt"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
       decode:
@@ -1753,8 +1739,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-bnxt"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
@@ -1776,8 +1760,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "PREFILL_NODES=2"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #   decode:
     #     num-worker: 1
     #     tp: 8
@@ -1785,8 +1767,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
@@ -1808,8 +1788,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
@@ -1833,8 +1811,6 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
-        - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
         - "MODEL_NAME=Qwen3.5-397B-A17B-FP8"
@@ -1863,8 +1839,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: false
     #     additional-settings:
     #     - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #   decode:
     #     num-worker: 1
     #     tp: 8
@@ -1872,8 +1846,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # # "Middle of curve" (1 prefill worker at TP8, 2 decode workers at DEP8)
@@ -1886,8 +1858,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: false
     #     additional-settings:
     #     - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #   decode:
     #     num-worker: 2
     #     tp: 8
@@ -1895,8 +1865,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
@@ -1918,8 +1886,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
         - "MODEL_NAME=GLM-5-FP8"
@@ -1943,8 +1909,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
         - "MODEL_NAME=GLM-5-FP8"
@@ -1959,8 +1923,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "PREFILL_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "MODEL_YAML_KEY=GLM-5-FP8-bnxt"
         - "MODEL_NAME=GLM-5-FP8"
       decode:
@@ -1970,8 +1932,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: true
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-bnxt"
         - "MODEL_NAME=GLM-5-FP8"
@@ -1993,8 +1953,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "PREFILL_NODES=2"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #   decode:
     #     num-worker: 1
     #     tp: 8
@@ -2002,8 +1960,6 @@ glm5-fp8-mi325x-sglang-disagg:
     #     dp-attn: true
     #     additional-settings:
     #     - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
     #     - "DECODE_MTP_SIZE=0"
 
     # "Bottom of curve" (1 prefill worker at TP8, 2 decode workers at TP8)
@@ -2025,8 +1981,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=2"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
         - "MODEL_NAME=GLM-5-FP8"
@@ -2050,8 +2004,6 @@ glm5-fp8-mi325x-sglang-disagg:
         dp-attn: false
         additional-settings:
         - "DECODE_NODES=1"
-        - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
-        - "MODEL_NAME=GLM-5-FP8"
         - "DECODE_MTP_SIZE=0"
         - "MODEL_YAML_KEY=GLM-5-FP8-no-mori"
         - "MODEL_NAME=GLM-5-FP8"
