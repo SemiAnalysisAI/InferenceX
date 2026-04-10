@@ -254,9 +254,29 @@ qwen3.5-fp8-mi355x-sglang-disagg:
         - "DECODE_NODES=2"
         - "DECODE_MTP_SIZE=0"
 
-    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
+    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8) - high conc
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8) - low conc
+    - spec-decoding: "none"
+      conc-list: [ 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
@@ -316,9 +336,29 @@ qwen3.5-fp8-mi355x-sglang-disagg:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
-    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
+    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8) - high conc
     - spec-decoding: "none"
-      conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+      conc-list: [ 256, 128, 64, 32 ]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "PREFILL_NODES=1"
+
+      decode:
+        num-worker: 2
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "DECODE_NODES=2"
+        - "DECODE_MTP_SIZE=0"
+
+    # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8) - low conc
+    - spec-decoding: "none"
+      conc-list: [ 16, 8, 4 ]
       prefill:
         num-worker: 1
         tp: 8
