@@ -193,7 +193,11 @@ if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} --tokenizer-worker-num 8 --stream-interval 3"
+DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} --tokenizer-worker-num 8"
+if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS  --stream-interval 3"
+fi
+
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
