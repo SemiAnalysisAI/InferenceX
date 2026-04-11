@@ -166,7 +166,7 @@ Qwen3.5-397B-A17B-FP8:
   mtp_flags: ""
   dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
-    mem_fraction_static: 0.65
+    mem_fraction_static: 0.6
     disable_radix_cache: true
     dp:
       max_running_requests: 24
@@ -177,7 +177,7 @@ Qwen3.5-397B-A17B-FP8:
       chunked_prefill_size: 65536
       cuda_graph_bs_range: "1-8"
   decode:
-    mem_fraction_static: 0.65
+    mem_fraction_static: 0.5
     prefill_round_robin_balance: true
     dp:
       max_running_requests: 4096
@@ -188,9 +188,9 @@ Qwen3.5-397B-A17B-FP8:
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-256"
     no_dp:
-      max_running_requests: 8
-      chunked_prefill_size: 65536
-      cuda_graph_bs_range: "1-8"
+      max_running_requests: 4
+      chunked_prefill_size: 32768
+      cuda_graph_bs_range: "1-4"
 
 GLM-5-FP8:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --disaggregation-transfer-backend mori --tool-call-parser glm47 --reasoning-parser glm45 --model-loader-extra-config '{\\\"enable_multithread_load\\\": true, \\\"num_threads\\\": 8}' --disable-cuda-graph"
@@ -208,7 +208,7 @@ GLM-5-FP8:
       chunked_prefill_size: 65536
       cuda_graph_bs_range: "1-8"
   decode:
-    mem_fraction_static: 0.65
+    mem_fraction_static: 0.5
     prefill_round_robin_balance: true
     dp:
       max_running_requests: 4096
@@ -219,8 +219,8 @@ GLM-5-FP8:
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-256"
     no_dp:
-      max_running_requests: 8
-      chunked_prefill_size: 65536
+      max_running_requests: 4
+      chunked_prefill_size: 32768
       cuda_graph_bs_range: "1-8"
 
 DeepSeek-R1-0528-MXFP4-Preview:
