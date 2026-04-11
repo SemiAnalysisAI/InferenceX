@@ -37,7 +37,12 @@ RUN echo "/sgl-workspace/mori/python" > /opt/venv/lib/python3.10/site-packages/a
 
 ENV PYTHONPATH="/sgl-workspace/mori/python:${PYTHONPATH}"
 
-# 5. Install transformers with GLM-5 (glm_moe_dsa) model type support
+# 5. Fix ROCm SMI library version mismatch
+#    MoRI (built against ROCm 7.0) expects librocm_smi64.so.7 but
+#    ROCm 7.2 ships librocm_smi64.so.1. Add compat symlink.
+RUN ln -sf /opt/rocm-7.2.0/lib/librocm_smi64.so.1 /opt/rocm-7.2.0/lib/librocm_smi64.so.7 && ldconfig
+
+# 6. Install transformers with GLM-5 (glm_moe_dsa) model type support
 RUN pip install --no-cache-dir \
     "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
 
