@@ -24,6 +24,7 @@ PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 
+sed -i '/^    for _, module in model\.named_modules():/i\    del params_dict\n' /app/ATOM/atom/model_loader/loader.py
 # Calculate max-model-len based on ISL and OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     CALCULATED_MAX_MODEL_LEN=""
