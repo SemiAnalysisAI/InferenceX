@@ -31,6 +31,16 @@ def _apply_patch():
                     os.environ.get("PROFILE_STOP_STEP", "50")))
     output_dir = os.environ.get("SGLANG_TORCH_PROFILER_DIR", "/tmp/trtllm_profiles")
 
+    # srtctl sets SGLANG_TORCH_PROFILER_DIR to the host path, but inside
+    # the container the logs dir is mounted at /logs. Translate host path
+    # so traces land on the mounted volume and survive container exit.
+    if "/logs/" in output_dir and not os.path.isdir("/logs"):
+        pass  # /logs mount doesn't exist, keep original path
+    elif "/logs/" in output_dir:
+        # Extract the part after .../logs/ and put it under /logs/
+        suffix = output_dir.split("/logs/", 1)[-1]
+        output_dir = f"/logs/{suffix}"
+
     import torch.profiler
     from dynamo.trtllm.request_handlers.handler_base import HandlerBase
 
