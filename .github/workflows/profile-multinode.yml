@@ -106,7 +106,8 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise SystemExit(1)
 
-          filt = data
+          # DEBUG: limit to first job only for testing
+          filt = data[:1]
           out = json.dumps(filt)
           print(out)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

@@ -38,7 +38,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+    # TODO: Revert to ishandhanani/srt-slurm after nsys TRT-LLM fix is merged upstream
+    git clone https://github.com/hbarclay/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q1-2026
 
