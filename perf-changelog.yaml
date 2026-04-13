@@ -1,4 +1,14 @@
 - config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Update search-space: tp8 conc=4, tp4 conc=4-256 (both seq-lens); remove explicit ep from search-space"
+    - "Update server launch args: add --enable-symm-mem, --disable-radix-cache, --tokenizer-path"
+    - "Reduce chunked-prefill-size/max-prefill-tokens from 32768 to 16384, mem-fraction-static from 0.82 to 0.8"
+    - "Set max-running-requests to $CONC, stream-interval to 50, fixed scheduler-recv-interval to 10"
+    - "Remove env vars (NCCL_NVLS_ENABLE, SGL_ENABLE_JIT_DEEPGEMM, SGLANG_ENABLE_FLASHINFER_GEMM) and conditional flashinfer-allreduce-fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
