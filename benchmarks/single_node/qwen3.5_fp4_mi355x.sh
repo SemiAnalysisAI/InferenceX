@@ -9,57 +9,42 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    EP_SIZE
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-nvidia-smi
-
 hf download "$MODEL"
+
+export SGLANG_USE_AITER=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
 
-echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
-
-EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---trust-remote-code \
+python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
+--host=0.0.0.0 --port=$PORT \
 --tensor-parallel-size=$TP \
---data-parallel-size 1 --expert-parallel-size $EP_SIZE \
+--attention-backend aiter \
+--mem-fraction-static $MEM_FRAC_STATIC \
+--model-loader-extra-config '{"enable_multithread_load": true}' \
+--watchdog-timeout 1200  \
 --disable-radix-cache \
---quantization modelopt_fp4 \
---kv-cache-dtype fp8_e4m3 \
---nsa-decode-backend trtllm \
---nsa-prefill-backend trtllm \
---moe-runner-backend flashinfer_trtllm \
---enable-flashinfer-allreduce-fusion \
---cuda-graph-max-bs 256 \
---max-prefill-tokens 32768 \
---chunked-prefill-size 32768 \
---mem-fraction-static 0.9 \
---stream-interval 30 \
---scheduler-recv-interval 10 \
---tokenizer-worker-num 6 \
---tokenizer-path $MODEL $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-pip install -q datasets pandas
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID" --sleep-interval 60
 
 run_benchmark_serving \
     --model "$MODEL" \

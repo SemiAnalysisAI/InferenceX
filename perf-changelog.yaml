@@ -1309,8 +1309,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
 
 - config-keys:
+    - glm5-fp4-b200-sglang
+  description:
+    - "Update GLM-5 NVFP4 B200 SGLang benchmark script with optimized launch parameters"
+    - "Add TP4 search space with higher concurrency (128-256) for 1k1k and 8k1k configs"
+    - "Enable FP8 E4M3 KV cache, NSA backends (trtllm), flashinfer allreduce fusion, MoE flashinfer_trtllm runner"
+    - "Tune mem-fraction-static to 0.9, chunked-prefill-size to 32768, add tokenizer-worker-num 6"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1011
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Qwen3.5 fp4 support on SGL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006
+  
+- config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
-
