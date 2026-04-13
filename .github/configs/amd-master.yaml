@@ -113,7 +113,7 @@ dsr1-fp8-mi325x-sglang-mtp:
     - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 glm5-fp8-mi325x-sglang:
-  image: semianalysiswork/sgl-bnxt-cdna3:amd-disagg-bnxt-lite
+  image: semianalysiswork/sgl-bnxt-cdna3:amd-main-bnxt
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi325x
@@ -1619,7 +1619,7 @@ dsr1-fp8-mi325x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=3"
 
 qwen3.5-fp8-mi325x-sglang-disagg:
-  image: semianalysiswork/sgl-bnxt-cdna3:amd-disagg-bnxt-lite
+  image: semianalysiswork/sgl-bnxt-cdna3:amd-main-bnxt
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi325x-disagg
@@ -1802,7 +1802,7 @@ qwen3.5-fp8-mi325x-sglang-disagg:
         - "MODEL_YAML_KEY=Qwen3.5-397B-A17B-FP8-no-mori"
 
 glm5-fp8-mi325x-sglang-disagg:
-  image: semianalysiswork/sgl-bnxt-cdna3:amd-disagg-bnxt-lite
+  image: semianalysiswork/sgl-bnxt-cdna3:amd-main-bnxt
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi325x-disagg
