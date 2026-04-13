@@ -368,8 +368,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         PREFILL_CMD="$PREFILL_CMD --dist-init-addr ${PREFILL_HEADNODE_URLS[0]} --nnodes ${PREFILL_NODES_PER_WORKER} --node-rank 0"
@@ -498,8 +497,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((NODE_RANK % PREFILL_NODES_PER_WORKER))
@@ -561,8 +559,7 @@ else
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${DECODE_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${DECODE_SERVER_CONFIG} "
 
     if [ "$DECODE_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((RANK % DECODE_NODES_PER_WORKER))
