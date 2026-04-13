@@ -25,12 +25,14 @@ on:
         type: string
         default: '64'
       profile-type:
-        description: "Profiler type"
+        description: "Profiler type (auto = nsys for TRT-LLM, torch for SGLang)"
         required: false
         type: choice
         options:
+          - auto
+          - nsys
           - torch
-        default: 'torch'
+        default: 'auto'
       profile-start-step:
         description: "Profiling start step (counts generate_locally calls, not engine iterations)"
         required: false
@@ -60,7 +62,7 @@ env:
   TEST_CONFIG_KEY: 'dsr1-fp4-b200-dynamo-trt'
   TEST_CONFIG_FILE: '.github/configs/nvidia-master.yaml'
   TEST_CONC: '6'
-  TEST_PROFILE_TYPE: 'torch'
+  TEST_PROFILE_TYPE: 'auto'
   TEST_PROFILE_START: '2'
   TEST_PROFILE_STOP: '8'
 
@@ -104,8 +106,7 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise SystemExit(1)
 
-          # DEBUG: limit to first job only for testing
-          filt = data[:1]
+          filt = data
           out = json.dumps(filt)
           print(out)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

@@ -412,7 +412,12 @@ inject_srtctl_profiling() {
         echo "[profile] CONFIG_FILE not set or not found, skipping srtctl profiling injection"
         return 0
     fi
+    # TRT-LLM uses nsys (torch profiler can't see C++ runtime kernels)
+    # SGLang uses torch profiler natively via /start_profile API
     local prof_type="torch"
+    if [[ "${FRAMEWORK:-}" == *"trt"* ]]; then
+        prof_type="nsys"
+    fi
     local prof_start="${PROFILE_INJECT_START:-5}"
     local prof_stop="${PROFILE_INJECT_STOP:-50}"
     local prof_isl="${ISL:-4096}"
