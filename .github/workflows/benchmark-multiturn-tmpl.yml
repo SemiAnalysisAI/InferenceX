@@ -124,7 +124,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
           submodules: true
+          lfs: true
 
+      - name: Pull LFS files in submodules
+        run: |
+          git -C experimental/multiturn/vllm_benchmark/kv-cache-tester lfs pull || true
 
       - name: Launch job script
         env:

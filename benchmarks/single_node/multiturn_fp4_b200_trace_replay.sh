@@ -10,6 +10,7 @@ set -x
 #   MODEL, TP, USERS, OFFLOAD_MODE, TOTAL_CPU_DRAM_GB, RESULT_DIR
 # Optional:
 #   PORT (default 8888), REQUEST_TIMEOUT (default 3600)
+#   TRACE_DIR (default: kv-cache-tester/traces_neon)
 #   DURATION (default 1800, benchmark duration in seconds)
 #   MAX_DELAY (default 60, max gap between requests in seconds)
 #   ADVANCE_MIN (default 0.0, min trace advancement fraction)
@@ -44,7 +45,7 @@ nvidia-smi
 # ---- Paths -----------------------------------------------------------------
 MULTITURN_DIR=/workspace/experimental/multiturn/vllm_benchmark
 KV_CACHE_TESTER_DIR="$MULTITURN_DIR/kv-cache-tester"
-TRACE_DIR="$KV_CACHE_TESTER_DIR/traces"
+TRACE_DIR="${TRACE_DIR:-$KV_CACHE_TESTER_DIR/traces_neon}"
 
 pip install --quiet urllib3 requests 2>/dev/null || true
 
