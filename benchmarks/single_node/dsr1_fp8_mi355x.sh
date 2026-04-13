@@ -27,6 +27,14 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 python3 -m sglang.launch_server \
     --attention-backend aiter \
     --model-path $MODEL \
@@ -38,7 +46,8 @@ python3 -m sglang.launch_server \
     --mem-fraction-static 0.8 --disable-radix-cache \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
-    --cuda-graph-max-bs $CONC > $SERVER_LOG 2>&1 &
+    --kv-cache-dtype fp8_e4m3 \
+    --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -59,7 +68,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

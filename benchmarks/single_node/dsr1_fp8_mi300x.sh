@@ -36,6 +36,14 @@ export SGLANG_AITER_MLA_PERSIST=1
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+EVAL_CONTEXT_ARGS=""
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
@@ -47,7 +55,7 @@ python3 -m sglang.launch_server \
 --max-prefill-tokens=131072 \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
---disable-radix-cache > $SERVER_LOG 2>&1 &
+--disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -68,7 +76,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

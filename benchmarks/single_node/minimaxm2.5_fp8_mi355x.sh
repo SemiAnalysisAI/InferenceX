@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -24,17 +25,35 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
+
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
+fi
+
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
+$EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
 --block-size=32 \
---disable-log-requests \
+--no-enable-prefix-caching \
+--attention-backend "ROCM_AITER_FA" \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -57,7 +76,10 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --concurrent-requests $CONC
+    run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
+
+# Stop GPU monitoring
+stop_gpu_monitor
 set +x

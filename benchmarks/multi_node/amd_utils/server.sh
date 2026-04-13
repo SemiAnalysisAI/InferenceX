@@ -179,15 +179,12 @@ fi
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
     decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
-    decode_chunked_prefill_size=$DECODE_CHUNKED_PREFILL_SIZE_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
-    decode_chunked_prefill_size=$DECODE_CHUNKED_PREFILL_SIZE_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
-    decode_chunked_prefill_size=$DECODE_CHUNKED_PREFILL_SIZE_NO_DP
 fi
 
 # Use Decode configuration to configure different TP/DP size between P and D
@@ -206,7 +203,7 @@ if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --chunked-prefill-size ${decode_chunked_prefill_size} --cuda-graph-bs ${decode_cuda_graph_bs[*]}"
+DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]}"
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
@@ -220,8 +217,9 @@ fi
 # =============================================================================
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 
-PREFILL_NODES_PER_WORKER=$((PREFILL_TP_SIZE / GPUS_PER_NODE))
-DECODE_NODES_PER_WORKER=$((DECODE_TP_SIZE / GPUS_PER_NODE))
+# Ceiling division by GPUS_PER_NODE for nodes-per-worker
+PREFILL_NODES_PER_WORKER=$(((PREFILL_TP_SIZE + 7) / GPUS_PER_NODE))
+DECODE_NODES_PER_WORKER=$(((DECODE_TP_SIZE + 7) / GPUS_PER_NODE))
 NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 
 # Build prefill arguments dynamically based on xP
