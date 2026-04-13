@@ -32,15 +32,15 @@ on:
           - torch
         default: 'torch'
       profile-start-step:
-        description: "Profiling start step"
+        description: "Profiling start step (counts generate_locally calls, not engine iterations)"
         required: false
         type: string
-        default: '5'
+        default: '2'
       profile-stop-step:
-        description: "Profiling stop step"
+        description: "Profiling stop step (counts generate_locally calls, not engine iterations)"
         required: false
         type: string
-        default: '50'
+        default: '8'
       ref:
         description: "Ref (branch/sha) to checkout"
         required: false
@@ -61,8 +61,8 @@ env:
   TEST_CONFIG_FILE: '.github/configs/nvidia-master.yaml'
   TEST_CONC: '6'
   TEST_PROFILE_TYPE: 'torch'
-  TEST_PROFILE_START: '5'
-  TEST_PROFILE_STOP: '50'
+  TEST_PROFILE_START: '2'
+  TEST_PROFILE_STOP: '8'
 
 jobs:
   get-jobs:
