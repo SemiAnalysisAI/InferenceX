@@ -14,29 +14,40 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 # --------------------------------
 
 # Reconfigure vLLM scheduler limits on a running endpoint. This requires a vLLM
-# build that exposes POST /pause, POST /reconfigure_scheduler, and POST /resume.
+# build that exposes POST /pause, POST /reconfigure, and POST /resume.
 # The feature is opt-in via VLLM_DYNAMIC_RECONFIGURE=1 and is intended for
 # single-server sweeps where model, parallelism, and cache layout stay fixed.
+#
+# Supported env vars (set before calling):
+#   VLLM_MAX_NUM_BATCHED_TOKENS  -- max tokens scheduled per step
+#   VLLM_MAX_NUM_SEQS            -- max concurrent sequences
 reconfigure_vllm_scheduler() {
     local port="$1"
     local base_url="${VLLM_DYNAMIC_RECONFIGURE_BASE_URL:-http://0.0.0.0:$port}"
-    local params=()
 
-    [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]] && \
-        params+=(--data-urlencode "max_num_batched_tokens=$VLLM_MAX_NUM_BATCHED_TOKENS")
-    [[ -n "${VLLM_MAX_NUM_SEQS:-}" ]] && \
-        params+=(--data-urlencode "max_num_seqs=$VLLM_MAX_NUM_SEQS")
-    [[ -n "${VLLM_MAX_NUM_SCHEDULED_TOKENS:-}" ]] && \
-        params+=(--data-urlencode "max_num_scheduled_tokens=$VLLM_MAX_NUM_SCHEDULED_TOKENS")
+    # Build JSON body from set env vars
+    local json="{"
+    local sep=""
+    if [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
+        json+="${sep}\"max_num_batched_tokens\":${VLLM_MAX_NUM_BATCHED_TOKENS}"
+        sep=","
+    fi
+    if [[ -n "${VLLM_MAX_NUM_SEQS:-}" ]]; then
+        json+="${sep}\"max_num_seqs\":${VLLM_MAX_NUM_SEQS}"
+        sep=","
+    fi
+    json+="}"
 
-    if [[ ${#params[@]} -eq 0 ]]; then
+    if [[ "$json" == "{}" ]]; then
         echo "VLLM_DYNAMIC_RECONFIGURE=1 but no VLLM scheduler parameters were set"
         return 1
     fi
 
-    echo "Reconfiguring vLLM scheduler at $base_url"
-    curl -fsS -X POST "$base_url/pause?mode=keep"
-    curl -fsS -X POST -G "$base_url/reconfigure_scheduler" "${params[@]}"
+    echo "Reconfiguring vLLM scheduler at $base_url: $json"
+    curl -fsS -X POST "$base_url/pause?mode=abort&clear_cache=true"
+    curl -fsS -X POST "$base_url/reconfigure" \
+        -H "Content-Type: application/json" \
+        -d "$json"
     curl -fsS -X POST "$base_url/resume"
 }
 

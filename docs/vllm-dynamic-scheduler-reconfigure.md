@@ -10,81 +10,81 @@ admission limits.
 
 This feature requires a vLLM build that exposes these HTTP endpoints:
 
-- `POST /pause?mode=keep`
-- `POST /reconfigure_scheduler`
+- `POST /pause?mode=abort&clear_cache=true`
+- `POST /reconfigure` (JSON body)
 - `POST /resume`
 
-The stock vLLM releases do not provide `/reconfigure_scheduler` unless the
-runtime scheduler reconfiguration patch has been included in the installed vLLM
-package or container image.
+The stock vLLM releases do not provide `/reconfigure`. You need either:
+
+1. A Docker image built from the vLLM branch containing the reconfigure API
+   (see [Building the patched image](#building-the-patched-image) below).
+2. A runtime patch applied at container start from a mounted vLLM checkout.
+
+## Reconfigurable Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `max_num_batched_tokens` | int > 0 | Max tokens scheduled per step |
+| `max_num_seqs` | int > 0 | Max concurrent sequences |
+| `enable_chunked_prefill` | bool | Toggle chunked prefill |
+| `long_prefill_token_threshold` | int >= 0 | Cap prefill chunk size (0 = no cap) |
+
+Everything else (TP, EP, GPU memory, KV cache dtype, block size, CUDA graphs,
+compilation config, etc.) is baked in at startup and cannot be changed.
 
 ## Enabling
 
-Set `VLLM_DYNAMIC_RECONFIGURE=1` before calling `run_benchmark_serving` with
-`--backend vllm`.
-
-Supported environment variables:
+Set `VLLM_DYNAMIC_RECONFIGURE=1` and the desired parameter env vars before
+calling `run_benchmark_serving` with `--backend vllm`:
 
 ```bash
 export VLLM_DYNAMIC_RECONFIGURE=1
 export VLLM_MAX_NUM_BATCHED_TOKENS=32768
 export VLLM_MAX_NUM_SEQS=128
-export VLLM_MAX_NUM_SCHEDULED_TOKENS=32768
 ```
 
-`run_benchmark_serving` calls the reconfiguration helper before each benchmark
-run. The helper pauses vLLM, applies the requested scheduler limits, and resumes
-serving.
+`run_benchmark_serving` calls `reconfigure_vllm_scheduler` before each benchmark
+run. The helper pauses vLLM, sends a JSON body to `/reconfigure`, and resumes.
 
-## Example Sweep
+## A/B Test Script
 
-Launch vLLM once with the largest static capacity needed by the sweep, then vary
-scheduler limits between benchmark cases:
+`benchmarks/test_reconfigure_sweep.sh` runs back-to-back comparisons:
+
+- **Phase A (baseline):** N cold starts, one per parameter combo
+- **Phase B (reconfigure):** 1 cold start, N reconfigure cycles
 
 ```bash
-vllm serve "$MODEL" \
-  --host 0.0.0.0 \
-  --port "$PORT" \
-  --tensor-parallel-size "$TP" \
-  --max-num-seqs 256 \
-  --max-num-batched-tokens 32768 \
-  > "$SERVER_LOG" 2>&1 &
-
-SERVER_PID=$!
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-for conc in 1 2 4 8 16 32 64 128; do
-    export VLLM_DYNAMIC_RECONFIGURE=1
-    export VLLM_MAX_NUM_SEQS="$conc"
-    export VLLM_MAX_NUM_BATCHED_TOKENS=32768
-    export VLLM_MAX_NUM_SCHEDULED_TOKENS=32768
-
-    run_benchmark_serving \
-      --model "$MODEL" \
-      --port "$PORT" \
-      --backend vllm \
-      --input-len "$ISL" \
-      --output-len "$OSL" \
-      --random-range-ratio "$RANDOM_RANGE_RATIO" \
-      --num-prompts "$((conc * 10))" \
-      --max-concurrency "$conc" \
-      --result-filename "${RESULT_FILENAME}_conc${conc}" \
-      --result-dir /workspace/ \
-      --server-pid "$SERVER_PID"
-done
+export MODEL=openai/gpt-oss-120b TP=8 CONC=32 ISL=1024 OSL=1024
+bash benchmarks/test_reconfigure_sweep.sh
 ```
 
-## Distribution of the vLLM Patch
+## Building the Patched Image
 
-Cluster runs must use a vLLM package or image that includes the dynamic scheduler
-API. Practical options are:
+The changes are pure Python -- no C++/CUDA recompilation needed. Overlay them
+onto the stock vLLM image:
 
-1. Build a custom benchmark container from the vLLM branch that contains the API.
-2. Install the patched vLLM wheel in the InferenceX job before starting `vllm serve`.
-3. Mount a patched vLLM checkout and install it editable in the benchmark image.
+```bash
+# From the vllm repo root (on the branch with the reconfigure patch)
+docker build -f docker/Dockerfile.reconfigure-overlay \
+  -t ghcr.io/semianalysisai/vllm-reconfigure:test1 .
 
-For reproducible cluster results, prefer a custom container or pinned wheel and
-record the vLLM commit SHA in the benchmark metadata.
+docker push ghcr.io/semianalysisai/vllm-reconfigure:test1
+```
+
+Or patch at runtime by mounting the vLLM checkout and running the overlay script
+at the top of the benchmark:
+
+```bash
+docker run --gpus all --rm -it --network host --shm-size 64g \
+  -v /path/to/vllm:/workspace/vllm-patch:ro \
+  -v /path/to/inferencex:/workspace \
+  vllm/vllm-openai:v0.15.1 \
+  bash -c '
+    bash /workspace/vllm-patch/docker/apply-reconfigure-overlay.sh
+    export MODEL=openai/gpt-oss-120b TP=8 CONC=32 ISL=1024 OSL=1024
+    bash /workspace/benchmarks/test_reconfigure_sweep.sh
+  '
+```
 
 ## Safety Notes
 
