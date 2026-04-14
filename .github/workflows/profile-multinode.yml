@@ -238,8 +238,11 @@ jobs:
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
           fi
 
-          # For multinode, also collect traces from LOGS/profiles/ into an archive
+          # For multinode, collect traces from LOGS/profiles/ or LOGS/logs/profiles/
           profiles_dir="$GITHUB_WORKSPACE/LOGS/profiles"
+          if [ ! -d "$profiles_dir" ] && [ -d "$GITHUB_WORKSPACE/LOGS/logs/profiles" ]; then
+            profiles_dir="$GITHUB_WORKSPACE/LOGS/logs/profiles"
+          fi
           if [ -d "$profiles_dir" ] && [ -n "$(find "$profiles_dir" -type f 2>/dev/null | head -1)" ]; then
             echo "Found profile traces:"
             find "$profiles_dir" -type f | head -20
