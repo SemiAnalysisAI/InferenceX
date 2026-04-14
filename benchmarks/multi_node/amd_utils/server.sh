@@ -448,7 +448,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${NODE0_ADDR} \
             --node-ports 30000 \
             --wait-for-all-health \
-            --health-endpoint /readiness \
+            --health-endpoint /health \
             --timeout 1800"
 
         if [[ "$DRY_RUN" -eq 1 ]]; then
