@@ -3365,7 +3365,7 @@ dsr1-fp8-h100-dynamo-sglang:
         dp-attn: true
 
 gptoss-fp4-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc11
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
