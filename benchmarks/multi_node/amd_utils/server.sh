@@ -11,8 +11,11 @@ NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
 
-# Ensure tokenizer deps are available (tiktoken for GLM-5, sentencepiece for others)
+# Ensure tokenizer deps and model config registration for benchmark client
 pip install --no-cache-dir tiktoken sentencepiece 2>&1 | tail -1
+
+# Register SGLang's custom model configs so benchmark_serving.py can load tokenizers
+python3 -c "from sglang.srt.utils.hf_transformers_utils import _CONFIG_REGISTRY" 2>/dev/null || true
 
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers

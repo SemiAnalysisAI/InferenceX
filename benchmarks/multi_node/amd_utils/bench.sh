@@ -57,6 +57,7 @@ for max_concurrency in ${chosen_concurrencies[@]}; do
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
         --result-dir /workspace/ \
+        --trust-remote-code \
         $( [ "$IS_MTP" = "true" ] && echo "--use-chat-template" )
 
     echo "-----------------------------------------"
