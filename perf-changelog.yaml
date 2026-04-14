@@ -1,4 +1,14 @@
 - config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
+    - "New framework: dynamo-trt (Dynamo frontend + TensorRT-LLM backend)"
+    - "Container: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "Runner script updated to support kimik2.5 model prefix with dynamo-trt framework"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1026
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
