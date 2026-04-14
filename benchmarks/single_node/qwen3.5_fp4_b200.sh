@@ -45,8 +45,8 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC \
 --max-running-requests $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
+--max-prefill-tokens 81920 \
+--chunked-prefill-size 81920 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
 --scheduler-recv-interval 10 \
