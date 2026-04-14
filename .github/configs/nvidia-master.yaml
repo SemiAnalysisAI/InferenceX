@@ -1821,11 +1821,11 @@ glm5-fp8-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5
@@ -3367,7 +3367,7 @@ dsr1-fp8-h100-dynamo-sglang:
         dp-attn: true
 
 gptoss-fp4-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:gpt-oss-dev
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc11
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
