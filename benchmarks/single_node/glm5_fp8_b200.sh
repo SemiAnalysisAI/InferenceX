@@ -9,8 +9,7 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    EP_SIZE
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -28,7 +27,7 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 
-echo "EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
