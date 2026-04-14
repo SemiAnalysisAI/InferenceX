@@ -32,12 +32,12 @@ on:
           - torch
         default: 'torch'
       profile-start-step:
-        description: "Profiling start step"
+        description: "Profiling start step (skip warmup iterations)"
         required: false
         type: string
         default: '2'
       profile-stop-step:
-        description: "Profiling stop step"
+        description: "Profiling stop step (num_steps = stop - start)"
         required: false
         type: string
         default: '8'
@@ -62,7 +62,7 @@ env:
   TEST_CONC: '16'
   TEST_PROFILE_TYPE: 'torch'
   TEST_PROFILE_START: '2'
-  TEST_PROFILE_STOP: '8'
+  TEST_PROFILE_STOP: '3'
 
 jobs:
   get-jobs:
