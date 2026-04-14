@@ -439,6 +439,11 @@ cfg['resources']['prefill_workers'] = 1
 cfg['resources']['decode_workers'] = 1
 cfg['resources']['prefill_nodes'] = 1
 cfg['resources']['decode_nodes'] = 1
+# Profiling uses sglang.launch_server (for /start_profile access on port 30000),
+# which requires sglang frontend instead of dynamo frontend
+if 'frontend' not in cfg:
+    cfg['frontend'] = {}
+cfg['frontend']['type'] = 'sglang'
 with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
 print('[profile] Done')
