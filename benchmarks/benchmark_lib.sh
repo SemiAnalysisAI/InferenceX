@@ -851,3 +851,81 @@ run_eval() {
     fi
     return $eval_rc
 }
+
+# --------------------------------
+# Patched vLLM distribution helpers
+# --------------------------------
+
+# Install a patched vLLM build before launching `vllm serve`. This is optional
+# and only needed when the active container/image does not already include the
+# dynamic scheduler reconfiguration API.
+#
+# Supported env vars:
+#   VLLM_PATCHED_WHEEL        -- local or remote wheel path/URL
+#   VLLM_PATCHED_REPO         -- git repository URL for patched vLLM
+#   VLLM_PATCHED_REF          -- branch, tag, or commit for VLLM_PATCHED_REPO
+#   VLLM_PATCHED_CHECKOUT     -- existing mounted checkout to install editable
+#   VLLM_PATCHED_INSTALL_MODE -- wheel, git, editable, or auto (default)
+install_patched_vllm() {
+    local mode="${VLLM_PATCHED_INSTALL_MODE:-auto}"
+
+    if [[ "$mode" == "auto" ]]; then
+        if [[ -n "${VLLM_PATCHED_WHEEL:-}" ]]; then
+            mode="wheel"
+        elif [[ -n "${VLLM_PATCHED_CHECKOUT:-}" ]]; then
+            mode="editable"
+        elif [[ -n "${VLLM_PATCHED_REPO:-}" ]]; then
+            mode="git"
+        else
+            echo "No patched vLLM install source configured; using existing vLLM"
+            return 0
+        fi
+    fi
+
+    case "$mode" in
+        wheel)
+            if [[ -z "${VLLM_PATCHED_WHEEL:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=wheel requires VLLM_PATCHED_WHEEL"
+                return 1
+            fi
+            echo "Installing patched vLLM wheel: $VLLM_PATCHED_WHEEL"
+            python3 -m pip install --no-cache-dir --force-reinstall "$VLLM_PATCHED_WHEEL"
+            ;;
+        git)
+            if [[ -z "${VLLM_PATCHED_REPO:-}" || -z "${VLLM_PATCHED_REF:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=git requires VLLM_PATCHED_REPO and VLLM_PATCHED_REF"
+                return 1
+            fi
+            local checkout_dir="${VLLM_PATCHED_GIT_DIR:-/tmp/patched-vllm}"
+            rm -rf "$checkout_dir"
+            git clone --depth 1 --branch "$VLLM_PATCHED_REF" "$VLLM_PATCHED_REPO" "$checkout_dir" || {
+                git clone "$VLLM_PATCHED_REPO" "$checkout_dir"
+                git -C "$checkout_dir" checkout "$VLLM_PATCHED_REF"
+            }
+            echo "Installing patched vLLM from $VLLM_PATCHED_REPO@$VLLM_PATCHED_REF"
+            VLLM_USE_PRECOMPILED=${VLLM_USE_PRECOMPILED:-1} \
+                python3 -m pip install --no-cache-dir -e "$checkout_dir"
+            ;;
+        editable)
+            if [[ -z "${VLLM_PATCHED_CHECKOUT:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=editable requires VLLM_PATCHED_CHECKOUT"
+                return 1
+            fi
+            echo "Installing patched vLLM editable checkout: $VLLM_PATCHED_CHECKOUT"
+            VLLM_USE_PRECOMPILED=${VLLM_USE_PRECOMPILED:-1} \
+                python3 -m pip install --no-cache-dir -e "$VLLM_PATCHED_CHECKOUT"
+            ;;
+        *)
+            echo "Unknown VLLM_PATCHED_INSTALL_MODE: $mode"
+            return 1
+            ;;
+    esac
+
+    python3 - <<'PY'
+import importlib.metadata
+try:
+    print("Installed vLLM version:", importlib.metadata.version("vllm"))
+except importlib.metadata.PackageNotFoundError:
+    print("Installed vLLM version: unknown")
+PY
+}
