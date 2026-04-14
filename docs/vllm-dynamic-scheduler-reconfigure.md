@@ -58,32 +58,46 @@ export MODEL=openai/gpt-oss-120b TP=8 CONC=32 ISL=1024 OSL=1024
 bash benchmarks/test_reconfigure_sweep.sh
 ```
 
-## Building the Patched Image
+## Pre-built Image
 
-The changes are pure Python -- no C++/CUDA recompilation needed. Overlay them
-onto the stock vLLM image:
+A pre-built image is available on Docker Hub:
+
+    semianalysiswork/vllm-reconfigure:latest
+
+This overlays the reconfigure API onto `vllm/vllm-openai:v0.18.0`.
+Source: [JordanNanos/vllm `feature/reconfigure-scheduler`](https://github.com/JordanNanos/vllm/tree/feature/reconfigure-scheduler),
+Dockerfile: `docker/Dockerfile.single-node-nvidia`.
+
+## Running a Single-Node Test
 
 ```bash
-# From the vllm repo root (on the branch with the reconfigure patch)
-docker build -f docker/Dockerfile.reconfigure-overlay \
-  -t ghcr.io/semianalysisai/vllm-reconfigure:test1 .
-
-docker push ghcr.io/semianalysisai/vllm-reconfigure:test1
+docker run --rm --init --network host \
+  --runtime nvidia --gpus all --ipc host --privileged \
+  --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
+  -v $HF_HUB_CACHE:/root/.cache/huggingface \
+  -v $(pwd):/workspace -w /workspace \
+  -e HF_TOKEN -e PORT=8888 \
+  -e MODEL=openai/gpt-oss-120b \
+  -e TP=8 -e CONC=32 \
+  -e ISL=1024 -e OSL=1024 \
+  semianalysiswork/vllm-reconfigure:latest \
+  bash benchmarks/test_reconfigure_sweep.sh
 ```
 
-Or patch at runtime by mounting the vLLM checkout and running the overlay script
-at the top of the benchmark:
+Use `SKIP_BASELINE=1` or `SKIP_RECONFIG=1` to run only one phase.
+Pass extra vLLM flags via `VLLM_EXTRA_ARGS` (e.g. `--kv-cache-dtype fp8`).
+
+## Building the Image From Source
+
+To rebuild from the vLLM fork:
 
 ```bash
-docker run --gpus all --rm -it --network host --shm-size 64g \
-  -v /path/to/vllm:/workspace/vllm-patch:ro \
-  -v /path/to/inferencex:/workspace \
-  vllm/vllm-openai:v0.15.1 \
-  bash -c '
-    bash /workspace/vllm-patch/docker/apply-reconfigure-overlay.sh
-    export MODEL=openai/gpt-oss-120b TP=8 CONC=32 ISL=1024 OSL=1024
-    bash /workspace/benchmarks/test_reconfigure_sweep.sh
-  '
+git clone https://github.com/JordanNanos/vllm.git -b feature/reconfigure-scheduler
+cd vllm
+docker build --platform linux/amd64 \
+  -f docker/Dockerfile.single-node-nvidia \
+  --build-arg BASE_IMAGE=vllm/vllm-openai:v0.18.0 \
+  -t semianalysiswork/vllm-reconfigure:latest .
 ```
 
 ## Safety Notes
