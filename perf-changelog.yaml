@@ -1330,3 +1330,10 @@
     - "Remove sed hack for TensorRT bug (fixed upstream in v1.3.0rc5)"
     - "Remove enable_block_reuse: false from kv_cache_config (default true is now recommended)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/854
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "DeepSeek R1 MI355X FP4 ATOM-MTP config to support MTP 3 tokens"
+    - "Image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2.post"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
