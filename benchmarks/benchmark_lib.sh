@@ -44,7 +44,7 @@ reconfigure_vllm_scheduler() {
     fi
 
     echo "Reconfiguring vLLM scheduler at $base_url: $json"
-    curl -fsS -X POST "$base_url/pause?mode=abort&clear_cache=true"
+    curl -fsS -X POST "$base_url/pause?mode=keep&clear_cache=true"
     curl -fsS -X POST "$base_url/reconfigure" \
         -H "Content-Type: application/json" \
         -d "$json"
