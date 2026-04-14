@@ -5,69 +5,51 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    DP_ATTENTION \
-    EP_SIZE
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+nvidia-smi
+
 hf download "$MODEL"
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-set +x
-
-export TRTLLM_ENABLE_PDL=1
-
-# Start GPU monitoring (power, temperature, clocks every second)
-start_gpu_monitor
-
-set -x
-cat > gptoss-config.yml << EOF
-cuda_graph_config:
-  enable_padding: true
-  max_batch_size: $CONC
-enable_attention_dp: $DP_ATTENTION
-kv_cache_config:
-  dtype: auto
-  free_gpu_memory_fraction: 0.85
-moe_config:
-  backend: TRITON
-num_postprocess_workers: 4
-print_iter_log: true
-stream_interval: 20 
-EOF
-
-MAX_NUM_TOKENS=20000
+if [ "${DP_ATTENTION}" = "true" ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
+elif [ "$EP_SIZE" -gt 1 ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
+else
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
-    MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
 
-PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
-trtllm-serve $MODEL \
---max_batch_size $CONC \
---max_num_tokens $MAX_NUM_TOKENS \
---max_seq_len=$MAX_MODEL_LEN \
---backend pytorch \
---extra_llm_api_options gptoss-config.yml \
---ep_size=$EP_SIZE \
---trust_remote_code \
---gpus_per_node 8 \
---host 0.0.0.0 \
---port $PORT \
---tp_size=$TP \
---pp_size=1 \
-> $SERVER_LOG 2>&1 &
+set -x
+vllm serve $MODEL --port $PORT \
+$PARALLEL_ARGS \
+--gpu-memory-utilization 0.90 \
+--max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
+--max-cudagraph-capture-size 2048 \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -77,14 +59,15 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
-    --backend openai \
+    --backend vllm \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

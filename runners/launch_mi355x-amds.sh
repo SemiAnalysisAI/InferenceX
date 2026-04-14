@@ -180,11 +180,18 @@ else
     "
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+        #--container-mount-home \
+
+    if [[ "$FRAMEWORK" == "atom" ]] || [[ "$FRAMEWORK" == "sglang" ]]; then
+        SLRUM_HOME_MOUNT=""
+    else
+        SLRUM_HOME_MOUNT=" --container-mount-home "
+    fi
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
-        --container-mount-home \
+        $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
