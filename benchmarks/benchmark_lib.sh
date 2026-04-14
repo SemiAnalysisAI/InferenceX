@@ -526,75 +526,17 @@ with open('${CONFIG_FILE}') as f:
     cfg = yaml.safe_load(f)
 backend = cfg.get('backend', {})
 sglang_cfg = backend.get('sglang_config', {})
-# For profiling: enable layerwise NVTX markers and disable CUDA graphs
-# (CUDA graphs hide individual kernel launches from the torch profiler)
+# Add --enable-layerwise-nvtx-marker to both prefill and decode configs
 for mode in ['prefill', 'decode', 'aggregated']:
     mode_cfg = sglang_cfg.get(mode, {})
     mode_cfg['enable-layerwise-nvtx-marker'] = True
-    mode_cfg['disable-cuda-graph'] = True
     sglang_cfg[mode] = mode_cfg
 backend['sglang_config'] = sglang_cfg
 cfg['backend'] = backend
 with open('${CONFIG_FILE}', 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False)
-print('[profile] Enabled SGLang --enable-layerwise-nvtx-marker and --disable-cuda-graph')
-" || echo "[profile] Warning: failed to inject SGLang config"
-
-        # Patch SGLang's torch profiler to use CUDA sync events instead of CUPTI
-        # (CUPTI requires elevated container privileges not available on all clusters)
-        local configs_dir="configs"
-        mkdir -p "$configs_dir"
-
-        # Create setup script that patches SGLang source directly inside the container
-        cat > "$configs_dir/apply-sglang-profiling-patch.sh" <<'SETUP'
-#!/bin/bash
-echo "[profile-setup] Patching SGLang profiler for CUDA sync events..."
-
-# Guard: only patch once
-if [[ -f /tmp/.sglang_profiling_patched ]]; then
-    echo "[profile-setup] Already patched, skipping"
-    exit 0
-fi
-
-# Inject experimental_config=_ExperimentalConfig(enable_cuda_sync_events=True)
-# into every torch.profiler.profile() call in SGLang's profiler code.
-# Uses CUDA events for GPU kernel timing instead of CUPTI (which needs elevated privileges).
-
-patch_profiler_file() {
-    local file="$1"
-    local closing_paren_indent="$2"  # indentation of the closing )
-    local kwarg_indent="${closing_paren_indent}    "  # one more level for the kwarg
-
-    if [[ ! -f "$file" ]]; then
-        echo "[profile-setup] WARNING: $file not found"
-        return
-    fi
-    if grep -q "enable_cuda_sync_events" "$file"; then
-        echo "[profile-setup] $file already patched"
-        return
-    fi
-
-    local exp_line="${kwarg_indent}experimental_config=torch.profiler._ExperimentalConfig(enable_cuda_sync_events=True),"
-    sed -i "/self\.torch_profiler = torch\.profiler\.profile/,/^${closing_paren_indent})/{
-        s|^${closing_paren_indent})|${exp_line}\n${closing_paren_indent})|
-    }" "$file"
-    echo "[profile-setup] Patched $file"
-}
-
-# Patch 1: profile_utils.py (_ProfilerTorch.start - v2 path, 8-space indent)
-PROFILE_UTILS=$(python3 -c "import sglang.srt.utils.profile_utils as m; print(m.__file__)" 2>/dev/null)
-patch_profiler_file "$PROFILE_UTILS" "        "
-
-# Patch 2: scheduler_profiler_mixin.py (legacy start_profile, 12-space indent)
-SCHED_MIXIN=$(python3 -c "import sglang.srt.managers.scheduler_profiler_mixin as m; print(m.__file__)" 2>/dev/null)
-patch_profiler_file "$SCHED_MIXIN" "            "
-
-touch /tmp/.sglang_profiling_patched
-echo "[profile-setup] SGLang CUDA sync events patch complete"
-SETUP
-        chmod +x "$configs_dir/apply-sglang-profiling-patch.sh"
-        export PROFILING_SETUP_SCRIPT="apply-sglang-profiling-patch.sh"
-        echo "[profile] Set PROFILING_SETUP_SCRIPT=$PROFILING_SETUP_SCRIPT (SGLang CUDA events)"
+print('[profile] Enabled SGLang --enable-layerwise-nvtx-marker')
+" || echo "[profile] Warning: failed to inject SGLang NVTX markers"
     fi
 }
 
