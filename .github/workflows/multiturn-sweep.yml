@@ -88,6 +88,11 @@ on:
         description: 'Git ref (branch/sha) to checkout'
         required: false
         type: string
+      ignore_eos:
+        description: 'Ignore EOS token and force exact output_tokens from trace (true/false)'
+        required: false
+        default: 'false'
+        type: string
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -191,6 +196,7 @@ jobs:
       script-suffix: ${{ inputs.script_suffix }}
       ep: "${{ matrix.ep || inputs.ep }}"
       ref: ${{ inputs.ref }}
+      ignore-eos: ${{ inputs.ignore_eos }}
 
   # ---------------------------------------------------------------------------
   # Collect & aggregate results

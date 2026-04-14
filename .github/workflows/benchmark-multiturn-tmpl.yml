@@ -55,6 +55,11 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      ignore-eos:
+        description: "Ignore EOS token and force exact output_tokens from trace"
+        required: false
+        type: string
+        default: 'false'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -73,6 +78,7 @@ env:
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   SCRIPT_SUFFIX: ${{ inputs.script-suffix }}
   SPEC_DECODING: 'off'
+  IGNORE_EOS: ${{ inputs.ignore-eos }}
 
 permissions:
   contents: read

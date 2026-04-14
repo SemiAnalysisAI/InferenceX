@@ -145,6 +145,9 @@ REPLAY_CMD+=" --advance-min $ADVANCE_MIN"
 REPLAY_CMD+=" --advance-max $ADVANCE_MAX"
 REPLAY_CMD+=" --seed 42"
 REPLAY_CMD+=" --no-color"
+if [ "${IGNORE_EOS:-false}" = "true" ]; then
+    REPLAY_CMD+=" --ignore-eos"
+fi
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
 
