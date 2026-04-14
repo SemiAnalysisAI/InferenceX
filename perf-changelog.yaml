@@ -1330,3 +1330,9 @@
     - "Remove sed hack for TensorRT bug (fixed upstream in v1.3.0rc5)"
     - "Remove enable_block_reuse: false from kv_cache_config (default true is now recommended)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/854
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Bump GLM-5 FP8 B200 SGLang concurrency from 128 to 256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1012

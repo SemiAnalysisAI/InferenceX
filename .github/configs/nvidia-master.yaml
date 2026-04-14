@@ -1819,11 +1819,11 @@ glm5-fp8-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5
