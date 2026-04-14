@@ -3189,11 +3189,11 @@ minimaxm2.5-fp4-b200-vllm:
     - { tp: 4, conc-start: 4, conc-end: 512 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
 
-gptoss-fp4-h100-vllm:
+gptoss-fp4-h100-cw-vllm:
   image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
-  runner: h100
+  runner: h100-cw
   precision: fp4
   framework: vllm
   multinode: false
@@ -3211,31 +3211,33 @@ gptoss-fp4-h100-vllm:
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
 
-minimaxm2.5-fp8-h100-dgxc-vllm:
+gptoss-fp4-h100-dgxc-vllm:
   image: vllm/vllm-openai:v0.18.0
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
   runner: h100-dgxc
-  precision: fp8
+  precision: fp4
   framework: vllm
   multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
-    # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 2, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 8, conc-start: 4, conc-end: 16 }
 
-minimaxm2.5-fp8-h100-cw-vllm:
+minimaxm2.5-fp8-h100-vllm:
   image: vllm/vllm-openai:v0.18.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: h100-cw
+  runner: h100
   precision: fp8
   framework: vllm
   multinode: false
