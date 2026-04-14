@@ -165,13 +165,12 @@ if [[ "${SKIP_RECONFIG:-0}" != "1" ]]; then
 
         RECONF_START=$(date +%s)
 
+        # Set env vars — run_benchmark_serving picks these up via
+        # the VLLM_DYNAMIC_RECONFIGURE hook and calls
+        # reconfigure_vllm_scheduler automatically.
         export VLLM_DYNAMIC_RECONFIGURE=1
         export VLLM_MAX_NUM_BATCHED_TOKENS="$mnb"
         export VLLM_MAX_NUM_SEQS="$mns"
-        reconfigure_vllm_scheduler "$PORT"
-
-        RECONF_END=$(date +%s)
-        echo "  Reconfigure: $((RECONF_END - RECONF_START))s"
 
         run_bench "$RESULTS_B" "reconfig_mnb${mnb}_mns${mns}"
 

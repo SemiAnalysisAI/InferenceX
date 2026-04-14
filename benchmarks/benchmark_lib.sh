@@ -45,10 +45,19 @@ reconfigure_vllm_scheduler() {
 
     echo "Reconfiguring vLLM scheduler at $base_url: $json"
     curl -fsS -X POST "$base_url/pause?mode=keep&clear_cache=true"
+
+    local rc=0
     curl -fsS -X POST "$base_url/reconfigure" \
         -H "Content-Type: application/json" \
-        -d "$json"
+        -d "$json" || rc=$?
+
+    # Always resume so the server is never left paused on failure.
     curl -fsS -X POST "$base_url/resume"
+
+    if [[ "$rc" -ne 0 ]]; then
+        echo "ERROR: /reconfigure failed (curl exit code $rc)" >&2
+        return "$rc"
+    fi
 }
 
 # --------------------------------
@@ -889,7 +898,7 @@ install_patched_vllm() {
                 return 1
             fi
             echo "Installing patched vLLM wheel: $VLLM_PATCHED_WHEEL"
-            python3 -m pip install --no-cache-dir --force-reinstall "$VLLM_PATCHED_WHEEL"
+            python3 -m pip install --no-cache-dir --no-deps --force-reinstall "$VLLM_PATCHED_WHEEL"
             ;;
         git)
             if [[ -z "${VLLM_PATCHED_REPO:-}" || -z "${VLLM_PATCHED_REF:-}" ]]; then

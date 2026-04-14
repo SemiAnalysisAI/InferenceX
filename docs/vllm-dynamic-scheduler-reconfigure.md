@@ -10,7 +10,7 @@ admission limits.
 
 This feature requires a vLLM build that exposes these HTTP endpoints:
 
-- `POST /pause?mode=abort&clear_cache=true`
+- `POST /pause?mode=keep&clear_cache=true`
 - `POST /reconfigure` (JSON body)
 - `POST /resume`
 
