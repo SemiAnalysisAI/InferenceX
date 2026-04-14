@@ -202,6 +202,7 @@ sleep 2
 
 # ---- Run AIPerf benchmark ----------------------------------------------------
 export AIPERF_LOG_CONVERSATIONS="$RESULT_DIR/conversations.jsonl"
+export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
 
 AIPERF_CMD="$AIPERF_BIN profile"
 AIPERF_CMD+=" --model $MODEL"
