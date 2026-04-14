@@ -40,9 +40,14 @@ export IBDEVICES
 # Prefer the private/RDMA interconnect (10.x subnet) over the public default route.
 # Mooncake and MoRI disagg transfers should stay on the backend network.
 _PRIVATE_IFNAME=$(ip -o addr show | awk '/10\.162\.224\./{print $2}' | head -n 1)
+_PRIVATE_IP=$(ip -o addr show | awk '/10\.162\.224\./{gsub(/\/.*/, "", $4); print $4; exit}')
 _DEFAULT_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
 export GLOO_SOCKET_IFNAME=${_PRIVATE_IFNAME:-$_DEFAULT_IFNAME}
 export NCCL_SOCKET_IFNAME=${_PRIVATE_IFNAME:-$_DEFAULT_IFNAME}
+# Force SGLang/mooncake to advertise the private IP for disagg transfers
+if [[ -n "$_PRIVATE_IP" ]]; then
+    export SGLANG_HOST_IP=$_PRIVATE_IP
+fi
 
 set +x
 
