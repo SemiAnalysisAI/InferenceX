@@ -131,6 +131,7 @@ sleep 2
 REPLAY_CMD="python3 $KV_CACHE_TESTER_DIR/trace_replay_tester.py"
 REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
 REPLAY_CMD+=" --trace-directory $TRACE_DIR"
+REPLAY_CMD+=" --timing-strategy think-only"
 REPLAY_CMD+=" --output-dir $RESULT_DIR/trace_replay"
 REPLAY_CMD+=" --start-users $USERS"
 REPLAY_CMD+=" --max-users $USERS"
