@@ -526,10 +526,12 @@ with open('${CONFIG_FILE}') as f:
     cfg = yaml.safe_load(f)
 backend = cfg.get('backend', {})
 sglang_cfg = backend.get('sglang_config', {})
-# Add --enable-layerwise-nvtx-marker to both prefill and decode configs
+# For profiling: enable layerwise NVTX markers and disable CUDA graphs
+# (CUDA graphs hide individual kernel launches from the torch profiler)
 for mode in ['prefill', 'decode', 'aggregated']:
     mode_cfg = sglang_cfg.get(mode, {})
     mode_cfg['enable-layerwise-nvtx-marker'] = True
+    mode_cfg['disable-cuda-graph'] = True
     sglang_cfg[mode] = mode_cfg
 backend['sglang_config'] = sglang_cfg
 cfg['backend'] = backend
