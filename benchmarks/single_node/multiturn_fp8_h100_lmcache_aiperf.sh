@@ -45,44 +45,14 @@ TRACE_FILE="$RESULT_DIR/lmcache_traces.jsonl"
 
 pip install --quiet urllib3 requests orjson datasets 2>/dev/null || true
 
-# Patch vLLM bug: local_cache_hit counter can go negative under high load
-# (causes "Counters can only be incremented by non-negative amounts" crash)
-STATS_FILE=$(python3 -c "import vllm; import os; print(os.path.join(os.path.dirname(vllm.__file__), 'v1', 'metrics', 'stats.py'))" 2>/dev/null || echo "")
-if [ -n "$STATS_FILE" ] && [ -f "$STATS_FILE" ] && grep -q 'self.local_cache_hit += (' "$STATS_FILE"; then
-    echo "Patching vLLM stats.py: $STATS_FILE"
-    python3 -c "
-import re, sys
-with open(sys.argv[1]) as f:
-    src = f.read()
-src = src.replace(
-    'self.local_cache_hit += (\n            num_cached_tokens + recomputed - num_external_computed_tokens\n        )',
-    'self.local_cache_hit += max(0,\n            num_cached_tokens + recomputed - num_external_computed_tokens\n        )',
-)
-with open(sys.argv[1], 'w') as f:
-    f.write(src)
-" "$STATS_FILE"
-fi
-
-# Patch vLLM bug: stale KV transfer callback after request cleanup (PR #37859)
-# (causes "AssertionError: assert req_id in self.requests" crash under KV offloading)
-SCHED_FILE=$(python3 -c "import vllm; import os; print(os.path.join(os.path.dirname(vllm.__file__), 'v1', 'core', 'sched', 'scheduler.py'))" 2>/dev/null || echo "")
-if [ -n "$SCHED_FILE" ] && [ -f "$SCHED_FILE" ] && grep -q 'assert req_id in self.requests' "$SCHED_FILE"; then
-    echo "Patching vLLM scheduler.py: $SCHED_FILE"
-    python3 << 'PYEOF' "$SCHED_FILE"
-import sys
-with open(sys.argv[1]) as f:
-    src = f.read()
-src = src.replace(
-    'assert req_id in self.requests\n            req = self.requests[req_id]\n            if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:',
-    'req = self.requests.get(req_id)\n            if req is None:\n                logger.debug("Ignoring finished recving KV transfer for unknown request %s", req_id)\n                self.finished_recving_kv_req_ids.discard(req_id)\n                continue\n            if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:',
-)
-src = src.replace(
-    'assert req_id in self.requests\n            self._free_blocks(self.requests[req_id])',
-    'req = self.requests.get(req_id)\n            if req is None:\n                logger.debug("Ignoring finished sending KV transfer for unknown request %s", req_id)\n                continue\n            self._free_blocks(req)',
-)
-with open(sys.argv[1], 'w') as f:
-    f.write(src)
-PYEOF
+# Check vLLM version — patches for local_cache_hit and scheduler stale KV
+# transfer are fixed in 0.19.0+
+VLLM_VERSION=$(python3 -c "import vllm; print(vllm.__version__)" 2>/dev/null || echo "unknown")
+echo "vLLM version: $VLLM_VERSION"
+if python3 -c "from packaging.version import Version; exit(0 if Version('${VLLM_VERSION}') >= Version('0.19.0') else 1)" 2>/dev/null; then
+    echo "vLLM >= 0.19.0: no patches needed"
+else
+    echo "WARNING: vLLM $VLLM_VERSION < 0.19.0 — local_cache_hit and scheduler patches are no longer applied. Upgrade to 0.19.0+ for stability."
 fi
 
 mkdir -p "$RESULT_DIR"
@@ -152,9 +122,10 @@ VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
+    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     VLLM_CMD+=" --kv_offloading_backend native"
     VLLM_CMD+=" --kv_offloading_size $offload_size"
-    VLLM_CMD+=" --disable-hybrid-kv-cache-manager"
+    VLLM_CMD+=" --no-disable-hybrid-kv-cache-manager"
 elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
