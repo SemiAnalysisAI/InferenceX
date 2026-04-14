@@ -36,9 +36,13 @@ else
 fi
 export IBDEVICES
 
-# Auto-detect default network interface (portable across clusters)
-export GLOO_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
-export NCCL_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
+# Auto-detect network interface for inter-node communication.
+# Prefer the private/RDMA interconnect (10.x subnet) over the public default route.
+# Mooncake and MoRI disagg transfers should stay on the backend network.
+_PRIVATE_IFNAME=$(ip -o addr show | awk '/10\.162\.224\./{print $2}' | head -n 1)
+_DEFAULT_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
+export GLOO_SOCKET_IFNAME=${_PRIVATE_IFNAME:-$_DEFAULT_IFNAME}
+export NCCL_SOCKET_IFNAME=${_PRIVATE_IFNAME:-$_DEFAULT_IFNAME}
 
 set +x
 

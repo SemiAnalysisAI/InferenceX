@@ -47,7 +47,10 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
-host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
+# Prefer private interconnect IP for node discovery/advertisement.
+# Falls back to default route IP if no 10.162.224.x address exists.
+host_ip=$(ip -o addr show | awk '/10\.162\.224\./{gsub(/\/.*/, "", $4); print $4; exit}')
+host_ip=${host_ip:-$(ip route get 1.1.1.1 | awk '/src/ {print $7}')}
 host_name=$(hostname)
 
 # MORI_RDMA_TC configuration (optional)
