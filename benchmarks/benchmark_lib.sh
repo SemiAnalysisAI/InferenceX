@@ -10,6 +10,37 @@ export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
 # --------------------------------
+# vLLM dynamic scheduler reconfiguration
+# --------------------------------
+
+# Reconfigure vLLM scheduler limits on a running endpoint. This requires a vLLM
+# build that exposes POST /pause, POST /reconfigure_scheduler, and POST /resume.
+# The feature is opt-in via VLLM_DYNAMIC_RECONFIGURE=1 and is intended for
+# single-server sweeps where model, parallelism, and cache layout stay fixed.
+reconfigure_vllm_scheduler() {
+    local port="$1"
+    local base_url="${VLLM_DYNAMIC_RECONFIGURE_BASE_URL:-http://0.0.0.0:$port}"
+    local params=()
+
+    [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]] && \
+        params+=(--data-urlencode "max_num_batched_tokens=$VLLM_MAX_NUM_BATCHED_TOKENS")
+    [[ -n "${VLLM_MAX_NUM_SEQS:-}" ]] && \
+        params+=(--data-urlencode "max_num_seqs=$VLLM_MAX_NUM_SEQS")
+    [[ -n "${VLLM_MAX_NUM_SCHEDULED_TOKENS:-}" ]] && \
+        params+=(--data-urlencode "max_num_scheduled_tokens=$VLLM_MAX_NUM_SCHEDULED_TOKENS")
+
+    if [[ ${#params[@]} -eq 0 ]]; then
+        echo "VLLM_DYNAMIC_RECONFIGURE=1 but no VLLM scheduler parameters were set"
+        return 1
+    fi
+
+    echo "Reconfiguring vLLM scheduler at $base_url"
+    curl -fsS -X POST "$base_url/pause?mode=keep"
+    curl -fsS -X POST -G "$base_url/reconfigure_scheduler" "${params[@]}"
+    curl -fsS -X POST "$base_url/resume"
+}
+
+# --------------------------------
 # GPU monitoring helpers
 # --------------------------------
 
@@ -324,6 +355,10 @@ run_benchmark_serving() {
         fi
         profile_flag+=(--profile)
         num_prompts="$max_concurrency"
+    fi
+
+    if [[ "${VLLM_DYNAMIC_RECONFIGURE:-0}" == "1" && "$backend" == "vllm" ]]; then
+        reconfigure_vllm_scheduler "$port"
     fi
 
     # Build benchmark command
