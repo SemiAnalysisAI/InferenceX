@@ -84,7 +84,7 @@ VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
-    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+    # SimpleCPUOffloadConnector uses cuda.bindings (NVIDIA-only), skip on ROCm
     VLLM_CMD+=" --kv_offloading_backend native"
     VLLM_CMD+=" --kv_offloading_size $offload_size"
     VLLM_CMD+=" --no-disable-hybrid-kv-cache-manager"
