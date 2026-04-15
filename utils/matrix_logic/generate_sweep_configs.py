@@ -934,6 +934,8 @@ def main():
         matrix_values = mark_eval_entries(matrix_values)
         if args.evals_only:
             matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
+            for e in matrix_values:
+                e[Fields.EVAL_ONLY.value] = True
 
     print(json.dumps(matrix_values))
     return matrix_values

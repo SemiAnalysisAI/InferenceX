@@ -54,7 +54,7 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('run-eval', False)]))")
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('eval-only', False)]))")
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x]))")
                   EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('run-eval', False)]))")
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
@@ -202,7 +202,7 @@ jobs:
             - name: Calculate success rate
               run: python3 utils/calc_success_rate.py $STATS_FILENAME
 
-            - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json

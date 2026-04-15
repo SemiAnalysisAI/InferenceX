@@ -14,9 +14,6 @@ check_env_vars \
     DP_ATTENTION \
     EP_SIZE
 
-# TensorRT bug. Remove when fixed
-sed -i '417d' /usr/local/lib/python3.12/dist-packages/tensorrt_llm/executor/result.py
-
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
@@ -40,7 +37,6 @@ cuda_graph_config:
 enable_attention_dp: $DP_ATTENTION
 kv_cache_config:
   dtype: auto
-  enable_block_reuse: false
   free_gpu_memory_fraction: 0.85
 moe_config:
   backend: TRITON
