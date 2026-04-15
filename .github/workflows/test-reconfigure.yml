@@ -48,6 +48,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 env:
   IMAGE: semianalysiswork/vllm-reconfigure:latest
 
