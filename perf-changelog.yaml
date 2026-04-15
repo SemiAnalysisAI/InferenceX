@@ -1362,6 +1362,5 @@
 - config-keys:
     - qwen3.5-fp4-b200-sglang
   description:
-    - "Add TP2 search-space (conc 4-128) alongside TP4 conc=4 baseline"
-    - "Update server launch: enable-symm-mem, prefill/chunked 16384, mem-fraction-static 0.8, stream-interval 50"
+    - "Update SGLang image to `0.5.10post1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
