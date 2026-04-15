@@ -526,14 +526,6 @@ SETUP
         echo "[profile] Set PROFILING_SETUP_SCRIPT=$PROFILING_SETUP_SCRIPT"
     fi
 
-    # For SGLang profiling: use the full (non-runtime) container image so that
-    # CUPTI is available for GPU kernel tracing. The -runtime images strip
-    # profiling libraries to save space.
-    if [[ "${IMAGE:-}" == *"-runtime"* ]]; then
-        export IMAGE="${IMAGE%-runtime}"
-        echo "[profile] Switched to full image for CUPTI support: $IMAGE"
-    fi
-
     # For SGLang: enable layerwise NVTX markers via sglang_config CLI args
     if [[ "${FRAMEWORK:-}" == *"sglang"* ]]; then
         python3 -c "

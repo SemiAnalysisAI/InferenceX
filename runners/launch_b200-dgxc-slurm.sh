@@ -57,6 +57,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
+    # For profiling: use the full (non-runtime) container image so that
+    # CUPTI is available for GPU kernel tracing.
+    if [[ "${PROFILE:-}" == "1" && "${IMAGE:-}" == *"-runtime"* ]]; then
+        export IMAGE="${IMAGE%-runtime}"
+        echo "[profile] Switched to full image for CUPTI support: $IMAGE"
+    fi
+
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
