@@ -47,7 +47,7 @@ python3 -m sglang.launch_server \
 --kv-cache-dtype fp8_e4m3 \
 --attention-backend aiter \
 --disable-radix-cache \
-$EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+$EVAL_CONTEXT_ARGS $SGLANG_PROFILE_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

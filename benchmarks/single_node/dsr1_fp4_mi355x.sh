@@ -49,7 +49,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --max-prefill-tokens=$PREFILL_SIZE \
 --cuda-graph-max-bs=128 \
 --attention-backend aiter \
---kv-cache-dtype fp8_e4m3 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+--kv-cache-dtype fp8_e4m3 $EVAL_CONTEXT_ARGS $SGLANG_PROFILE_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

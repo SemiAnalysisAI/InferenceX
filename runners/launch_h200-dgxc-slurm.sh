@@ -4,6 +4,8 @@
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -115,6 +117,7 @@ EOF
     echo "Submitting job with srtctl..."
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+    inject_srtctl_profiling
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 

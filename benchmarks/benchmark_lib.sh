@@ -9,6 +9,14 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
+# When profiling, enable layerwise NVTX markers for per-layer annotations
+# (module names, input shapes, weight shapes) in torch profiler traces.
+# Single-node scripts should append $SGLANG_PROFILE_ARGS to their launch command.
+SGLANG_PROFILE_ARGS=""
+if [[ "${PROFILE:-}" == "1" ]]; then
+    SGLANG_PROFILE_ARGS="--enable-layerwise-nvtx-marker --disable-cuda-graph"
+fi
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------
@@ -397,8 +405,148 @@ run_benchmark_serving() {
 
 
 # --------------------------------
-# Profiling trace helpers
+# Profiling helpers
 # --------------------------------
+
+# Inject srtctl profiling config into CONFIG_FILE before srtctl apply.
+# Call this after cloning srt-slurm and before running srtctl apply.
+# Requires: PROFILE=1, CONFIG_FILE set and exists.
+# Optional env vars: PROFILE_INJECT_TYPE (torch|nsys), PROFILE_INJECT_START, PROFILE_INJECT_STOP
+inject_srtctl_profiling() {
+    if [[ "${PROFILE:-}" != "1" ]]; then
+        return 0
+    fi
+    if [[ -z "${CONFIG_FILE:-}" || ! -f "${CONFIG_FILE}" ]]; then
+        echo "[profile] CONFIG_FILE not set or not found, skipping srtctl profiling injection"
+        return 0
+    fi
+    local prof_type="torch"
+    local prof_start="${PROFILE_INJECT_START:-5}"
+    local prof_stop="${PROFILE_INJECT_STOP:-50}"
+    local prof_isl="${ISL:-4096}"
+    local prof_osl="${OSL:-1024}"
+    local prof_conc="${CONC:-${CONC_LIST%% *}}"  # first value from CONC_LIST if CONC not set
+    prof_conc="${prof_conc:-64}"
+    echo "[profile] Injecting profiling into ${CONFIG_FILE} (type=${prof_type}, steps=${prof_start}-${prof_stop}, isl=${prof_isl}, osl=${prof_osl}, conc=${prof_conc})..."
+    python3 -c "
+import yaml, sys
+with open('${CONFIG_FILE}') as f:
+    cfg = yaml.safe_load(f)
+cfg['profiling'] = {
+    'type': '${prof_type}',
+    'isl': ${prof_isl},
+    'osl': ${prof_osl},
+    'concurrency': ${prof_conc},
+    'prefill': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
+    'decode': {'start_step': ${prof_start}, 'stop_step': ${prof_stop}},
+}
+# Profiling requires exactly 1 prefill + 1 decode worker
+if 'resources' not in cfg:
+    cfg['resources'] = {}
+cfg['resources']['prefill_workers'] = 1
+cfg['resources']['decode_workers'] = 1
+cfg['resources']['prefill_nodes'] = 1
+cfg['resources']['decode_nodes'] = 1
+# Profiling uses sglang.launch_server (for /start_profile access on port 30000),
+# which requires sglang frontend instead of dynamo frontend
+if 'frontend' not in cfg:
+    cfg['frontend'] = {}
+cfg['frontend']['type'] = 'sglang'
+with open('${CONFIG_FILE}', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+print('[profile] Done')
+" || echo "[profile] Warning: profiling injection failed"
+
+    # For TRT-LLM: use a setup script to directly patch handler_base.py inside the container.
+    # The setup_script runs inside the container before the worker starts.
+    if [[ "${FRAMEWORK:-}" == *"trt"* ]]; then
+        local patches_src="${GITHUB_WORKSPACE:-$(dirname "$0")/..}/patches"
+        local configs_dir="configs"
+        mkdir -p "$configs_dir"
+
+        # Copy the patch to configs dir (mounted at /configs in container)
+        if [[ -f "$patches_src/trtllm-profiling.py" ]]; then
+            cp "$patches_src/trtllm-profiling.py" "$configs_dir/"
+            echo "[profile] Copied trtllm-profiling.py to $configs_dir/"
+        fi
+
+        # Create a setup script that patches handler_base.py directly
+        cat > "$configs_dir/apply-profiling-patch.sh" <<'SETUP'
+#!/bin/bash
+echo "[profile-setup] Applying TRT-LLM profiling patch..."
+
+PATCH_SRC="/configs/trtllm-profiling.py"
+HANDLER="/opt/dynamo/venv/lib/python3.12/site-packages/dynamo/trtllm/request_handlers/handler_base.py"
+
+if [[ ! -f "$PATCH_SRC" ]]; then
+    echo "[profile-setup] ERROR: patch not found at $PATCH_SRC"
+    exit 0
+fi
+
+if [[ ! -f "$HANDLER" ]]; then
+    # Try to find it
+    HANDLER=$(find /opt -name "handler_base.py" -path "*/trtllm/*" 2>/dev/null | head -1)
+    if [[ -z "$HANDLER" ]]; then
+        echo "[profile-setup] ERROR: handler_base.py not found"
+        exit 0
+    fi
+fi
+
+echo "[profile-setup] Found handler at: $HANDLER"
+
+# Guard: only append once (multiple MPI ranks run this script)
+if grep -q "InferenceX profiling patch" "$HANDLER" 2>/dev/null; then
+    echo "[profile-setup] Patch already applied, skipping"
+    exit 0
+fi
+
+# Append the patch import and call to the end of handler_base.py
+cat >> "$HANDLER" <<'PATCH_APPEND'
+
+# --- InferenceX profiling patch (auto-appended) ---
+import os as _os
+if _os.environ.get("PROFILING_MODE"):
+    import importlib.util as _ilu
+    _patch_path = "/configs/trtllm-profiling.py"
+    if _os.path.isfile(_patch_path):
+        _spec = _ilu.spec_from_file_location("_trtllm_profiling", _patch_path)
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        if hasattr(_mod, "patch"):
+            _mod.patch()
+# --- End profiling patch ---
+PATCH_APPEND
+
+echo "[profile-setup] Patch appended to $HANDLER"
+SETUP
+        chmod +x "$configs_dir/apply-profiling-patch.sh"
+
+        # Export setup script name for launch scripts to pass to srtctl apply --setup-script
+        export PROFILING_SETUP_SCRIPT="apply-profiling-patch.sh"
+        echo "[profile] Set PROFILING_SETUP_SCRIPT=$PROFILING_SETUP_SCRIPT"
+    fi
+
+    # For SGLang: enable layerwise NVTX markers via sglang_config CLI args
+    if [[ "${FRAMEWORK:-}" == *"sglang"* ]]; then
+        python3 -c "
+import yaml
+with open('${CONFIG_FILE}') as f:
+    cfg = yaml.safe_load(f)
+backend = cfg.get('backend', {})
+sglang_cfg = backend.get('sglang_config', {})
+# Add --enable-layerwise-nvtx-marker to both prefill and decode configs
+for mode in ['prefill', 'decode', 'aggregated']:
+    mode_cfg = sglang_cfg.get(mode, {})
+    mode_cfg['enable-layerwise-nvtx-marker'] = True
+    sglang_cfg[mode] = mode_cfg
+backend['sglang_config'] = sglang_cfg
+cfg['backend'] = backend
+with open('${CONFIG_FILE}', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+print('[profile] Enabled SGLang --enable-layerwise-nvtx-marker')
+" || echo "[profile] Warning: failed to inject SGLang NVTX markers"
+    fi
+}
 
 _find_latest_profile_trace() {
     local latest=""

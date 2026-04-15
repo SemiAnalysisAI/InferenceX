@@ -1,0 +1,374 @@
+name: Profile Multinode
+
+on:
+  # TODO: Remove push trigger after testing
+  push:
+    paths:
+      - '.github/workflows/profile-multinode.yml'
+      - 'benchmarks/benchmark_lib.sh'
+      - 'runners/launch_*.sh'
+      - 'patches/**'
+  workflow_dispatch:
+    inputs:
+      config-key:
+        description: "Config key from config yaml (e.g. dsr1-fp4-b200-dynamo-trt)"
+        required: true
+        type: string
+      config-file:
+        description: "Config file to use"
+        required: false
+        type: string
+        default: '.github/configs/nvidia-master.yaml'
+      conc:
+        description: "Concurrency value (must exist in config's conc-range/list)"
+        required: false
+        type: string
+        default: '64'
+      profile-type:
+        description: "Profiler type"
+        required: false
+        type: choice
+        options:
+          - torch
+        default: 'torch'
+      profile-start-step:
+        description: "Profiling start step (skip warmup iterations)"
+        required: false
+        type: string
+        default: '2'
+      profile-stop-step:
+        description: "Profiling stop step (num_steps = stop - start)"
+        required: false
+        type: string
+        default: '8'
+      ref:
+        description: "Ref (branch/sha) to checkout"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
+  RANDOM_RANGE_RATIO: '0.8'
+  PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  # TODO: Remove these test defaults after testing (used by push trigger)
+  TEST_CONFIG_KEY: 'dsr1-fp4-b200-dynamo-sglang'
+  TEST_CONFIG_FILE: '.github/configs/nvidia-master.yaml'
+  TEST_CONC: '16'
+  TEST_PROFILE_TYPE: 'torch'
+  TEST_PROFILE_START: '2'
+  TEST_PROFILE_STOP: '3'
+
+jobs:
+  get-jobs:
+    runs-on: ubuntu-latest
+    outputs:
+      filtered-matrix: ${{ steps.filter.outputs.filtered }}
+      count: ${{ steps.filter.outputs.count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - id: gen
+        name: Generate matrix via script
+        run: |
+          pip install pydantic
+          CLI_ARGS="test-config --config-files ${{ inputs.config-file || env.TEST_CONFIG_FILE }} --config-keys ${{ inputs.config-key || env.TEST_CONFIG_KEY }} --conc ${{ inputs.conc || env.TEST_CONC }}"
+          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+      - id: filter
+        name: Take first generated job
+        shell: python
+        run: |
+          import json, os, sys
+          raw = '${{ steps.gen.outputs.raw }}'
+          try:
+            data = json.loads(raw)
+          except Exception as e:
+            print('Invalid generator output:', e, file=sys.stderr)
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write("filtered=[]\ncount=0\n")
+            raise
+
+          if not isinstance(data, list):
+            print('Generator output is not a list.', file=sys.stderr)
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write("filtered=[]\ncount=0\n")
+            raise SystemExit(1)
+
+          # DEBUG: limit to first job only for testing
+          filt = data[:1]
+          out = json.dumps(filt)
+          print(out)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"filtered={out}\n")
+            f.write(f"count={len(filt)}\n")
+
+      - name: Fail if no matching entries
+        if: ${{ steps.filter.outputs.count == '0' }}
+        run: |
+          echo "No entries produced for config-key=${{ inputs.config-key || env.TEST_CONFIG_KEY }}, conc=${{ inputs.conc || env.TEST_CONC }}." >&2
+          exit 1
+
+  profile:
+    needs: get-jobs
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
+    runs-on: ${{ matrix.config.runner }}
+    timeout-minutes: 480
+    env:
+      EXP_NAME: ${{ matrix.config.exp-name }}
+      MODEL: ${{ matrix.config.model }}
+      MODEL_PREFIX: ${{ matrix.config.model-prefix }}
+      ISL: ${{ matrix.config.isl }}
+      OSL: ${{ matrix.config.osl }}
+      MAX_MODEL_LEN: ${{ matrix.config.max-model-len }}
+      IMAGE: ${{ matrix.config.image }}
+      FRAMEWORK: ${{ matrix.config.framework }}
+      PRECISION: ${{ matrix.config.precision }}
+      SPEC_DECODING: ${{ matrix.config.spec-decoding }}
+      DISAGG: ${{ matrix.config.disagg }}
+      # Single-node fields
+      TP: ${{ matrix.config.tp }}
+      EP_SIZE: ${{ matrix.config.ep }}
+      DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
+      CONC: ${{ matrix.config.conc[0] }}
+      # Multi-node fields
+      CONC_LIST: ${{ join(matrix.config.conc, ' ') }}
+      PREFILL_NUM_WORKERS: ${{ matrix.config.prefill.num-worker }}
+      PREFILL_TP: ${{ matrix.config.prefill.tp }}
+      PREFILL_EP: ${{ matrix.config.prefill.ep }}
+      PREFILL_DP_ATTN: ${{ matrix.config.prefill.dp-attn }}
+      DECODE_NUM_WORKERS: ${{ matrix.config.decode.num-worker }}
+      DECODE_TP: ${{ matrix.config.decode.tp }}
+      DECODE_EP: ${{ matrix.config.decode.ep }}
+      DECODE_DP_ATTN: ${{ matrix.config.decode.dp-attn }}
+    steps:
+      - name: Resource cleanup
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+          fi
+          if command -v squeue >/dev/null 2>&1; then
+            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+          clean: false
+
+      - name: Launch + Profile
+        id: run
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          IS_MULTINODE: ${{ matrix.config.disagg }}
+          PROFILE: '1'
+          PROFILE_TYPE: ${{ inputs.profile-type || env.TEST_PROFILE_TYPE }}
+          PROFILE_START_STEP: ${{ inputs.profile-start-step || env.TEST_PROFILE_START }}
+          PROFILE_STOP_STEP: ${{ inputs.profile-stop-step || env.TEST_PROFILE_STOP }}
+          SGLANG_TORCH_PROFILER_DIR: /workspace/
+          VLLM_TORCH_PROFILER_DIR: /workspace/
+          VLLM_RPC_TIMEOUT: '1800000'
+        run: |
+          set -euo pipefail
+
+          # Build result filename (same pattern as profile.yml)
+          ep_val="${EP_SIZE:-${DECODE_EP:-1}}"
+          tp_val="${TP:-${DECODE_TP:-1}}"
+          if [[ "${IS_MULTINODE}" == "true" ]]; then
+            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_prefill-tp${PREFILL_TP}-ep${PREFILL_EP}-dp${PREFILL_DP_ATTN}-nw${PREFILL_NUM_WORKERS}_decode-tp${DECODE_TP}-ep${DECODE_EP}-dp${DECODE_DP_ATTN}-nw${DECODE_NUM_WORKERS}_disagg-${DISAGG}_spec-${SPEC_DECODING}_conc${CONC}_${RUNNER_NAME}"
+          else
+            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${tp_val}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          fi
+          export RESULT_FILENAME="${res_name}"
+          echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
+
+          # Export additional settings (sets CONFIG_FILE for srt-slurm recipes)
+          additional="${{ join(matrix.config.prefill.additional-settings || fromJson('[]'), ' ') }} ${{ join(matrix.config.decode.additional-settings || fromJson('[]'), ' ') }}"
+          if [ -n "${additional// /}" ]; then
+            export $additional
+          fi
+
+          # Export profiling env vars for the launch scripts to pick up
+          export PROFILE_INJECT_TYPE="${PROFILE_TYPE}"
+          export PROFILE_INJECT_START="${PROFILE_START_STEP}"
+          export PROFILE_INJECT_STOP="${PROFILE_STOP_STEP}"
+
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+
+          # Locate results
+          if ls ${res_name}*.json 1> /dev/null 2>&1; then
+            echo "Found result files: $(ls ${res_name}*.json)"
+          else
+            echo "Warning: No result files matching ${res_name}*.json" >&2
+          fi
+
+          # Locate profile traces — mirrors single-node profile.yml
+          # Single-node: benchmark_lib move_profile_trace_for_relay produces profile_${res_name}.trace.json.gz
+          # Multi-node: srt-slurm writes traces to outputs/*/logs/profiles/{mode}/
+          trace_path="profile_${res_name}.trace.json.gz"
+          if [ -f "$trace_path" ]; then
+            echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
+          fi
+
+          # For multinode, collect traces from LOGS/profiles/ or LOGS/logs/profiles/
+          profiles_dir="$GITHUB_WORKSPACE/LOGS/profiles"
+          if [ ! -d "$profiles_dir" ] && [ -d "$GITHUB_WORKSPACE/LOGS/logs/profiles" ]; then
+            profiles_dir="$GITHUB_WORKSPACE/LOGS/logs/profiles"
+          fi
+          if [ -d "$profiles_dir" ] && [ -n "$(find "$profiles_dir" -type f 2>/dev/null | head -1)" ]; then
+            echo "Found profile traces:"
+            find "$profiles_dir" -type f | head -20
+
+            # If single trace not found yet, pick the latest from profiles/ and stage it
+            # (same as move_profile_trace_for_relay does for single-node)
+            if [ ! -f "$trace_path" ]; then
+              latest_trace=$(find "$profiles_dir" -type f \( -name "*.trace.json" -o -name "*.trace.json.gz" -o -name "*.pt.trace.json" \) -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+              if [ -n "$latest_trace" ]; then
+                if [[ "$latest_trace" == *.gz ]]; then
+                  cp "$latest_trace" "$trace_path"
+                else
+                  gzip -c "$latest_trace" > "$trace_path"
+                fi
+                echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
+                echo "Staged trace: $latest_trace -> $trace_path"
+              fi
+            fi
+
+            # Archive all traces for detailed analysis
+            archive="profile_${res_name}.tar.gz"
+            tar czf "$GITHUB_WORKSPACE/$archive" -C "$profiles_dir" .
+            echo "trace_archive=$archive" >> "$GITHUB_OUTPUT"
+          elif [ ! -f "$trace_path" ]; then
+            echo "Warning: No profile traces found" >&2
+            echo "=== Contents of LOGS directory ==="
+            find "$GITHUB_WORKSPACE/LOGS" -type f 2>/dev/null | head -30 || echo "LOGS dir not found"
+            echo "==================================="
+          fi
+
+      - name: Process results
+        env:
+          RUNNER_TYPE: ${{ matrix.config.runner }}
+        run: |
+          if [[ "${{ matrix.config.disagg }}" == "true" ]]; then
+            for result_file in ${RESULT_FILENAME}_*.json; do
+              if [ -f "$result_file" ]; then
+                gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
+                prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
+                decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
+                if [ -n "$gpus" ]; then
+                  RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
+                fi
+              fi
+            done
+          else
+            python3 utils/process_result.py
+          fi
+
+      - name: Upload profile trace
+        if: ${{ steps.run.outputs.trace != '' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}
+          path: ${{ steps.run.outputs.trace }}
+
+      - name: Upload all profile traces (archive)
+        if: ${{ steps.run.outputs.trace_archive != '' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: profile_all_${{ env.RESULT_FILENAME }}
+          path: ${{ steps.run.outputs.trace_archive }}
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: bmk_${{ env.RESULT_FILENAME }}
+          path: agg_${{ env.RESULT_FILENAME }}*.json
+          if-no-files-found: ignore
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: logs_${{ env.RESULT_FILENAME }}
+          path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
+
+      - name: Checkout storage repo
+        if: ${{ steps.run.outputs.trace != '' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: SemiAnalysisAI/InferenceX-trace-storage
+          path: storage
+          ref: master
+          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
+          fetch-depth: 0
+
+      - name: Push profile to storage repo
+        if: ${{ steps.run.outputs.trace != '' }}
+        id: push
+        env:
+          TRACE_LOCAL: ${{ steps.run.outputs.trace }}
+        run: |
+          set -euo pipefail
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ env.RESULT_FILENAME }}"
+          mkdir -p "$dest_dir"
+          cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+          pushd storage >/dev/null
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          git commit -m "Add profile: ${{ env.RESULT_FILENAME }}" || echo "Nothing to commit"
+          git push
+          STORAGE_SHA="$(git rev-parse HEAD)"
+          popd >/dev/null
+          RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ env.RESULT_FILENAME }}/trace.json.gz"
+          TITLE="${{ env.RESULT_FILENAME }}"
+          enc_src="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${RAW_URL}', safe=''))")"
+          enc_title="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${TITLE}', safe=''))")"
+          relay="${PERFETTO_RELAY_URL%/}"
+          echo "relay_url=${relay}/?src=${enc_src}&title=${enc_title}" >> "$GITHUB_OUTPUT"
+
+      - name: Print Perfetto link
+        if: ${{ steps.push.outputs.relay_url != '' }}
+        run: |
+          echo "Perfetto Relay URL: ${{ steps.push.outputs.relay_url }}"
+          printf "\n**Perfetto (Relay):** %s\n" "${{ steps.push.outputs.relay_url }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: |
+          if command -v squeue >/dev/null 2>&1; then
+            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
+              scancel --name="${{ runner.name }}" || true
+            else
+              scancel -u "$USER" || true
+            fi
+          fi
