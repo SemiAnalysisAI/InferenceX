@@ -44,7 +44,6 @@ python3 -m sglang.launch_server \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
-    --context-length $CONTEXT_LENGTH \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
