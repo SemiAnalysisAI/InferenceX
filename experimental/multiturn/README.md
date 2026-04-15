@@ -1,16 +1,27 @@
-## Experimental WIP: Multi turn with/without CPU KVCache Offloading
+# Experimental multiturn notes
 
-lit review
-- https://lmsys.org/blog/2025-09-10-sglang-hicache/
--  sglang calls GPU HBM as (L1) and CPU DRAM as (L2)
-- https://lmsys.org/images/blog/hicache/mooncake_benchmark.png
-- single turn long context Q&A  https://arxiv.org/abs/2311.04939 (seems more like an shared prefix style similar to cascade attention (pre cursor to sglang radix attention )) https://flashinfer.ai/2024/02/02/cascade-inference.html
-- synethic & sharegpt vllm multi turn datasets https://github.com/vllm-project/vllm/tree/main/benchmarks/multi_turn
-- Production Alibiba Multi turn dataset https://arxiv.org/abs/2506.02634 (seem to not provide the acutal prompts and outputs tho, more just prompt lengths and output lengths, etc.)
-- sglang synthetic multi turn benchmark script here https://github.com/sgl-project/sglang/tree/main/benchmark/hicache
-- interestingly sglang blog simulates PD disagg via just setting OSL as 1
-- MT-bench https://arxiv.org/abs/2402.14762
-```bash
-python3 benchmark/hicache/bench_multiturn.py --model-path $MODEL_PATH --disable-random-sample \
---output-length 1 --request-length 2048 \ # simulate P-D disaggregation
-```
+This directory contains working notes, investigations, and planning material for multiturn and long-context benchmarking.
+
+## Official ISB1 replay status lives elsewhere
+
+Do **not** treat this directory as the source of truth for the currently supported InferenceX ISB1 surface.
+
+For the official, reviewable statement of what is landed now, use:
+- `datasets/isb1/SUPPORT_MATRIX.md`
+- `datasets/isb1/README.md`
+- `.github/configs/isb1-master.yaml`
+
+## Relevant roadmap docs
+
+- `ISB1_MULTITURN_LONG_CONTEXT_CANONICAL_SYNTHESIS_2026-04-09.md` — canonical synthesis for next implementation phases; use this first for planning context.
+- `ISB1_INFERENCEX_PHASED_PR_ROADMAP_2026-04-09.md` — phased landing plan used to split schema/workflow/data/extension/polish work into mergeable stages.
+
+## Scope warning
+
+Files in this directory may discuss future or experimental directions such as:
+- KV offload investigations
+- synthetic multiturn ideas
+- broader long-context expansion
+- experiments outside the currently merged official replay lane
+
+Those notes are useful for planning, but they are **not** themselves an official support claim.

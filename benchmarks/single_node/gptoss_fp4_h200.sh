@@ -18,7 +18,9 @@ fi
 hf download "$MODEL"
 
 # Start GPU monitoring (power, temperature, clocks every second)
-start_gpu_monitor
+if ! is_isb1_kv_stress_benchmark; then
+    start_gpu_monitor
+fi
 
 set -x
 pip install datasets pandas
@@ -37,13 +39,20 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     CALCULATED_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
+PREFIX_CACHING_CONFIG="no-enable-prefix-caching: true"
+if is_isb1_replay_benchmark || is_isb1_kv_stress_benchmark; then
+    PREFIX_CACHING_CONFIG=""
+fi
+
 # Create config.yaml
 cat > config.yaml << EOF
-no-enable-prefix-caching: true
+$PREFIX_CACHING_CONFIG
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
+
+apply_vllm_offload_config
 
 SERVER_LOG=/workspace/server.log
 export TORCH_CUDA_ARCH_LIST="9.0"
@@ -55,14 +64,15 @@ PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
  --config config.yaml \
  --gpu-memory-utilization 0.9 \
  --tensor-parallel-size $TP \
- --max-num-seqs $CONC > $SERVER_LOG 2>&1 &
+ --max-num-seqs $CONC $VLLM_OFFLOAD_EXTRA_ARGS \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-run_benchmark_serving \
+run_single_node_benchmark \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
@@ -72,7 +82,8 @@ run_benchmark_serving \
     --num-prompts $(( $CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --server-pid "$SERVER_PID"
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
@@ -81,5 +92,7 @@ if [ "${RUN_EVAL}" = "true" ]; then
 fi
 
 # Stop GPU monitoring
-stop_gpu_monitor
+if ! is_isb1_kv_stress_benchmark; then
+    stop_gpu_monitor
+fi
 set +x

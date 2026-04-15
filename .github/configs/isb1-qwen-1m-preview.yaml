@@ -1,0 +1,53 @@
+# Manual-only gated Qwen 1M preview surface.
+# The selected export cells remain support-status=reviewed_preview and
+# benchmark_certification_status=dataset_replay_verified, but this file is
+# intentionally separate from isb1-master.yaml so the lane stays out of the
+# ordinary runnable support statement.
+#
+# Use only for explicit validation dispatches while KV-offload observability and
+# correctness remain under review. Running this file does not imply native 1M
+# served-lane support or KV-offload certification.
+
+qwen3.5-fp8-b200-isb1-sglang-1m-gated-preview-code:
+  image: lmsysorg/sglang:v0.5.9-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  precision: fp8
+  framework: sglang
+  runner: b200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  canonical-model-id: qwen3_5_397b_a17b
+  max-model-len: 1048576
+  replay-configs:
+    - export-file: datasets/isb1/exports/preview/long_context_1m/inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__sglang.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 1
+          max-sessions: 1
+          max-turns-per-session: 3
+          num-warmup-sessions: 0
+
+qwen3.5-fp8-b200-isb1-vllm-1m-gated-preview-code:
+  image: vllm/vllm-openai:v0.19.0-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  precision: fp8
+  framework: vllm
+  runner: b200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  canonical-model-id: qwen3_5_397b_a17b
+  max-model-len: 1048576
+  replay-configs:
+    - export-file: datasets/isb1/exports/preview/long_context_1m/inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 1
+          max-sessions: 1
+          max-turns-per-session: 3
+          num-warmup-sessions: 0

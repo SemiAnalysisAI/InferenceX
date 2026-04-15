@@ -1,0 +1,2 @@
+exports/**/*.json linguist-generated=true
+exports/**/*.json text eol=lf

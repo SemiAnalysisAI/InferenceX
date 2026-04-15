@@ -1,2 +1,5 @@
 **/__pycache__/**
 **/.coverage
+**/.DS_Store
+prompt-exports/
+.claude

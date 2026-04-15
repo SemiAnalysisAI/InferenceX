@@ -10,7 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from validation import (
     validate_matrix_entry,
+    validate_isb1_matrix_entry,
+    validate_isb1_kv_stress_matrix_entry,
     load_config_files,
+    load_isb1_config_files,
+    load_isb1_kv_stress_config_files,
     load_runner_file,
     Fields
 )
@@ -370,6 +374,243 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         conc *= args.step_size
                         if conc > conc_end:
                             conc = conc_end
+
+    return matrix_values
+
+
+def generate_isb1_sweep(args, all_config_data, runner_data):
+    """Generate ISB1 replay sweep configurations with optional filtering."""
+    if args.runner_type:
+        valid_runner_types = set(runner_data.keys())
+        invalid_runners = set(args.runner_type) - valid_runner_types
+        if invalid_runners:
+            raise ValueError(
+                f"Invalid runner type(s): {invalid_runners}. "
+                f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
+            )
+
+    matrix_values = []
+
+    for _, val in all_config_data.items():
+        if args.model_prefix and val[Fields.MODEL_PREFIX.value] not in args.model_prefix:
+            continue
+
+        if args.precision and val[Fields.PRECISION.value] not in args.precision:
+            continue
+
+        if args.framework and val[Fields.FRAMEWORK.value] not in args.framework:
+            continue
+
+        if args.runner_type and val[Fields.RUNNER.value] not in args.runner_type:
+            continue
+
+        image = val[Fields.IMAGE.value]
+        model = val[Fields.MODEL.value]
+        model_code = val[Fields.MODEL_PREFIX.value]
+        precision = val[Fields.PRECISION.value]
+        framework = val[Fields.FRAMEWORK.value]
+        runner = val[Fields.RUNNER.value]
+        benchmark_type = val[Fields.BENCHMARK_TYPE.value]
+        runtime_stack_id = val[Fields.RUNTIME_STACK_ID.value]
+        hardware_profile_id = val[Fields.HARDWARE_PROFILE_ID.value]
+        canonical_model_id = val[Fields.CANONICAL_MODEL_ID.value]
+        max_model_len = val.get(Fields.MAX_MODEL_LEN.value)
+
+        runner_nodes_to_use = None
+        if args.runner_node_filter:
+            runner_nodes = runner_data.get(runner, [])
+            runner_nodes_to_use = [
+                node for node in runner_nodes if args.runner_node_filter in node
+            ]
+            if not runner_nodes_to_use:
+                continue
+
+        replay_configs = val[Fields.REPLAY_CONFIGS.value]
+        for replay_config in replay_configs:
+            export_file = replay_config[Fields.EXPORT_FILE.value]
+            request_mode = replay_config[Fields.REQUEST_MODE.value]
+            support_status = replay_config.get(Fields.SUPPORT_STATUS.value)
+
+            for replay_space in replay_config[Fields.SEARCH_SPACE.value]:
+                max_concurrency = replay_space[Fields.MAX_CONCURRENCY.value]
+
+                if args.max_concurrency is not None:
+                    if args.max_concurrency <= 0:
+                        continue
+                    max_concurrency = min(max_concurrency, args.max_concurrency)
+
+                runners_for_entry = (
+                    runner_nodes_to_use if runner_nodes_to_use else [runner]
+                )
+                for runner_value in runners_for_entry:
+                    entry = {
+                        Fields.IMAGE.value: image,
+                        Fields.MODEL.value: model,
+                        Fields.MODEL_PREFIX.value: model_code,
+                        Fields.PRECISION.value: precision,
+                        Fields.FRAMEWORK.value: framework,
+                        Fields.RUNNER.value: runner_value,
+                        Fields.BENCHMARK_TYPE.value: benchmark_type,
+                        Fields.EXPORT_FILE.value: export_file,
+                        Fields.RUNTIME_STACK_ID.value: runtime_stack_id,
+                        Fields.HARDWARE_PROFILE_ID.value: hardware_profile_id,
+                        Fields.CANONICAL_MODEL_ID.value: canonical_model_id,
+                        Fields.SUPPORT_STATUS.value: support_status,
+                        Fields.REQUEST_MODE.value: request_mode,
+                        Fields.MAX_CONCURRENCY.value: max_concurrency,
+                        Fields.MAX_SESSIONS.value: replay_space.get(Fields.MAX_SESSIONS.value),
+                        Fields.MAX_TURNS_PER_SESSION.value: replay_space.get(Fields.MAX_TURNS_PER_SESSION.value),
+                        Fields.MAX_OUTPUT_LEN.value: replay_space.get(Fields.MAX_OUTPUT_LEN.value),
+                        Fields.NUM_WARMUP_SESSIONS.value: replay_space.get(
+                            Fields.NUM_WARMUP_SESSIONS.value, 0
+                        ),
+                        Fields.IGNORE_WAITS.value: replay_space.get(
+                            Fields.IGNORE_WAITS.value, False
+                        ),
+                        Fields.IGNORE_EOS.value: replay_space.get(
+                            Fields.IGNORE_EOS.value, False
+                        ),
+                        Fields.MAX_MODEL_LEN.value: max_model_len,
+                        Fields.OFFLOAD_MODE.value: val.get(Fields.OFFLOAD_MODE.value),
+                        Fields.KV_CACHE_DTYPE.value: val.get(Fields.KV_CACHE_DTYPE.value),
+                        Fields.DISABLE_PREFIX_CACHING.value: val.get(
+                            Fields.DISABLE_PREFIX_CACHING.value
+                        ),
+                        'benchmark-duration-s': replay_space.get('benchmark-duration-s'),
+                        Fields.EXP_NAME.value: f"{model_code}_isb1",
+                    }
+                    validate_isb1_matrix_entry(entry)
+                    matrix_values.append(entry)
+
+    return matrix_values
+
+
+def generate_isb1_kv_stress_sweep(args, all_config_data, runner_data):
+    """Generate ISB1 KV stress sweep configurations with optional filtering."""
+    if args.runner_type:
+        valid_runner_types = set(runner_data.keys())
+        invalid_runners = set(args.runner_type) - valid_runner_types
+        if invalid_runners:
+            raise ValueError(
+                f"Invalid runner type(s): {invalid_runners}. "
+                f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
+            )
+
+    matrix_values = []
+
+    for _, val in all_config_data.items():
+        if args.model_prefix and val[Fields.MODEL_PREFIX.value] not in args.model_prefix:
+            continue
+
+        if args.precision and val[Fields.PRECISION.value] not in args.precision:
+            continue
+
+        if args.framework and val[Fields.FRAMEWORK.value] not in args.framework:
+            continue
+
+        if args.runner_type and val[Fields.RUNNER.value] not in args.runner_type:
+            continue
+
+        image = val[Fields.IMAGE.value]
+        model = val[Fields.MODEL.value]
+        model_code = val[Fields.MODEL_PREFIX.value]
+        precision = val[Fields.PRECISION.value]
+        framework = val[Fields.FRAMEWORK.value]
+        runner = val[Fields.RUNNER.value]
+        benchmark_type = val[Fields.BENCHMARK_TYPE.value]
+        runtime_stack_id = val[Fields.RUNTIME_STACK_ID.value]
+        hardware_profile_id = val[Fields.HARDWARE_PROFILE_ID.value]
+        canonical_model_id = val[Fields.CANONICAL_MODEL_ID.value]
+        max_model_len = val.get(Fields.MAX_MODEL_LEN.value)
+        kv_cache_dtype = val[Fields.KV_CACHE_DTYPE.value]
+
+        runner_nodes_to_use = None
+        if args.runner_node_filter:
+            runner_nodes = runner_data.get(runner, [])
+            runner_nodes_to_use = [
+                node for node in runner_nodes if args.runner_node_filter in node
+            ]
+            if not runner_nodes_to_use:
+                continue
+
+        kv_stress_configs = val[Fields.KV_STRESS_CONFIGS.value]
+        for kv_stress_config in kv_stress_configs:
+            export_file = kv_stress_config[Fields.EXPORT_FILE.value]
+            request_mode = kv_stress_config[Fields.REQUEST_MODE.value]
+            support_status = kv_stress_config.get(Fields.SUPPORT_STATUS.value)
+            workload_type = kv_stress_config[Fields.WORKLOAD_TYPE.value]
+
+            runners_for_entry = (
+                runner_nodes_to_use if runner_nodes_to_use else [runner]
+            )
+
+            def _append_kv_stress_entry(
+                max_concurrency: int,
+                offload_mode: str,
+                duration_s: int,
+                *,
+                tp: int | None = None,
+                ep: int | None = None,
+            ) -> None:
+                disable_prefix_caching = offload_mode == "noprefix"
+                for runner_value in runners_for_entry:
+                    entry = {
+                        Fields.IMAGE.value: image,
+                        Fields.MODEL.value: model,
+                        Fields.MODEL_PREFIX.value: model_code,
+                        Fields.PRECISION.value: precision,
+                        Fields.FRAMEWORK.value: framework,
+                        Fields.RUNNER.value: runner_value,
+                        Fields.BENCHMARK_TYPE.value: benchmark_type,
+                        Fields.EXPORT_FILE.value: export_file,
+                        Fields.RUNTIME_STACK_ID.value: runtime_stack_id,
+                        Fields.HARDWARE_PROFILE_ID.value: hardware_profile_id,
+                        Fields.CANONICAL_MODEL_ID.value: canonical_model_id,
+                        Fields.SUPPORT_STATUS.value: support_status,
+                        Fields.REQUEST_MODE.value: request_mode,
+                        Fields.MAX_CONCURRENCY.value: max_concurrency,
+                        Fields.OFFLOAD_MODE.value: offload_mode,
+                        Fields.KV_CACHE_DTYPE.value: kv_cache_dtype,
+                        Fields.DISABLE_PREFIX_CACHING.value: disable_prefix_caching,
+                        'benchmark-duration-s': duration_s,
+                        Fields.WORKLOAD_TYPE.value: workload_type,
+                        Fields.MAX_MODEL_LEN.value: max_model_len,
+                        Fields.EXP_NAME.value: f"{model_code}_isb1_kv_stress",
+                    }
+                    if tp is not None:
+                        entry[Fields.TP.value] = tp
+                    if ep is not None:
+                        entry[Fields.EP.value] = ep
+                    validate_isb1_kv_stress_matrix_entry(entry)
+                    matrix_values.append(entry)
+
+            tp_configs = kv_stress_config.get('tp-configs')
+            if tp_configs:
+                for tp_config in tp_configs:
+                    tp_value = tp_config[Fields.TP.value]
+                    ep_value = tp_config.get(Fields.EP.value, 1)
+                    users = tp_config[Fields.USERS.value]
+                    offload_modes = tp_config[Fields.OFFLOAD_MODES.value]
+                    duration_s = tp_config[Fields.DURATION_S.value]
+
+                    for max_concurrency in users:
+                        for offload_mode in offload_modes:
+                            _append_kv_stress_entry(
+                                max_concurrency,
+                                offload_mode,
+                                duration_s,
+                                tp=tp_value,
+                                ep=ep_value,
+                            )
+            else:
+                for stress_space in kv_stress_config[Fields.SEARCH_SPACE.value]:
+                    users = stress_space[Fields.USERS.value]
+                    offload_modes = stress_space[Fields.OFFLOAD_MODES.value]
+                    duration_s = stress_space[Fields.DURATION_S.value]
+
+                    for max_concurrency in users:
+                        for offload_mode in offload_modes:
+                            _append_kv_stress_entry(max_concurrency, offload_mode, duration_s)
 
     return matrix_values
 
@@ -885,6 +1126,86 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: isb1-sweep
+    isb1_sweep_parser = subparsers.add_parser(
+        'isb1-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help='Generate ISB1 replay sweep configurations'
+    )
+    isb1_sweep_parser.add_argument(
+        '--model-prefix',
+        nargs='+',
+        required=False,
+        help='Model prefix(es) to filter configurations (optional, can specify multiple)'
+    )
+    isb1_sweep_parser.add_argument(
+        '--precision',
+        nargs='+',
+        required=False,
+        help='Precision(s) to filter by (optional, can specify multiple)'
+    )
+    isb1_sweep_parser.add_argument(
+        '--framework',
+        nargs='+',
+        required=False,
+        help='Framework(s) to filter by (optional, can specify multiple)'
+    )
+    isb1_sweep_parser.add_argument(
+        '--runner-type',
+        nargs='+',
+        required=False,
+        help='Runner type(s) to filter by (e.g., h200, b200) (optional, can specify multiple)'
+    )
+    isb1_sweep_parser.add_argument(
+        '--max-concurrency',
+        type=int,
+        required=False,
+        help='Maximum replay concurrency value to include (caps higher values)'
+    )
+    isb1_sweep_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
+    # Subcommand: isb1-kv-stress-sweep
+    isb1_kv_stress_sweep_parser = subparsers.add_parser(
+        'isb1-kv-stress-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help='Generate ISB1 KV stress sweep configurations'
+    )
+    isb1_kv_stress_sweep_parser.add_argument(
+        '--model-prefix',
+        nargs='+',
+        required=False,
+        help='Model prefix(es) to filter configurations (optional, can specify multiple)'
+    )
+    isb1_kv_stress_sweep_parser.add_argument(
+        '--precision',
+        nargs='+',
+        required=False,
+        help='Precision(s) to filter by (optional, can specify multiple)'
+    )
+    isb1_kv_stress_sweep_parser.add_argument(
+        '--framework',
+        nargs='+',
+        required=False,
+        help='Framework(s) to filter by (optional, can specify multiple)'
+    )
+    isb1_kv_stress_sweep_parser.add_argument(
+        '--runner-type',
+        nargs='+',
+        required=False,
+        help='Runner type(s) to filter by (e.g., h200, b200) (optional, can specify multiple)'
+    )
+    isb1_kv_stress_sweep_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     # Subcommand: test-config
     test_config_keys_parser = subparsers.add_parser(
         'test-config',
@@ -915,7 +1236,12 @@ def main():
     apply_node_type_defaults(args)
 
     # Load and validate configuration files (validation happens by default in load functions)
-    all_config_data = load_config_files(args.config_files)
+    if args.command == 'isb1-sweep':
+        all_config_data = load_isb1_config_files(args.config_files)
+    elif args.command == 'isb1-kv-stress-sweep':
+        all_config_data = load_isb1_kv_stress_config_files(args.config_files)
+    else:
+        all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
 
     # Route to appropriate function based on subcommand
@@ -924,13 +1250,17 @@ def main():
     elif args.command == 'runner-model-sweep':
         matrix_values = generate_runner_model_sweep_config(
             args, all_config_data, runner_data)
+    elif args.command == 'isb1-sweep':
+        matrix_values = generate_isb1_sweep(args, all_config_data, runner_data)
+    elif args.command == 'isb1-kv-stress-sweep':
+        matrix_values = generate_isb1_kv_stress_sweep(args, all_config_data, runner_data)
     elif args.command == 'test-config':
         matrix_values = generate_test_config_sweep(args, all_config_data)
     else:
         parser.error(f"Unknown command: {args.command}")
         
     # Handle eval options (mutually exclusive: --no-evals or --evals-only)
-    if not args.no_evals:
+    if args.command not in ('isb1-sweep', 'isb1-kv-stress-sweep') and not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
         if args.evals_only:
             matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]

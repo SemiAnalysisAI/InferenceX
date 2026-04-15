@@ -47,6 +47,7 @@ def base_env_vars():
         "OSL": "1024",
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
+        "IMAGE": "lmsysorg/sglang:v0.4.6.post5-cu126",
     }
 
 
@@ -298,6 +299,32 @@ class TestProcessResultScript:
         )
 
         assert result.returncode != 0
+
+    def test_isb1_replay_env_guard(self, tmp_path, sample_benchmark_result, single_node_env_vars):
+        """ISB1 replay runs should fail fast with a helpful processor redirect."""
+        env = single_node_env_vars.copy()
+        env["BENCHMARK_TYPE"] = "isb1_replay"
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+
+        assert result.returncode != 0
+        assert "Use utils/process_result_isb1.py instead" in result.stderr
+
+    def test_isb1_replay_payload_guard(self, tmp_path, single_node_env_vars):
+        """Replay-shaped payloads should be rejected even without BENCHMARK_TYPE set."""
+        replay_like_result = {
+            "model_id": "test-model",
+            "max_concurrency": 4,
+            "aggregate_metrics": {
+                "total_token_throughput_tps": 1000.0,
+                "output_throughput_tps": 800.0,
+            },
+        }
+
+        result = run_script(tmp_path, single_node_env_vars, replay_like_result)
+
+        assert result.returncode != 0
+        assert "Detected an ISB1 replay-style result payload" in result.stderr
 
 
 # =============================================================================

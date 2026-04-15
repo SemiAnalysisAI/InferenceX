@@ -1,0 +1,256 @@
+name: Run ISB1 Sweep
+run-name: ISB1 Sweep - ${{ github.event.inputs.config-files || '.github/configs/isb1-master.yaml' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      config-files:
+        description: Space-separated ISB1 config file paths
+        required: true
+        default: .github/configs/isb1-master.yaml
+      runner-config:
+        description: Runner config YAML
+        required: false
+        default: .github/configs/runners.yaml
+      model-prefix:
+        description: Optional space-separated model-prefix filters
+        required: false
+        default: ''
+      precision:
+        description: Optional space-separated precision filters
+        required: false
+        default: ''
+      framework:
+        description: Optional space-separated framework filters
+        required: false
+        default: ''
+      runner-type:
+        description: Optional space-separated runner filters
+        required: false
+        default: ''
+      runner-node-filter:
+        description: Optional runner-node substring filter
+        required: false
+        default: ''
+      max-concurrency:
+        description: Optional cap applied to replay max-concurrency
+        required: false
+        default: ''
+      vllm-cpu-offload-gb:
+        description: Optional vLLM CPU offload budget in GB for long-context runs
+        required: false
+        default: ''
+      vllm-swap-space-gb:
+        description: Optional vLLM swap-space budget in GB for long-context runs
+        required: false
+        default: ''
+      sglang-mem-fraction-override:
+        description: Optional SGLang mem-fraction-static override for long-context runs
+        required: false
+        default: ''
+      sglang-chunked-prefill-override:
+        description: Optional SGLang chunked-prefill-size override for long-context runs
+        required: false
+        default: ''
+      ref:
+        description: Git ref to checkout
+        required: false
+        default: ''
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      replay-matrix: ${{ steps.generate.outputs.replay-matrix }}
+      has-matrix: ${{ steps.generate.outputs.has-matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install dependencies
+        run: pip install pydantic pyyaml
+
+      - id: generate
+        env:
+          CONFIG_FILES: ${{ inputs.config-files }}
+          RUNNER_CONFIG: ${{ inputs.runner-config }}
+          MODEL_PREFIX: ${{ inputs.model-prefix }}
+          PRECISION: ${{ inputs.precision }}
+          FRAMEWORK: ${{ inputs.framework }}
+          RUNNER_TYPE: ${{ inputs.runner-type }}
+          RUNNER_NODE_FILTER: ${{ inputs.runner-node-filter }}
+          MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+        run: |
+          read -r -a config_files <<< "$CONFIG_FILES"
+
+          for config_file in "${config_files[@]}"; do
+            if [ ! -f "$config_file" ]; then
+              echo "Missing ISB1 config file: $config_file" >&2
+              echo "PR1b adds the workflow lane only; the committed config arrives in PR2." >&2
+              exit 1
+            fi
+          done
+
+          cmd=(python3 utils/matrix_logic/generate_sweep_configs.py isb1-sweep --config-files "${config_files[@]}" --runner-config "$RUNNER_CONFIG")
+
+          if [ -n "$MODEL_PREFIX" ]; then
+            read -r -a model_prefixes <<< "$MODEL_PREFIX"
+            cmd+=(--model-prefix "${model_prefixes[@]}")
+          fi
+          if [ -n "$PRECISION" ]; then
+            read -r -a precisions <<< "$PRECISION"
+            cmd+=(--precision "${precisions[@]}")
+          fi
+          if [ -n "$FRAMEWORK" ]; then
+            read -r -a frameworks <<< "$FRAMEWORK"
+            cmd+=(--framework "${frameworks[@]}")
+          fi
+          if [ -n "$RUNNER_TYPE" ]; then
+            read -r -a runner_types <<< "$RUNNER_TYPE"
+            cmd+=(--runner-type "${runner_types[@]}")
+          fi
+          if [ -n "$RUNNER_NODE_FILTER" ]; then
+            cmd+=(--runner-node-filter "$RUNNER_NODE_FILTER")
+          fi
+          if [ -n "$MAX_CONCURRENCY" ]; then
+            cmd+=(--max-concurrency "$MAX_CONCURRENCY")
+          fi
+
+          matrix_json="$("${cmd[@]}")"
+          compact_matrix="$(printf '%s' "$matrix_json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)))')"
+          has_matrix="$(printf '%s' "$compact_matrix" | python3 -c 'import json,sys; print("true" if json.load(sys.stdin) else "false")')"
+
+          {
+            echo "replay-matrix=$compact_matrix"
+            echo "has-matrix=$has_matrix"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write ISB1 preflight run manifest
+        env:
+          REPLAY_MATRIX: ${{ steps.generate.outputs.replay-matrix }}
+          HAS_MATRIX: ${{ steps.generate.outputs.has-matrix }}
+          INPUT_CONFIG_FILES: ${{ inputs.config-files }}
+          INPUT_RUNNER_CONFIG: ${{ inputs.runner-config }}
+          INPUT_MODEL_PREFIX: ${{ inputs.model-prefix }}
+          INPUT_PRECISION: ${{ inputs.precision }}
+          INPUT_FRAMEWORK: ${{ inputs.framework }}
+          INPUT_RUNNER_TYPE: ${{ inputs.runner-type }}
+          INPUT_RUNNER_NODE_FILTER: ${{ inputs.runner-node-filter }}
+          INPUT_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+          INPUT_VLLM_CPU_OFFLOAD_GB: ${{ inputs.vllm-cpu-offload-gb }}
+          INPUT_VLLM_SWAP_SPACE_GB: ${{ inputs.vllm-swap-space-gb }}
+          INPUT_SGLANG_MEM_FRACTION_OVERRIDE: ${{ inputs.sglang-mem-fraction-override }}
+          INPUT_SGLANG_CHUNKED_PREFILL_OVERRIDE: ${{ inputs.sglang-chunked-prefill-override }}
+          INPUT_REF: ${{ inputs.ref || github.ref }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from collections import Counter
+
+          matrix_rows = json.loads(os.environ.get("REPLAY_MATRIX") or "[]")
+
+          def count_by(field: str) -> dict[str, int]:
+              values = [row.get(field) for row in matrix_rows]
+              normalized = ["" if value is None else str(value) for value in values]
+              return dict(sorted(Counter(normalized).items()))
+
+          manifest = {
+              "dispatch_inputs": {
+                  "config-files": os.environ.get("INPUT_CONFIG_FILES", ""),
+                  "runner-config": os.environ.get("INPUT_RUNNER_CONFIG", ""),
+                  "model-prefix": os.environ.get("INPUT_MODEL_PREFIX", ""),
+                  "precision": os.environ.get("INPUT_PRECISION", ""),
+                  "framework": os.environ.get("INPUT_FRAMEWORK", ""),
+                  "runner-type": os.environ.get("INPUT_RUNNER_TYPE", ""),
+                  "runner-node-filter": os.environ.get("INPUT_RUNNER_NODE_FILTER", ""),
+                  "max-concurrency": os.environ.get("INPUT_MAX_CONCURRENCY", ""),
+                  "vllm-cpu-offload-gb": os.environ.get("INPUT_VLLM_CPU_OFFLOAD_GB", ""),
+                  "vllm-swap-space-gb": os.environ.get("INPUT_VLLM_SWAP_SPACE_GB", ""),
+                  "sglang-mem-fraction-override": os.environ.get("INPUT_SGLANG_MEM_FRACTION_OVERRIDE", ""),
+                  "sglang-chunked-prefill-override": os.environ.get("INPUT_SGLANG_CHUNKED_PREFILL_OVERRIDE", ""),
+                  "ref": os.environ.get("INPUT_REF", ""),
+              },
+              "matrix_summary": {
+                  "has_matrix": os.environ.get("HAS_MATRIX", "false"),
+                  "total_cells": len(matrix_rows),
+                  "by_model_prefix": count_by("model-prefix"),
+                  "by_framework": count_by("framework"),
+                  "by_runner": count_by("runner"),
+                  "by_support_status": count_by("support-status"),
+              },
+              "workflow_context": {
+                  "run_id": os.environ.get("WORKFLOW_RUN_ID", ""),
+                  "run_attempt": os.environ.get("WORKFLOW_RUN_ATTEMPT", ""),
+                  "sha": os.environ.get("WORKFLOW_SHA", ""),
+              },
+              "matrix_rows": matrix_rows,
+          }
+
+          with open("isb1_run_manifest.json", "w", encoding="utf-8") as fh:
+              json.dump(manifest, fh, indent=2, sort_keys=True)
+          PY
+
+      - name: Upload ISB1 run manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: isb1_run_manifest
+          path: isb1_run_manifest.json
+          if-no-files-found: error
+
+  sweep:
+    needs: setup
+    if: ${{ needs.setup.outputs.has-matrix == 'true' }}
+    uses: ./.github/workflows/benchmark-isb1-tmpl.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.replay-matrix) }}
+    secrets: inherit
+    with:
+      runner: ${{ matrix.config.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      model-prefix: ${{ matrix.config.model-prefix }}
+      precision: ${{ matrix.config.precision }}
+      framework: ${{ matrix.config.framework }}
+      exp-name: ${{ matrix.config.exp-name }}
+      benchmark-type: ${{ matrix.config.benchmark-type }}
+      export-file: ${{ matrix.config.export-file }}
+      runtime-stack-id: ${{ matrix.config.runtime-stack-id }}
+      hardware-profile-id: ${{ matrix.config.hardware-profile-id }}
+      canonical-model-id: ${{ matrix.config.canonical-model-id }}
+      support-status: ${{ matrix.config.support-status || '' }}
+      request-mode: ${{ matrix.config.request-mode }}
+      max-concurrency: ${{ matrix.config.max-concurrency }}
+      max-sessions: ${{ matrix.config.max-sessions || '' }}
+      max-turns-per-session: ${{ matrix.config.max-turns-per-session || '' }}
+      max-output-len: ${{ matrix.config.max-output-len || '' }}
+      num-warmup-sessions: ${{ matrix.config.num-warmup-sessions || '0' }}
+      ignore-waits: ${{ matrix.config.ignore-waits || false }}
+      ignore-eos: ${{ matrix.config.ignore-eos || false }}
+      max-model-len: ${{ matrix.config.max-model-len || '' }}
+      offload-mode: ${{ matrix.config.offload-mode || '' }}
+      kv-cache-dtype: ${{ matrix.config.kv-cache-dtype || '' }}
+      disable-prefix-caching: ${{ matrix.config.disable-prefix-caching || false }}
+      benchmark-duration-s: ${{ matrix.config.benchmark-duration-s || '' }}
+      vllm-cpu-offload-gb: ${{ inputs.vllm-cpu-offload-gb || '' }}
+      vllm-swap-space-gb: ${{ inputs.vllm-swap-space-gb || '' }}
+      sglang-mem-fraction-override: ${{ inputs.sglang-mem-fraction-override || '' }}
+      sglang-chunked-prefill-override: ${{ inputs.sglang-chunked-prefill-override || '' }}
+      ref: ${{ inputs.ref || github.ref }}
+
+  collect-results:
+    needs: [setup, sweep]
+    if: ${{ always() && needs.setup.outputs.has-matrix == 'true' && needs.sweep.result != 'skipped' }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      result-prefix: isb1
