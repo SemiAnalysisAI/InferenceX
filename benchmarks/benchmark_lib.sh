@@ -9,6 +9,14 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
+# When profiling, enable layerwise NVTX markers for per-layer annotations
+# (module names, input shapes, weight shapes) in torch profiler traces.
+# Single-node scripts should append $SGLANG_PROFILE_ARGS to their launch command.
+SGLANG_PROFILE_ARGS=""
+if [[ "${PROFILE:-}" == "1" ]]; then
+    SGLANG_PROFILE_ARGS="--enable-layerwise-nvtx-marker --disable-cuda-graph"
+fi
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------

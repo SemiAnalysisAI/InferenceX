@@ -90,7 +90,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
     --speculative-num-steps $SPECULATIVE_NUM_STEPS \
     --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
     --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK \
-    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS $SGLANG_PROFILE_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

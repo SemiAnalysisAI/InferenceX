@@ -47,7 +47,7 @@ python3 -m sglang.launch_server \
     --num-continuous-decode-steps 4 \
     --max-prefill-tokens 196608 \
     --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS $SGLANG_PROFILE_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
