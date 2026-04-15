@@ -1307,7 +1307,7 @@
     - "Expand from tp2/tp4 to tp1/tp2/tp4/tp8 with expert parallel and dp-attn variants"
     - "Add ep2, ep4, and dp-attn configurations for higher concurrency sweeps"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/996
-  
+
 - config-keys:
     - qwen3.5-fp4-b200-sglang
   description:
@@ -1316,6 +1316,16 @@
     - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
     - "Configs: 1k1k (TP4 conc 4-128), 8k1k (TP4 conc 4-128)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
+
+- config-keys:
+    - qwen3.5-bf16-mi300x-sglang
+    - qwen3.5-bf16-mi325x-sglang
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI300X and  MI325X to achieve better performance"
+    - "Use lmsysorg/sglang:v0.5.10-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/986
 
 - config-keys:
     - glm5-fp4-b200-sglang
@@ -1331,3 +1341,29 @@
   description:
     - "Qwen3.5 fp4 support on SGL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1006
+  
+- config-keys:
+    - gptoss-fp4-h200-trt
+  description:
+    - "Upgrade TensorRT-LLM container from release:gpt-oss-dev to release:v1.3.0rc5"
+    - "Remove sed hack for TensorRT bug (fixed upstream in v1.3.0rc5)"
+    - "Remove enable_block_reuse: false from kv_cache_config (default true is now recommended)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/854
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Bump GLM-5 FP8 B200 SGLang concurrency from 128 to 256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1012
+  
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "TP2/TP4 seach space exploration for Qwen3.5 fp4 on SGL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1022
+  
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
