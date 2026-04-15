@@ -90,9 +90,22 @@ fi
 
 echo "$VLLM_CMD" > "$RESULT_DIR/vllm_command.txt"
 
+# ---- ROCm / AITER tuning ----------------------------------------------------
+# Keep AITER for attention perf, but disable AITER MoE kernels —
+# ck_moe_stage1 crashes with MXFP4 + expert-parallel on MI355X.
+# See: https://github.com/vllm-project/vllm/issues/35637
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=0
+
+# If MEC FW < 177, RCCL cannot reclaim scratch memory — disable to avoid crashes.
+# https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
+version=$(rocm-smi --showfw | grep MEC | head -n 1 | awk '{print $NF}')
+if [[ "$version" == "" || $version -lt 177 ]]; then
+  export HSA_NO_SCRATCH_RECLAIM=1
+fi
+
 # ---- Start vLLM server ------------------------------------------------------
 echo "Starting vllm server..."
-# MI355X is ROCm — no CUDA arch needed
 export PYTHONNOUSERSITE=1
 
 $VLLM_CMD > "$SERVER_LOG" 2>&1 &
