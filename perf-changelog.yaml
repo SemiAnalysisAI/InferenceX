@@ -1356,7 +1356,8 @@
 - config-keys:
     - glm5-fp8-mi355x-sglang
   description:
-    - "Upgrade GLM5 FP8 MI355X SGLang image to v0.5.10"
+    - "Upgrade GLM5 FP8 MI355X SGLang image to v0.5.10rc0-rocm720-mi35x-20260413"
+    - "Set --kv-cache-dtype fp8_e4m3 and --disable-radix-cache"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1023
 
 - config-keys:
