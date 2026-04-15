@@ -1,0 +1,451 @@
+name: Template - Benchmark ISB1
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      model:
+        required: true
+        type: string
+      model-prefix:
+        required: true
+        type: string
+      precision:
+        required: true
+        type: string
+      framework:
+        required: true
+        type: string
+      exp-name:
+        required: true
+        type: string
+      benchmark-type:
+        required: true
+        type: string
+      export-file:
+        required: true
+        type: string
+      runtime-stack-id:
+        required: true
+        type: string
+      hardware-profile-id:
+        required: true
+        type: string
+      canonical-model-id:
+        required: true
+        type: string
+      support-status:
+        required: false
+        type: string
+        default: ''
+      request-mode:
+        required: true
+        type: string
+      max-concurrency:
+        required: true
+        type: string
+      max-sessions:
+        required: false
+        type: string
+        default: ''
+      max-turns-per-session:
+        required: false
+        type: string
+        default: ''
+      max-output-len:
+        required: false
+        type: string
+        default: ''
+      num-warmup-sessions:
+        required: false
+        type: string
+        default: '0'
+      ignore-waits:
+        required: false
+        type: boolean
+        default: false
+      ignore-eos:
+        required: false
+        type: boolean
+        default: false
+      max-model-len:
+        required: false
+        type: string
+        default: ''
+      tp-override:
+        required: false
+        type: string
+        default: ''
+      ep-override:
+        required: false
+        type: string
+        default: ''
+      trace-source:
+        required: false
+        type: string
+        default: ''
+      offload-mode:
+        required: false
+        type: string
+        default: ''
+      kv-cache-dtype:
+        required: false
+        type: string
+        default: ''
+      disable-prefix-caching:
+        required: false
+        type: boolean
+        default: false
+      benchmark-duration-s:
+        required: false
+        type: string
+        default: ''
+      workload-type:
+        required: false
+        type: string
+        default: ''
+      vllm-cpu-offload-gb:
+        required: false
+        type: string
+        default: ''
+      vllm-swap-space-gb:
+        required: false
+        type: string
+        default: ''
+      sglang-mem-fraction-override:
+        required: false
+        type: string
+        default: ''
+      sglang-chunked-prefill-override:
+        required: false
+        type: string
+        default: ''
+      ref:
+        description: Git ref (branch/sha) to checkout
+        required: false
+        type: string
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
+  EXP_NAME: ${{ inputs.exp-name }}
+  MODEL: ${{ inputs.model }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
+  IMAGE: ${{ inputs.image }}
+  FRAMEWORK: ${{ inputs.framework }}
+  PRECISION: ${{ inputs.precision }}
+  BENCHMARK_TYPE: ${{ inputs.benchmark-type }}
+  EXPORT_FILE: ${{ inputs.export-file }}
+  RUNTIME_STACK_ID: ${{ inputs.runtime-stack-id }}
+  HARDWARE_PROFILE_ID: ${{ inputs.hardware-profile-id }}
+  CANONICAL_MODEL_ID: ${{ inputs.canonical-model-id }}
+  SUPPORT_STATUS: ${{ inputs.support-status }}
+  REQUEST_MODE: ${{ inputs.request-mode }}
+  MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+  MAX_SESSIONS: ${{ inputs.max-sessions }}
+  MAX_TURNS_PER_SESSION: ${{ inputs.max-turns-per-session }}
+  MAX_OUTPUT_LEN: ${{ inputs.max-output-len }}
+  NUM_WARMUP_SESSIONS: ${{ inputs.num-warmup-sessions }}
+  IGNORE_WAITS: ${{ inputs.ignore-waits }}
+  IGNORE_EOS: ${{ inputs.ignore-eos }}
+  OFFLOAD_MODE: ${{ inputs.offload-mode }}
+  KV_CACHE_DTYPE: ${{ inputs.kv-cache-dtype }}
+  DISABLE_PREFIX_CACHING: ${{ inputs.disable-prefix-caching }}
+  BENCHMARK_DURATION_S: ${{ inputs.benchmark-duration-s }}
+  WORKLOAD_TYPE: ${{ inputs.workload-type }}
+  VLLM_CPU_OFFLOAD_GB: ${{ inputs.vllm-cpu-offload-gb }}
+  VLLM_SWAP_SPACE_GB: ${{ inputs.vllm-swap-space-gb }}
+  SGLANG_MEM_FRACTION_OVERRIDE: ${{ inputs.sglang-mem-fraction-override }}
+  SGLANG_CHUNKED_PREFILL_OVERRIDE: ${{ inputs.sglang-chunked-prefill-override }}
+  TP_OVERRIDE: ${{ inputs.tp-override }}
+  EP_OVERRIDE: ${{ inputs.ep-override }}
+  TRACE_SOURCE: ${{ inputs.trace-source }}
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 300
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | ${{ inputs.benchmark-type }} conc-${{ inputs.max-concurrency }}"
+    steps:
+      - name: Resource cleanup (pre-run)
+        run: &resource-cleanup |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
+          fi
+
+          if command -v squeue >/dev/null 2>&1; then
+            if [[ "${{ runner.name }}" == h100-* || "${{ runner.name }}" == h200-* || "${{ runner.name }}" == b200-* ]]; then
+              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+              scancel --name="${{ runner.name }}" || true
+              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+                squeue --name="${{ runner.name }}"
+                sleep 5
+              done
+            else
+              echo "[Slurm] Cleaning up jobs for user: $USER ..."
+              scancel -u "$USER" || true
+              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
+                squeue -u "$USER"
+                sleep 5
+              done
+            fi
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+          clean: false
+
+      - name: Certify ISB1 export contract
+        env:
+          INPUT_EXPORT_FILE: ${{ inputs.export-file }}
+          INPUT_RUNTIME_STACK_ID: ${{ inputs.runtime-stack-id }}
+          INPUT_HARDWARE_PROFILE_ID: ${{ inputs.hardware-profile-id }}
+          INPUT_CANONICAL_MODEL_ID: ${{ inputs.canonical-model-id }}
+          INPUT_SUPPORT_STATUS: ${{ inputs.support-status }}
+          INPUT_MAX_MODEL_LEN: ${{ inputs.max-model-len }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          export_path = Path(os.environ["INPUT_EXPORT_FILE"])
+          if not export_path.exists():
+              raise SystemExit(f"Missing ISB1 export file: {export_path}")
+
+          payload = json.loads(export_path.read_text())
+          exports = payload.get("exports")
+          if not isinstance(exports, list) or not exports:
+              raise SystemExit(
+                  f"ISB1 export file must contain a non-empty 'exports' list: {export_path}"
+              )
+
+          support_status = os.environ.get("INPUT_SUPPORT_STATUS", "").strip() or None
+          explicit_max_model_len = os.environ.get("INPUT_MAX_MODEL_LEN", "").strip()
+          if not re.search(r"(?P<isl>\d+)k(?P<osl>\d+)k", export_path.stem) and not explicit_max_model_len:
+              raise SystemExit(
+                  "Mixed-shape ISB1 exports require explicit max-model-len in the workflow input. "
+                  f"Missing for '{export_path}'."
+              )
+
+          identity_cells = [
+              cell
+              for cell in exports
+              if cell.get("runtime_stack_id") == os.environ["INPUT_RUNTIME_STACK_ID"]
+              and cell.get("hardware_profile_id") == os.environ["INPUT_HARDWARE_PROFILE_ID"]
+              and cell.get("canonical_model_id") == os.environ["INPUT_CANONICAL_MODEL_ID"]
+          ]
+          identity_statuses = sorted(
+              {
+                  cell.get("support_status")
+                  for cell in identity_cells
+                  if cell.get("support_status") is not None
+              }
+          )
+          matching_cells = [
+              cell
+              for cell in identity_cells
+              if support_status is None or cell.get("support_status") == support_status
+          ]
+
+          if support_status is None and len(identity_statuses) > 1:
+              raise SystemExit(
+                  f"Ambiguous ISB1 support tier for {export_path}; identity spans {identity_statuses}. "
+                  "Pin support-status explicitly."
+              )
+          if not matching_cells:
+              raise SystemExit(
+                  "No ISB1 export cell matches the requested workflow identity/tier for "
+                  f"{export_path}. Available tiers for that identity: {identity_statuses or ['<none>']}"
+              )
+
+          certification_statuses = sorted(
+              {
+                  cell.get("benchmark_certification_status")
+                  for cell in matching_cells
+                  if cell.get("benchmark_certification_status") is not None
+              }
+          )
+          if not certification_statuses:
+              raise SystemExit(
+                  "Selected ISB1 export cells must declare benchmark_certification_status. "
+                  f"Missing for '{export_path}'."
+              )
+          if certification_statuses != ["dataset_replay_verified"]:
+              raise SystemExit(
+                  "Current InferenceX ISB1 consumer lanes only accept "
+                  "benchmark_certification_status=dataset_replay_verified. "
+                  f"Selected cells for '{export_path}' resolved to {certification_statuses}."
+              )
+
+          print(
+              "Certified ISB1 export contract for "
+              f"{export_path} with support-status={support_status or '<unset>'} "
+              f"and benchmark_certification_status={certification_statuses[0]}"
+          )
+          PY
+
+      - name: Derive ISB1 runner env
+        env:
+          INPUT_RUNNER: ${{ inputs.runner }}
+          INPUT_EXPORT_FILE: ${{ inputs.export-file }}
+          INPUT_MAX_MODEL_LEN: ${{ inputs.max-model-len }}
+          INPUT_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+          INPUT_TP_OVERRIDE: ${{ inputs.tp-override }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          runner = os.environ["INPUT_RUNNER"].lower()
+          export_file = os.environ["INPUT_EXPORT_FILE"]
+          explicit_max_model_len = os.environ.get("INPUT_MAX_MODEL_LEN", "").strip()
+          max_concurrency = os.environ["INPUT_MAX_CONCURRENCY"]
+
+          if runner.startswith(("h100", "h200", "b200")):
+              tp = 8
+          else:
+              raise SystemExit(
+                  f"ISB1 replay lane is NVIDIA-first in PR1b; unsupported runner '{runner}'."
+              )
+
+          tp_override = os.environ.get("INPUT_TP_OVERRIDE", "").strip()
+          if tp_override:
+              tp = int(tp_override)
+
+          if tp < 8:
+              raise SystemExit(
+                  f"ISB1 replay requires TP=8 on NVIDIA runners; derived TP={tp} for runner '{runner}'."
+              )
+
+          export_path = Path(export_file)
+          match = re.search(r"(?P<isl>\d+)k(?P<osl>\d+)k", export_path.stem)
+
+          if match:
+              isl = int(match.group("isl")) * 1024
+              osl = int(match.group("osl")) * 1024
+          else:
+              try:
+                  payload = json.loads(export_path.read_text())
+              except Exception as exc:
+                  raise SystemExit(
+                      f"Could not inspect preview export metadata from '{export_file}': {exc}"
+                  )
+              served_shape = payload.get("served_shape") or {}
+              isl = int(served_shape.get("isl", 0) or 0)
+              osl = int(served_shape.get("osl", 0) or 0)
+              if not explicit_max_model_len:
+                  raise SystemExit(
+                      "Mixed-shape preview exports require explicit max-model-len in the ISB1 config. "
+                      f"Missing for '{export_file}'."
+                  )
+
+          if explicit_max_model_len:
+              max_model_len = int(explicit_max_model_len)
+          else:
+              max_model_len = isl + osl + (200 if max(isl, osl) >= 8192 else 20)
+
+          print(f"TP={tp}")
+          print("EP_SIZE=1")
+          print("DP_ATTENTION=false")
+          print("SPEC_DECODING=none")
+          print("DISAGG=false")
+          print(f"CONC={max_concurrency}")
+          print(f"ISL={isl}")
+          print(f"OSL={osl}")
+          print(f"MAX_MODEL_LEN={max_model_len}")
+          print("RANDOM_RANGE_RATIO=1.0")
+          print(f"EXPORT_STEM={Path(export_file).stem}")
+          PY
+
+      - id: launch
+        name: Launch job script
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          RUNNER_TYPE: ${{ inputs.runner }}
+        run: |
+          RESULT_FILENAME="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_${BENCHMARK_TYPE}_${EXPORT_STEM}_conc${MAX_CONCURRENCY}_${RUNNER_NAME}"
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
+          echo "result_filename=${RESULT_FILENAME}" >> "$GITHUB_OUTPUT"
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+
+          FOUND_RESULT_FILE=
+          for i in {1..10}; do
+            if [ -f "$RESULT_FILENAME.json" ]; then
+              FOUND_RESULT_FILE=true
+              break
+            fi
+            echo "Waiting for result file... (attempt $i)"
+            sleep 1
+          done
+
+          if [ -z "$FOUND_RESULT_FILE" ]; then
+            echo "Run failed: Replay result $RESULT_FILENAME.json not found." >&2
+            exit 1
+          fi
+
+      - name: Process result
+        run: |
+          python3 utils/process_result_isb1.py
+
+      - name: Upload result
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: isb1_${{ steps.launch.outputs.result_filename }}
+          path: agg_${{ steps.launch.outputs.result_filename }}.json
+
+      - name: Upload raw replay result
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: replay_${{ steps.launch.outputs.result_filename }}
+          path: ${{ steps.launch.outputs.result_filename }}.json
+          if-no-files-found: ignore
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: server_logs_${{ steps.launch.outputs.result_filename }}
+          path: server.log
+          if-no-files-found: ignore
+
+      - name: Upload GPU metrics
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: gpu_metrics_${{ steps.launch.outputs.result_filename }}
+          path: gpu_metrics.csv
+          if-no-files-found: ignore
+
+      - name: Upload KV metrics
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: kv_metrics_${{ steps.launch.outputs.result_filename }}
+          path: kv_metrics.csv
+          if-no-files-found: ignore
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: *resource-cleanup

@@ -1,0 +1,96 @@
+# Dedicated ISB1 KV cache stress sweeps (CTO-approved schema).
+#
+# This file is intentionally separate from isb1-master.yaml and uses
+# benchmark-type: isb1_kv_stress with kv-stress-configs.
+
+gptoss-fp4-h200-isb1-kv-stress-vllm-code:
+  image: vllm/vllm-openai:v0.18.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  precision: fp4
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_kv_stress
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: gpt_oss_120b
+  max-model-len: 131272
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      workload-type: code
+      search-space:
+        - users: [2, 4, 8, 16, 32, 64, 128, 256]
+          offload-modes: ["on", "off", "noprefix"]
+          duration-s: 1800
+
+gptoss-fp4-b200-isb1-kv-stress-vllm-code:
+  image: vllm/vllm-openai:v0.15.1
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  precision: fp4
+  framework: vllm
+  runner: b200
+  benchmark-type: isb1_kv_stress
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  canonical-model-id: gpt_oss_120b
+  max-model-len: 131272
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      workload-type: code
+      search-space:
+        - users: [2, 4, 8, 16, 32, 64, 128, 256]
+          offload-modes: ["on", "off", "noprefix"]
+          duration-s: 1800
+
+qwen3.5-fp8-h200-isb1-kv-stress-vllm-code:
+  image: vllm/vllm-openai:v0.18.0
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  precision: fp8
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_kv_stress
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: qwen3_5_397b_a17b
+  max-model-len: 131272
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      workload-type: code
+      search-space:
+        - users: [2, 4, 8, 16, 32, 64, 128, 256]
+          offload-modes: ["on", "off", "noprefix"]
+          duration-s: 1800
+
+qwen3.5-fp8-b200-isb1-kv-stress-vllm-code:
+  image: vllm/vllm-openai:v0.19.0-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  precision: fp8
+  framework: vllm
+  runner: b200
+  benchmark-type: isb1_kv_stress
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  canonical-model-id: qwen3_5_397b_a17b
+  max-model-len: 131272
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      workload-type: code
+      search-space:
+        - users: [2, 4, 8, 16, 32, 64, 128, 256]
+          offload-modes: ["on", "off", "noprefix"]
+          duration-s: 1800

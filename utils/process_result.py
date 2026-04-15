@@ -4,6 +4,15 @@ import os
 from pathlib import Path
 
 
+def fail_if_isb1_replay_requested():
+    """Guard against sending ISB1 replay results through the throughput processor."""
+    if os.environ.get('BENCHMARK_TYPE') == 'isb1_replay':
+        raise SystemExit(
+            'process_result.py does not support ISB1 replay results. '
+            'Use utils/process_result_isb1.py instead.'
+        )
+
+
 def get_required_env_vars(required_vars):
     """Load and validate required environment variables."""
     env_values = {}
@@ -21,6 +30,8 @@ def get_required_env_vars(required_vars):
 
     return env_values
 
+
+fail_if_isb1_replay_requested()
 
 # Base required env vars
 base_env = get_required_env_vars([
@@ -41,6 +52,12 @@ image = base_env['IMAGE']
 
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
+
+if 'aggregate_metrics' in bmk_result and 'total_token_throughput_tps' in bmk_result['aggregate_metrics']:
+    raise SystemExit(
+        'Detected an ISB1 replay-style result payload in process_result.py. '
+        'Use utils/process_result_isb1.py instead.'
+    )
 
 data = {
     'hw': hw,

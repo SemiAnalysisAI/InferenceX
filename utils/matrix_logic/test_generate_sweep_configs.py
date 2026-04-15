@@ -1,21 +1,72 @@
 """Comprehensive tests for generate_sweep_configs.py"""
 import pytest
 import argparse
+import json
+from pathlib import Path
 from generate_sweep_configs import (
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
+    generate_isb1_sweep,
+    generate_isb1_kv_stress_sweep,
     generate_runner_model_sweep_config,
     apply_node_type_defaults,
     expand_config_keys,
     mark_eval_entries,
+)
+from validation import (
+    load_config_files,
+    load_isb1_config_files,
+    load_isb1_kv_stress_config_files,
 )
 
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
+
+def _write_isb1_export_fixture(
+    root: Path,
+    relative_path: str,
+    *,
+    runtime_stack_id: str,
+    hardware_profile_id: str,
+    canonical_model_id: str,
+    support_status: str,
+    benchmark_certification_status: str = "dataset_replay_verified",
+) -> None:
+    export_path = root / relative_path
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text(
+        json.dumps(
+            {
+                "adapter_id": "inferencex_multiturn",
+                "exports": [
+                    {
+                        "trace_id": f"{export_path.stem}-trace",
+                        "runtime_stack_id": runtime_stack_id,
+                        "hardware_profile_id": hardware_profile_id,
+                        "canonical_model_id": canonical_model_id,
+                        "support_status": support_status,
+                        "benchmark_certification_status": benchmark_certification_status,
+                        "session": {
+                            "session_id": "fixture-session",
+                            "turns": [
+                                {
+                                    "turn_idx": 0,
+                                    "turn_id": 0,
+                                    "messages": [{"role": "user", "content": "hi"}],
+                                    "expected_output_tokens": 8,
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+    )
 
 @pytest.fixture
 def sample_single_node_config():
@@ -149,6 +200,161 @@ def full_sweep_args_multi_node():
     return args
 
 
+@pytest.fixture
+def sample_isb1_config():
+    """ISB1 replay config based on NVIDIA H200 replay lane."""
+    return {
+        "dsr1-isb1-h200-vllm": {
+            "image": "vllm/vllm-openai:v0.8.5",
+            "model": "deepseek-ai/DeepSeek-R1-0528",
+            "model-prefix": "dsr1",
+            "precision": "fp8",
+            "framework": "vllm",
+            "runner": "h200",
+            "benchmark-type": "isb1_replay",
+            "runtime-stack-id": "vllm-0.8.5-h200",
+            "hardware-profile-id": "h200-8gpu",
+            "canonical-model-id": "deepseek-r1-0528",
+            "max-model-len": 16384,
+            "replay-configs": [
+                {
+                    "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+                    "request-mode": "multi-turn",
+                    "support-status": "supported",
+                    "search-space": [
+                        {
+                            "max-concurrency": 4,
+                            "max-sessions": 2,
+                            "max-turns-per-session": 6,
+                            "max-output-len": 512,
+                            "num-warmup-sessions": 1,
+                            "ignore-waits": True,
+                            "ignore-eos": False,
+                        },
+                        {"max-concurrency": 8},
+                        {"max-concurrency": 16},
+                    ],
+                },
+                {
+                    "export-file": "datasets/isb1/exports/core/code_8k1k.json",
+                    "request-mode": "multi-turn",
+                    "support-status": "supported",
+                    "search-space": [
+                        {"max-concurrency": 4},
+                        {"max-concurrency": 8},
+                    ],
+                },
+            ],
+        }
+    }
+
+
+@pytest.fixture
+def isb1_sweep_args():
+    """Args for isb1-sweep command."""
+    args = argparse.Namespace()
+    args.model_prefix = None
+    args.precision = None
+    args.framework = None
+    args.runner_type = None
+    args.max_concurrency = None
+    args.runner_node_filter = None
+    return args
+
+
+@pytest.fixture
+def sample_isb1_kv_stress_config():
+    """ISB1 KV stress config with users/offload-mode search space."""
+    return {
+        "gptoss-fp4-h200-isb1-kv-stress-vllm-code": {
+            "image": "vllm/vllm-openai:v0.18.0",
+            "model": "openai/gpt-oss-120b",
+            "model-prefix": "gptoss",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "h200",
+            "benchmark-type": "isb1_kv_stress",
+            "runtime-stack-id": "standalone:vllm",
+            "hardware-profile-id": "nvidia:h200_sxm_141gb",
+            "canonical-model-id": "gpt_oss_120b",
+            "max-model-len": 131272,
+            "kv-cache-dtype": "fp8",
+            "kv-stress-configs": [
+                {
+                    "export-file": "datasets/isb1/exports/extension_131k/vllm/code_131k1k.json",
+                    "request-mode": "multi-turn",
+                    "support-status": "reviewed_preview",
+                    "workload-type": "code",
+                    "search-space": [
+                        {
+                            "users": [2, 4, 8],
+                            "offload-modes": ["on", "off", "noprefix"],
+                            "duration-s": 1800,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+
+@pytest.fixture
+def sample_isb1_kv_stress_tp_config():
+    """ISB1 KV stress config using per-TP expansion."""
+    return {
+        "gptoss-fp4-h200-isb1-kv-stress-vllm-code-tp": {
+            "image": "vllm/vllm-openai:v0.18.0",
+            "model": "openai/gpt-oss-120b",
+            "model-prefix": "gptoss",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "h200",
+            "benchmark-type": "isb1_kv_stress",
+            "runtime-stack-id": "standalone:vllm",
+            "hardware-profile-id": "nvidia:h200_sxm_141gb",
+            "canonical-model-id": "gpt_oss_120b",
+            "max-model-len": 131272,
+            "kv-cache-dtype": "fp8",
+            "kv-stress-configs": [
+                {
+                    "export-file": "datasets/isb1/exports/extension_131k/vllm/code_131k1k.json",
+                    "request-mode": "multi-turn",
+                    "support-status": "reviewed_preview",
+                    "workload-type": "code",
+                    "search-space": [
+                        {
+                            "users": [1],
+                            "offload-modes": ["off"],
+                            "duration-s": 10,
+                        }
+                    ],
+                    "tp-configs": [
+                        {
+                            "tp": 8,
+                            "ep": 1,
+                            "users": [2, 4, 8],
+                            "offload-modes": ["on", "off", "noprefix"],
+                            "duration-s": 1800,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+
+@pytest.fixture
+def isb1_kv_stress_sweep_args():
+    """Args for isb1-kv-stress-sweep command."""
+    args = argparse.Namespace()
+    args.model_prefix = None
+    args.precision = None
+    args.framework = None
+    args.runner_type = None
+    args.runner_node_filter = None
+    return args
+
+
 # =============================================================================
 # Test seq_len mappings
 # =============================================================================
@@ -179,6 +385,573 @@ class TestSeqLenToStr:
         """Unknown sequence lengths should return isl_osl format."""
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
+
+
+# =============================================================================
+# Test generate_isb1_sweep
+# =============================================================================
+
+class TestGenerateISB1Sweep:
+    """Tests for generate_isb1_sweep."""
+
+    def test_basic_sweep_generation(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+
+    def test_matrix_entry_structure(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        entry = result[0]
+        assert entry["benchmark-type"] == "isb1_replay"
+        assert entry["export-file"].endswith("chat_8k1k.json")
+        assert entry["runtime-stack-id"] == "vllm-0.8.5-h200"
+        assert entry["hardware-profile-id"] == "h200-8gpu"
+        assert entry["canonical-model-id"] == "deepseek-r1-0528"
+        assert entry["support-status"] == "supported"
+        assert entry["request-mode"] == "multi-turn"
+        assert entry["max-concurrency"] == 4
+        assert entry["max-sessions"] == 2
+        assert entry["max-turns-per-session"] == 6
+        assert entry["max-output-len"] == 512
+        assert entry["num-warmup-sessions"] == 1
+        assert entry["ignore-waits"] is True
+        assert entry["ignore-eos"] is False
+        assert entry["max-model-len"] == 16384
+        assert entry["exp-name"] == "dsr1_isb1"
+        assert "run-eval" not in entry
+
+    def test_filter_by_model_prefix(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.model_prefix = ["dsr1"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+
+        isb1_sweep_args.model_prefix = ["gptoss"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_filter_by_precision(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.precision = ["fp8"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+
+        isb1_sweep_args.precision = ["fp4"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_filter_by_framework(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.framework = ["vllm"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+
+        isb1_sweep_args.framework = ["sglang"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_filter_by_runner_type(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.runner_type = ["h200"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+
+        isb1_sweep_args.runner_type = ["h100"]
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_invalid_runner_type_raises_error(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.runner_type = ["not-a-runner"]
+        with pytest.raises(ValueError, match="Invalid runner type"):
+            generate_isb1_sweep(
+                isb1_sweep_args,
+                sample_isb1_config,
+                sample_runner_config,
+            )
+
+    def test_max_concurrency_cap(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.max_concurrency = 6
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 5
+        assert sorted(entry["max-concurrency"] for entry in result) == [4, 4, 6, 6, 6]
+
+    def test_non_positive_max_concurrency_skips_all(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.max_concurrency = 0
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_max_model_len_passthrough_optional(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert all(entry["max-model-len"] == 16384 for entry in result)
+
+        sample_isb1_config["dsr1-isb1-h200-vllm"].pop("max-model-len")
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert all(entry["max-model-len"] is None for entry in result)
+
+    def test_runner_node_filter_expands_runner_nodes(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.runner_node_filter = "cw"
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert len(result) == 10
+        assert all(entry["runner"].startswith("h200-cw") for entry in result)
+
+    def test_runner_node_filter_no_match_returns_empty(self, sample_isb1_config, sample_runner_config, isb1_sweep_args):
+        isb1_sweep_args.runner_node_filter = "does-not-exist"
+        result = generate_isb1_sweep(
+            isb1_sweep_args,
+            sample_isb1_config,
+            sample_runner_config,
+        )
+        assert result == []
+
+    def test_main_routes_isb1_sweep(self, tmp_path, sample_isb1_config, sample_runner_config, monkeypatch):
+        import yaml
+        import sys
+        from generate_sweep_configs import main
+
+        sample_entry = sample_isb1_config["dsr1-isb1-h200-vllm"]
+        for replay_config in sample_entry["replay-configs"]:
+            _write_isb1_export_fixture(
+                tmp_path,
+                replay_config["export-file"],
+                runtime_stack_id=sample_entry["runtime-stack-id"],
+                hardware_profile_id=sample_entry["hardware-profile-id"],
+                canonical_model_id=sample_entry["canonical-model-id"],
+                support_status=replay_config["support-status"],
+            )
+
+        config_file = tmp_path / "isb1.yaml"
+        runner_file = tmp_path / "runners.yaml"
+        config_file.write_text(yaml.dump(sample_isb1_config))
+        runner_file.write_text(yaml.dump(sample_runner_config))
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "generate_sweep_configs.py",
+                "isb1-sweep",
+                "--config-files",
+                str(config_file),
+                "--runner-config",
+                str(runner_file),
+            ],
+        )
+
+        result = main()
+        assert len(result) == 5
+        assert all(entry["benchmark-type"] == "isb1_replay" for entry in result)
+
+
+class TestKVStressSweep:
+    """Tests for generate_isb1_kv_stress_sweep."""
+
+    def test_basic_kv_stress_sweep_generation(
+        self,
+        sample_isb1_kv_stress_config,
+        sample_runner_config,
+        isb1_kv_stress_sweep_args,
+    ):
+        result = generate_isb1_kv_stress_sweep(
+            isb1_kv_stress_sweep_args,
+            sample_isb1_kv_stress_config,
+            sample_runner_config,
+        )
+        # users(3) * offload-modes(3) = 9 flattened rows
+        assert len(result) == 9
+
+    def test_flatten_users_x_offload_modes(
+        self,
+        sample_isb1_kv_stress_config,
+        sample_runner_config,
+        isb1_kv_stress_sweep_args,
+    ):
+        result = generate_isb1_kv_stress_sweep(
+            isb1_kv_stress_sweep_args,
+            sample_isb1_kv_stress_config,
+            sample_runner_config,
+        )
+
+        assert all(entry["benchmark-type"] == "isb1_kv_stress" for entry in result)
+        assert all(isinstance(entry["max-concurrency"], int) for entry in result)
+        assert all(isinstance(entry["offload-mode"], str) for entry in result)
+        assert all(entry["benchmark-duration-s"] == 1800 for entry in result)
+        assert all(entry["kv-cache-dtype"] == "fp8" for entry in result)
+        assert all(entry["workload-type"] == "code" for entry in result)
+
+        pairs = {(entry["max-concurrency"], entry["offload-mode"]) for entry in result}
+        assert pairs == {
+            (2, "on"),
+            (2, "off"),
+            (2, "noprefix"),
+            (4, "on"),
+            (4, "off"),
+            (4, "noprefix"),
+            (8, "on"),
+            (8, "off"),
+            (8, "noprefix"),
+        }
+
+    def test_tp_config_expansion_produces_expected_rows(
+        self,
+        sample_isb1_kv_stress_tp_config,
+        sample_runner_config,
+        isb1_kv_stress_sweep_args,
+    ):
+        result = generate_isb1_kv_stress_sweep(
+            isb1_kv_stress_sweep_args,
+            sample_isb1_kv_stress_tp_config,
+            sample_runner_config,
+        )
+
+        # users(3) * offload-modes(3) = 9 rows from tp-configs expansion
+        assert len(result) == 9
+        assert {entry["tp"] for entry in result} == {8}
+        assert {entry["ep"] for entry in result} == {1}
+
+    def test_repo_kv_stress_config_loads_and_expands(self, isb1_kv_stress_sweep_args):
+        repo_root = Path(__file__).resolve().parents[2]
+        config_data = load_isb1_kv_stress_config_files(
+            [str(repo_root / ".github/configs/isb1-kv-stress.yaml")]
+        )
+        runner_data = {
+            "b200": ["b200-nb_0"],
+            "h200": ["h200-cw_2"],
+        }
+
+        matrix = generate_isb1_kv_stress_sweep(
+            isb1_kv_stress_sweep_args,
+            config_data,
+            runner_data,
+        )
+
+        # 4 configs (gptoss/qwen * b200/h200) * 8 users * 3 offload modes
+        assert len(matrix) == 96
+        assert all(entry["benchmark-type"] == "isb1_kv_stress" for entry in matrix)
+        assert all("tp" not in entry for entry in matrix)
+        assert all("ep" not in entry for entry in matrix)
+
+
+class TestISB1SweepIsolation:
+    """Tests for ISB1 sweep isolation from throughput config lane."""
+
+    def test_repo_isb1_master_includes_runtime_expansion_cells(self, isb1_sweep_args):
+        repo_root = Path(__file__).resolve().parents[2]
+        config_data = load_isb1_config_files(
+            [str(repo_root / ".github/configs/isb1-master.yaml")]
+        )
+        runner_data = {
+            "b200": ["b200-nb_0"],
+            "h100": ["h100-cw_0"],
+            "h200": ["h200-cw_2"],
+        }
+
+        matrix = generate_isb1_sweep(isb1_sweep_args, config_data, runner_data)
+        config_keys = set(config_data)
+        matrix_key_triples = {
+            (entry["model-prefix"], entry["framework"], entry["runner"])
+            for entry in matrix
+        }
+
+        assert "dsr1-fp8-b200-isb1-vllm" in config_keys
+        assert "dsr1-fp8-h200-isb1-vllm" in config_keys
+        assert "gptoss-fp4-b200-isb1-sglang" in config_keys
+        assert "gptoss-fp4-h100-isb1-sglang" in config_keys
+        assert "gptoss-fp4-h200-isb1-sglang" in config_keys
+        assert "gptoss-fp4-h100-isb1-sglang-offload-core-preview-chat" in config_keys
+        assert "gptoss-fp4-h100-isb1-vllm-offload-core-preview-code" in config_keys
+        assert "gptoss-fp4-h100-isb1-sglang-500k-preview-code" in config_keys
+        assert "gptoss-fp4-h100-isb1-vllm-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-vllm-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-vllm-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-vllm-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-sglang-extension" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-sglang-extension" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-sglang-extension" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-vllm-extension" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-vllm-extension" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-vllm-extension" in config_keys
+
+        assert ("dsr1", "vllm", "b200") in matrix_key_triples
+        assert ("dsr1", "vllm", "h200") in matrix_key_triples
+        assert ("gptoss", "sglang", "b200") in matrix_key_triples
+        assert ("gptoss", "sglang", "h100") in matrix_key_triples
+        assert ("gptoss", "sglang", "h200") in matrix_key_triples
+        assert ("qwen3.5", "sglang", "b200") in matrix_key_triples
+        assert ("qwen3.5", "sglang", "h100") in matrix_key_triples
+        assert ("qwen3.5", "sglang", "h200") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "b200") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "h100") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "h200") in matrix_key_triples
+
+        assert "dsr1-fp8-h100-isb1-sglang" not in config_keys
+        assert "dsr1-fp8-h100-isb1-vllm" not in config_keys
+
+        assert any(
+            entry["export-file"].endswith("extension_32k/vllm/chat_32k1k.json")
+            and entry["support-status"] == "supported"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("core/vllm/code_8k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert not any(
+            entry["export-file"].endswith("core/vllm/code_8k1k.json")
+            and entry["support-status"] == "supported"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_32k/vllm/code_32k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_64k/vllm/code_64k1k.json")
+            and entry["support-status"] == "supported"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_64k/sglang/chat_64k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            "preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json"
+            in entry["export-file"]
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_131k/sglang/chat_131k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_131k/sglang/code_131k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_131k/vllm/chat_131k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        assert any(
+            entry["export-file"].endswith("extension_131k/vllm/code_131k1k.json")
+            and entry["support-status"] == "reviewed_preview"
+            for entry in matrix
+        )
+        qwen_sglang_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "extension_131k/sglang/code_131k1k_qwen3.5.json"
+            )
+        ]
+        assert len(qwen_sglang_entries) == 6
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_sglang_entries)
+        assert all(entry["framework"] == "sglang" for entry in qwen_sglang_entries)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_sglang_entries)
+        assert {entry["max-concurrency"] for entry in qwen_sglang_entries} == {2, 4}
+
+        qwen_vllm_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "extension_131k/vllm/code_131k1k_qwen3.5.json"
+            )
+        ]
+        assert len(qwen_vllm_entries) == 6
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_vllm_entries)
+        assert all(entry["framework"] == "vllm" for entry in qwen_vllm_entries)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_vllm_entries)
+        assert {entry["max-concurrency"] for entry in qwen_vllm_entries} == {2, 4}
+
+        sglang_500k_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "preview/long_context_500k/"
+                "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__sglang.json"
+            )
+        ]
+        assert len(sglang_500k_entries) == 3
+        assert all(entry["support-status"] == "reviewed_preview" for entry in sglang_500k_entries)
+        assert all(entry["max-model-len"] == 524288 for entry in sglang_500k_entries)
+        assert all(entry["max-concurrency"] == 1 for entry in sglang_500k_entries)
+
+        vllm_500k_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "preview/long_context_500k/"
+                "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json"
+            )
+        ]
+        assert len(vllm_500k_entries) == 3
+        assert all(entry["support-status"] == "reviewed_preview" for entry in vllm_500k_entries)
+        assert all(entry["max-model-len"] == 524288 for entry in vllm_500k_entries)
+        assert all(entry["max-concurrency"] == 1 for entry in vllm_500k_entries)
+
+        qwen_sglang_500k_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "preview/long_context_500k/"
+                "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__sglang.json"
+            )
+        ]
+        assert len(qwen_sglang_500k_entries) == 3
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_sglang_500k_entries)
+        assert all(entry["framework"] == "sglang" for entry in qwen_sglang_500k_entries)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_sglang_500k_entries)
+        assert all(entry["max-model-len"] == 524288 for entry in qwen_sglang_500k_entries)
+        assert all(entry["max-concurrency"] == 1 for entry in qwen_sglang_500k_entries)
+
+        qwen_vllm_500k_entries = [
+            entry
+            for entry in matrix
+            if entry["export-file"].endswith(
+                "preview/long_context_500k/"
+                "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json"
+            )
+        ]
+        assert len(qwen_vllm_500k_entries) == 3
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_vllm_500k_entries)
+        assert all(entry["framework"] == "vllm" for entry in qwen_vllm_500k_entries)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_vllm_500k_entries)
+        assert all(entry["max-model-len"] == 524288 for entry in qwen_vllm_500k_entries)
+        assert all(entry["max-concurrency"] == 1 for entry in qwen_vllm_500k_entries)
+
+        assert not any(
+            entry["export-file"].endswith(
+                "preview/long_context_1m/"
+                "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json"
+            )
+            or entry["export-file"].endswith(
+                "preview/long_context_1m/"
+                "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__sglang.json"
+            )
+            for entry in matrix
+        )
+
+    def test_repo_qwen_1m_preview_config_is_manual_and_separate(self, isb1_sweep_args):
+        repo_root = Path(__file__).resolve().parents[2]
+        config_data = load_isb1_config_files(
+            [str(repo_root / ".github/configs/isb1-qwen-1m-preview.yaml")]
+        )
+        runner_data = {
+            "b200": ["b200-nb_0"],
+            "h100": ["h100-cw_0"],
+            "h200": ["h200-cw_2"],
+        }
+
+        matrix = generate_isb1_sweep(isb1_sweep_args, config_data, runner_data)
+        config_keys = set(config_data)
+
+        assert config_keys == {
+            "qwen3.5-fp8-b200-isb1-sglang-1m-gated-preview-code",
+            "qwen3.5-fp8-b200-isb1-vllm-1m-gated-preview-code",
+        }
+        assert len(matrix) == 2
+        assert {entry["runner"] for entry in matrix} == {"b200"}
+        assert {entry["framework"] for entry in matrix} == {"sglang", "vllm"}
+        assert {entry["model-prefix"] for entry in matrix} == {"qwen3.5"}
+        assert {entry["support-status"] for entry in matrix} == {"reviewed_preview"}
+        assert {entry["max-model-len"] for entry in matrix} == {1048576}
+        assert {entry["max-concurrency"] for entry in matrix} == {1}
+        assert {entry["max-sessions"] for entry in matrix} == {1}
+        assert {entry["max-turns-per-session"] for entry in matrix} == {3}
+        assert {
+            entry["canonical-model-id"] for entry in matrix
+        } == {"qwen3_5_397b_a17b"}
+        assert {
+            entry["export-file"] for entry in matrix
+        } == {
+            "datasets/isb1/exports/preview/long_context_1m/"
+            "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__sglang.json",
+            "datasets/isb1/exports/preview/long_context_1m/"
+            "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json",
+        }
+        assert all((repo_root / entry["export-file"]).exists() for entry in matrix)
+
+
+    def test_isb1_config_does_not_validate_as_throughput(self, tmp_path, sample_isb1_config):
+        import yaml
+
+        config_file = tmp_path / "isb1.yaml"
+        config_file.write_text(yaml.dump(sample_isb1_config))
+
+        with pytest.raises(ValueError):
+            load_config_files([str(config_file)])
+
+    def test_throughput_config_does_not_validate_as_isb1(self, tmp_path, sample_single_node_config):
+        import yaml
+
+        config_file = tmp_path / "throughput.yaml"
+        config_file.write_text(yaml.dump(sample_single_node_config))
+
+        with pytest.raises(ValueError):
+            load_isb1_config_files([str(config_file)])
 
 
 # =============================================================================

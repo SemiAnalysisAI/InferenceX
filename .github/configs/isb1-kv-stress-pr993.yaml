@@ -1,0 +1,4326 @@
+dsr1-fp4-b200-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp4-b200-dynamo-sglang-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp4-b200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp4-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.9-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:sglang
+dsr1-fp4-b200-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:trt
+dsr1-fp4-b200-trt-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:trt
+dsr1-fp4-b300-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:b300_sxm_288gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-r1-fp4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: b300
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp4-gb200-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: lmsysorg/sglang:v0.5.8-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp4-gb200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp4-gb300-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:gb300_grace_blackwell_288gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: gb300
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp4-gb300-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:gb300_grace_blackwell_288gb
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: gb300
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp4-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/DeepSeek-R1-0528-MXFP4-Preview
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+dsr1-fp4-mi355x-atom-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/DeepSeek-R1-0528-MXFP4
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+dsr1-fp4-mi355x-sglang-disagg-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: sglang-disagg
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/DeepSeek-R1-0528-MXFP4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: mi355x-disagg
+  runtime-stack-id: standalone:sglang-disagg
+dsr1-fp4-mi355x-sglang-disagg-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: sglang-disagg
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/DeepSeek-R1-0528-MXFP4
+  model-prefix: dsr1
+  multinode: true
+  precision: fp4
+  runner: mi355x-disagg
+  runtime-stack-id: standalone:sglang-disagg
+dsr1-fp4-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/DeepSeek-R1-0528-MXFP4-Preview
+  model-prefix: dsr1
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-b200-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-b200-dynamo-sglang-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-b200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: b200-multinode
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.9-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-b200-sglang-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.9-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-b200-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:trt
+dsr1-fp8-b200-trt-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:trt
+dsr1-fp8-b300-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:b300_sxm_288gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: b300
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-gb200-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-gb200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-gb300-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:gb300_grace_blackwell_288gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: gb300
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-gb300-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:gb300_grace_blackwell_288gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: gb300
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-h100-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  image: lmsysorg/sglang:v0.5.8-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: h100-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-h100-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: h100-multinode
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-h200-dynamo-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: h200-multinode
+  runtime-stack-id: standalone:dynamo-sglang
+dsr1-fp8-h200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: h200-multinode
+  runtime-stack-id: standalone:dynamo-trt
+dsr1-fp8-h200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:v0.5.9-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-h200-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:trt
+dsr1-fp8-h200-trt-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: trt
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:trt
+dsr1-fp8-mi300x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: amd:mi300x_192gb
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: mi300x
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-mi325x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: amd:mi325x_288gb
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: mi325x
+  runtime-stack-id: standalone:sglang
+dsr1-fp8-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+dsr1-fp8-mi355x-atom-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+dsr1-fp8-mi355x-sglang-disagg-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: sglang-disagg
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: mi355x-disagg
+  runtime-stack-id: standalone:sglang-disagg
+dsr1-fp8-mi355x-sglang-disagg-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  disagg: true
+  framework: sglang-disagg
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: true
+  precision: fp8
+  runner: mi355x-disagg
+  runtime-stack-id: standalone:sglang-disagg
+dsr1-fp8-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: dsr1
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+glm5-fp4-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: glm5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:sglang
+glm5-fp8-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: glm5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:sglang
+glm5-fp8-h200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: glm5
+  framework: sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:glm5-hopper
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:sglang
+glm5-fp8-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: glm5
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2.post
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+glm5-fp8-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: glm5
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+gptoss-fp4-b200-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: trt
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:trt
+gptoss-fp4-b200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: vllm/vllm-openai:v0.15.1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:vllm
+gptoss-fp4-gb200-dynamo-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  disagg: true
+  framework: dynamo-trt
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: true
+  precision: fp4
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-trt
+gptoss-fp4-h100-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  image: vllm/vllm-openai:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: h100
+  runtime-stack-id: standalone:vllm
+gptoss-fp4-h200-trt-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: trt
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc11
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: h200
+  runtime-stack-id: standalone:trt
+gptoss-fp4-h200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: vllm/vllm-openai:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: h200
+  runtime-stack-id: standalone:vllm
+gptoss-fp4-mi300x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: amd:mi300x_192gb
+  image: vllm/vllm-openai-rocm:v0.17.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: mi300x
+  runtime-stack-id: standalone:vllm
+gptoss-fp4-mi325x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: amd:mi325x_288gb
+  image: vllm/vllm-openai-rocm:v0.17.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: mi325x
+  runtime-stack-id: standalone:vllm
+gptoss-fp4-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+gptoss-fp4-mi355x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: gptoss
+  framework: vllm
+  hardware-profile-id: amd:mi355x_288gb
+  image: vllm/vllm-openai-rocm:v0.17.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/gpt-oss-120b-w-mxfp4-a-fp8
+  model-prefix: gptoss
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:vllm
+kimik2.5-fp4-b200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: vllm/vllm-openai:v0.17.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:vllm
+kimik2.5-fp4-gb200-dynamo-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  disagg: true
+  framework: dynamo-vllm
+  hardware-profile-id: nvidia:gb200_grace_blackwell_192gb
+  image: vllm/vllm-openai:v0.18.0-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  multinode: true
+  precision: fp4
+  runner: gb200
+  runtime-stack-id: standalone:dynamo-vllm
+kimik2.5-fp4-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+kimik2.5-fp4-mi355x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: amd:mi355x_288gb
+  image: vllm/vllm-openai-rocm:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:vllm
+kimik2.5-int4-b200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: vllm/vllm-openai:v0.15.1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  multinode: false
+  precision: int4
+  runner: b200
+  runtime-stack-id: standalone:vllm
+kimik2.5-int4-h200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: vllm/vllm-openai:v0.16.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  multinode: false
+  precision: int4
+  runner: h200
+  runtime-stack-id: standalone:vllm
+kimik2.5-int4-mi300x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: amd:mi300x_192gb
+  image: vllm/vllm-openai-rocm:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  multinode: false
+  precision: int4
+  runner: mi300x
+  runtime-stack-id: standalone:vllm
+kimik2.5-int4-mi325x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: amd:mi325x_288gb
+  image: vllm/vllm-openai-rocm:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  multinode: false
+  precision: int4
+  runner: mi325x
+  runtime-stack-id: standalone:vllm
+kimik2.5-int4-mi355x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: kimik2.5
+  framework: vllm
+  hardware-profile-id: amd:mi355x_288gb
+  image: vllm/vllm-openai-rocm:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  multinode: false
+  precision: int4
+  runner: mi355x
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp4-b200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: vllm/vllm-openai:v0.19.0-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/MiniMax-M2.5-NVFP4
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-b200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: vllm/vllm-openai:v0.19.0-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-h100-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  image: vllm/vllm-openai:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: h100
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-h200-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: vllm/vllm-openai:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-mi300x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: amd:mi300x_192gb
+  image: vllm/vllm-openai-rocm:v0.16.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: mi300x
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-mi325x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: amd:mi325x_288gb
+  image: vllm/vllm-openai-rocm:v0.18.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: mi325x
+  runtime-stack-id: standalone:vllm
+minimaxm2.5-fp8-mi355x-atom-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: atom
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:atom
+minimaxm2.5-fp8-mi355x-vllm-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: minimaxm2.5
+  framework: vllm
+  hardware-profile-id: amd:mi355x_288gb
+  image: vllm/vllm-openai-rocm:v0.19.0
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:vllm
+qwen3.5-bf16-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  multinode: false
+  precision: bf16
+  runner: b200
+  runtime-stack-id: standalone:sglang
+qwen3.5-bf16-mi300x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi300x_192gb
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  multinode: false
+  precision: bf16
+  runner: mi300x
+  runtime-stack-id: standalone:sglang
+qwen3.5-bf16-mi325x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi325x_288gb
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  multinode: false
+  precision: bf16
+  runner: mi325x
+  runtime-stack-id: standalone:sglang
+qwen3.5-bf16-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260215
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  multinode: false
+  precision: bf16
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp4-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp4
+  runner: b200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp4-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: lmsysorg/sglang:v0.5.10-rocm720-mi35x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp4
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-b200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.9-cu130-amd64
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-b200-sglang-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  image: lmsysorg/sglang:v0.5.9-cu130
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: b200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-h200-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:v0.5.9-cu129-amd64
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-h200-sglang-isb1-kv-stress-500k:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:v0.5.9-cu129-amd64
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      users:
+      - 1
+      - 2
+      - 4
+      - 8
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      tp: 8
+      users:
+      - 1
+      - 2
+      - 4
+      - 8
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-h200-sglang-mtp-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  image: lmsysorg/sglang:v0.5.10.post1
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: h200
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-mi300x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi300x_192gb
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: mi300x
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-mi325x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi325x_288gb
+  image: lmsysorg/sglang:v0.5.9-rocm720-mi30x
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: mi325x
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-mi355x-sglang-isb1-kv-stress:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260218
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      - noprefix
+      tp: 8
+      users:
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:sglang
+qwen3.5-fp8-mi355x-sglang-isb1-kv-stress-500k:
+  benchmark-type: isb1_kv_stress
+  canonical-model-id: qwen3.5
+  framework: sglang
+  hardware-profile-id: amd:mi355x_288gb
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260218
+  kv-cache-dtype: fp8
+  kv-stress-configs:
+  - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
+    request-mode: multi-turn
+    search-space:
+    - duration-s: 1800
+      offload-modes:
+      - 'on'
+      - 'off'
+      users:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+    tp-configs:
+    - duration-s: 1800
+      ep: 1
+      offload-modes:
+      - 'on'
+      - 'off'
+      tp: 8
+      users:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  multinode: false
+  precision: fp8
+  runner: mi355x
+  runtime-stack-id: standalone:sglang

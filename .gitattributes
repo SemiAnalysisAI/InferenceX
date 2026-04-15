@@ -1,0 +1,2 @@
+datasets/isb1/exports/preview/long_context_1m/*.json filter=lfs diff=lfs merge=lfs -text
+datasets/isb1/exports/**/*.json filter=lfs diff=lfs merge=lfs -text

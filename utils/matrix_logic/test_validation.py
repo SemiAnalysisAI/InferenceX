@@ -1,20 +1,31 @@
 """Comprehensive tests for validation.py"""
+import json
+from pathlib import Path
+
 import pytest
+import yaml
 from validation import (
     Fields,
     SingleNodeMatrixEntry,
     MultiNodeMatrixEntry,
+    ISB1ReplayMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
     MultiNodeSearchSpaceEntry,
+    ISB1ReplaySearchSpaceEntry,
+    ISB1ReplayConfigEntry,
     SingleNodeSeqLenConfig,
     MultiNodeSeqLenConfig,
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
+    ISB1MasterConfigEntry,
     validate_matrix_entry,
+    validate_isb1_matrix_entry,
     validate_master_config,
+    validate_isb1_master_config,
     validate_runner_config,
     load_config_files,
+    load_isb1_config_files,
     load_runner_file,
 )
 
@@ -22,6 +33,68 @@ from validation import (
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
+
+def _write_isb1_export_fixture(
+    root: Path,
+    relative_path: str,
+    *,
+    runtime_stack_id: str,
+    hardware_profile_id: str,
+    canonical_model_id: str,
+    support_status: str,
+    benchmark_certification_status: str = "dataset_replay_verified",
+) -> None:
+    export_path = root / relative_path
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text(
+        json.dumps(
+            {
+                "adapter_id": "inferencex_multiturn",
+                "exports": [
+                    {
+                        "trace_id": f"{export_path.stem}-trace",
+                        "runtime_stack_id": runtime_stack_id,
+                        "hardware_profile_id": hardware_profile_id,
+                        "canonical_model_id": canonical_model_id,
+                        "support_status": support_status,
+                        "benchmark_certification_status": benchmark_certification_status,
+                        "session": {
+                            "session_id": "fixture-session",
+                            "turns": [
+                                {
+                                    "turn_idx": 0,
+                                    "turn_id": 0,
+                                    "messages": [{"role": "user", "content": "hello"}],
+                                    "expected_output_tokens": 8,
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+    )
+
+
+def _write_manifest_fixture(
+    root: Path,
+    relative_path: str,
+    *,
+    export_file: str,
+    max_model_len: int,
+) -> None:
+    manifest_path = root / relative_path
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "manifest_version": "0.1.0",
+                "max_model_len": max_model_len,
+                "exports": [{"export_file": export_file}],
+            }
+        )
+    )
 
 @pytest.fixture
 def valid_single_node_matrix_entry():
@@ -160,6 +233,74 @@ def valid_multinode_master_config():
 
 
 @pytest.fixture
+def valid_isb1_master_config():
+    """Valid ISB1 replay master config for NVIDIA PR1a."""
+    return {
+        "image": "vllm/vllm-openai:v0.8.5",
+        "model": "deepseek-ai/DeepSeek-R1-0528",
+        "model-prefix": "dsr1",
+        "precision": "fp8",
+        "framework": "vllm",
+        "runner": "h200",
+        "benchmark-type": "isb1_replay",
+        "runtime-stack-id": "vllm-0.8.5-h200",
+        "hardware-profile-id": "h200-8gpu",
+        "canonical-model-id": "deepseek-r1-0528",
+        "max-model-len": 16384,
+        "replay-configs": [
+            {
+                "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+                "request-mode": "multi-turn",
+                "support-status": "supported",
+                "search-space": [
+                    {
+                        "max-concurrency": 4,
+                        "max-sessions": 2,
+                        "max-turns-per-session": 6,
+                        "max-output-len": 512,
+                        "num-warmup-sessions": 1,
+                        "ignore-waits": True,
+                        "ignore-eos": False,
+                    },
+                    {
+                        "max-concurrency": 8,
+                    },
+                ],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def valid_isb1_matrix_entry(valid_isb1_master_config):
+    """Valid ISB1 replay matrix entry."""
+    return {
+        "image": valid_isb1_master_config["image"],
+        "model": valid_isb1_master_config["model"],
+        "model-prefix": valid_isb1_master_config["model-prefix"],
+        "precision": valid_isb1_master_config["precision"],
+        "framework": valid_isb1_master_config["framework"],
+        "runner": valid_isb1_master_config["runner"],
+        "benchmark-type": valid_isb1_master_config["benchmark-type"],
+        "export-file": valid_isb1_master_config["replay-configs"][0]["export-file"],
+        "runtime-stack-id": valid_isb1_master_config["runtime-stack-id"],
+        "hardware-profile-id": valid_isb1_master_config["hardware-profile-id"],
+        "canonical-model-id": valid_isb1_master_config["canonical-model-id"],
+        "support-status": valid_isb1_master_config["replay-configs"][0]["support-status"],
+        "request-mode": valid_isb1_master_config["replay-configs"][0]["request-mode"],
+        "max-concurrency": 4,
+        "max-sessions": 2,
+        "max-turns-per-session": 6,
+        "max-output-len": 512,
+        "num-warmup-sessions": 1,
+        "ignore-waits": True,
+        "ignore-eos": False,
+        "max-model-len": valid_isb1_master_config["max-model-len"],
+        "exp-name": "dsr1_isb1",
+    }
+
+
+@pytest.fixture
 def valid_runner_config():
     """Valid runner config based on .github/configs/runners.yaml."""
     return {
@@ -193,6 +334,10 @@ class TestFieldsEnum:
         assert Fields.SPEC_DECODING.value == "spec-decoding"
         assert Fields.PREFILL.value == "prefill"
         assert Fields.DECODE.value == "decode"
+        assert Fields.BENCHMARK_TYPE.value == "benchmark-type"
+        assert Fields.SUPPORT_STATUS.value == "support-status"
+        assert Fields.MAX_CONCURRENCY.value == "max-concurrency"
+        assert Fields.REPLAY_CONFIGS.value == "replay-configs"
 
 
 # =============================================================================
@@ -659,6 +804,153 @@ class TestMasterConfigEntries:
 
 
 # =============================================================================
+# Test ISB1 replay models
+# =============================================================================
+
+class TestISB1ReplaySearchSpaceEntry:
+    """Tests for ISB1ReplaySearchSpaceEntry model."""
+
+    def test_valid_with_required_only(self):
+        config = ISB1ReplaySearchSpaceEntry(**{
+            "max-concurrency": 4,
+        })
+        assert config.max_concurrency == 4
+        assert config.num_warmup_sessions == 0
+        assert config.ignore_waits is False
+        assert config.ignore_eos is False
+
+    def test_valid_with_all_fields(self):
+        config = ISB1ReplaySearchSpaceEntry(**{
+            "max-concurrency": 8,
+            "max-sessions": 2,
+            "max-turns-per-session": 6,
+            "max-output-len": 512,
+            "num-warmup-sessions": 1,
+            "ignore-waits": True,
+            "ignore-eos": True,
+        })
+        assert config.max_sessions == 2
+        assert config.max_turns_per_session == 6
+        assert config.max_output_len == 512
+        assert config.num_warmup_sessions == 1
+        assert config.ignore_waits is True
+        assert config.ignore_eos is True
+
+    def test_missing_required_field(self):
+        with pytest.raises(Exception):
+            ISB1ReplaySearchSpaceEntry(**{
+                "max-sessions": 2,
+            })
+
+    def test_extra_field_forbidden(self):
+        with pytest.raises(Exception):
+            ISB1ReplaySearchSpaceEntry(**{
+                "max-concurrency": 4,
+                "unknown-field": "value",
+            })
+
+
+class TestISB1ReplayConfigEntry:
+    """Tests for ISB1ReplayConfigEntry model."""
+
+    def test_valid_entry(self):
+        config = ISB1ReplayConfigEntry(**{
+            "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+            "request-mode": "multi-turn",
+            "support-status": "supported",
+            "search-space": [{"max-concurrency": 4}],
+        })
+        assert config.export_file.endswith("chat_8k1k.json")
+        assert config.request_mode == "multi-turn"
+        assert config.support_status == "supported"
+        assert len(config.search_space) == 1
+
+    def test_invalid_support_status(self):
+        with pytest.raises(Exception):
+            ISB1ReplayConfigEntry(**{
+                "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+                "request-mode": "multi-turn",
+                "support-status": "definitely_supported",
+                "search-space": [{"max-concurrency": 4}],
+            })
+
+    def test_missing_export_file(self):
+        with pytest.raises(Exception):
+            ISB1ReplayConfigEntry(**{
+                "request-mode": "multi-turn",
+                "search-space": [{"max-concurrency": 4}],
+            })
+
+    def test_missing_request_mode(self):
+        with pytest.raises(Exception):
+            ISB1ReplayConfigEntry(**{
+                "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+                "search-space": [{"max-concurrency": 4}],
+            })
+
+    def test_empty_search_space(self):
+        with pytest.raises(Exception):
+            ISB1ReplayConfigEntry(**{
+                "export-file": "datasets/isb1/exports/core/chat_8k1k.json",
+                "request-mode": "multi-turn",
+                "search-space": [],
+            })
+
+
+class TestISB1MasterConfigEntry:
+    """Tests for ISB1MasterConfigEntry model."""
+
+    def test_valid_isb1_master_config(self, valid_isb1_master_config):
+        config = ISB1MasterConfigEntry(**valid_isb1_master_config)
+        assert config.benchmark_type == "isb1_replay"
+        assert config.model_prefix == "dsr1"
+        assert config.runner == "h200"
+        assert config.max_model_len == 16384
+        assert len(config.replay_configs) == 1
+
+    def test_max_model_len_optional(self, valid_isb1_master_config):
+        del valid_isb1_master_config["max-model-len"]
+        config = ISB1MasterConfigEntry(**valid_isb1_master_config)
+        assert config.max_model_len is None
+
+    def test_benchmark_type_must_match(self, valid_isb1_master_config):
+        valid_isb1_master_config["benchmark-type"] = "throughput"
+        with pytest.raises(Exception):
+            ISB1MasterConfigEntry(**valid_isb1_master_config)
+
+    def test_throughput_only_field_rejected(self, valid_isb1_master_config):
+        valid_isb1_master_config["multinode"] = False
+        with pytest.raises(Exception):
+            ISB1MasterConfigEntry(**valid_isb1_master_config)
+
+    def test_missing_required_field(self, valid_isb1_master_config):
+        del valid_isb1_master_config["runtime-stack-id"]
+        with pytest.raises(Exception):
+            ISB1MasterConfigEntry(**valid_isb1_master_config)
+
+
+class TestISB1ReplayMatrixEntry:
+    """Tests for ISB1ReplayMatrixEntry model."""
+
+    def test_valid_entry(self, valid_isb1_matrix_entry):
+        entry = ISB1ReplayMatrixEntry(**valid_isb1_matrix_entry)
+        assert entry.benchmark_type == "isb1_replay"
+        assert entry.support_status == "supported"
+        assert entry.max_concurrency == 4
+        assert entry.exp_name == "dsr1_isb1"
+
+    def test_missing_required_field(self, valid_isb1_matrix_entry):
+        del valid_isb1_matrix_entry["export-file"]
+        with pytest.raises(Exception):
+            ISB1ReplayMatrixEntry(**valid_isb1_matrix_entry)
+
+    def test_extra_throughput_field_forbidden(self, valid_isb1_matrix_entry):
+        valid_isb1_matrix_entry["tp"] = 8
+        with pytest.raises(Exception):
+            ISB1ReplayMatrixEntry(**valid_isb1_matrix_entry)
+
+
+# =============================================================================
 # Test validate_master_config function
 # =============================================================================
 
@@ -693,6 +985,37 @@ class TestValidateMasterConfig:
         with pytest.raises(ValueError) as exc_info:
             validate_master_config(configs)
         assert "broken-config" in str(exc_info.value)
+        assert "failed validation" in str(exc_info.value)
+
+
+class TestValidateISB1MasterConfig:
+    """Tests for validate_isb1_master_config function."""
+
+    def test_valid_isb1_config(self, valid_isb1_master_config):
+        configs = {"dsr1-isb1-h200-vllm": valid_isb1_master_config}
+        result = validate_isb1_master_config(configs)
+        assert result == configs
+
+    def test_invalid_isb1_config_raises_valueerror(self, valid_isb1_master_config):
+        del valid_isb1_master_config["model"]
+        configs = {"broken-isb1-config": valid_isb1_master_config}
+        with pytest.raises(ValueError) as exc_info:
+            validate_isb1_master_config(configs)
+        assert "broken-isb1-config" in str(exc_info.value)
+        assert "failed validation" in str(exc_info.value)
+
+
+class TestValidateISB1MatrixEntry:
+    """Tests for validate_isb1_matrix_entry function."""
+
+    def test_valid_entry(self, valid_isb1_matrix_entry):
+        result = validate_isb1_matrix_entry(valid_isb1_matrix_entry)
+        assert result == valid_isb1_matrix_entry
+
+    def test_invalid_entry_raises_valueerror(self, valid_isb1_matrix_entry):
+        del valid_isb1_matrix_entry["benchmark-type"]
+        with pytest.raises(ValueError) as exc_info:
+            validate_isb1_matrix_entry(valid_isb1_matrix_entry)
         assert "failed validation" in str(exc_info.value)
 
 
@@ -821,6 +1144,224 @@ invalid-config:
         with pytest.raises(ValueError) as exc_info:
             load_config_files([str(config_file)])
         assert "failed validation" in str(exc_info.value)
+
+
+class TestLoadISB1ConfigFiles:
+    """Tests for load_isb1_config_files function."""
+
+    def test_load_single_file_with_validation(self, tmp_path, valid_isb1_master_config):
+        config_file = tmp_path / "isb1-config.yaml"
+        _write_isb1_export_fixture(
+            tmp_path,
+            valid_isb1_master_config["replay-configs"][0]["export-file"],
+            runtime_stack_id=valid_isb1_master_config["runtime-stack-id"],
+            hardware_profile_id=valid_isb1_master_config["hardware-profile-id"],
+            canonical_model_id=valid_isb1_master_config["canonical-model-id"],
+            support_status=valid_isb1_master_config["replay-configs"][0]["support-status"],
+        )
+
+        config_file.write_text(
+            yaml.dump({"dsr1-isb1-h200-vllm": valid_isb1_master_config})
+        )
+        result = load_isb1_config_files([str(config_file)])
+        assert "dsr1-isb1-h200-vllm" in result
+        assert result["dsr1-isb1-h200-vllm"]["benchmark-type"] == "isb1_replay"
+
+    def test_export_contract_rejects_mismatched_support_status(
+        self, tmp_path, valid_isb1_master_config
+    ):
+        config_file = tmp_path / "isb1-config.yaml"
+        _write_isb1_export_fixture(
+            tmp_path,
+            valid_isb1_master_config["replay-configs"][0]["export-file"],
+            runtime_stack_id=valid_isb1_master_config["runtime-stack-id"],
+            hardware_profile_id=valid_isb1_master_config["hardware-profile-id"],
+            canonical_model_id=valid_isb1_master_config["canonical-model-id"],
+            support_status="reviewed_preview",
+        )
+        config_file.write_text(
+            yaml.dump({"dsr1-isb1-h200-vllm": valid_isb1_master_config})
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files([str(config_file)])
+        assert "support-status" in str(exc_info.value)
+        assert "Available support tiers" in str(exc_info.value)
+
+    def test_export_contract_requires_dataset_replay_verified_certification(
+        self, tmp_path, valid_isb1_master_config
+    ):
+        config_file = tmp_path / "isb1-config.yaml"
+        _write_isb1_export_fixture(
+            tmp_path,
+            valid_isb1_master_config["replay-configs"][0]["export-file"],
+            runtime_stack_id=valid_isb1_master_config["runtime-stack-id"],
+            hardware_profile_id=valid_isb1_master_config["hardware-profile-id"],
+            canonical_model_id=valid_isb1_master_config["canonical-model-id"],
+            support_status=valid_isb1_master_config["replay-configs"][0]["support-status"],
+            benchmark_certification_status="pending_review",
+        )
+        config_file.write_text(
+            yaml.dump({"dsr1-isb1-h200-vllm": valid_isb1_master_config})
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files([str(config_file)])
+        assert "benchmark_certification_status" in str(exc_info.value)
+        assert "dataset_replay_verified" in str(exc_info.value)
+
+    def test_export_contract_requires_max_model_len_for_preview_style_export(
+        self, tmp_path, valid_isb1_master_config
+    ):
+        config_file = tmp_path / "isb1-config.yaml"
+        preview_config = {
+            **valid_isb1_master_config,
+            "replay-configs": [
+                {
+                    **valid_isb1_master_config["replay-configs"][0],
+                    "export-file": (
+                        "datasets/isb1/exports/preview/offload_core/"
+                        "inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json"
+                    ),
+                    "support-status": "reviewed_preview",
+                }
+            ],
+        }
+        del preview_config["max-model-len"]
+
+        _write_isb1_export_fixture(
+            tmp_path,
+            preview_config["replay-configs"][0]["export-file"],
+            runtime_stack_id=preview_config["runtime-stack-id"],
+            hardware_profile_id=preview_config["hardware-profile-id"],
+            canonical_model_id=preview_config["canonical-model-id"],
+            support_status="reviewed_preview",
+        )
+        config_file.write_text(yaml.dump({"preview-row": preview_config}))
+
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files([str(config_file)])
+        assert "max-model-len" in str(exc_info.value)
+
+    def test_export_contract_accepts_preview_style_export_with_explicit_max_model_len(
+        self, tmp_path, valid_isb1_master_config
+    ):
+        config_file = tmp_path / "isb1-config.yaml"
+        preview_config = {
+            **valid_isb1_master_config,
+            "runtime-stack-id": "standalone:vllm",
+            "hardware-profile-id": "nvidia:h100_sxm_80gb",
+            "canonical-model-id": "gpt_oss_120b",
+            "max-model-len": 524288,
+            "replay-configs": [
+                {
+                    **valid_isb1_master_config["replay-configs"][0],
+                    "export-file": (
+                        "datasets/isb1/exports/preview/long_context_500k/"
+                        "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json"
+                    ),
+                    "support-status": "reviewed_preview",
+                }
+            ],
+        }
+
+        _write_isb1_export_fixture(
+            tmp_path,
+            preview_config["replay-configs"][0]["export-file"],
+            runtime_stack_id=preview_config["runtime-stack-id"],
+            hardware_profile_id=preview_config["hardware-profile-id"],
+            canonical_model_id=preview_config["canonical-model-id"],
+            support_status="reviewed_preview",
+        )
+        config_file.write_text(yaml.dump({"preview-row": preview_config}))
+
+        result = load_isb1_config_files([str(config_file)])
+        assert "preview-row" in result
+
+    def test_export_contract_warns_when_manifest_max_model_len_mismatches_config(
+        self, tmp_path, valid_isb1_master_config
+    ):
+        config_file = tmp_path / "isb1-config.yaml"
+        preview_config = {
+            **valid_isb1_master_config,
+            "runtime-stack-id": "standalone:vllm",
+            "hardware-profile-id": "nvidia:h100_sxm_80gb",
+            "canonical-model-id": "qwen3_5_397b_a17b",
+            "max-model-len": 524288,
+            "replay-configs": [
+                {
+                    **valid_isb1_master_config["replay-configs"][0],
+                    "export-file": (
+                        "datasets/isb1/exports/preview/long_context_500k/"
+                        "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json"
+                    ),
+                    "support-status": "reviewed_preview",
+                }
+            ],
+        }
+
+        export_file = preview_config["replay-configs"][0]["export-file"]
+        _write_isb1_export_fixture(
+            tmp_path,
+            export_file,
+            runtime_stack_id=preview_config["runtime-stack-id"],
+            hardware_profile_id=preview_config["hardware-profile-id"],
+            canonical_model_id=preview_config["canonical-model-id"],
+            support_status="reviewed_preview",
+        )
+        _write_manifest_fixture(
+            tmp_path,
+            "datasets/isb1/exports/preview/long_context_500k/manifest_qwen3.5.json",
+            export_file=export_file,
+            max_model_len=1048576,
+        )
+        config_file.write_text(yaml.dump({"preview-row": preview_config}))
+
+        with pytest.warns(UserWarning, match="max-model-len"):
+            result = load_isb1_config_files([str(config_file)])
+        assert "preview-row" in result
+
+    def test_load_single_file_without_validation(self, tmp_path):
+        config_file = tmp_path / "isb1-config.yaml"
+        config_file.write_text("""
+test-isb1:
+  image: test-image
+  benchmark-type: isb1_replay
+""")
+        result = load_isb1_config_files([str(config_file)], validate=False)
+        assert "test-isb1" in result
+        assert result["test-isb1"]["benchmark-type"] == "isb1_replay"
+
+    def test_validation_runs_by_default(self, tmp_path):
+        config_file = tmp_path / "isb1-config.yaml"
+        config_file.write_text("""
+invalid-isb1:
+  image: test-image
+  benchmark-type: isb1_replay
+""")
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files([str(config_file)])
+        assert "failed validation" in str(exc_info.value)
+
+    def test_duplicate_keys_raise_error(self, tmp_path):
+        config1 = tmp_path / "config1.yaml"
+        config1.write_text("""
+duplicate-key:
+  benchmark-type: isb1_replay
+""")
+        config2 = tmp_path / "config2.yaml"
+        config2.write_text("""
+duplicate-key:
+  benchmark-type: isb1_replay
+""")
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files([str(config1), str(config2)], validate=False)
+        assert "Duplicate configuration keys" in str(exc_info.value)
+
+    def test_nonexistent_file_raises_error(self):
+        with pytest.raises(ValueError) as exc_info:
+            load_isb1_config_files(["nonexistent-isb1.yaml"])
+        assert "does not exist" in str(exc_info.value)
 
 
 # =============================================================================

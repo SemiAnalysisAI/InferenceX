@@ -1,5 +1,11 @@
 # Experimental
 
-This folder contains experimental WIP code that is mostly Claude Code generated.
+This folder contains experimental WIP code and planning material.
 
-**Warning:** Code in this directory is very basic and likely contains errors or incomplete implementations. It is not intended for production use or as part of the official InferenceMAX results.
+Relevant roadmap docs:
+
+For the current official ISB1 support statement, use:
+- `datasets/isb1/SUPPORT_MATRIX.md`
+- `datasets/isb1/README.md`
+
+**Warning:** code and notes in this directory may be incomplete, experimental, or future-looking. They are not by themselves the official statement of supported InferenceX ISB1 capability.

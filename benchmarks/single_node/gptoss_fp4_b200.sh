@@ -34,14 +34,32 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     CALCULATED_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
+PREFIX_CACHING_CONFIG="no-enable-prefix-caching: true"
+if is_isb1_replay_benchmark; then
+    PREFIX_CACHING_CONFIG=""
+fi
+if [[ -n "${OFFLOAD_MODE:-}" ]]; then
+    apply_vllm_offload_config
+fi
+
 cat > config.yaml << EOF
 kv-cache-dtype: fp8
 compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true}}'
-no-enable-prefix-caching: true
+$PREFIX_CACHING_CONFIG
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 max-model-len: $CALCULATED_MAX_MODEL_LEN
 EOF
+
+if [[ -n "${VLLM_CPU_OFFLOAD_GB:-}" ]]; then
+    echo "cpu-offload-gb: ${VLLM_CPU_OFFLOAD_GB}" >> config.yaml
+fi
+if [[ -n "${VLLM_SWAP_SPACE_GB:-}" ]]; then
+    echo "swap-space: ${VLLM_SWAP_SPACE_GB}" >> config.yaml
+fi
+if [[ -n "${OFFLOAD_MODE:-}" ]]; then
+    apply_vllm_offload_config
+fi
 
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
@@ -52,6 +70,9 @@ PORT=${PORT:-8888}
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
+if [[ -n "${OFFLOAD_MODE:-}" ]]; then
+    start_kv_metrics_collector "${PORT:-8888}" /workspace/kv_metrics.csv 2.0
+fi
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
@@ -59,7 +80,8 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --gpu-memory-utilization 0.9 \
 --tensor-parallel-size $TP \
 --max-num-seqs 512 \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--disable-log-requests $VLLM_OFFLOAD_EXTRA_ARGS \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -68,7 +90,7 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 pip install -q datasets pandas
 
-run_benchmark_serving \
+run_single_node_benchmark \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
@@ -78,7 +100,8 @@ run_benchmark_serving \
     --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --server-pid "$SERVER_PID"
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
@@ -87,5 +110,8 @@ if [ "${RUN_EVAL}" = "true" ]; then
 fi
 
 # Stop GPU monitoring
+if [[ -n "${OFFLOAD_MODE:-}" ]]; then
+    stop_kv_metrics_collector
+fi
 stop_gpu_monitor
 set +x

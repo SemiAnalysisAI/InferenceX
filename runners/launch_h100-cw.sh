@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/lib_single_node_script.sh"
+
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 PARTITION="h100"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
+SCRIPT_PATH=$(resolve_single_node_benchmark_script "${EXP_NAME%%_*}" "$PRECISION" "h100" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
 
 set -x
 
@@ -31,7 +34,7 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL,PORT=8888 \
-bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100.sh
+bash "$SCRIPT_PATH"
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID

@@ -1,0 +1,291 @@
+# TriAttention KV-compression preview lanes for ISB1 replay benchmarks.
+#
+# These entries deploy vLLM with the TriAttention plugin enabled for runtime
+# KV-cache compression on H100/H200 Hopper-class GPUs. The plugin uses env
+# vars TRIATTN_RUNTIME_KV_BUDGET and TRIATTN_RUNTIME_SPARSE_STATS_PATH,
+# configured in the benchmark scripts.
+#
+# Key differences from baseline vLLM ISB1 entries:
+#   - model-prefix includes "triattn" suffix to route to dedicated scripts
+#   - Prefix caching disabled (incompatible with KV compression)
+#   - max-num-batched-tokens lowered to 1024 (prevents OOM from large prefills)
+#   - KV budget auto-detected: 2048 for code workloads, 12000 for chat workloads
+#
+# This file is intentionally separate from isb1-master.yaml — TriAttention
+# preview lanes stay out of the ordinary runnable support statement.
+# Use only for explicit validation dispatches.
+#
+# Prerequisites:
+#   - triattention pip package installed in the container (or installed at runtime)
+#   - Optional: pre-calibrated stats at /workspace/triattn_stats/<canonical_model_id>_stats.pt
+
+# ---------------------------------------------------------------------------
+# DeepSeek-R1 FP8 — H100/H200 with TriAttention — core 8k1k
+# ---------------------------------------------------------------------------
+
+dsr1triattn-fp8-h100-isb1-vllm:
+  image: vllm/vllm-openai:v0.18.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1triattn
+  precision: fp8
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: deepseek_r1_0528
+  max-model-len: 10240
+  replay-configs:
+    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+
+dsr1triattn-fp8-h200-isb1-vllm:
+  image: vllm/vllm-openai:v0.18.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1triattn
+  precision: fp8
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: deepseek_r1_0528
+  max-model-len: 10240
+  replay-configs:
+    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+
+# ---------------------------------------------------------------------------
+# DeepSeek-R1 FP8 — H100/H200 with TriAttention — long-context extensions
+# ---------------------------------------------------------------------------
+
+dsr1triattn-fp8-h100-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1triattn
+  precision: fp8
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: deepseek_r1_0528
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+
+dsr1triattn-fp8-h200-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1triattn
+  precision: fp8
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: deepseek_r1_0528
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+
+# ---------------------------------------------------------------------------
+# Qwen 3.5 FP8 — H100/H200 with TriAttention — extension only
+# (Qwen 3.5 is not present in core 8k1k exports; only extension 131k)
+# ---------------------------------------------------------------------------
+
+qwen3.5triattn-fp8-h100-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5triattn
+  precision: fp8
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: qwen3_5_397b_a17b
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 2
+          num-warmup-sessions: 1
+
+qwen3.5triattn-fp8-h200-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5triattn
+  precision: fp8
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: qwen3_5_397b_a17b
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 2
+          num-warmup-sessions: 1
+
+# ---------------------------------------------------------------------------
+# GPT-OSS-120B FP4 — H100/H200 with TriAttention — core 8k1k
+# ---------------------------------------------------------------------------
+
+gptosstriattn-fp4-h100-isb1-vllm:
+  image: vllm/vllm-openai:v0.18.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptosstriattn
+  precision: fp4
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: gpt_oss_120b
+  max-model-len: 10240
+  replay-configs:
+    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+
+gptosstriattn-fp4-h200-isb1-vllm:
+  image: vllm/vllm-openai:v0.18.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptosstriattn
+  precision: fp4
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: gpt_oss_120b
+  max-model-len: 10240
+  replay-configs:
+    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+        - max-concurrency: 8
+
+# ---------------------------------------------------------------------------
+# GPT-OSS-120B FP4 — H100/H200 with TriAttention — long-context extensions
+# ---------------------------------------------------------------------------
+
+gptosstriattn-fp4-h100-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptosstriattn
+  precision: fp4
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: gpt_oss_120b
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+
+gptosstriattn-fp4-h200-isb1-vllm-extension:
+  image: vllm/vllm-openai:v0.18.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptosstriattn
+  precision: fp4
+  framework: vllm
+  runner: h200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h200_sxm_141gb
+  canonical-model-id: gpt_oss_120b
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
+    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 4
+          num-warmup-sessions: 1
