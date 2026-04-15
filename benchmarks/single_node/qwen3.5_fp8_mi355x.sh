@@ -41,7 +41,6 @@ python3 -m sglang.launch_server \
     --ep-size $EP_SIZE \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
