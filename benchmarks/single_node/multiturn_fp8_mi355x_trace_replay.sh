@@ -87,7 +87,7 @@ if [ "$OFFLOAD_MODE" = "on" ]; then
     # SimpleCPUOffloadConnector uses cuda.bindings (NVIDIA-only), skip on ROCm
     VLLM_CMD+=" --kv_offloading_backend native"
     VLLM_CMD+=" --kv_offloading_size $offload_size"
-    VLLM_CMD+=" --no-disable-hybrid-kv-cache-manager"
+    VLLM_CMD+=" --disable-hybrid-kv-cache-manager"
 elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
