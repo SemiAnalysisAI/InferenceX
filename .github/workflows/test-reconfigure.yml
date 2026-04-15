@@ -1,0 +1,116 @@
+name: Test - Scheduler Reconfigure A/B
+run-name: "Reconfigure A/B | ${{ inputs.model }} tp=${{ inputs.tp }} conc=${{ inputs.conc }} | ${{ inputs.runner }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Self-hosted runner label (e.g. b200-dgxc_1)"
+        required: true
+        type: string
+      model:
+        description: "HuggingFace model path"
+        required: true
+        type: string
+        default: "openai/gpt-oss-120b"
+      tp:
+        description: "Tensor parallel size"
+        required: true
+        type: string
+        default: "8"
+      conc:
+        description: "Benchmark concurrency"
+        required: true
+        type: string
+        default: "32"
+      isl:
+        description: "Input sequence length"
+        required: true
+        type: string
+        default: "1024"
+      osl:
+        description: "Output sequence length"
+        required: true
+        type: string
+        default: "1024"
+      extra-args:
+        description: "Extra vllm serve args (e.g. --kv-cache-dtype fp8)"
+        required: false
+        type: string
+      skip-baseline:
+        description: "Skip Phase A (baseline cold starts)"
+        required: false
+        type: boolean
+        default: false
+      skip-reconfig:
+        description: "Skip Phase B (reconfigure)"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  IMAGE: semianalysiswork/vllm-reconfigure:latest
+
+jobs:
+  reconfigure-ab-test:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 300
+    name: "reconfigure-ab | ${{ inputs.model }} | ${{ inputs.runner }}"
+    steps:
+      - name: Resource cleanup (pre-run)
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            docker ps -aq | xargs -r docker rm -f || true
+            docker network prune -f || true
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.ref }}
+          clean: false
+
+      - name: Pull image
+        run: docker pull "$IMAGE"
+
+      - name: Run A/B test
+        run: |
+          set -x
+          HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
+
+          docker run --rm --init --network host \
+            --runtime nvidia --gpus all --ipc host --privileged \
+            --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
+            -v "${HF_HUB_CACHE_MOUNT}:/root/.cache/huggingface" \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            -e HF_TOKEN \
+            -e MODEL="${{ inputs.model }}" \
+            -e TP="${{ inputs.tp }}" \
+            -e CONC="${{ inputs.conc }}" \
+            -e ISL="${{ inputs.isl }}" \
+            -e OSL="${{ inputs.osl }}" \
+            -e PORT=8888 \
+            -e RANDOM_RANGE_RATIO=0.8 \
+            -e VLLM_EXTRA_ARGS="${{ inputs.extra-args }}" \
+            -e SKIP_BASELINE="${{ inputs.skip-baseline && '1' || '0' }}" \
+            -e SKIP_RECONFIG="${{ inputs.skip-reconfig && '1' || '0' }}" \
+            -e RESULT_FILENAME="reconfigure_ab_test" \
+            -e NCCL_GRAPH_REGISTER=0 \
+            -e PYTHONPYCACHEPREFIX=/tmp/pycache/ \
+            "$IMAGE" \
+            bash benchmarks/test_reconfigure_sweep.sh
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reconfigure-ab-results-${{ inputs.runner }}
+          path: |
+            results_reconfigure_test/
+          retention-days: 30
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            docker ps -aq | xargs -r docker rm -f || true
+          fi
