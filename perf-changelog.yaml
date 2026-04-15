@@ -1346,15 +1346,21 @@
   description:
     - "Bump GLM-5 FP8 B200 SGLang concurrency from 128 to 256"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1012
-  
+
 - config-keys:
     - qwen3.5-fp4-mi355x-sglang
   description:
     - "TP2/TP4 seach space exploration for Qwen3.5 fp4 on SGL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1022
-  
+
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update SGLang image to `0.5.10post1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
