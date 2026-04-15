@@ -1,7 +1,7 @@
 name: Profile Multinode
 
 on:
-  # TODO: Remove push trigger after testing
+  # TODO: Remove push trigger after testing (triggers on path changes below)
   push:
     paths:
       - '.github/workflows/profile-multinode.yml'
