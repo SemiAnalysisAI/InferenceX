@@ -20,6 +20,9 @@ if [[ -z "$IBDEVICES" ]]; then
         export IBDEVICES=ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7
     elif [[ $NODENAME == mia1* ]]; then
         export IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+    elif [[ $NODENAME == chi-mi325x* ]]; then
+        # Vultr/CPE MI325X cluster: Broadcom RoCE (bnxt_re); bnxt_re6 is DOWN, skip it
+        export IBDEVICES=bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8
     else
         echo "ERROR: Unable to detect cluster from hostname $NODENAME and IBDEVICES not set" >&2
         exit 1
@@ -41,6 +44,13 @@ export NCCL_IB_HCA=$IBDEVICES
 export SGLANG_USE_AITER=1
 export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=1200
 export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=1200
+
+# GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
+if [[ "$MODEL_NAME" == *GLM-5* ]]; then
+    export SGLANG_ROCM_FUSED_DECODE_MLA=0
+    export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+    export SAFETENSORS_FAST_GPU=1
+fi
 
 # Disable allocating memory in one pass
 export MORI_SHMEM_MODE=ISOLATION
@@ -64,8 +74,11 @@ export MORI_MAX_DISPATCH_TOKENS_DECODE=160
 export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
 
 export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
-export MORI_IO_QP_MAX_SEND_WR=16384
-export MORI_IO_QP_MAX_CQE=32768
+# Broadcom bnxt_re NICs cap SQ depth at ~4351 entries. Lower from upstream
+# defaults (16384/32768) to avoid SQ overflow under EP8 RDMA traffic.
+# See sgl-project/sglang#22072
+export MORI_IO_QP_MAX_SEND_WR=4096
+export MORI_IO_QP_MAX_CQE=8192
 export MORI_IO_QP_MAX_SGE=4
 
 export MORI_APP_LOG_LEVEL=INFO
@@ -101,6 +114,11 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == chi-mi325x* ]]; then
+            # Vultr/CPE MI325X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+            export MORI_RDMA_TC=104
+            export MORI_RDMA_SL=3
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
         fi
@@ -114,6 +132,11 @@ else
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == chi-mi325x* ]]; then
+        # Vultr/CPE MI325X: Broadcom Thor 2, DSCP AF31(26)->prio 3, TC=4*26=104
+        export MORI_RDMA_TC=104
+        export MORI_RDMA_SL=3
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
         echo "       This is normal for clusters without QoS or outside Docker containers."

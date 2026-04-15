@@ -71,10 +71,19 @@ mi300x:
 - 'mi300x-amds_2'
 - 'mi300x-amds_3'
 mi325x:
-- 'mi325x-amd_0'
-- 'mi325x-amd_1'
-- 'mi325x-amd_2'
-- 'mi325x-amd_3'
+- 'mi325x-amds_00'
+- 'mi325x-amds_01'
+- 'mi325x-amds_02'
+- 'mi325x-amds_03'
+- 'mi325x-amds_04'
+- 'mi325x-amds_05'
+- 'mi325x-amds_06'
+- 'mi325x-amds_08'
+mi325x-disagg:
+- 'mi325x-amds_00'
+- 'mi325x-amds_01'
+- 'mi325x-amds_02'
+- 'mi325x-amds_03'
 mi355x:
 - 'mi355x-amds_0'
 - 'mi355x-amds_1'

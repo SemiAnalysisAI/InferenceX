@@ -30,14 +30,18 @@ if [[ ! -f "$MODELS_YAML" ]]; then
     exit 1
 fi
 
-# Validate MODEL_NAME exists as a top-level key in models.yaml
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in models.yaml"
+# MODEL_YAML_KEY is the models.yaml lookup key (bare model name, e.g. DeepSeek-R1-0528).
+# MODEL_NAME may be a longer HF cache path (e.g. models--org--repo/snapshots/<hash>).
+_MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+
+# Validate the yaml key exists as a top-level key in models.yaml
+if ! grep -q "^${_MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    echo "Error: Model '$_MODEL_YAML_KEY' not found in models.yaml"
     echo "Available models:"
     grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
     exit 1
 fi
-echo "Model found: $MODEL_NAME"
+echo "Model found: $_MODEL_YAML_KEY"
 
 # All models use server.sh as the entrypoint
 RUN_FILE="server.sh"
@@ -249,10 +253,9 @@ echo "NNODES is ${NNODES}"
 echo "REPO Directory is ${DI_REPO_DIR}"
 echo "USER_NAME is ${USER_NAME}"
 
-# Get the RDMA priority and DSCP value from the NIC
+# Get the RDMA priority and DSCP value from the NIC (optional - env.sh handles absence gracefully)
 if ! command -v nicctl >/dev/null 2>&1; then
-    echo "Error: nicctl command not found. Please ensure nicctl is installed and available." >&2
-    exit 1
+    echo "[INFO] nicctl not found. RDMA QoS configuration will be skipped inside the container." >&2
 fi
 
 # Reduce log spam
@@ -286,7 +289,8 @@ export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(echo "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
 
 
@@ -296,8 +300,8 @@ SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning stale logs folder..."
-  # clean up the logs folder
-  sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  # NFS-safe cleanup: use timeout to avoid hanging on stale NFS locks
+  timeout --kill-after=5 30 sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
 
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -317,6 +321,54 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
 '
+
+# =============================================================================
+# Optional: Pre-stage model to local NVMe for faster loading
+# =============================================================================
+# LOCAL_MODEL_CACHE_DIR: mount point for fast local storage (NVMe/SSD) on compute nodes.
+# Set per-cluster via the runner/launch script. When set, model weights are rsync'd
+# from shared storage to local NVMe before Docker starts. This is idempotent —
+# subsequent runs skip files already cached locally.
+#
+# If unset or the local path doesn't exist, the model is served directly from
+# shared storage (NFS/Lustre) as before.
+if [[ -n "${LOCAL_MODEL_CACHE_DIR:-}" ]]; then
+    LOCAL_MODEL_FULL="${LOCAL_MODEL_CACHE_DIR}/${MODEL_NAME}"
+    echo "[cache] Pre-staging model to local NVMe on all nodes..."
+    echo "[cache]   Source: $MODEL_PATH"
+    echo "[cache]   Dest:   $LOCAL_MODEL_FULL"
+
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+        set -euo pipefail
+        SRC="'"$MODEL_PATH"'"
+        DST="'"$LOCAL_MODEL_FULL"'"
+        CACHE_DIR="'"${LOCAL_MODEL_CACHE_DIR}"'"
+
+        # Create destination directory
+        sudo mkdir -p "$CACHE_DIR" 2>/dev/null || mkdir -p "$CACHE_DIR"
+        sudo chown -R "$(whoami)" "$CACHE_DIR" 2>/dev/null || true
+
+        echo "[cache] $(hostname): Syncing model to local NVMe..."
+        START=$(date +%s)
+
+        rclone sync "$SRC/" "$DST/" \
+            --transfers 32 \
+            --checkers 32 \
+            --links \
+            --progress
+
+        ELAPSED=$(( $(date +%s) - START ))
+        SIZE=$(du -sh "$DST" 2>/dev/null | cut -f1)
+        echo "[cache] $(hostname): Done in ${ELAPSED}s ($SIZE)"
+    ' 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        echo "[cache] Model pre-staged successfully. Updating MODEL_DIR."
+        MODEL_DIR="${LOCAL_MODEL_CACHE_DIR}"
+    else
+        echo "[cache] WARNING: Local caching failed on some nodes. Falling back to shared storage."
+    fi
+fi
 
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
@@ -357,7 +409,7 @@ exec sudo docker run --rm \
     --privileged \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    -v $(which nicctl):/usr/sbin/nicctl \
+    $(command -v nicctl &>/dev/null && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
@@ -373,6 +425,7 @@ exec sudo docker run --rm \
     -e xP=\$xP \
     -e yD=\$yD \
     -e MODEL_NAME=\$MODEL_NAME \
+    -e MODEL_YAML_KEY=${_MODEL_YAML_KEY} \
     -e IPADDRS=\$IPADDRS \
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE \
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP \
