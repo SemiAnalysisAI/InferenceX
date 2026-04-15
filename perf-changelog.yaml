@@ -1309,6 +1309,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
 
 - config-keys:
+    - qwen3.5-bf16-mi300x-sglang
+    - qwen3.5-bf16-mi325x-sglang
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI300X and  MI325X to achieve better performance"
+    - "Use lmsysorg/sglang:v0.5.10-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/986
+
+- config-keys:
     - glm5-fp4-b200-sglang
   description:
     - "Update GLM-5 NVFP4 B200 SGLang benchmark script with optimized launch parameters"
