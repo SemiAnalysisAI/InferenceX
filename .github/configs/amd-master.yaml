@@ -126,7 +126,6 @@ qwen3.5-bf16-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
-    - { tp: 8, ep: 8, conc-start: 64, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:
