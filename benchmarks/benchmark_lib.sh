@@ -639,6 +639,30 @@ move_profile_trace_for_relay() {
     fi
 
     echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
+
+    # Also stage per-stage traces (EXTEND=prefill, DECODE=decode) if they exist.
+    # These are produced by profile_by_stage=true and have filenames like:
+    #   {profile_id}-TP-0-DP-0-EP-0-EXTEND.trace.json.gz
+    # Stage all matching traces, preserving their original rank suffixes.
+    local trace_dir
+    trace_dir="$(dirname "$trace_file")"
+    local profile_id
+    profile_id="$(basename "$trace_file" .trace.json.gz)"
+    profile_id="${profile_id#merged-}"
+
+    local stage_trace=""
+    for stage in DECODE EXTEND; do
+        while IFS= read -r stage_trace; do
+            [[ -z "$stage_trace" ]] && continue
+            # Extract rank info from filename: {id}-TP-0-DP-1-EP-1-DECODE.trace.json.gz -> TP-0-DP-1-EP-1
+            local basename_trace
+            basename_trace="$(basename "$stage_trace" "-${stage}.trace.json.gz")"
+            local ranks="${basename_trace#"${profile_id}"-}"
+            local dest_stage="/workspace/profile_${RESULT_FILENAME}_${ranks}_${stage}.trace.json.gz"
+            cp -f "$stage_trace" "$dest_stage"
+            echo "[PROFILE] Staged ${stage} trace: $dest_stage (source: $stage_trace)"
+        done < <(ls -t "$trace_dir"/${profile_id}-*${stage}.trace.json.gz 2>/dev/null)
+    done
 }
 
 
