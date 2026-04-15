@@ -184,18 +184,23 @@ jobs:
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
             if [ "${FRAMEWORK}" = "sglang" ]; then
-              # Try to locate corresponding TP-0 traces produced by SGLang profiler
-              merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
+              # Locate per-stage TP-0 traces produced by SGLang profiler.
+              # SGLang writes to SGLANG_TORCH_PROFILER_DIR (typically /workspace/).
+              # With profile_by_stage=true, filenames are: {id}-TP-0[-DP-0][-EP-0]-{EXTEND|DECODE}.trace.json.gz
+              prof_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
+              merged_latest=$(ls -t "$prof_dir"/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
               if [ -n "${merged_latest}" ] && [ -f "${merged_latest}" ]; then
+                trace_dir="$(dirname "$merged_latest")"
                 ts_name="${merged_latest##*/}"
                 ts_name="${ts_name#merged-}"
                 ts_name="${ts_name%.trace.json.gz}"
-                tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
-                tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
-                if [ -f "${tp0_decode}" ]; then
+                # Find TP-0 DECODE/EXTEND traces (filename includes optional DP/EP rank suffixes)
+                tp0_decode=$(ls -t "$trace_dir"/${ts_name}-TP-0*DECODE.trace.json.gz 2>/dev/null | head -n1 || true)
+                tp0_extend=$(ls -t "$trace_dir"/${ts_name}-TP-0*EXTEND.trace.json.gz 2>/dev/null | head -n1 || true)
+                if [ -n "${tp0_decode}" ] && [ -f "${tp0_decode}" ]; then
                   echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
                 fi
-                if [ -f "${tp0_extend}" ]; then
+                if [ -n "${tp0_extend}" ] && [ -f "${tp0_extend}" ]; then
                   echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
                 fi
               fi
