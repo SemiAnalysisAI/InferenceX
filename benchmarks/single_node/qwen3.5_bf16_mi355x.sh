@@ -44,10 +44,11 @@ python3 -m sglang.launch_server \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
+    --context-length $CONTEXT_LENGTH \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.8 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
