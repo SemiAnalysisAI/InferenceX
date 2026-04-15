@@ -93,6 +93,11 @@ on:
         required: false
         default: 'false'
         type: string
+      trace_dir:
+        description: 'Override trace directory (e.g. traces, traces_neon). Relative to kv-cache-tester dir.'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -197,6 +202,7 @@ jobs:
       ep: "${{ matrix.ep || inputs.ep }}"
       ref: ${{ inputs.ref }}
       ignore-eos: ${{ inputs.ignore_eos }}
+      trace-dir: ${{ inputs.trace_dir }}
 
   # ---------------------------------------------------------------------------
   # Collect & aggregate results

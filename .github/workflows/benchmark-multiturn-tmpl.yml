@@ -60,6 +60,11 @@ on:
         required: false
         type: string
         default: 'false'
+      trace-dir:
+        description: "Override trace directory (relative to kv-cache-tester dir)"
+        required: false
+        type: string
+        default: ''
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -79,6 +84,7 @@ env:
   SCRIPT_SUFFIX: ${{ inputs.script-suffix }}
   SPEC_DECODING: 'off'
   IGNORE_EOS: ${{ inputs.ignore-eos }}
+  TRACE_DIR: ${{ inputs.trace-dir }}
 
 permissions:
   contents: read

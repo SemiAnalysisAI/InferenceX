@@ -45,7 +45,12 @@ nvidia-smi
 # ---- Paths -----------------------------------------------------------------
 MULTITURN_DIR=/workspace/experimental/multiturn/vllm_benchmark
 KV_CACHE_TESTER_DIR="$MULTITURN_DIR/kv-cache-tester"
-TRACE_DIR="${TRACE_DIR:-$KV_CACHE_TESTER_DIR/traces_neon}"
+# TRACE_DIR can be absolute, relative to kv-cache-tester, or empty (default: traces_neon)
+if [ -z "${TRACE_DIR:-}" ]; then
+    TRACE_DIR="$KV_CACHE_TESTER_DIR/traces_neon"
+elif [ ! -d "$TRACE_DIR" ] && [ -d "$KV_CACHE_TESTER_DIR/$TRACE_DIR" ]; then
+    TRACE_DIR="$KV_CACHE_TESTER_DIR/$TRACE_DIR"
+fi
 
 pip install --quiet urllib3 requests 2>/dev/null || true
 
