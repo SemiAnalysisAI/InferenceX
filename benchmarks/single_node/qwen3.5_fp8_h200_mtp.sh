@@ -35,7 +35,7 @@ echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_MODEL_LEN: $MAX_MODEL_LEN"
 start_gpu_monitor
 
 set -x
-python3 -m sglang.launch_server \
+SGLANG_ENABLE_SPEC_V2=1 python3 -m sglang.launch_server \
   --model "$MODEL" \
   --host 0.0.0.0 \
   --port "$PORT" \
