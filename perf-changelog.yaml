@@ -1348,3 +1348,9 @@
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Update SGLang image from v0.5.9-cu129-amd64 to v0.5.10.post1-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
