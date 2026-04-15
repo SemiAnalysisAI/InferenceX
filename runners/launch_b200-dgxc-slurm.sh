@@ -229,7 +229,6 @@ else
     fi
 
     srun --jobid=$JOB_ID \
-        --exclusive \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
