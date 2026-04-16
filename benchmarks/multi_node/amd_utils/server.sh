@@ -201,6 +201,7 @@ fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
+    SGLANG_MORI_MOE_MAX_INPUT_TOKENS=$((SGLANG_MORI_MOE_MAX_INPUT_TOKENS * (DECODE_MTP_SIZE + 1)))
 fi
 
 # =============================================================================
@@ -355,7 +356,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Decode servers  ($((DECODE_TP_SIZE/GPUS_PER_NODE))  nodes): ${DECODE_ARGS}"
     echo "Prefill env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL}"
     echo "Decode  env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} "
-    echo "Decode  env: SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${DECODE_CUDA_GRAPH_BS_DP_END} "
+    echo "Decode  env: SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${SGLANG_MORI_MOE_MAX_INPUT_TOKENS} "
 
     echo "================================================"
 
@@ -551,7 +552,7 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
-    DECODE_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${SGLANG_MORI_MOE_MAX_INPUT_TOKENS} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
