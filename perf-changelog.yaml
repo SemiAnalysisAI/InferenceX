@@ -1362,7 +1362,6 @@
 - config-keys:
     - qwen3.5-fp8-mi355x-sglang
     - qwen3.5-bf16-mi355x-sglang
-    - qwen3.5-fp8-mi355x-sglang
   description:
     - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
     - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
