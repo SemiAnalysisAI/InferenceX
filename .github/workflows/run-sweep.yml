@@ -50,10 +50,19 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Set up Python
+              uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+              with:
+                  python-version: '3.12'
+                  cache: 'pip'
+                  cache-dependency-path: utils/requirements.txt
+
+            - name: Install dependencies
+              run: |
+                  pip install -r utils/requirements.txt
+
             - id: setup
               run: |
-                  pip install pydantic
-
                   if [ "${{ github.event_name }}" == "pull_request" ]; then
                       BASE_REF="origin/${{ github.base_ref }}"
                       HEAD_REF="${{ github.event.pull_request.head.sha }}"
@@ -251,11 +260,20 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
+            - name: Set up Python
+              uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+              with:
+                  python-version: '3.12'
+                  cache: 'pip'
+                  cache-dependency-path: utils/requirements.txt
+
             - name: Install python dependencies
-              run: pip install PyGithub
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r utils/requirements.txt
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -286,11 +304,20 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
+            - name: Set up Python
+              uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+              with:
+                  python-version: '3.12'
+                  cache: 'pip'
+                  cache-dependency-path: utils/requirements.txt
+
             - name: Install dependencies
-              run: pip install psycopg2-binary tabulate
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r utils/requirements.txt
 
             - name: Compare results against main
-              run: python3 utils/compare_results.py results/ >> $GITHUB_STEP_SUMMARY
+              run: python3 utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
 
     trigger-ingest:
         needs:

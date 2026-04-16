@@ -1,12 +1,8 @@
-annotated-types==0.7.0
-iniconfig==2.3.0
-packaging==26.1
-pluggy==1.6.0
+# Direct dependencies for utils/ scripts and CI tests.
+# Exact pins for deterministic resolution on Python 3.12 in CI.
 pydantic==2.13.0
-pydantic_core==2.46.0
-Pygments==2.20.0
+PyGithub==2.8.1
+psycopg2-binary==2.9.11
 pytest==9.0.3
 PyYAML==6.0.3
 tabulate==0.10.0
-typing-inspection==0.4.2
-typing_extensions==4.15.0
