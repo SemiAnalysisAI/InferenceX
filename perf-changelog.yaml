@@ -1,4 +1,10 @@
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image from 'lmsysorg/sglang:v0.5.10-rocm720-mi35x' to 'rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413'"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1041
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
