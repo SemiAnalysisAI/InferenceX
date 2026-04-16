@@ -20,7 +20,9 @@ positional arguments:
                         configurations for a runner type. For instance, to
                         validate that all configs that specify an h200 runner
                         successfully run across all h200 runner nodes.
-    test-config         Generate full sweep for specific config keys.
+    test-config         Generate the standard sweep for specific config keys by
+                        default; pass --full for all intermediate concurrency
+                        points.
                         Supports wildcard patterns (* and ?) for matching
                         multiple keys at once.
 
@@ -129,7 +131,11 @@ This will only include runner nodes whose names contain "mi300x-amd"
 
 ## `test-config` Command
 
-The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
+The `test-config` command generates the standard sweep for one or more specific
+config keys. By default this keeps only the two configured concurrency
+endpoints per parallelism config. Pass `--full` to restore the full
+intermediate concurrency sweep. Explicit `--conc` values remain authoritative
+and are respected even without `--full`.
 
 ```
 usage: generate_sweep_configs.py test-config
@@ -137,6 +143,7 @@ usage: generate_sweep_configs.py test-config
     [--runner-config RUNNER_CONFIG]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
+    [--full]
 ```
 
 Config keys support **wildcard patterns** using `*` (matches any characters) and `?` (matches a single character). Patterns that match no keys will raise an error.
@@ -173,7 +180,12 @@ test-config --config-keys dsr1* --config-files .github/configs/nvidia-master.yam
 test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/configs/nvidia-master.yaml
 ```
 
-**Override concurrency for targeted testing:**
+**Run the full intermediate concurrency sweep for a specific config:**
+```
+test-config --config-keys dsr1-fp4-b200-sglang --config-files .github/configs/nvidia-master.yaml --full
+```
+
+**Override concurrency for targeted testing (works independently of standard vs full sweep):**
 ```
 test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
 ```

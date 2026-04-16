@@ -66,6 +66,11 @@ def main():
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Pass --full to generate_sweep_configs.py (full-sweep-enabled mode: all conc points)",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -118,6 +123,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
+                if args.full:
+                    base_cmd.append("--full")
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -143,6 +150,7 @@ def main():
                 "--config-files",
                 *MASTER_CONFIGS,
                 "--evals-only",
+                "--full",
             ]
             try:
                 eval_result = subprocess.run(

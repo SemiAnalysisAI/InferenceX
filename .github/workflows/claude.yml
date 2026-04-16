@@ -98,7 +98,11 @@ jobs:
 
             **Subcommand reference:**
             - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-lens`. This is the primary subcommand for running benchmarks.
-            - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'. Uses the flags `--config-files` and `--config-keys`, does NOT accept any other arguments.
+            - `test-config`: Use this subcommand ONLY when prompted to with 'test-config'.
+              Requires `--config-files` and `--config-keys`. It optionally accepts
+              `--conc` for an explicit subset or `--full` to sweep all intermediate
+              concurrency points. Without either flag, `test-config` runs the
+              standard endpoint-only sweep.
 
             Examples:
 
@@ -122,16 +126,25 @@ jobs:
             generate-cli-command: "full-sweep --config-files .github/configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 1k1k"
             ```
 
-            **Test specific config keys (MUST USE `--conc`):**
+            **Test specific config keys with explicit concurrency:**
             ```
             generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang --conc 4"
+            ```
+
+            **Test specific config keys with full sweep:**
+            ```
+            generate-cli-command: "test-config --config-files .github/configs/nvidia-master.yaml --config-keys dsr1-fp4-b200-sglang --full"
             ```
 
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
             - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
-            - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
+            - Use `test-config` ONLY when given specific config keys to test.
+              Prefer explicit `--conc` values for the narrowest run, or use
+              `--full` only when the request specifically needs the entire
+              intermediate concurrency sweep.
+            - When using `test-config`, explicit `--conc` values are authoritative even without `--full`
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
             ## Monitor workflow execution

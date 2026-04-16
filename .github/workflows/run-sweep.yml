@@ -40,8 +40,18 @@ jobs:
     setup:
         runs-on: ubuntu-latest
         if: >-
-            (github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'sweep-enabled')) ||
-            (github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[skip-sweep]'))
+            (
+              github.event_name == 'pull_request' &&
+              !github.event.pull_request.draft &&
+              (
+                contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              )
+            ) ||
+            (
+              github.event_name != 'pull_request' &&
+              !contains(github.event.head_commit.message, '[skip-sweep]')
+            )
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
         steps:
@@ -51,6 +61,17 @@ jobs:
                   fetch-depth: 0
 
             - id: setup
+              env:
+                  IS_PUSH_MAIN: >-
+                      ${{
+                        github.event_name == 'push' &&
+                        github.ref == 'refs/heads/main'
+                      }}
+                  HAS_FULL_SWEEP_LABEL: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+                      }}
               run: |
                   pip install pydantic
 
@@ -62,12 +83,21 @@ jobs:
                       HEAD_REF="${{ github.event.after }}"
                   fi
 
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/process_changelog.py \
-                      --changelog-file ${GITHUB_WORKSPACE}/perf-changelog.yaml \
-                      --base-ref "$BASE_REF" \
-                      --head-ref "$HEAD_REF")
+                  PROCESS_CHANGELOG_CMD=(
+                      python3
+                      "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --base-ref "$BASE_REF"
+                      --head-ref "$HEAD_REF"
+                  )
 
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  if [ "$IS_PUSH_MAIN" = "true" ] || [ "$HAS_FULL_SWEEP_LABEL" = "true" ]; then
+                      PROCESS_CHANGELOG_CMD+=(--full)
+                  fi
+
+                  CONFIG_JSON=$("${PROCESS_CHANGELOG_CMD[@]}")
+
+                  echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
     sweep-multi-node-1k1k:
         needs: setup

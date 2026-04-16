@@ -7,6 +7,7 @@ from generate_sweep_configs import (
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    generate_test_config_sweep,
     apply_node_type_defaults,
     expand_config_keys,
     mark_eval_entries,
@@ -147,6 +148,121 @@ def full_sweep_args_multi_node():
     args.single_node = False
     args.multi_node = True
     return args
+
+
+@pytest.fixture
+def test_config_args():
+    """Args namespace for test-config subcommand (standard sweep).
+
+    Tests that use multi-node configs must override config_keys:
+        args.config_keys = ["test-multi-node"]
+    Tests that use 8k1k config must override:
+        args.config_keys = ["test-single-node-8k1k"]
+
+    NOTE: generate_test_config_sweep() accesses args.config_keys directly and
+    args.conc / args.full via getattr. The --no-evals / --evals-only flags are
+    handled in main() after the function returns.
+    """
+    args = argparse.Namespace()
+    args.config_keys = ["test-single-node"]
+    args.conc = None
+    args.full = False
+    return args
+
+
+@pytest.fixture
+def single_node_test_config():
+    """Minimal single-node config for generate_test_config_sweep."""
+    return {
+        "test-single-node": {
+            "image": "test-image:latest",
+            "model": "test-model",
+            "model-prefix": "test",
+            "precision": "fp8",
+            "framework": "sglang",
+            "runner": "h200",
+            "seq-len-configs": [
+                {
+                    "isl": seq_len_stoi["1k1k"][0],
+                    "osl": seq_len_stoi["1k1k"][1],
+                    "search-space": [
+                        {
+                            "tp": 1,
+                            "conc-start": 4,
+                            "conc-end": 64,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+
+@pytest.fixture
+def single_node_8k1k_test_config():
+    """Single-node 8k1k config for eval marking tests."""
+    return {
+        "test-single-node-8k1k": {
+            "image": "test-image:latest",
+            "model": "test-model",
+            "model-prefix": "test",
+            "precision": "fp8",
+            "framework": "sglang",
+            "runner": "h200",
+            "seq-len-configs": [
+                {
+                    "isl": seq_len_stoi["8k1k"][0],
+                    "osl": seq_len_stoi["8k1k"][1],
+                    "search-space": [
+                        {
+                            "tp": 1,
+                            "conc-start": 4,
+                            "conc-end": 64,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+
+@pytest.fixture
+def multinode_test_config():
+    """Minimal multi-node config for generate_test_config_sweep."""
+    return {
+        "test-multi-node": {
+            "image": "test-image:latest",
+            "model": "test-model",
+            "model-prefix": "test",
+            "precision": "fp4",
+            "framework": "dynamo-trt",
+            "runner": "gb200",
+            "multinode": True,
+            "seq-len-configs": [
+                {
+                    "isl": seq_len_stoi["1k1k"][0],
+                    "osl": seq_len_stoi["1k1k"][1],
+                    "search-space": [
+                        {
+                            "prefill": {
+                                "num-worker": 2,
+                                "tp": 4,
+                                "ep": 4,
+                                "dp-attn": True,
+                            },
+                            "decode": {
+                                "num-worker": 1,
+                                "tp": 8,
+                                "ep": 8,
+                                "dp-attn": True,
+                            },
+                            "conc-list": [500, 1000, 2000, 4000],
+                        }
+                    ],
+                }
+            ],
+        }
+    }
 
 
 # =============================================================================
@@ -1181,7 +1297,6 @@ class TestArgumentDefaults:
     def test_runner_config_default_value(self):
         """Verify --runner-config defaults to .github/configs/runners.yaml."""
         import sys
-        from generate_sweep_configs import main
 
         # Save original sys.argv
         original_argv = sys.argv
@@ -1198,7 +1313,6 @@ class TestArgumentDefaults:
             # Parse args using the ArgumentParser from main
             # We need to access the parser directly
             import argparse
-            from generate_sweep_configs import main
 
             # Create the same parent parser as in main()
             parent_parser = argparse.ArgumentParser(add_help=False)
@@ -1743,3 +1857,368 @@ class TestMarkEvalEntries:
         non_prefill = [x for x in result if 'prefill' not in x]
         assert not all(x['run-eval'] for x in non_prefill), \
             "mark_eval_entries must not mark all entries — would break e2e splitting"
+
+
+class TestGenerateTestConfigSweep:
+    """Tests for generate_test_config_sweep baseline behavior."""
+
+    def test_single_node_standard_entry_count_and_conc_values(
+        self, test_config_args, single_node_test_config
+    ):
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 2
+        assert {entry["conc"] for entry in result} == {4, 64}
+
+    def test_single_node_entry_fields_and_values(
+        self, test_config_args, single_node_test_config
+    ):
+        entry = generate_test_config_sweep(
+            test_config_args, single_node_test_config
+        )[0]
+
+        assert set(entry) == {
+            "image",
+            "model",
+            "model-prefix",
+            "precision",
+            "framework",
+            "runner",
+            "isl",
+            "osl",
+            "tp",
+            "conc",
+            "max-model-len",
+            "ep",
+            "dp-attn",
+            "spec-decoding",
+            "exp-name",
+            "disagg",
+            "run-eval",
+        }
+        assert entry["image"] == "test-image:latest"
+        assert entry["model"] == "test-model"
+        assert entry["model-prefix"] == "test"
+        assert entry["precision"] == "fp8"
+        assert entry["framework"] == "sglang"
+        assert entry["runner"] == "h200"
+        assert entry["isl"] == 1024
+        assert entry["osl"] == 1024
+        assert entry["tp"] == 1
+        assert entry["ep"] == 1
+        assert entry["dp-attn"] is False
+        assert entry["spec-decoding"] == "none"
+        assert entry["max-model-len"] == 2248
+        assert entry["exp-name"] == "test_1k1k"
+        assert entry["disagg"] is False
+        assert entry["run-eval"] is False
+
+    def test_single_node_multiple_tp_values(
+        self, test_config_args, single_node_test_config
+    ):
+        config = single_node_test_config["test-single-node"]["seq-len-configs"][0]
+        config["search-space"].append({"tp": 2, "conc-start": 8, "conc-end": 32})
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 4
+        assert {(entry["tp"], entry["conc"]) for entry in result} == {
+            (1, 4),
+            (1, 64),
+            (2, 8),
+            (2, 32),
+        }
+
+    def test_single_node_multiple_seq_len_configs(
+        self, test_config_args, single_node_test_config
+    ):
+        single_node_test_config["test-single-node"]["seq-len-configs"].append(
+            {
+                "isl": seq_len_stoi["8k1k"][0],
+                "osl": seq_len_stoi["8k1k"][1],
+                "search-space": [{"tp": 1, "conc-start": 4, "conc-end": 64}],
+            }
+        )
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 4
+        assert {entry["isl"] for entry in result} == {1024, 8192}
+
+    def test_multi_node_standard_conc_is_stored_as_endpoint_list(
+        self, test_config_args, multinode_test_config
+    ):
+        test_config_args.config_keys = ["test-multi-node"]
+
+        result = generate_test_config_sweep(test_config_args, multinode_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == [500, 4000]
+
+    def test_multi_node_entry_fields(
+        self, test_config_args, multinode_test_config
+    ):
+        test_config_args.config_keys = ["test-multi-node"]
+        entry = generate_test_config_sweep(
+            test_config_args, multinode_test_config
+        )[0]
+
+        assert "prefill" in entry
+        assert "decode" in entry
+        assert isinstance(entry["conc"], list)
+        assert "tp" not in entry
+        assert entry["spec-decoding"] == "none"
+        assert entry["disagg"] is False
+        assert entry["max-model-len"] == 2248
+        assert entry["exp-name"] == "test_1k1k"
+
+    def test_config_key_resolution_ignores_other_configs(
+        self, test_config_args, single_node_test_config
+    ):
+        all_config_data = {
+            **single_node_test_config,
+            "other-config": {
+                "image": "other-image:latest",
+                "model": "other-model",
+                "model-prefix": "other",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "b200",
+                "seq-len-configs": [
+                    {
+                        "isl": seq_len_stoi["1k1k"][0],
+                        "osl": seq_len_stoi["1k1k"][1],
+                        "search-space": [{"tp": 2, "conc-start": 2, "conc-end": 8}],
+                    }
+                ],
+            },
+        }
+
+        result = generate_test_config_sweep(test_config_args, all_config_data)
+
+        assert len(result) == 2
+        assert all(entry["model-prefix"] == "test" for entry in result)
+
+    def test_invalid_config_key_raises(self, test_config_args, single_node_test_config):
+        test_config_args.config_keys = ["nonexistent-key"]
+
+        with pytest.raises(ValueError, match="Config key\\(s\\) not found"):
+            generate_test_config_sweep(test_config_args, single_node_test_config)
+
+
+class TestTestConfigParser:
+    """Regression tests for test-config parser wiring."""
+
+    def test_test_config_parser_accepts_full_and_conc(self):
+        parent_parser = argparse.ArgumentParser(add_help=False)
+        parent_parser.add_argument("--config-files", nargs="+", required=True)
+        parent_parser.add_argument(
+            "--runner-config",
+            default=".github/configs/runners.yaml",
+        )
+
+        parser = argparse.ArgumentParser(
+            description="Generate benchmark configurations from YAML config files"
+        )
+        subparsers = parser.add_subparsers(dest="command", required=True)
+
+        test_config_parser = subparsers.add_parser(
+            "test-config",
+            parents=[parent_parser],
+            add_help=False,
+        )
+        test_config_parser.add_argument("--config-keys", nargs="+", required=True)
+        test_config_parser.add_argument("--conc", nargs="+", type=int, required=False)
+        test_config_parser.add_argument("--full", action="store_true")
+
+        args = parser.parse_args(
+            [
+                "test-config",
+                "--config-files",
+                "dummy.yaml",
+                "--config-keys",
+                "test-single-node",
+                "--conc",
+                "4",
+                "8",
+                "--full",
+            ]
+        )
+
+        assert args.command == "test-config"
+        assert args.config_keys == ["test-single-node"]
+        assert args.conc == [4, 8]
+        assert args.full is True
+
+
+class TestFullSweepFlag:
+    """Tests for the test-config --full flag and endpoint reduction behavior."""
+
+    def test_single_node_standard_produces_two_points(
+        self, test_config_args, single_node_test_config
+    ):
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 2
+        assert {entry["conc"] for entry in result} == {4, 64}
+
+    def test_single_node_full_produces_all_points(
+        self, test_config_args, single_node_test_config
+    ):
+        test_config_args.full = True
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 5
+        assert {entry["conc"] for entry in result} == {4, 8, 16, 32, 64}
+
+    def test_single_node_degenerate_range(
+        self, test_config_args, single_node_test_config
+    ):
+        search_space = single_node_test_config["test-single-node"]["seq-len-configs"][0][
+            "search-space"
+        ][0]
+        search_space["conc-start"] = 32
+        search_space["conc-end"] = 32
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == 32
+
+    def test_single_node_conc_list_preserves_ascending_endpoints(
+        self, test_config_args, single_node_test_config
+    ):
+        search_space = single_node_test_config["test-single-node"]["seq-len-configs"][0][
+            "search-space"
+        ][0]
+        search_space.pop("conc-start")
+        search_space.pop("conc-end")
+        search_space["conc-list"] = [2, 4, 8, 16, 32]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 2
+        assert {entry["conc"] for entry in result} == {2, 32}
+
+    def test_single_node_conc_list_preserves_descending_order(
+        self, test_config_args, single_node_test_config
+    ):
+        search_space = single_node_test_config["test-single-node"]["seq-len-configs"][0][
+            "search-space"
+        ][0]
+        search_space.pop("conc-start")
+        search_space.pop("conc-end")
+        search_space["conc-list"] = [32, 16, 8, 4, 2]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 2
+        assert [entry["conc"] for entry in result] == [32, 2]
+
+    def test_single_node_single_element_conc_list(
+        self, test_config_args, single_node_test_config
+    ):
+        search_space = single_node_test_config["test-single-node"]["seq-len-configs"][0][
+            "search-space"
+        ][0]
+        search_space.pop("conc-start")
+        search_space.pop("conc-end")
+        search_space["conc-list"] = [128]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == 128
+
+    def test_multi_node_standard_trims_to_endpoints(
+        self, test_config_args, multinode_test_config
+    ):
+        test_config_args.config_keys = ["test-multi-node"]
+
+        result = generate_test_config_sweep(test_config_args, multinode_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == [500, 4000]
+
+    def test_multi_node_preserves_descending_endpoint_order(
+        self, test_config_args, multinode_test_config
+    ):
+        test_config_args.config_keys = ["test-multi-node"]
+        search_space = multinode_test_config["test-multi-node"]["seq-len-configs"][0][
+            "search-space"
+        ][0]
+        search_space["conc-list"] = [4000, 2000, 1000, 500]
+
+        result = generate_test_config_sweep(test_config_args, multinode_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == [4000, 500]
+
+    def test_multi_node_full_preserves_all_points(
+        self, test_config_args, multinode_test_config
+    ):
+        test_config_args.config_keys = ["test-multi-node"]
+        test_config_args.full = True
+
+        result = generate_test_config_sweep(test_config_args, multinode_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == [500, 1000, 2000, 4000]
+
+    def test_full_with_explicit_conc_filter(
+        self, test_config_args, single_node_test_config
+    ):
+        test_config_args.full = True
+        test_config_args.conc = [8, 32]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 2
+        assert {entry["conc"] for entry in result} == {8, 32}
+
+    def test_standard_with_explicit_endpoint_conc_filter(
+        self, test_config_args, single_node_test_config
+    ):
+        test_config_args.conc = [64]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == 64
+
+    def test_standard_with_explicit_intermediate_conc_filter(
+        self, test_config_args, single_node_test_config
+    ):
+        test_config_args.conc = [16]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert len(result) == 1
+        assert result[0]["conc"] == 16
+
+    def test_explicit_conc_without_match_returns_empty(
+        self, test_config_args, single_node_test_config
+    ):
+        test_config_args.conc = [999]
+
+        result = generate_test_config_sweep(test_config_args, single_node_test_config)
+
+        assert result == []
+
+    def test_eval_marking_uses_full_sweep_range(
+        self, test_config_args, single_node_8k1k_test_config
+    ):
+        test_config_args.config_keys = ["test-single-node-8k1k"]
+        test_config_args.full = True
+
+        result = generate_test_config_sweep(
+            test_config_args, single_node_8k1k_test_config
+        )
+        marked = mark_eval_entries(result)
+
+        eval_concs = {entry["conc"] for entry in marked if entry["run-eval"]}
+        non_eval_concs = {entry["conc"] for entry in marked if not entry["run-eval"]}
+
+        assert eval_concs == {16, 64}
+        assert non_eval_concs == {4, 8, 32}

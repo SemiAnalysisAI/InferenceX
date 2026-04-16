@@ -1,4 +1,3 @@
-from ast import For
 import fnmatch
 import json
 import argparse
@@ -536,10 +535,11 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
 
 
 def generate_test_config_sweep(args, all_config_data):
-    """Generate full sweep for specific config keys.
+    """Generate sweep for specific config keys.
 
     Validates that all specified config keys exist before generating.
-    Expands all configs fully without any filtering.
+    Standard sweep keeps only concurrency endpoints unless ``--full`` or
+    explicit ``--conc`` values are provided.
     """
     resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
 
@@ -585,12 +585,16 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
-                    # Apply --conc filter if provided (only for test-config)
+                    # Respect explicit --conc requests regardless of sweep tier
                     if getattr(args, 'conc', None):
                         conc_values = [c for c in conc_values if c in args.conc]
                         if not conc_values:
                             # No intersection with requested conc values; skip
                             continue
+                    # Standard sweep: only the two configured endpoints
+                    # Pass --full to sweep all intermediate points
+                    elif len(conc_values) > 1 and not getattr(args, 'full', False):
+                        conc_values = [conc_values[0], conc_values[-1]]
 
                     entry = {
                         Fields.IMAGE.value: image,
@@ -634,12 +638,16 @@ def generate_test_config_sweep(args, all_config_data):
                             if conc > conc_end:
                                 conc = conc_end
 
-                    # Apply --conc filter if provided (only for test-config)
+                    # Respect explicit --conc requests regardless of sweep tier
                     if getattr(args, 'conc', None):
                         conc_values = [c for c in conc_values if c in args.conc]
                         if not conc_values:
                             # No intersection with requested conc values; skip
                             continue
+                    # Standard sweep: only the two configured endpoints
+                    # Pass --full to sweep all intermediate points
+                    elif len(conc_values) > 1 and not getattr(args, 'full', False):
+                        conc_values = [conc_values[0], conc_values[-1]]
 
                     for conc in conc_values:
                         entry = {
@@ -890,7 +898,7 @@ def main():
         'test-config',
         parents=[parent_parser],
         add_help=False,
-        help='Generate full sweep for specific config keys. Validates that all specified keys exist before generating.'
+        help='Generate sweep for specific config keys. Standard sweep by default; pass --full for all intermediate concurrency points.'
     )
     test_config_keys_parser.add_argument(
         '--config-keys',
@@ -903,7 +911,16 @@ def main():
         nargs='+',
         type=int,
         required=False,
-        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+        help='Only include these concurrency values. Explicit --conc values are respected even without --full.'
+    )
+    test_config_keys_parser.add_argument(
+        '--full',
+        action='store_true',
+        help=(
+            'Sweep all intermediate concurrency points (full sweep). '
+            'Without this flag, only the two configured concurrency '
+            'endpoints are swept (standard sweep).'
+        )
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',
