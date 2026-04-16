@@ -93,6 +93,11 @@ on:
         required: false
         default: 'false'
         type: string
+      hash_block_mode:
+        description: 'Build each request prompt deterministically from hash_ids, bypassing pullback/growth (true/false). Use for neon/interleaved-subagent traces.'
+        required: false
+        default: 'false'
+        type: string
       trace_dir:
         description: 'Override trace directory (e.g. traces, traces_neon). Relative to kv-cache-tester dir.'
         required: false
@@ -202,6 +207,7 @@ jobs:
       ep: "${{ matrix.ep || inputs.ep }}"
       ref: ${{ inputs.ref }}
       ignore-eos: ${{ inputs.ignore_eos }}
+      hash-block-mode: ${{ inputs.hash_block_mode }}
       trace-dir: ${{ inputs.trace_dir }}
 
   # ---------------------------------------------------------------------------

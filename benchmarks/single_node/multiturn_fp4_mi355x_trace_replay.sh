@@ -45,7 +45,20 @@ nvidia-smi 2>/dev/null || rocm-smi 2>/dev/null || true
 # ---- Paths -----------------------------------------------------------------
 MULTITURN_DIR=/workspace/experimental/multiturn/vllm_benchmark
 KV_CACHE_TESTER_DIR="$MULTITURN_DIR/kv-cache-tester"
-TRACE_DIR="${TRACE_DIR:-$KV_CACHE_TESTER_DIR/traces_neon}"
+# TRACE_DIR: local path (abs or relative to kv-cache-tester) or hf_<org>--<repo>
+# (e.g. hf_semianalysisai--cc-traces-0 loads from HF dataset semianalysisai/cc-traces-0)
+if [[ "${TRACE_DIR:-}" == hf_* ]]; then
+    HF_DATASET="${TRACE_DIR#hf_}"
+    HF_DATASET="${HF_DATASET/--//}"
+    TRACE_SOURCE_FLAG="--hf-dataset $HF_DATASET"
+    echo "Loading traces from Hugging Face dataset: $HF_DATASET"
+else
+    TRACE_DIR="${TRACE_DIR:-$KV_CACHE_TESTER_DIR/traces_neon}"
+    if [ ! -d "$TRACE_DIR" ] && [ -d "$KV_CACHE_TESTER_DIR/$TRACE_DIR" ]; then
+        TRACE_DIR="$KV_CACHE_TESTER_DIR/$TRACE_DIR"
+    fi
+    TRACE_SOURCE_FLAG="--trace-directory $TRACE_DIR"
+fi
 
 pip install --quiet urllib3 requests 2>/dev/null || true
 
@@ -139,7 +152,7 @@ sleep 2
 # ---- Run trace replay benchmark ---------------------------------------------
 REPLAY_CMD="python3 $KV_CACHE_TESTER_DIR/trace_replay_tester.py"
 REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
-REPLAY_CMD+=" --trace-directory $TRACE_DIR"
+REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 REPLAY_CMD+=" --timing-strategy think-only"
 REPLAY_CMD+=" --output-dir $RESULT_DIR/trace_replay"
 REPLAY_CMD+=" --start-users $USERS"
@@ -156,6 +169,9 @@ REPLAY_CMD+=" --seed 42"
 REPLAY_CMD+=" --no-color"
 if [ "${IGNORE_EOS:-false}" = "true" ]; then
     REPLAY_CMD+=" --ignore-eos"
+fi
+if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
+    REPLAY_CMD+=" --hash-block-mode"
 fi
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
