@@ -6,6 +6,8 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
+if [[ "$IS_MULTINODE" == "true" ]]; then
+
 # Validate framework
 if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
     echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
@@ -211,3 +213,26 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+
+else
+
+    HF_HUB_CACHE_MOUNT="/scratch/models"
+    export MODEL="/scratch/models/${MODEL#*/}"
+    SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+
+    srun --jobid=$JOB_ID \
+        --container-image=$SQUASH_FILE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --no-container-mount-home \
+        --container-workdir=/workspace/ \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b300${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+
+fi
