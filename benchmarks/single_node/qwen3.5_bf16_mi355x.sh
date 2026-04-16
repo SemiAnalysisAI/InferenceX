@@ -39,7 +39,6 @@ python3 -m sglang.launch_server \
     --port $PORT \
     --tensor-parallel-size $TP \
     --ep-size $EP_SIZE \
-    --data-parallel-size 1 \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
@@ -47,7 +46,7 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.8 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

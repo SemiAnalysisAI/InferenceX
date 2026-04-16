@@ -1364,3 +1364,13 @@
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
+    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415 for BF16 benchmark"
+    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414 for FP8 benchmark"
+    - "Image includes upstream SGLang PRs: https://github.com/sgl-project/sglang/pull/21188, https://github.com/sgl-project/sglang/pull/21421, https://github.com/sgl-project/sglang/pull/20736"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1036
