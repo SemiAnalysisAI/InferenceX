@@ -1826,7 +1826,7 @@ glm5-fp8-b200-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260328-a27651d5
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
@@ -1863,6 +1863,25 @@ qwen3.5-fp8-b200-sglang-mtp:
     search-space:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     
+
+qwen3.5-fp8-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: b300
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.15.1
   model: moonshotai/Kimi-K2.5
