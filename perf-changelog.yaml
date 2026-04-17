@@ -2078,3 +2078,17 @@
     - "Removed redundant transformer installation"
     - "Optimization model serves configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260328-a27651d5 to nightly-dev-20260422-de962f32"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1065
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update Qwen3.5-397B-A17B-FP8 B200 SGLang MTP to nightly-dev-20260422-de962f32"
+    - "Align B200 flags with B300: SGLANG_ENABLE_SPEC_V2=1, --enable-symm-mem, --expert-parallel-size"
+    - "Reduce prefill tokens from 32768 to 16384, drop flashinfer_allreduce_fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1065
