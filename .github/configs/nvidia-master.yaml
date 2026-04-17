@@ -2063,6 +2063,28 @@ dsr1-fp8-b200-sglang-mtp:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
+# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
+# does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
+# B200 SGLang MTP recipe as-is until B300-specific tuning is available. Image bumped
+# to v0.5.10.post1-cu130 to match the standard B300 SGLang image used by other B300 configs.
+dsr1-fp8-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: b300
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
   model: deepseek-ai/DeepSeek-R1-0528
