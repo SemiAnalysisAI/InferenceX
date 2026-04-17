@@ -1405,13 +1405,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1048
 
 - config-keys:
-    - gptoss-fp4-mi300x-vllm
-  description:
-    - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
-    - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
-  
-- config-keys: 
     - dsr1-fp4-b300-sglang
   description:
     - "Add DeepSeek-R1-0528 FP4 B300 SGLang benchmark (non-MTP)"
