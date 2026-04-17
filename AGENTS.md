@@ -156,6 +156,7 @@ When working with benchmark configurations, use these valid values:
 - Kebab-case for field names: `model-prefix`, `conc-start`, `dp-attn`
 - Master configs define all benchmark configurations
 - `perf-changelog.yaml` triggers which configs to benchmark
+  - **The file is read in chronological order: oldest at the top, newest at the bottom. New entries MUST be appended to the END of the file — never insert in the middle or prepend.**
 
 ### Bash
 
