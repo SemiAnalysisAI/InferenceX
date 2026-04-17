@@ -35,6 +35,6 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi325xs.sh
+bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
 
 scancel $JOB_ID
