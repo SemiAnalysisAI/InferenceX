@@ -1380,3 +1380,11 @@
   description:
     - "Update SGLang image from nightly-dev-cu13-20260328-a27651d5 to v0.5.10.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1031
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update Qwen3.5-397B-A17B-FP8 B200 SGLang MTP to v0.5.10.post1-cu130"
+    - "Align B200 flags with B300: SGLANG_ENABLE_SPEC_V2=1, --enable-symm-mem, --expert-parallel-size"
+    - "Reduce prefill tokens from 32768 to 16384, drop flashinfer_allreduce_fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -20,55 +20,43 @@ nvidia-smi
 
 hf download "$MODEL"
 
-export NCCL_NVLS_ENABLE=1
-export SGLANG_ENABLE_JIT_DEEPGEMM=false
-export PYTHONUNBUFFERED=1
-
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
-if [[ $CONC -ge 16 ]]; then
-  SCHEDULER_RECV_INTERVAL=30
-else
-  SCHEDULER_RECV_INTERVAL=10
-fi
-
-MEM_FRAC_STATIC=0.8
-CHUNKED_PREFILL_SIZE=32768
-MAX_PREFILL_TOKENS=32768
-CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
-MAX_RUNNING_REQUESTS=$CONC
 CONTEXT_LENGTH=$((ISL + OSL + 20))
-
-# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
-SPECULATIVE_NUM_STEPS=3
-SPECULATIVE_DRAFT_TOKENS=4
-SPECULATIVE_EAGLE_TOPK=1
-
-echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
-
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
 fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
---quantization fp8 --kv-cache-dtype fp8_e4m3 --mamba-ssm-dtype bfloat16 \
---cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
---mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
---context-length $CONTEXT_LENGTH --disable-radix-cache \
---fp8-gemm-backend=flashinfer_trtllm \
---attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
---enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---tokenizer-worker-num 6 --stream-interval 30 \
---speculative-algorithm EAGLE --speculative-num-steps $SPECULATIVE_NUM_STEPS --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
-> $SERVER_LOG 2>&1 &
+--tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
+--enable-symm-mem \
+--disable-radix-cache \
+--quantization fp8 \
+--kv-cache-dtype fp8_e4m3 \
+--mamba-ssm-dtype bfloat16 \
+--attention-backend trtllm_mha \
+--moe-runner-backend flashinfer_trtllm \
+--cuda-graph-max-bs $CONC \
+--max-running-requests $CONC \
+--max-prefill-tokens 16384 \
+--chunked-prefill-size 16384 \
+--mem-fraction-static 0.8 \
+--stream-interval 50 \
+--scheduler-recv-interval 10 \
+--tokenizer-worker-num 6 \
+--tokenizer-path $MODEL \
+--speculative-algorithm EAGLE \
+--speculative-num-steps 3 \
+--speculative-eagle-topk 1 \
+--speculative-num-draft-tokens 4 \
+--context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
