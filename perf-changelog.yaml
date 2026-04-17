@@ -1444,4 +1444,4 @@
     - "Add MiniMax-M2.5 FP4 (NVFP4) B300 vLLM benchmark"
     - "Image: vllm/vllm-openai:v0.19.0-cu130"
     - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html does not have a B300-specific recipe, so this reuses the existing MiniMax-M2.5 FP4 B200 vLLM recipe as-is"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1055
