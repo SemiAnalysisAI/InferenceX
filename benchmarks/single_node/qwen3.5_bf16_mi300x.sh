@@ -19,34 +19,25 @@ hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
-CONTEXT_LENGTH=$((ISL + OSL + 20))
-MAX_PREFILL_TOKENS=32768
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
-else EVAL_CONTEXT_ARGS="--context-length $CONTEXT_LENGTH"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 # following Andy Luo linkedin's recipe https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
 python3 -m sglang.launch_server \
-    --attention-backend aiter \
+    --attention-backend triton \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
-    --data-parallel-size 1 \
     --trust-remote-code \
-    --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
-    --cuda-graph-max-bs $CONC \
-    --disable-radix-cache \
-    --max-prefill-tokens $MAX_PREFILL_TOKENS \
-    --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.8 \
+    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
