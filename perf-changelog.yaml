@@ -1403,4 +1403,4 @@
     - "Add DeepSeek-R1-0528 FP4 B300 SGLang benchmark (non-MTP)"
     - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
     - "Reuses existing B200 DSR1 FP4 SGLang recipe since the SGLang cookbook has no B300-specific recipe"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1049
