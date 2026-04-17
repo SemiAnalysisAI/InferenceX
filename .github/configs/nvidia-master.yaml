@@ -2011,7 +2011,7 @@ kimik2.5-int4-b200-vllm:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.15.1
+  image: vllm/vllm-openai:v0.19.0-cu130
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
