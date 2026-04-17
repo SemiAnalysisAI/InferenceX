@@ -1388,3 +1388,11 @@
     - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
     - "EAGLE speculative decoding with MTP, TP=4, concurrency 4-256 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1035
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "TP=4, concurrency 4-256 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
