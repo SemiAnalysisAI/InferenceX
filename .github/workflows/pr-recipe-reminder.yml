@@ -40,6 +40,8 @@ jobs:
 
             If it is not, please create a PR first before we can merge your PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
             - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sgl-cookbook`.replace(/^            /gm, '');
+            - https://github.com/sgl-project/sgl-cookbook
+
+            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.**`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
