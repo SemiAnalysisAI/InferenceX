@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this script reuses the existing
+# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
@@ -8,6 +12,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -17,33 +22,40 @@ fi
 
 hf download "$MODEL"
 
+nvidia-smi
+
+export PYTHONNOUSERSITE=1
+export VLLM_USE_FLASHINFER_MOE_INT4=1
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# following AMD Andy linkedin's recipe
-# https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
-python3 -m sglang.launch_server \
-    --attention-backend triton \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --mem-fraction-static 0.8 \
-    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+set -x
+vllm serve $MODEL --host 0.0.0.0 --port $PORT \
+--gpu-memory-utilization 0.95 \
+--tensor-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
+--max-num-seqs $CONC \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
+--trust-remote-code \
+--disable-log-requests \
+--no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -52,10 +64,11 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

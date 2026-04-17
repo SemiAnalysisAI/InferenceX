@@ -217,12 +217,19 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 else
 
     HF_HUB_CACHE_MOUNT="/scratch/models"
-    export MODEL="/scratch/models/${MODEL#*/}"
+    # Qwen3.5-397B-A17B-FP8 is pre-staged under /scratch/models on the B300 cluster,
+    # so point MODEL at the local copy. Other models fall through and use `hf download`
+    # against the mounted cache from their benchmark script.
+    if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
+        export MODEL="/scratch/models/${MODEL#*/}"
+    fi
     SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # Pin to one of the known-good B300 nodes; others have hardware/network
+    # issues that cause benchmarks to hang or fail to start.
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
