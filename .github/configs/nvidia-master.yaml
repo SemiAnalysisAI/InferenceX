@@ -1911,6 +1911,29 @@ glm5-fp4-b200-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
+# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5
+# does not have a B300-specific recipe, so this config reuses the existing
+# GLM-5 FP4 B200 SGLang recipe as-is until B300-specific tuning is available.
+glm5-fp4-b300-sglang:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.9-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
