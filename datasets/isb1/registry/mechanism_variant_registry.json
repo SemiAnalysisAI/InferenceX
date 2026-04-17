@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Registered mechanism × variant pairs for ISB1 mechanism_eval. Rows whose mechanism/mechanism_variant do not appear here are flagged unregistered by utils/mechanism_eval.py and must not be cited as certified.",
+  "compression_mechanisms": [
+    "kv_quantization",
+    "kv_compression",
+    "compressed_attention"
+  ],
+  "speculative_mechanisms": [
+    "speculative_decoding"
+  ],
+  "variants": [
+    {
+      "mechanism": "baseline",
+      "mechanism_variant": "none",
+      "compression_method": null,
+      "compression_scope": null,
+      "description": "No mechanism applied. Used as the reference point for all other mechanism rows."
+    },
+    {
+      "mechanism": "kv_quantization",
+      "mechanism_variant": "fp8_e4m3",
+      "compression_method": "fp8_e4m3",
+      "compression_scope": "kv_cache",
+      "description": "Per-tensor FP8 E4M3 KV cache quantization. Engine-native path (vLLM --kv-cache-dtype fp8, SGLang --kv-cache-dtype fp8_e4m3)."
+    },
+    {
+      "mechanism": "kv_quantization",
+      "mechanism_variant": "turboquant_class",
+      "compression_method": "turboquant_class",
+      "compression_scope": "kv_cache",
+      "description": "TurboQuant-class Hadamard-rotated 4-bit KV quantization. Requires non-null quality_eval_id to be cited at supported tier."
+    },
+    {
+      "mechanism": "kv_compression",
+      "mechanism_variant": "kvtc_class",
+      "compression_method": "kvtc_class",
+      "compression_scope": "kv_cache",
+      "description": "KVTC-class tensor-codebook KV compression. Requires non-null quality_eval_id to be cited at supported tier."
+    },
+    {
+      "mechanism": "compressed_attention",
+      "mechanism_variant": "triattention_class",
+      "compression_method": "triattention_class",
+      "compression_scope": "attention",
+      "description": "TriAttention-class sparse-attention variant. Requires non-null quality_eval_id to be cited at supported tier."
+    },
+    {
+      "mechanism": "speculative_decoding",
+      "mechanism_variant": "mtp",
+      "compression_method": null,
+      "compression_scope": null,
+      "description": "Multi-token prediction head as draft model. Requires draft_model_id and speculative_acceptance_rate."
+    },
+    {
+      "mechanism": "speculative_decoding",
+      "mechanism_variant": "eagle3",
+      "compression_method": null,
+      "compression_scope": null,
+      "description": "EAGLE-3 speculative decoding. Requires draft_model_id and speculative_acceptance_rate."
+    },
+    {
+      "mechanism": "speculative_decoding",
+      "mechanism_variant": "medusa",
+      "compression_method": null,
+      "compression_scope": null,
+      "description": "Medusa speculative decoding. Requires draft_model_id and speculative_acceptance_rate."
+    },
+    {
+      "mechanism": "speculative_decoding",
+      "mechanism_variant": "dflash",
+      "compression_method": null,
+      "compression_scope": null,
+      "description": "DeepFlash-style draft stack. Requires draft_model_id and speculative_acceptance_rate."
+    }
+  ]
+}

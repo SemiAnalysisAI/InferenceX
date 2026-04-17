@@ -63,7 +63,23 @@ CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
   cpu_cache_usage_peak_pct REAL,
   raw_result_json TEXT,
   status TEXT,
-  error_message TEXT
+  error_message TEXT,
+  mechanism TEXT,
+  mechanism_variant TEXT,
+  compression_method TEXT,
+  compression_scope TEXT,
+  compression_ratio REAL,
+  compression_overhead_ms REAL,
+  decompression_overhead_ms REAL,
+  quality_eval_id TEXT,
+  quality_eval_status TEXT,
+  quality_delta_summary TEXT,
+  draft_model_id TEXT,
+  speculative_acceptance_rate REAL,
+  speculative_wasted_tokens INTEGER,
+  mechanism_notes TEXT,
+  mechanism_eval_registered INTEGER,
+  quality_eval_registered INTEGER
 )
 """
 
@@ -113,6 +129,22 @@ INSERT_COLUMNS = [
     "raw_result_json",
     "status",
     "error_message",
+    "mechanism",
+    "mechanism_variant",
+    "compression_method",
+    "compression_scope",
+    "compression_ratio",
+    "compression_overhead_ms",
+    "decompression_overhead_ms",
+    "quality_eval_id",
+    "quality_eval_status",
+    "quality_delta_summary",
+    "draft_model_id",
+    "speculative_acceptance_rate",
+    "speculative_wasted_tokens",
+    "mechanism_notes",
+    "mechanism_eval_registered",
+    "quality_eval_registered",
 ]
 
 GROUPABLE_COLUMNS = {
@@ -128,6 +160,12 @@ GROUPABLE_COLUMNS = {
     "offload_mode",
     "campaign_class",
     "trace_source",
+    "mechanism",
+    "mechanism_variant",
+    "compression_method",
+    "compression_scope",
+    "quality_eval_id",
+    "quality_eval_status",
 }
 
 DEFAULT_QUERY_COLUMNS = [
@@ -195,6 +233,22 @@ def parse_args() -> argparse.Namespace:
     ingest.add_argument("--gpu-profile-csv", help="Optional GPU profile CSV path to stash in raw_result_json metadata.")
     ingest.add_argument("--status", default="success", choices=["success", "failed", "timeout"])
     ingest.add_argument("--error-message")
+    # Mechanism_eval additive fields. All default to None so the ingest path
+    # remains backward compatible for rows that predate mechanism classification.
+    ingest.add_argument("--mechanism")
+    ingest.add_argument("--mechanism-variant")
+    ingest.add_argument("--compression-method")
+    ingest.add_argument("--compression-scope")
+    ingest.add_argument("--compression-ratio", type=float)
+    ingest.add_argument("--compression-overhead-ms", type=float)
+    ingest.add_argument("--decompression-overhead-ms", type=float)
+    ingest.add_argument("--quality-eval-id")
+    ingest.add_argument("--quality-eval-status", choices=["pending", "completed", "failed", "not_required"])
+    ingest.add_argument("--quality-delta-summary")
+    ingest.add_argument("--draft-model-id")
+    ingest.add_argument("--speculative-acceptance-rate", type=float)
+    ingest.add_argument("--speculative-wasted-tokens", type=int)
+    ingest.add_argument("--mechanism-notes")
 
     query = subparsers.add_parser("query", help="Print runs or an aggregated grouped view.")
     query.add_argument("--db-path", default=str(DEFAULT_DB_PATH), help="SQLite DB path.")
@@ -225,6 +279,24 @@ _MIGRATIONS = [
     f"ALTER TABLE {TABLE_NAME} ADD COLUMN workload_type TEXT",
     f"ALTER TABLE {TABLE_NAME} ADD COLUMN campaign_class TEXT",
     f"ALTER TABLE {TABLE_NAME} ADD COLUMN trace_source TEXT",
+    # Mechanism_eval schema (additive, backward-compatible). All columns default
+    # to NULL; rows that never set them retain their existing semantics.
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN mechanism TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN mechanism_variant TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN compression_method TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN compression_scope TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN compression_ratio REAL",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN compression_overhead_ms REAL",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN decompression_overhead_ms REAL",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN quality_eval_id TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN quality_eval_status TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN quality_delta_summary TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN draft_model_id TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN speculative_acceptance_rate REAL",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN speculative_wasted_tokens INTEGER",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN mechanism_notes TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN mechanism_eval_registered INTEGER",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN quality_eval_registered INTEGER",
 ]
 
 
@@ -463,6 +535,68 @@ def insert_run(args: argparse.Namespace) -> None:
         "raw_result_json": json.dumps(build_raw_payload(payload, args), sort_keys=True),
         "status": args.status,
         "error_message": choose(args.error_message, payload.get("error_message")),
+        "mechanism": choose(getattr(args, "mechanism", None), payload.get("mechanism")),
+        "mechanism_variant": choose(
+            getattr(args, "mechanism_variant", None), payload.get("mechanism_variant")
+        ),
+        "compression_method": choose(
+            getattr(args, "compression_method", None), payload.get("compression_method")
+        ),
+        "compression_scope": choose(
+            getattr(args, "compression_scope", None), payload.get("compression_scope")
+        ),
+        "compression_ratio": to_float(
+            choose(getattr(args, "compression_ratio", None), payload.get("compression_ratio"))
+        ),
+        "compression_overhead_ms": to_float(
+            choose(
+                getattr(args, "compression_overhead_ms", None),
+                payload.get("compression_overhead_ms"),
+            )
+        ),
+        "decompression_overhead_ms": to_float(
+            choose(
+                getattr(args, "decompression_overhead_ms", None),
+                payload.get("decompression_overhead_ms"),
+            )
+        ),
+        "quality_eval_id": choose(
+            getattr(args, "quality_eval_id", None), payload.get("quality_eval_id")
+        ),
+        "quality_eval_status": choose(
+            getattr(args, "quality_eval_status", None), payload.get("quality_eval_status")
+        ),
+        "quality_delta_summary": choose(
+            getattr(args, "quality_delta_summary", None), payload.get("quality_delta_summary")
+        ),
+        "draft_model_id": choose(
+            getattr(args, "draft_model_id", None), payload.get("draft_model_id")
+        ),
+        "speculative_acceptance_rate": to_float(
+            choose(
+                getattr(args, "speculative_acceptance_rate", None),
+                payload.get("speculative_acceptance_rate"),
+            )
+        ),
+        "speculative_wasted_tokens": to_int(
+            choose(
+                getattr(args, "speculative_wasted_tokens", None),
+                payload.get("speculative_wasted_tokens"),
+            )
+        ),
+        "mechanism_notes": choose(
+            getattr(args, "mechanism_notes", None), payload.get("mechanism_notes")
+        ),
+        "mechanism_eval_registered": (
+            1 if (payload.get("mechanism_eval_validation") or {}).get("mechanism_eval_registered") is True
+            else 0 if (payload.get("mechanism_eval_validation") or {}).get("mechanism_eval_registered") is False
+            else None
+        ),
+        "quality_eval_registered": (
+            1 if (payload.get("mechanism_eval_validation") or {}).get("quality_eval_registered") is True
+            else 0 if (payload.get("mechanism_eval_validation") or {}).get("quality_eval_registered") is False
+            else None
+        ),
     }
 
     conn = connect_db(args.db_path)

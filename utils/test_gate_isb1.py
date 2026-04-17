@@ -20,6 +20,14 @@ def make_row(
     total_sessions: int = 2,
     session_throughput_sps: float = 1.0,
     benchmark_certification_status: str = "dataset_replay_verified",
+    mechanism: str = "baseline",
+    mechanism_variant: str | None = "none",
+    quality_eval_id: str | None = None,
+    quality_eval_status: str | None = None,
+    draft_model_id: str | None = None,
+    speculative_acceptance_rate: float | None = None,
+    mechanism_eval_registered: bool | None = True,
+    quality_eval_registered: bool | None = None,
 ):
     return {
         "benchmark_type": "isb1_replay",
@@ -45,6 +53,18 @@ def make_row(
         "total_sessions": total_sessions,
         "session_throughput_sps": session_throughput_sps,
         "benchmark_certification_status": benchmark_certification_status,
+        "mechanism": mechanism,
+        "mechanism_variant": mechanism_variant,
+        "quality_eval_id": quality_eval_id,
+        "quality_eval_status": quality_eval_status,
+        "draft_model_id": draft_model_id,
+        "speculative_acceptance_rate": speculative_acceptance_rate,
+        "mechanism_eval_validation": {
+            "mechanism_eval_registered": mechanism_eval_registered,
+            "quality_eval_registered": quality_eval_registered,
+            "quality_eval_status_known": True,
+            "issues": [],
+        },
     }
 
 
@@ -216,3 +236,187 @@ def test_gate_main_strict_returns_nonzero_on_failure(tmp_path):
 
     assert load_rows(report_path)[0]["result_filename"] == "dsr1_control_b200_vllm"
     assert main([str(report_path), "--strict"]) == 1
+
+
+
+def test_mechanism_gate_passes_for_baseline_rows():
+    rows = [
+        make_row(
+            result_filename="baseline_b200_vllm",
+            model="dsr1",
+            hw="b200-cw-1",
+            framework="vllm",
+            support_status="supported",
+            effective_max_context_depth=9416,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="baseline",
+            mechanism_variant="none",
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    # Baseline rows enter the mechanism filter but pass every criterion trivially
+    # — no compression mechanism, no speculative draft required, no quality eval required.
+    assert mechanism_gate["status"] == "pass"
+    assert mechanism_gate["matched_rows"] == 1
+    assert mechanism_gate["failing_rows"] == []
+
+
+def test_mechanism_gate_fails_supported_fp8_without_completed_eval():
+    rows = [
+        make_row(
+            result_filename="dsr1_fp8kv_h100_vllm",
+            model="dsr1",
+            hw="h100-cw-1",
+            framework="vllm",
+            support_status="supported",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="kv_quantization",
+            mechanism_variant="fp8_e4m3",
+            quality_eval_id="ruler_v1",
+            quality_eval_status="pending",
+            quality_eval_registered=True,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "fail"
+    assert mechanism_gate["failing_rows"]
+    failed = mechanism_gate["failing_rows"][0]
+    assert any(
+        "supported+compression" in criterion for criterion in failed["failed_criteria"]
+    )
+
+
+def test_mechanism_gate_passes_reviewed_preview_fp8_without_eval():
+    rows = [
+        make_row(
+            result_filename="qwen_fp8kv_b200_sglang",
+            model="qwen3.5",
+            hw="b200-cw-1",
+            framework="sglang",
+            support_status="reviewed_preview",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="kv_quantization",
+            mechanism_variant="fp8_e4m3",
+            quality_eval_id=None,
+            quality_eval_status=None,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "pass"
+
+
+def test_mechanism_gate_passes_supported_fp8_with_completed_registered_eval():
+    rows = [
+        make_row(
+            result_filename="dsr1_fp8kv_h100_vllm",
+            model="dsr1",
+            hw="h100-cw-1",
+            framework="vllm",
+            support_status="supported",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="kv_quantization",
+            mechanism_variant="fp8_e4m3",
+            quality_eval_id="ruler_v1",
+            quality_eval_status="completed",
+            quality_eval_registered=True,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "pass"
+
+
+def test_mechanism_gate_fails_unregistered_variant():
+    rows = [
+        make_row(
+            result_filename="weird_variant_b200_vllm",
+            model="qwen3.5",
+            hw="b200-cw-1",
+            framework="vllm",
+            support_status="reviewed_preview",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="kv_quantization",
+            mechanism_variant="made_up_variant",
+            mechanism_eval_registered=False,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "fail"
+    failed = mechanism_gate["failing_rows"][0]
+    assert "mechanism_variant registered" in failed["failed_criteria"]
+
+
+def test_mechanism_gate_fails_speculative_without_draft_model():
+    rows = [
+        make_row(
+            result_filename="spec_no_draft_h100_vllm",
+            model="dsr1",
+            hw="h100-cw-1",
+            framework="vllm",
+            support_status="reviewed_preview",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="speculative_decoding",
+            mechanism_variant="eagle3",
+            draft_model_id=None,
+            speculative_acceptance_rate=None,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "fail"
+    failed = mechanism_gate["failing_rows"][0]
+    assert any(
+        "speculative_decoding requires draft fields" in criterion
+        for criterion in failed["failed_criteria"]
+    )
+
+
+def test_mechanism_gate_passes_speculative_with_full_fields():
+    rows = [
+        make_row(
+            result_filename="spec_h100_vllm",
+            model="dsr1",
+            hw="h100-cw-1",
+            framework="vllm",
+            support_status="reviewed_preview",
+            effective_max_context_depth=131272,
+            context_pressure_class="standard",
+            context_status="not_applicable",
+            mechanism="speculative_decoding",
+            mechanism_variant="eagle3",
+            draft_model_id="eagle3-draft-v1",
+            speculative_acceptance_rate=0.78,
+        )
+    ]
+    report = build_gate_report(rows)
+    mechanism_gate = next(
+        gate for gate in report["gates"] if gate["id"] == "mechanism_compression_quality"
+    )
+    assert mechanism_gate["status"] == "pass"

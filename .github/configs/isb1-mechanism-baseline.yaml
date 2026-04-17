@@ -1,0 +1,59 @@
+# ISB1 mechanism_eval — baseline (no compression, no speculative decoding).
+#
+# These rows anchor the mechanism-axis Pareto frontier: every other mechanism
+# variant is compared back to a baseline row with the same model × hardware ×
+# context band. Baseline rows declare mechanism=baseline / mechanism_variant=none
+# so they pass the mechanism_compression_quality gate without requiring a
+# quality_eval_id. The gate only enforces a completed quality eval for
+# supported-tier rows whose mechanism is in the compression set
+# (kv_quantization, kv_compression, compressed_attention).
+#
+# All cells here are benchmark_certification_status=dataset_replay_verified.
+# No live-serving certification is claimed.
+
+dsr1-fp8-h100-isb1-mechanism-baseline-vllm:
+  image: vllm/vllm-openai:v0.11.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  precision: fp8
+  framework: vllm
+  runner: h100
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:vllm
+  hardware-profile-id: nvidia:h100_sxm_80gb
+  canonical-model-id: deepseek_r1_0528
+  mechanism: baseline
+  mechanism-variant: none
+  replay-configs:
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
+      request-mode: multi-turn
+      support-status: supported
+      search-space:
+        - max-concurrency: 2
+          max-sessions: 2
+          max-turns-per-session: 3
+          num-warmup-sessions: 0
+
+qwen3.5-fp8-b200-isb1-mechanism-baseline-sglang:
+  image: lmsysorg/sglang:v0.5.9-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  precision: fp8
+  framework: sglang
+  runner: b200
+  benchmark-type: isb1_replay
+  runtime-stack-id: standalone:sglang
+  hardware-profile-id: nvidia:b200_sxm_180gb
+  canonical-model-id: qwen3_5_397b_a17b
+  mechanism: baseline
+  mechanism-variant: none
+  max-model-len: 131072
+  replay-configs:
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
+      request-mode: multi-turn
+      support-status: reviewed_preview
+      search-space:
+        - max-concurrency: 2
+          max-sessions: 2
+          max-turns-per-session: 3
+          num-warmup-sessions: 0

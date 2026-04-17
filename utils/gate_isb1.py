@@ -3,6 +3,13 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
+from mechanism_eval import (
+    COMPRESSION_MECHANISMS,
+    SPECULATIVE_MECHANISMS,
+    VALID_QUALITY_STATUSES,
+    row_requires_completed_quality_eval,
+)
+
 
 Row = dict[str, Any]
 Criterion = tuple[str, Callable[[Row], bool]]
@@ -48,6 +55,10 @@ def build_row_reference(row: Row, failed_criteria: list[str] | None = None) -> R
         "infmax_model_prefix": row.get("infmax_model_prefix"),
         "support_status": row.get("support_status"),
         "context_pressure_status": (row.get("context_pressure_signal") or {}).get("status"),
+        "mechanism": row.get("mechanism"),
+        "mechanism_variant": row.get("mechanism_variant"),
+        "quality_eval_id": row.get("quality_eval_id"),
+        "quality_eval_status": row.get("quality_eval_status"),
     }
     if failed_criteria:
         reference["failed_criteria"] = failed_criteria
@@ -75,6 +86,43 @@ def vllm_context_ok(row: Row) -> bool:
         return True
     signal = row.get("context_pressure_signal") or {}
     return signal.get("status") == "ok" and not bool(row.get("context_pressure_suspicious"))
+
+
+def mechanism_variant_registered(row: Row) -> bool:
+    """Baseline rows always pass; every other mechanism must be in the registry."""
+    if row.get("mechanism") in (None, "baseline"):
+        return True
+    validation = row.get("mechanism_eval_validation") or {}
+    return validation.get("mechanism_eval_registered") is True
+
+
+def quality_eval_completed(row: Row) -> bool:
+    """Hard rule: supported tier × compression mechanism requires completed eval."""
+    mechanism = row.get("mechanism")
+    support_status = row.get("support_status")
+    if not row_requires_completed_quality_eval(mechanism, support_status):
+        return True
+    if row.get("quality_eval_status") != "completed":
+        return False
+    validation = row.get("mechanism_eval_validation") or {}
+    # Registered quality_eval_id is mandatory when a completed eval is cited.
+    return validation.get("quality_eval_registered") is True
+
+
+def speculative_fields_present(row: Row) -> bool:
+    """Speculative-decoding mechanisms must carry draft_model_id and acceptance rate."""
+    if row.get("mechanism") not in SPECULATIVE_MECHANISMS:
+        return True
+    if not row.get("draft_model_id"):
+        return False
+    return row.get("speculative_acceptance_rate") is not None
+
+
+def quality_status_in_allowed_set(row: Row) -> bool:
+    status = row.get("quality_eval_status")
+    if status is None:
+        return True
+    return status in VALID_QUALITY_STATUSES
 
 
 def get_present_coverage(rows: list[Row]) -> set[tuple[str, str]]:
@@ -210,6 +258,20 @@ def build_gate_report(rows: list[Row], advisory: bool = True) -> Row:
             ],
             expected_coverage=EXPECTED_1M_COVERAGE,
             exact_coverage=True,
+        ),
+        evaluate_gate(
+            "mechanism_compression_quality",
+            "Mechanism compression quality (hard gate)",
+            [row for row in rows if row.get("mechanism") is not None],
+            [
+                ("mechanism_variant registered", mechanism_variant_registered),
+                ("quality_eval_status in accepted set", quality_status_in_allowed_set),
+                (
+                    "supported+compression ⇒ quality_eval_status == completed",
+                    quality_eval_completed,
+                ),
+                ("speculative_decoding requires draft fields", speculative_fields_present),
+            ],
         ),
     ]
 

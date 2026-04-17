@@ -1,0 +1,120 @@
+name: Run ISB1 Mechanism Eval Sweep
+run-name: ISB1 Mechanism Eval - ${{ github.event.inputs.config-file || '.github/configs/isb1-mechanism-baseline.yaml' }}
+
+# Dispatches ISB1 replay rows with mechanism_eval metadata attached.
+# The config files declare mechanism/mechanism_variant/quality_eval_id etc.
+# at the top level; utils/matrix_logic/generate_sweep_configs.py plumbs them
+# through as env vars read by utils/process_result_isb1.py.
+#
+# gate_isb1.py runs its mechanism_compression_quality gate against the
+# aggregated result set: any supported-tier compression row without a
+# completed, registered quality eval fails the gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      config-file:
+        description: ISB1 mechanism_eval config file path
+        required: true
+        default: .github/configs/isb1-mechanism-baseline.yaml
+      runner-type:
+        description: Optional space-separated runner filters (e.g. h200 b200)
+        required: false
+        default: ''
+      runner-config:
+        description: Runner config YAML
+        required: false
+        default: .github/configs/runners.yaml
+      ref:
+        description: Git ref to checkout
+        required: false
+        default: ''
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      mechanism-matrix: ${{ steps.generate.outputs.mechanism-matrix }}
+      has-matrix: ${{ steps.generate.outputs.has-matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install dependencies
+        run: pip install pydantic pyyaml
+
+      - id: generate
+        env:
+          CONFIG_FILE: ${{ inputs.config-file }}
+          RUNNER_CONFIG: ${{ inputs.runner-config }}
+          RUNNER_TYPE: ${{ inputs.runner-type }}
+        run: |
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Missing ISB1 mechanism_eval config file: $CONFIG_FILE" >&2
+            exit 1
+          fi
+
+          cmd=(python3 utils/matrix_logic/generate_sweep_configs.py isb1-sweep --config-files "$CONFIG_FILE" --runner-config "$RUNNER_CONFIG")
+
+          if [ -n "$RUNNER_TYPE" ]; then
+            read -r -a runner_types <<< "$RUNNER_TYPE"
+            cmd+=(--runner-type "${runner_types[@]}")
+          fi
+
+          matrix_json="$("${cmd[@]}")"
+          compact_matrix="$(printf '%s' "$matrix_json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)))')"
+          has_matrix="$(printf '%s' "$compact_matrix" | python3 -c 'import json,sys; print("true" if json.load(sys.stdin) else "false")')"
+
+          {
+            echo "mechanism-matrix=$compact_matrix"
+            echo "has-matrix=$has_matrix"
+          } >> "$GITHUB_OUTPUT"
+
+  sweep:
+    needs: setup
+    if: ${{ needs.setup.outputs.has-matrix == 'true' }}
+    uses: ./.github/workflows/benchmark-isb1-tmpl.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.mechanism-matrix) }}
+    secrets: inherit
+    with:
+      runner: ${{ matrix.config.runner }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      model-prefix: ${{ matrix.config.model-prefix }}
+      precision: ${{ matrix.config.precision }}
+      framework: ${{ matrix.config.framework }}
+      exp-name: ${{ matrix.config.exp-name }}
+      benchmark-type: ${{ matrix.config.benchmark-type }}
+      export-file: ${{ matrix.config.export-file }}
+      runtime-stack-id: ${{ matrix.config.runtime-stack-id }}
+      hardware-profile-id: ${{ matrix.config.hardware-profile-id }}
+      canonical-model-id: ${{ matrix.config.canonical-model-id }}
+      support-status: ${{ matrix.config.support-status || '' }}
+      request-mode: ${{ matrix.config.request-mode }}
+      max-concurrency: ${{ matrix.config.max-concurrency }}
+      max-sessions: ${{ matrix.config.max-sessions || '' }}
+      max-turns-per-session: ${{ matrix.config.max-turns-per-session || '' }}
+      max-model-len: ${{ matrix.config.max-model-len || '' }}
+      tp-override: ${{ matrix.config.tp || '' }}
+      ep-override: ${{ matrix.config.ep || '' }}
+      trace-source: ${{ matrix.config.trace-source || '' }}
+      offload-mode: ${{ matrix.config.offload-mode || '' }}
+      kv-cache-dtype: ${{ matrix.config.kv-cache-dtype || '' }}
+      disable-prefix-caching: ${{ matrix.config.disable-prefix-caching || '' }}
+      workload-type: ${{ matrix.config.workload-type || '' }}
+      ref: ${{ inputs.ref || github.ref }}
+
+  collect-results:
+    needs: [setup, sweep]
+    if: ${{ always() && needs.setup.outputs.has-matrix == 'true' && needs.sweep.result != 'skipped' }}
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      result-prefix: isb1-mechanism

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Registered quality-eval harnesses for ISB1 mechanism_eval. A row asserting quality_eval_id must reference one of these; gate_isb1 requires a completed eval before any compression mechanism can claim support_status=supported.",
+  "eval_harnesses": [
+    {
+      "quality_eval_id": "ruler_v1",
+      "harness": "RULER",
+      "version": "v1.0",
+      "scope": "long_context_retrieval",
+      "metric_keys": ["ruler_avg_score", "ruler_per_length"],
+      "baseline_required": true,
+      "description": "Long-context retrieval benchmark. Primary signal for KV quantization and compression quality at 32k–1M."
+    },
+    {
+      "quality_eval_id": "longbench_v2",
+      "harness": "LongBench",
+      "version": "v2.0",
+      "scope": "long_context_reasoning",
+      "metric_keys": ["longbench_avg_f1", "longbench_per_task"],
+      "baseline_required": true,
+      "description": "Long-context reasoning and multi-doc QA. Complements RULER for reasoning-heavy workloads."
+    },
+    {
+      "quality_eval_id": "humaneval",
+      "harness": "HumanEval",
+      "version": "v1.0",
+      "scope": "code_generation",
+      "metric_keys": ["humaneval_pass_at_1", "humaneval_pass_at_10"],
+      "baseline_required": true,
+      "description": "Code-generation accuracy. Primary signal for coding workloads under compression."
+    },
+    {
+      "quality_eval_id": "math_500",
+      "harness": "MATH-500",
+      "version": "v1.0",
+      "scope": "reasoning_math",
+      "metric_keys": ["math_500_accuracy"],
+      "baseline_required": true,
+      "description": "Math reasoning accuracy. Detects chain-of-thought degradation from aggressive KV quantization."
+    }
+  ]
+}

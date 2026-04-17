@@ -5,6 +5,13 @@ import sys
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
+from mechanism_eval import (
+    build_mechanism_fields,
+    load_mechanism_registry,
+    load_quality_registry,
+    validate_mechanism_fields,
+)
+
 ISB1_RUNNABLE_CERTIFICATION_STATUSES = ["dataset_replay_verified"]
 
 
@@ -372,6 +379,31 @@ data = {
     "disable_prefix_caching": os.environ.get("DISABLE_PREFIX_CACHING", "false").lower() == "true",
     "runtime_overrides": build_runtime_overrides(replay_result),
 }
+
+# Mechanism_eval schema (additive, env-driven, backward-compatible null defaults).
+# All fields default to None except `mechanism` which defaults to "baseline" so
+# unclassified rows are never silently treated as compressed. See
+# utils/mechanism_eval.py for the field catalog and
+# datasets/isb1/registry/mechanism_variant_registry.json for the accepted values.
+_mechanism_fields = build_mechanism_fields()
+data.update(_mechanism_fields)
+try:
+    _mechanism_registry = load_mechanism_registry()
+    _quality_registry = load_quality_registry()
+    data["mechanism_eval_validation"] = validate_mechanism_fields(
+        _mechanism_fields,
+        mechanism_registry=_mechanism_registry,
+        quality_registry=_quality_registry,
+    )
+except (FileNotFoundError, ValueError) as exc:
+    # Registry load failures degrade to advisory rather than breaking the run;
+    # gate_isb1 reports the issue downstream so it shows up in the gate report.
+    data["mechanism_eval_validation"] = {
+        "mechanism_eval_registered": None,
+        "quality_eval_registered": None,
+        "quality_eval_status_known": None,
+        "issues": [f"registry_load_error: {exc}"],
+    }
 
 effective_max_context_depth = data["max_model_len"] or (isl + osl + 200)
 data["effective_max_context_depth"] = effective_max_context_depth
