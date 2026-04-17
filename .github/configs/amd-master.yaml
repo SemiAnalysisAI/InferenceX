@@ -418,7 +418,7 @@ minimaxm2.5-fp8-mi355x-atom:
 minimaxm2.5-fp4-mi355x-atom:
   # TODO:
   image: TBD
-  model: MiniMaxAI/MiniMax-M2.5
+  model: amd/MiniMax-M2.5-MXFP4
   model-prefix: minimaxm2.5
   runner: mi355x
   precision: fp4
