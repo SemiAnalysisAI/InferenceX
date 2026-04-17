@@ -1374,9 +1374,17 @@
     - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414 for FP8 benchmark"
     - "Image includes upstream SGLang PRs: https://github.com/sgl-project/sglang/pull/21188, https://github.com/sgl-project/sglang/pull/21421, https://github.com/sgl-project/sglang/pull/20736"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1036
-  
+
 - config-keys:
     - glm5-fp4-b200-sglang
   description:
     - "Update SGLang image from nightly-dev-cu13-20260328-a27651d5 to v0.5.10.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1031
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "EAGLE speculative decoding with MTP, TP=4, concurrency 4-256 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1035
