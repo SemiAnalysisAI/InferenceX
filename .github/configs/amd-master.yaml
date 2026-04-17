@@ -459,7 +459,7 @@ minimaxm2.5-fp8-mi325x-vllm:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.0
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
