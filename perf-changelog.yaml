@@ -1427,4 +1427,4 @@
     - "Add GLM-5 FP4 (NVFP4) B300 SGLang benchmark"
     - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
     - "At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5 does not have a B300-specific recipe, so this reuses the existing GLM-5 FP4 B200 SGLang recipe as-is"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1058
