@@ -3342,15 +3342,14 @@ minimaxm2.5-fp8-b200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
-    - { tp: 2, ep: 2, conc-start: 512, conc-end: 512 }
+    - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
+    - { tp: 2, conc-start: 4, conc-end: 1024 }
+    - { tp: 4, conc-start: 4, conc-end: 1024 }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
 # does not have a B300-specific recipe, so this config reuses the existing
