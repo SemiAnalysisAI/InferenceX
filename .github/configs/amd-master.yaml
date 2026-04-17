@@ -585,38 +585,6 @@ dsr1-fp8-mi355x-atom-mtp:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
-# Eval-only: fp8 disagg WITHOUT DPA — isolates DPA as variable
-dsr1-fp8-mi355x-sglang-disagg-nodpa-eval:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  runner: mi355x-disagg
-  precision: fp8
-  framework: sglang-disagg
-  multinode: true
-  disagg: true
-  seq-len-configs:
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - spec-decoding: "none"
-      conc-list: [ 256 ]
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 1
-        dp-attn: false
-        additional-settings:
-        - "PREFILL_NODES=1"
-      decode:
-        num-worker: 2
-        tp: 8
-        ep: 1
-        dp-attn: false
-        additional-settings:
-        - "DECODE_NODES=2"
-        - "DECODE_MTP_SIZE=0"
-
 dsr1-fp8-mi355x-sglang-disagg:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
   model: deepseek-ai/DeepSeek-R1-0528

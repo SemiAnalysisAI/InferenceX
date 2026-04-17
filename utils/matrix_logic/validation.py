@@ -129,6 +129,7 @@ class MultiNodeMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
+    eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
 
 

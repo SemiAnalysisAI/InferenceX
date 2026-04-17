@@ -11,7 +11,6 @@ from generate_sweep_configs import (
     mark_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
-    mark_eval_entries,
 )
 
 
@@ -336,6 +335,54 @@ class TestMarkEvalEntries:
         assert result[0]["run-eval"] is True
         assert result[0]["eval-conc"] == 32
         assert result[1]["run-eval"] is False
+
+    def test_marks_highest_and_median_conc(self):
+        """Should mark highest and median concurrency for 8k1k entries."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 32,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 128,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        # conc values: [32, 128, 512]. median=128 (index 1), highest=512
+        assert result[0]['run-eval'] is False   # conc=32
+        assert result[1]['run-eval'] is True    # conc=128 (median)
+        assert result[2]['run-eval'] is True    # conc=512 (highest)
+
+    def test_non_8k1k_never_marked(self):
+        """Entries with non-8k1k seq lengths should never be eval-marked."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        assert result[0]['run-eval'] is False
+
+    def test_never_marks_all_entries(self):
+        """mark_eval_entries should never mark every single-node entry,
+        ensuring the e2e splitting logic can distinguish default from evals-only."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': c,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False}
+            for c in [32, 64, 128, 256, 512]
+        ] + [
+            # Non-8k1k entry that should never be marked
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 64,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        non_prefill = [x for x in result if 'prefill' not in x]
+        assert not all(x['run-eval'] for x in non_prefill), \
+            "mark_eval_entries must not mark all entries — would break e2e splitting"
 
 
 # =============================================================================
@@ -1839,53 +1886,3 @@ class TestE2EConfigSplitting:
         assert all('prefill' not in x for x in evals)
 
 
-class TestMarkEvalEntries:
-    """Verify mark_eval_entries only marks highest/median concurrency at 8k1k."""
-
-    def test_marks_highest_and_median_conc(self):
-        """Should mark highest and median concurrency for 8k1k entries."""
-        entries = [
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 32,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 128,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 512,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-        ]
-        result = mark_eval_entries(entries)
-        # conc values: [32, 128, 512]. median=128 (index 1), highest=512
-        assert result[0]['run-eval'] is False   # conc=32
-        assert result[1]['run-eval'] is True    # conc=128 (median)
-        assert result[2]['run-eval'] is True    # conc=512 (highest)
-
-    def test_non_8k1k_never_marked(self):
-        """Entries with non-8k1k seq lengths should never be eval-marked."""
-        entries = [
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-        ]
-        result = mark_eval_entries(entries)
-        assert result[0]['run-eval'] is False
-
-    def test_never_marks_all_entries(self):
-        """mark_eval_entries should never mark every single-node entry,
-        ensuring the e2e splitting logic can distinguish default from evals-only."""
-        entries = [
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': c,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False}
-            for c in [32, 64, 128, 256, 512]
-        ] + [
-            # Non-8k1k entry that should never be marked
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 64,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-        ]
-        result = mark_eval_entries(entries)
-        non_prefill = [x for x in result if 'prefill' not in x]
-        assert not all(x['run-eval'] for x in non_prefill), \
-            "mark_eval_entries must not mark all entries — would break e2e splitting"

@@ -1473,3 +1473,23 @@
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
     - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
+
+- config-keys:
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Add multi-node lm-eval accuracy runs for gb200, gb300, h200-multinode, and mi355x via eval-only path"
+    - "Eval picks the config with highest max eligible concurrency per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) group on 8k1k"
+    - "Eval concurrency set to the median eligible conc (>= MIN_EVAL_CONC=16) of the selected config to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1000
+  evals-only: true

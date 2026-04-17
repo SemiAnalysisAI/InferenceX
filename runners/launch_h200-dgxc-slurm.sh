@@ -40,9 +40,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/Oseltamivir/srt-slurm-nvidia.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout nvidia-pr
+    git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -235,10 +235,13 @@ EOF
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
+            shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
-                [ -f "$eval_file" ] && cp "$eval_file" "$GITHUB_WORKSPACE/"
+                [ -f "$eval_file" ] || continue
+                cp "$eval_file" "$GITHUB_WORKSPACE/"
                 echo "Copied eval artifact: $(basename "$eval_file")"
             done
+            shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
         fi

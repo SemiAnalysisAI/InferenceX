@@ -141,10 +141,13 @@ PY
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -name eval_results 2>/dev/null | head -1)
         if [ -n "$EVAL_DIR" ] && [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
+            shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
-                [ -f "$eval_file" ] && cp "$eval_file" "$GITHUB_WORKSPACE/"
+                [ -f "$eval_file" ] || continue
+                cp "$eval_file" "$GITHUB_WORKSPACE/"
                 echo "Copied eval artifact: $(basename "$eval_file")"
             done
+            shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found under $BENCHMARK_LOGS_DIR/logs"
         fi
