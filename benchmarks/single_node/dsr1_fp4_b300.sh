@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# NOTE: https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not
-# have a B300-specific recipe, so this script reuses the existing DSR1 FP4 B200
-# SGLang recipe as-is until B300-specific tuning is available.
+# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
+# does not have a B300-specific recipe, so this script reuses the existing
+# DSR1 FP4 B200 SGLang recipe as-is until B300-specific tuning is available.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
