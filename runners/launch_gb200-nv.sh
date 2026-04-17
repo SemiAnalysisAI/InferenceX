@@ -34,6 +34,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
         exit 1
     fi
+elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
+        export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    else
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4"
+        exit 1
+    fi
 else
     export MODEL_PATH=$MODEL
 fi
@@ -165,6 +173,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 EOF
 
