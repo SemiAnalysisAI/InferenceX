@@ -1478,4 +1478,4 @@
     - minimaxm2.5-fp4-b200-vllm
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
