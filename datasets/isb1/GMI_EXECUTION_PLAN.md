@@ -1,5 +1,10 @@
 # ISB1 KV Cache Benchmark — GMI Cloud Execution Plan
 
+Bare-metal execution runbook for ISB1 replay bundles on GMI Cloud Hopper (H100/H200)
+and Blackwell (GB200). All runs described here are `support_status=reviewed_preview`
+with `benchmark_certification_status=dataset_replay_verified` — i.e. replay and export
+certification, not live-serving certification.
+
 ## Available Hardware
 
 | GPU | HBM | Available | Max Context Before Offload |
@@ -19,7 +24,7 @@ Prove the pipeline works end-to-end before burning GPU hours.
 # On H100 — single model, single concurrency, 5 min duration
 export MODEL=deepseek-ai/DeepSeek-R1-0528
 export TP=8
-export EXPORT_FILE=datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+export EXPORT_FILE=datasets/isb1/exports/extension_131k/code_131k1k.json
 
 # Launch server
 bash benchmarks/single_node/dsr1_fp8_h100_vllm.sh
@@ -89,11 +94,11 @@ GB200 192GB has 2.4x more HBM — the cliff comes later.
 ```bash
 # 500K preview (Qwen 3.5 only):
 export EXPORT_FILE=datasets/isb1/exports/preview/long_context_500k/\
-inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json
+inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
 
 # 1M preview (Qwen 3.5 only):
 export EXPORT_FILE=datasets/isb1/exports/preview/long_context_1m/\
-inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json
+inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1.json
 
 # Low concurrency (these are HUGE contexts):
 #   users: [1, 2, 4]
@@ -131,7 +136,7 @@ export GPU_TYPE=h100  # or gb200
 bash datasets/isb1/scripts/gmi_portable_benchmark.sh \
   --model $MODEL \
   --gpu $GPU_TYPE \
-  --export-file datasets/isb1/exports/extension_131k/vllm/code_131k1k.json \
+  --export-file datasets/isb1/exports/extension_131k/code_131k1k.json \
   --users 2,4,8,16,32,64 \
   --offload-modes on,off,noprefix \
   --duration 1800
@@ -172,4 +177,6 @@ After all phases, we have:
 4. **HBM scaling evidence:** does 2.4x more HBM give 2.4x more capacity?
 5. **Long context feasibility:** can GB200 serve 500K/1M context at all?
 
-These results go into the InferenceX PR as evidence that the benchmark works.
+Results feed the Pareto summaries and capacity-cliff annotations consumed by the
+ISB1 replay analyzers (`datasets/isb1/scripts/gmi_analyze_sweep.py`,
+`datasets/isb1/scripts/plot_pareto.py`).

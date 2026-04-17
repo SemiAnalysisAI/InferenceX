@@ -8,10 +8,14 @@ InferenceX consumes committed file artifacts only:
 - replay processing through `utils/bench_serving/benchmark_export_replay.py`
 - result normalization through `utils/process_result_isb1.py`
 
+InferenceX does **not** import external runtime code and does **not** make
+live-serving claims from export-file existence alone.
+
+---
 
 ## Why not random data?
 
-Random data benchmarks show worst-case performance. Real inference workloads
+Random-data benchmarks show worst-case performance. Real inference workloads
 have multi-turn conversations where each turn shares context with previous
 turns. This enables:
 
@@ -26,21 +30,15 @@ turns. This enables:
 These traces stress-test the exact KV cache behaviors that determine real
 production performance.
 
-InferenceX does **not** import external runtime code and does **not** make live-serving claims from export-file existence alone.
-
 ---
 
-## Current ground truth (verified 2026-04-12)
+## Coverage
 
-The definitive strict audit found:
+Strict audit rule: count only model-architecture-valid cells. Per-model context
+limits (DSR1 163,840; GPT-OSS 131,072; Qwen3.5 1,010,000) produce N/A rows
+above each model's max.
 
-- **26 PASSED**
-- **0 FAILED**
-- **10 N/A**
-
-Strict audit rule: count only model-architecture-valid cells.
-
-### Strict verified coverage
+### Verified coverage
 
 | Model | Chat | Code |
 |---|---|---|
@@ -48,78 +46,80 @@ Strict audit rule: count only model-architecture-valid cells.
 | `gptoss` | `8k`, `32k`, `64k`, `131k` | `8k`, `32k`, `64k`, `131k` |
 | `qwen3.5` | `8k`, `32k`, `64k`, `131k`, `500k` | `8k`, `32k`, `64k`, `131k`, `500k` |
 
-### Existing but excluded from the strict pass count
+### Existing preview artifacts
 
-- `gptoss` `500k` chat/code preview files exist, but strict coverage stops at `131k`
-- `qwen3.5` `1M` chat/code preview files exist, but were excluded from the strict audit
-- `dsr1` has no strict `500k` or `1M` lane because the model tops out at `163840`
+- `gptoss` `500k` chat/code preview files exist at `reviewed_preview` tier
+- `qwen3.5` `1M` chat/code preview files exist at `gated` tier (consumed only
+  through `isb1-qwen-1m-preview.yaml`)
+- `dsr1` has no `500k` or `1M` lane because the model tops out at `163,840`
 
 ---
 
 ## Inventory
 
-### Export-file counts
+### Export-file layout (post-flatten)
 
-- **50 export files**
-- **3 JSON manifests**
-- **53 total JSON files** under `datasets/isb1/exports/`
-- **888 total cells**
-- **5,094 total turns**
-- **13 MB actual message content**
-- **All export files are valid JSON**
+Bundle files are flat per context-band directory — framework-specific variants
+are consolidated into single files whose internal cell rows carry runtime
+metadata.
 
-### Export-file breakdown
+| Subtree | Bundle files | Notes |
+|---|---:|---|
+| `core/` | 4 | 8K chat/code × {generic, qwen3.5} |
+| `extension_32k/` | 4 | 32K chat/code × {generic, qwen3.5} |
+| `extension_64k/` | 4 | 64K chat/code × {generic, qwen3.5} |
+| `extension_131k/` | 5 | 131K chat/code × {generic, qwen3.5, dsr1 chat} |
+| `preview/long_context_500k/` | 4 + 2 manifests | 500K chat/code × {gptoss, qwen3.5} |
+| `preview/long_context_1m/` | 2 + 1 manifest | 1M chat/code × qwen3.5 |
 
-| Class | Count |
-|---|---:|
-| Core `8k1k` | 8 |
-| Extension `32k1k` | 8 |
-| Extension `64k1k` | 8 |
-| Extension `131k1k` | 10 |
-| Preview `offload_core` | 4 |
-| Preview `500k` | 8 |
-| Preview `1M` | 4 |
-| JSON manifests | 3 |
+All export files are valid JSON and replay-hydratable via
+`utils/bench_serving/benchmark_export_replay.py`.
+
+---
+
+## Support-status vocabulary
+
+ISB1 replay surfaces classify under the five-class support vocabulary:
+
+- `supported` — core 8K replay path
+- `reviewed_preview` — 32K / 64K / 131K extensions, 500K preview
+- `gated` — 1M preview (manual config only)
+- `artifact_only` — retained artifacts without live replay
+- `unsupported` — not a valid path
+
+No ISB1 surface claims `live_benchmark_certification`; all claims are bounded
+to `dataset_replay_verified`.
 
 ---
 
 ## Claim boundary
 
 Safe claims:
-- InferenceX carries the full audited ISB1 replay corpus described above.
-- Strict replay-file coverage is **26 passed / 0 failed / 10 N/A**.
+- InferenceX carries the ISB1 replay corpus described above.
+- Strict replay-file coverage is **26 valid / 0 failed / 10 N/A** across 36
+  (model × band × workload) combinations.
 - DSR1 strict coverage stops at `131k`.
 - GPT-OSS strict coverage stops at `131k`.
-- Qwen strict coverage reaches `500k`.
-- GPT-OSS `500k` and Qwen `1M` files exist, but are excluded from the strict pass count.
+- Qwen3.5 strict coverage reaches `500k`.
+- GPT-OSS `500k` and Qwen3.5 `1M` files exist but are excluded from the strict
+  pass count (`reviewed_preview` and `gated` tiers, respectively).
 
 Unsafe claims:
-- `26/26` valid cells verified (10 N/A due to model `max_position_embeddings` limits: DSR1=163,840, GPT-OSS=131,072, Qwen3.5=1,010,000)
+- `26/26` valid cells verified (10 N/A due to model `max_position_embeddings`
+  limits)
 - strict GPT-OSS `500k` coverage
-- strict Qwen `1M` coverage
+- strict Qwen3.5 `1M` coverage
 - turning preview-file existence into live benchmark certification
 
 ---
 
-## Key docs
+## Related docs
 
-- [`COVERAGE_AUDIT_2026-04-11.md`](COVERAGE_AUDIT_2026-04-11.md) — definitive strict audit, file-path mapping, and N/A rationale
-- [`LONG_CONTEXT_TRUTH_MATRIX.md`](LONG_CONTEXT_TRUTH_MATRIX.md) — canonical claim boundary
-- [`SUPPORT_MATRIX.md`](SUPPORT_MATRIX.md) — lane-by-lane audited support table
-- [`PRODUCER_GAPS.md`](PRODUCER_GAPS.md) — what remains truly open vs no longer applicable
-- [`RUNBOOK_EXTERNAL_GMI.md`](RUNBOOK_EXTERNAL_GMI.md) — external operator path
-- [`RUNBOOK_INTERNAL_SEMIANALYSIS.md`](RUNBOOK_INTERNAL_SEMIANALYSIS.md) — internal workflow-backed path
-- [`INVESTIGATION_KV_CACHE_PROFILING_2026-04-11.md`](INVESTIGATION_KV_CACHE_PROFILING_2026-04-11.md) — what the long-context preview paths actually measure
-
----
-
-## Export roots
-
-- `datasets/isb1/exports/core/`
-- `datasets/isb1/exports/extension_32k/`
-- `datasets/isb1/exports/extension_64k/`
-- `datasets/isb1/exports/extension_131k/`
-- `datasets/isb1/exports/preview/offload_core/`
-- `datasets/isb1/exports/preview/long_context_500k/`
-- `datasets/isb1/exports/preview/long_context_1m/`
-
+- [`COEXISTENCE_WITH_KV_CACHE_TESTER.md`](COEXISTENCE_WITH_KV_CACHE_TESTER.md) —
+  how PR #1032 coexists with PR #993's kv-cache-tester
+- [`GMI_EXECUTION_PLAN.md`](GMI_EXECUTION_PLAN.md) — bare-metal execution
+  runbook for ISB1 replay on GMI Cloud Hopper and Blackwell
+- [`exports/preview/long_context_500k/README.md`](exports/preview/long_context_500k/README.md) —
+  500K preview lane claim boundary
+- [`exports/preview/long_context_1m/README.md`](exports/preview/long_context_1m/README.md) —
+  1M gated preview lane claim boundary
