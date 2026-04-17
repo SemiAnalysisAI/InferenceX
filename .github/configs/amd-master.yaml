@@ -281,7 +281,7 @@ glm5-fp8-mi355x-atom:
     - { tp: 8, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:nightly-bcc2306cefa4179c548d3e638e7a22a88d281733
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x

@@ -1473,3 +1473,11 @@
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
     - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Upgrade the Kimi-K2.5-INT4-MI355X-vLLM image to upstream daily image vllm/vllm-openai-rocm:nightly-bcc2306cefa4179c548d3e638e7a22a88d281733"
+    - "Reduce --gpu-memory-utilization from 0.95 to 0.88"
+    - "Remove --mm-encoder-tp-mode data flag"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1066

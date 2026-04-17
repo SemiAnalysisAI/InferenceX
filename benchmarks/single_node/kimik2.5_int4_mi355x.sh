@@ -37,13 +37,12 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.88 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=64 \
 --trust-remote-code \
 --no-enable-prefix-caching \
---max-num-seqs 256 \
---mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
+--max-num-seqs 256 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
