@@ -6697,7 +6697,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
 
 kimik2.5-fp4-gb200-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: gb200
