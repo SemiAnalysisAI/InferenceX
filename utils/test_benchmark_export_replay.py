@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from aiohttp import web
 
 from bench_serving.benchmark_export_replay import (
@@ -124,6 +126,70 @@ def _trace_replay_payload(runtime_stack_id: str = "standalone:trt_llm") -> dict:
             }
         ],
     }
+
+
+def _write_json_and_sha(path: Path, payload: dict) -> str:
+    text = json.dumps(payload)
+    path.write_text(text)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _trace_replay_prefix_payload() -> dict:
+    base_cell = _trace_replay_payload()["exports"][0]
+    return {
+        "events": base_cell["events"],
+        "trace_metadata": base_cell["trace_metadata"],
+        "workload_family": "coding",
+        "task_class": "incident_debugging",
+        "workload_profile": "code_assistant",
+        "kv_mode": "shared_prefix",
+        "coding_profile": "bugfix",
+        "benchmark_surface": "code",
+        "benchmark_modifiers": ["prefix_aware"],
+        "workload_shape": {"turn_count": 2},
+        "long_context_contract": {"band": "extension_131k"},
+        "coding_profile_detail": {"language": "python"},
+        "system_expectations": {"tools_allowed": True},
+        "reasoning_profile": "standard",
+        "history_visibility": "full",
+        "context_band": "lc2_32k_64k",
+        "adapter_execution_class": "trace_replay_projection",
+    }
+
+
+def _prefix_aware_trace_replay_payload(
+    tmp_path: Path,
+    *,
+    prefix_ref: str = "prefix-1",
+    runtime_stack_id: str = "standalone:trt_llm",
+) -> tuple[dict, Path, dict]:
+    prefix_payload = _trace_replay_prefix_payload()
+    sidecar_path = tmp_path / "prefixes" / f"{prefix_ref}.json"
+    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+    sidecar_sha = _write_json_and_sha(sidecar_path, prefix_payload)
+
+    payload = {
+        "schema_version": "0.2.0",
+        "adapter_id": "inferencex_trace_replay",
+        "prefix_index": {
+            prefix_ref: {
+                "relative_path": f"prefixes/{prefix_ref}.json",
+                "sha256": sidecar_sha,
+            }
+        },
+        "exports": [
+            {
+                "trace_id": "trace-replay-1",
+                "runtime_stack_id": runtime_stack_id,
+                "hardware_profile_id": "nvidia:b200_sxm_180gb",
+                "canonical_model_id": "gpt_oss_120b",
+                "support_status": "supported",
+                "benchmark_certification_status": "dataset_replay_verified",
+                "prefix_ref": prefix_ref,
+            }
+        ],
+    }
+    return payload, sidecar_path, prefix_payload
 
 
 async def _start_mock_server(
@@ -764,3 +830,118 @@ def test_depth_telemetry_in_benchmark_result(tmp_path: Path) -> None:
     # Per-turn metrics should have actual context length
     for turn_key, turn_metrics in result["per_turn_metrics"].items():
         assert "mean_actual_context_len" in turn_metrics
+
+
+def test_load_replay_sessions_prefix_hydrates_v020_bundle(tmp_path: Path) -> None:
+    payload, _, prefix_payload = _prefix_aware_trace_replay_payload(tmp_path)
+    payload["exports"].append(
+        {
+            **payload["exports"][0],
+            "canonical_model_id": "glm_5",
+        }
+    )
+    export_file = tmp_path / "trace_replay_v020.json"
+    export_file.write_text(json.dumps(payload))
+
+    sessions, selection = load_replay_sessions(
+        export_file=str(export_file),
+        count_text_tokens=_count_tokens,
+        runtime_stack_ids={"standalone:trt_llm"},
+        hardware_profile_ids={"nvidia:b200_sxm_180gb"},
+        canonical_model_ids={"gpt_oss_120b"},
+        request_mode="auto",
+    )
+
+    assert len(sessions) == 1
+    assert sessions[0].session_id == prefix_payload["trace_metadata"]["session_id"]
+    assert sessions[0].request_mode == "completions"
+    assert sessions[0].turns[1].wait_before_s == 0.025
+    assert sessions[0].turns[0].completion_prompt.startswith("USER:")
+    assert selection["canonical_model_ids"] == ["gpt_oss_120b"]
+    assert selection["request_mode_mix"] == {"completions": 1}
+
+
+def test_load_replay_sessions_prefix_sha_mismatch_raises(tmp_path: Path) -> None:
+    payload, _, _ = _prefix_aware_trace_replay_payload(tmp_path)
+    payload["prefix_index"]["prefix-1"]["sha256"] = "deadbeef"
+    export_file = tmp_path / "trace_replay_bad_sha.json"
+    export_file.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="declared_sha"):
+        load_replay_sessions(
+            export_file=str(export_file),
+            count_text_tokens=_count_tokens,
+            runtime_stack_ids={"standalone:trt_llm"},
+            hardware_profile_ids={"nvidia:b200_sxm_180gb"},
+            canonical_model_ids={"gpt_oss_120b"},
+        )
+
+
+def test_load_replay_sessions_unknown_prefix_ref_raises(tmp_path: Path) -> None:
+    payload, _, _ = _prefix_aware_trace_replay_payload(tmp_path)
+    payload["exports"][0]["prefix_ref"] = "missing-prefix"
+    export_file = tmp_path / "trace_replay_unknown_prefix.json"
+    export_file.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="unknown prefix_ref"):
+        load_replay_sessions(
+            export_file=str(export_file),
+            count_text_tokens=_count_tokens,
+            runtime_stack_ids={"standalone:trt_llm"},
+            hardware_profile_ids={"nvidia:b200_sxm_180gb"},
+            canonical_model_ids={"gpt_oss_120b"},
+        )
+
+
+def test_load_replay_sessions_legacy_v010_skips_prefix_hydrator(tmp_path: Path) -> None:
+    payload = _trace_replay_payload()
+    payload["prefix_index"] = {
+        "unused-prefix": {
+            "relative_path": "prefixes/unused-prefix.json",
+            "sha256": "not-used",
+        }
+    }
+    export_file = tmp_path / "trace_replay_legacy.json"
+    export_file.write_text(json.dumps(payload))
+
+    sessions, selection = load_replay_sessions(
+        export_file=str(export_file),
+        count_text_tokens=_count_tokens,
+        runtime_stack_ids={"standalone:trt_llm"},
+        hardware_profile_ids={"nvidia:b200_sxm_180gb"},
+        canonical_model_ids={"gpt_oss_120b"},
+        request_mode="auto",
+    )
+
+    assert len(sessions) == 1
+    assert sessions[0].session_id == "session-replay-1"
+    assert selection["request_mode_mix"] == {"completions": 1}
+
+
+def test_load_replay_sessions_rejects_mixed_prefix_and_embedded_events_bundle(
+    tmp_path: Path,
+) -> None:
+    payload, _, _ = _prefix_aware_trace_replay_payload(tmp_path)
+    payload["exports"].append(
+        {
+            "trace_id": "trace-replay-legacy-row",
+            "runtime_stack_id": "standalone:sglang",
+            "hardware_profile_id": "nvidia:h200_sxm_141gb",
+            "canonical_model_id": "qwen3_30b_a3b",
+            "support_status": "supported",
+            "benchmark_certification_status": "dataset_replay_verified",
+            "events": _trace_replay_payload(runtime_stack_id="standalone:sglang")["exports"][0]["events"],
+            "trace_metadata": {"session_id": "legacy-session"},
+        }
+    )
+    export_file = tmp_path / "trace_replay_mixed_bundle.json"
+    export_file.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="Mixed legacy/prefix-aware"):
+        load_replay_sessions(
+            export_file=str(export_file),
+            count_text_tokens=_count_tokens,
+            runtime_stack_ids={"standalone:trt_llm"},
+            hardware_profile_ids={"nvidia:b200_sxm_180gb"},
+            canonical_model_ids={"gpt_oss_120b"},
+        )

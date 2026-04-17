@@ -6,7 +6,7 @@ bounded `1M`-class ISB1 coding replay preview.
 ## What these files are
 
 - dedicated replay bundles restricted to `qwen3_5_397b_a17b`
-- producer cells for standalone `vllm` and standalone `sglang`
+- producer cells currently materialized for `standalone:sglang` only; additional runtimes land here when the producer regenerates the bundle
 - committed bundle coverage for `nvidia:b200_sxm_180gb`, `nvidia:h100_sxm_80gb`, and `nvidia:h200_sxm_141gb`
 - restricted to `ulc2_1m_plus`
 - restricted to `support_status=reviewed_preview` at the selected export-cell level

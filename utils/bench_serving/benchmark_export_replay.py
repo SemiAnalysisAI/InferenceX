@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -24,6 +25,7 @@ import random
 import sys
 import time
 import warnings
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +62,149 @@ ROLE_LABELS = {
 MODULE_DIR = Path(__file__).resolve().parent
 if str(MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(MODULE_DIR))
+
+TRACE_REPLAY_PREFIX_FIELDS = (
+    "events",
+    "trace_metadata",
+    "workload_family",
+    "task_class",
+    "workload_profile",
+    "kv_mode",
+    "coding_profile",
+    "benchmark_surface",
+    "benchmark_modifiers",
+    "workload_shape",
+    "long_context_contract",
+    "coding_profile_detail",
+    "system_expectations",
+    "reasoning_profile",
+    "history_visibility",
+    "context_band",
+    "adapter_execution_class",
+)
+_PREFIX_ARTIFACT_CACHE_MAX = 8
+_PREFIX_ARTIFACT_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
+
+
+def _schema_version_tuple(raw_version: Any) -> tuple[int, int, int]:
+    if raw_version is None:
+        return (0, 1, 0)
+
+    parts = str(raw_version).split(".")
+    values: list[int] = []
+    for part in parts[:3]:
+        try:
+            values.append(int(part))
+        except ValueError:
+            return (0, 0, 0)
+    while len(values) < 3:
+        values.append(0)
+    return tuple(values[:3])
+
+
+def _schema_version_at_least(raw_version: Any, minimum_version: str) -> bool:
+    return _schema_version_tuple(raw_version) >= _schema_version_tuple(minimum_version)
+
+
+def _remember_prefix_artifact(
+    cache_key: tuple[str, str],
+    prefix_payload: dict[str, Any],
+) -> None:
+    _PREFIX_ARTIFACT_CACHE[cache_key] = prefix_payload
+    _PREFIX_ARTIFACT_CACHE.move_to_end(cache_key)
+    while len(_PREFIX_ARTIFACT_CACHE) > _PREFIX_ARTIFACT_CACHE_MAX:
+        _PREFIX_ARTIFACT_CACHE.popitem(last=False)
+
+
+
+def _load_prefix_artifact(
+    bundle_path: Path,
+    prefix_ref: str,
+    prefix_entry: dict[str, Any],
+) -> dict[str, Any]:
+    cache_key = (str(bundle_path), prefix_ref)
+    cached = _PREFIX_ARTIFACT_CACHE.get(cache_key)
+    if cached is not None:
+        _PREFIX_ARTIFACT_CACHE.move_to_end(cache_key)
+        return cached
+
+    prefix_path = bundle_path.parent / str(prefix_entry.get("relative_path", ""))
+    raw_prefix = prefix_path.read_bytes()
+    declared_sha = str(prefix_entry.get("sha256", ""))
+    actual_sha = hashlib.sha256(raw_prefix).hexdigest()
+    if actual_sha != declared_sha:
+        detail = {
+            "bundle_path": str(bundle_path),
+            "prefix_ref": prefix_ref,
+            "declared_sha": declared_sha,
+            "actual_sha": actual_sha,
+        }
+        raise ValueError(f"Prefix artifact SHA-256 mismatch: {detail}")
+
+    prefix_payload = json.loads(raw_prefix)
+    _remember_prefix_artifact(cache_key, prefix_payload)
+    return prefix_payload
+
+
+
+def _merge_prefix_into_trace_replay_cell(
+    cell: dict[str, Any],
+    prefix_payload: dict[str, Any],
+) -> None:
+    for field in TRACE_REPLAY_PREFIX_FIELDS:
+        if field not in cell and field in prefix_payload:
+            cell[field] = prefix_payload[field]
+
+    prefix_overrides = cell.get("prefix_overrides")
+    if isinstance(prefix_overrides, dict):
+        cell.update(prefix_overrides)
+
+
+
+def _hydrate_trace_replay_export_payload(
+    payload: dict[str, Any],
+    bundle_path: Path,
+) -> None:
+    if not _schema_version_at_least(payload.get("schema_version"), "0.2.0"):
+        return
+
+    export_cells = list(payload.get("exports", []))
+    if not export_cells:
+        return
+
+    bundle_path_str = str(bundle_path)
+    has_prefix_ref = any(cell.get("prefix_ref") for cell in export_cells)
+    has_embedded_events = any("events" in cell for cell in export_cells)
+    if has_prefix_ref and has_embedded_events:
+        raise ValueError(
+            "Mixed legacy/prefix-aware trace replay bundle unsupported in "
+            f"{bundle_path_str}; rows cannot mix embedded events with prefix_ref."
+        )
+
+    missing_prefix_ref = [cell for cell in export_cells if not cell.get("prefix_ref")]
+    if missing_prefix_ref:
+        raise ValueError(
+            f"Prefix-aware trace replay bundle missing prefix_ref in {bundle_path_str}"
+        )
+
+    raw_prefix_index = payload.get("prefix_index")
+    prefix_index = raw_prefix_index if isinstance(raw_prefix_index, dict) else {}
+    prefix_payloads: dict[str, dict[str, Any]] = {}
+    for prefix_ref in {str(cell["prefix_ref"]) for cell in export_cells}:
+        prefix_entry = prefix_index.get(prefix_ref)
+        if not isinstance(prefix_entry, dict):
+            raise ValueError(f"unknown prefix_ref {prefix_ref!r} in {bundle_path_str}")
+        prefix_payloads[prefix_ref] = _load_prefix_artifact(
+            bundle_path=bundle_path,
+            prefix_ref=prefix_ref,
+            prefix_entry=prefix_entry,
+        )
+
+    for cell in export_cells:
+        _merge_prefix_into_trace_replay_cell(
+            cell,
+            prefix_payloads[str(cell["prefix_ref"])],
+        )
 
 
 @dataclass
@@ -505,8 +650,11 @@ def load_replay_sessions(
     seed: int = 0,
     allow_mixed_selection: bool = False,
 ) -> tuple[list[ReplaySession], dict[str, Any]]:
-    payload = json.loads(Path(export_file).read_text())
+    bundle_path = Path(export_file).resolve()
+    payload = json.loads(bundle_path.read_text())
     adapter_id = str(payload.get("adapter_id", "unknown"))
+    if adapter_id == "inferencex_trace_replay":
+        _hydrate_trace_replay_export_payload(payload, bundle_path)
     export_cells = list(payload.get("exports", []))
     if adapter_id not in {"inferencex_multiturn", "inferencex_trace_replay"}:
         raise ValueError(

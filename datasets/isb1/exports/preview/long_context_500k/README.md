@@ -8,7 +8,7 @@ This directory carries the smallest honest InferenceX consumer handoff for bound
 - dedicated replay bundles derived from committed `131k1k` extension exports
 - restricted to `gpt_oss_120b` or `qwen3_5_397b_a17b`
 - restricted to `xlc2_384k_512k`
-- restricted to standalone `vllm` and standalone `sglang`
+- producer cells currently materialized for `standalone:sglang` only; additional runtimes land here when the producer regenerates the bundle
 - restricted to `nvidia:b200_sxm_180gb`, `nvidia:h100_sxm_80gb`, and `nvidia:h200_sxm_141gb`
 - restricted to `support_status=reviewed_preview`
 - restricted to `benchmark_certification_status=dataset_replay_verified`
@@ -36,6 +36,7 @@ run bounded `500k`-class previews without over-selecting lower-band cells.
 
 ## Consumer contract
 
+- consumed only through the coding `500k` preview stanzas in `isb1-master.yaml`
 - `isb1-master.yaml` pins these rows as `reviewed_preview`
 - `isb1-master.yaml` pins `max-model-len: 524288`
 - current search space is intentionally bounded to single-concurrency preview execution

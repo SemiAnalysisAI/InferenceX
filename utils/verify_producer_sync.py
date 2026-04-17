@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Verify producer/consumer sync for ISB1 preview and extension exports."""
+"""Verify producer/consumer sync for ISB1 committed export subtrees.
+
+Covers every export root that is intentionally mirrored from the Inferscope
+producer into the InferenceX consumer tree: the 8k core bundle, the 32k / 64k /
+131k extension bundles, and the gated 500k / 1M preview bundles.
+
+Subtrees that exist on neither side are silently skipped (there is nothing to
+sync). Subtrees that exist on only one side are reported as sync issues.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +18,9 @@ from pathlib import Path
 
 
 RELEVANT_SUBTREES = (
+    "core",
+    "extension_32k",
+    "extension_64k",
     "extension_131k",
     "preview/long_context_500k",
     "preview/long_context_1m",
@@ -38,13 +49,20 @@ def _compare_subtree(producer_root: Path, consumer_root: Path, subtree: str) -> 
     producer_subtree = producer_root / subtree
     consumer_subtree = consumer_root / subtree
 
+    producer_exists = producer_subtree.exists()
+    consumer_exists = consumer_subtree.exists()
+
+    # Nothing on either side: nothing to sync, skip silently.
+    if not producer_exists and not consumer_exists:
+        return issues
+
     producer_files = _json_files(producer_subtree)
     consumer_files = _json_files(consumer_subtree)
 
-    if not producer_subtree.exists():
+    if not producer_exists:
         issues.append(SyncIssue("missing_producer_subtree", subtree))
         return issues
-    if not consumer_subtree.exists():
+    if not consumer_exists:
         issues.append(SyncIssue("missing_consumer_subtree", subtree))
         return issues
 

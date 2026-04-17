@@ -1,79 +1,29 @@
-# PR2 packaged the core 8k1k replay bundles.
-# PR4 adds truthful long-context extension replay lanes using only the materialized
-# extension_32k / extension_64k / extension_131k code bundles.
-# These extension lanes are served-shape replay artifacts derived from larger source
-# workloads; they are not native 500k+/1M+ InferenceX served-lane claims.
+# ISB1 master sweep config.
 #
-# Core entries keep an explicit 8k1k max-model-len. Extension entries intentionally
-# omit max-model-len so the ISB1 workflow derives the served-shape value from the
-# export stem (32k1k / 64k1k / 131k1k) at execution time.
+# Each stanza pairs a runtime/hardware/model identity with one or more
+# replay-config entries. Every (runtime-stack-id, hardware-profile-id,
+# canonical-model-id) triple must exist in the referenced export bundle;
+# row-level filtering in the hydrator selects the matching cells.
 #
-# Official replay-configs pin support-status: supported so the workflow only replays
-# the supported subset of mixed-status export bundles.
-# All currently runnable rows also resolve to
-# benchmark_certification_status=dataset_replay_verified.
-# Phase 2 adds truthful chat-extension widening plus bounded preview/offload
-# lanes. Preview rows stay explicit via support-status: reviewed_preview and the
-# dedicated preview export paths. The current replay closure covers dsr1,
-# gptoss, and qwen3.5 across core 8k1k plus extension bands, with bounded
-# 500k code preview for gptoss and qwen3.5 on standalone sglang/vllm across
-# b200/h100/h200.
-
-dsr1-fp8-b200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  precision: fp8
-  framework: sglang
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: deepseek_r1_0528
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-dsr1-fp8-h200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  precision: fp8
-  framework: sglang
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: deepseek_r1_0528
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
+# Export-file paths are flat under datasets/isb1/exports/ (no per-engine
+# subdirs). Qwen3.5 bundles are suffixed _qwen3.5.json to keep identity
+# triples unambiguous.
+#
+# Core entries keep an explicit 8k1k max-model-len. Extension entries
+# intentionally omit max-model-len so the ISB1 workflow derives the
+# served-shape value from the export stem (32k1k / 64k1k / 131k1k) at
+# execution time.
+#
+# support-status:
+#   supported         — benchmark_certification_status=dataset_replay_verified
+#   reviewed_preview  — preview rows, pinned explicitly for disclosure
+#   unsupported       — rows retained for bundle coverage; not executed
+#
+# Current closure: dsr1, gptoss, qwen3.5 on standalone:vllm across core 8k1k
+# and extension 32k/64k/131k bands, plus bounded 500k code preview on
+# standalone:sglang for gptoss and qwen3.5. SGLang core/extension lanes are
+# deferred until matching cells are materialized in the corresponding
+# bundles.
 
 dsr1-fp8-b200-isb1-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
@@ -88,14 +38,14 @@ dsr1-fp8-b200-isb1-vllm:
   canonical-model-id: deepseek_r1_0528
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -116,100 +66,16 @@ dsr1-fp8-h200-isb1-vllm:
   canonical-model-id: deepseek_r1_0528
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-gptoss-fp4-b200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-gptoss-fp4-h100-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-gptoss-fp4-h200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
@@ -229,14 +95,14 @@ gptoss-fp4-b200-isb1-vllm:
   canonical-model-id: gpt_oss_120b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -257,14 +123,14 @@ gptoss-fp4-h100-isb1-vllm:
   canonical-model-id: gpt_oss_120b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -285,100 +151,16 @@ gptoss-fp4-h200-isb1-vllm:
   canonical-model-id: gpt_oss_120b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-qwen3.5-fp8-b200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: sglang
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-qwen3.5-fp8-h100-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: sglang
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-
-qwen3.5-fp8-h200-isb1-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: sglang
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 10240
-  replay-configs:
-    - export-file: datasets/isb1/exports/core/sglang/chat_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/sglang/code_8k1k.json
-      request-mode: multi-turn
-      support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
@@ -397,14 +179,14 @@ qwen3.5-fp8-b200-isb1-vllm:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -425,14 +207,14 @@ qwen3.5-fp8-h100-isb1-vllm:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -453,14 +235,14 @@ qwen3.5-fp8-h200-isb1-vllm:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -480,37 +262,9 @@ dsr1-fp8-b200-isb1-sglang-extension:
   hardware-profile-id: nvidia:b200_sxm_180gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
+      support-status: unsupported
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
@@ -528,37 +282,9 @@ dsr1-fp8-h200-isb1-sglang-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
+      support-status: unsupported
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
@@ -576,37 +302,37 @@ dsr1-fp8-b200-isb1-vllm-extension:
   hardware-profile-id: nvidia:b200_sxm_180gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
-      support-status: reviewed_preview
+      support-status: unsupported
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
@@ -624,202 +350,37 @@ dsr1-fp8-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-
-gptoss-fp4-b200-isb1-sglang-extension:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: gpt_oss_120b
-  replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/sglang/chat_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-
-gptoss-fp4-h100-isb1-sglang-extension:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: gpt_oss_120b
-  replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/sglang/chat_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-
-gptoss-fp4-h200-isb1-sglang-extension:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: gpt_oss_120b
-  replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/sglang/chat_131k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
+      support-status: unsupported
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
@@ -837,42 +398,42 @@ gptoss-fp4-b200-isb1-vllm-extension:
   hardware-profile-id: nvidia:b200_sxm_180gb
   canonical-model-id: gpt_oss_120b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
         - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/vllm/chat_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/chat_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -892,42 +453,42 @@ gptoss-fp4-h100-isb1-vllm-extension:
   hardware-profile-id: nvidia:h100_sxm_80gb
   canonical-model-id: gpt_oss_120b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
         - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/vllm/chat_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/chat_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -947,42 +508,42 @@ gptoss-fp4-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: gpt_oss_120b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 2
           num-warmup-sessions: 1
         - max-concurrency: 4
-    - export-file: datasets/isb1/exports/extension_131k/vllm/chat_131k1k.json
+    - export-file: datasets/isb1/exports/extension_131k/chat_131k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1002,83 +563,7 @@ qwen3.5-fp8-b200-isb1-sglang-extension:
   hardware-profile-id: nvidia:b200_sxm_180gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k_qwen3.5.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 2
-          num-warmup-sessions: 1
-        - max-concurrency: 4
-
-qwen3.5-fp8-h100-isb1-sglang-extension:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: sglang
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: qwen3_5_397b_a17b
-  replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1098,35 +583,7 @@ qwen3.5-fp8-h200-isb1-sglang-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/sglang/code_32k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/sglang/chat_32k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/code_64k1k.json
-      request-mode: multi-turn
-      support-status: supported
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/sglang/chat_64k1k.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 4
-          num-warmup-sessions: 1
-        - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/sglang/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1146,35 +603,35 @@ qwen3.5-fp8-b200-isb1-vllm-extension:
   hardware-profile-id: nvidia:b200_sxm_180gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1194,35 +651,35 @@ qwen3.5-fp8-h100-isb1-vllm-extension:
   hardware-profile-id: nvidia:h100_sxm_80gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1242,35 +699,35 @@ qwen3.5-fp8-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_32k/vllm/chat_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/chat_32k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_64k/vllm/chat_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/chat_64k1k_qwen3.5.json
       request-mode: multi-turn
-      support-status: supported
+      support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1291,7 +748,7 @@ qwen3.5-fp8-b200-isb1-sglang-500k-preview-code:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__sglang.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1313,7 +770,7 @@ qwen3.5-fp8-h100-isb1-sglang-500k-preview-code:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__sglang.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1335,73 +792,7 @@ qwen3.5-fp8-h200-isb1-sglang-500k-preview-code:
   canonical-model-id: qwen3_5_397b_a17b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__sglang.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-qwen3.5-fp8-b200-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.19.0-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: vllm
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-qwen3.5-fp8-h100-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: vllm
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-qwen3.5-fp8-h200-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  precision: fp8
-  framework: vllm
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: qwen3_5_397b_a17b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1423,7 +814,7 @@ gptoss-fp4-b200-isb1-sglang-500k-preview-code:
   canonical-model-id: gpt_oss_120b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__sglang.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1445,7 +836,7 @@ gptoss-fp4-h100-isb1-sglang-500k-preview-code:
   canonical-model-id: gpt_oss_120b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__sglang.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1467,7 +858,7 @@ gptoss-fp4-h200-isb1-sglang-500k-preview-code:
   canonical-model-id: gpt_oss_120b
   max-model-len: 524288
   replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__sglang.json
+    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -1476,248 +867,3 @@ gptoss-fp4-h200-isb1-sglang-500k-preview-code:
           max-turns-per-session: 4
           num-warmup-sessions: 0
 
-gptoss-fp4-b200-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.15.1
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-gptoss-fp4-h100-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-gptoss-fp4-h200-isb1-vllm-500k-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 524288
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/long_context_500k/inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-
-gptoss-fp4-b200-isb1-sglang-offload-core-preview-chat:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0
-
-gptoss-fp4-h100-isb1-sglang-offload-core-preview-chat:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0
-
-gptoss-fp4-h200-isb1-sglang-offload-core-preview-chat:
-  image: lmsysorg/sglang:v0.5.9-cu130
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: sglang
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:sglang
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0
-
-gptoss-fp4-b200-isb1-vllm-offload-core-preview-code:
-  image: vllm/vllm-openai:v0.15.1
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: b200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:b200_sxm_180gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0
-
-gptoss-fp4-h100-isb1-vllm-offload-core-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: h100
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h100_sxm_80gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0
-
-gptoss-fp4-h200-isb1-vllm-offload-core-preview-code:
-  image: vllm/vllm-openai:v0.18.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  precision: fp4
-  framework: vllm
-  runner: h200
-  benchmark-type: isb1_replay
-  runtime-stack-id: standalone:vllm
-  hardware-profile-id: nvidia:h200_sxm_141gb
-  canonical-model-id: gpt_oss_120b
-  max-model-len: 131272
-  replay-configs:
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__smoke.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 2
-          max-turns-per-session: 4
-          num-warmup-sessions: 0
-    - export-file: datasets/isb1/exports/preview/offload_core/inferencex_trace_replay__coding_hopper_blackwell_offload_core_v1__standard.json
-      request-mode: multi-turn
-      support-status: reviewed_preview
-      search-space:
-        - max-concurrency: 1
-          max-sessions: 4
-          max-turns-per-session: 6
-          num-warmup-sessions: 0

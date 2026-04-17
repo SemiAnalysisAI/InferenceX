@@ -15,7 +15,7 @@ status: proposed
 | **Traces** | 522 real Claude Code sessions | 35 synthetic multi-turn traces |
 | **Source** | Real production agentic workloads | Synthetic with controlled stress patterns |
 | **Replay** | `trace_replay_tester.py` | `benchmark_export_replay.py` |
-| **Config** | `multiturn-agentic-trace.yaml` | `isb1-kv-stress-pr993.yaml` |
+| **Config** | `multiturn-agentic-trace.yaml` | `isb1-kv-stress.yaml` |
 | **Metrics** | Prometheus sidecar (`metrics_collector.py`) | `process_result_isb1.py` |
 
 ## Why Both Are Needed
@@ -50,9 +50,9 @@ h200-fp8-llama70b:
   trace-file: experimental/multiturn/vllm_benchmark/kv-cache-tester/traces/...
 
 # Our config — uses ISB1 export traces  
-# .github/configs/isb1-kv-stress-pr993.yaml
-dsr1-fp8-h200-isb1-kv-stress-vllm-pr993:
-  export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k.json
+# .github/configs/isb1-kv-stress.yaml
+dsr1-fp8-h200-isb1-kv-stress-vllm:
+  export-file: datasets/isb1/exports/extension_131k/code_131k1k.json
 ```
 
 ### Workflows (no conflict)

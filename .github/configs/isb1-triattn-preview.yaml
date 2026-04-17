@@ -36,14 +36,14 @@ dsr1triattn-fp8-h100-isb1-vllm:
   canonical-model-id: deepseek_r1_0528
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -64,14 +64,14 @@ dsr1triattn-fp8-h200-isb1-vllm:
   canonical-model-id: deepseek_r1_0528
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -95,13 +95,13 @@ dsr1triattn-fp8-h100-isb1-vllm-extension:
   hardware-profile-id: nvidia:h100_sxm_80gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
@@ -120,13 +120,13 @@ dsr1triattn-fp8-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: deepseek_r1_0528
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
@@ -150,7 +150,7 @@ qwen3.5triattn-fp8-h100-isb1-vllm-extension:
   hardware-profile-id: nvidia:h100_sxm_80gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -169,7 +169,7 @@ qwen3.5triattn-fp8-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: qwen3_5_397b_a17b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_131k/vllm/code_131k1k_qwen3.5.json
+    - export-file: datasets/isb1/exports/extension_131k/code_131k1k_qwen3.5.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -193,14 +193,14 @@ gptosstriattn-fp4-h100-isb1-vllm:
   canonical-model-id: gpt_oss_120b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -221,14 +221,14 @@ gptosstriattn-fp4-h200-isb1-vllm:
   canonical-model-id: gpt_oss_120b
   max-model-len: 10240
   replay-configs:
-    - export-file: datasets/isb1/exports/core/vllm/chat_8k1k.json
+    - export-file: datasets/isb1/exports/core/chat_8k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
         - max-concurrency: 8
-    - export-file: datasets/isb1/exports/core/vllm/code_8k1k.json
+    - export-file: datasets/isb1/exports/core/code_8k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
@@ -252,13 +252,13 @@ gptosstriattn-fp4-h100-isb1-vllm-extension:
   hardware-profile-id: nvidia:h100_sxm_80gb
   canonical-model-id: gpt_oss_120b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:
@@ -277,13 +277,13 @@ gptosstriattn-fp4-h200-isb1-vllm-extension:
   hardware-profile-id: nvidia:h200_sxm_141gb
   canonical-model-id: gpt_oss_120b
   replay-configs:
-    - export-file: datasets/isb1/exports/extension_32k/vllm/code_32k1k.json
+    - export-file: datasets/isb1/exports/extension_32k/code_32k1k.json
       request-mode: multi-turn
       support-status: reviewed_preview
       search-space:
         - max-concurrency: 4
           num-warmup-sessions: 1
-    - export-file: datasets/isb1/exports/extension_64k/vllm/code_64k1k.json
+    - export-file: datasets/isb1/exports/extension_64k/code_64k1k.json
       request-mode: multi-turn
       support-status: supported
       search-space:

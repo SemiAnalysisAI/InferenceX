@@ -7,6 +7,9 @@ SCRIPT_PATH = Path(__file__).parent / "verify_producer_sync.py"
 
 
 RELEVANT_FILES = {
+    "core/sglang/chat_8k1k_qwen3.5.json": {"name": "core"},
+    "extension_32k/sglang/chat_32k1k.json": {"name": "e32k"},
+    "extension_64k/sglang/chat_64k1k.json": {"name": "e64k"},
     "extension_131k/sglang/code_131k1k_qwen3.5.json": {"name": "e131k"},
     "preview/long_context_500k/manifest_qwen3.5.json": {"name": "500k"},
     "preview/long_context_1m/manifest.json": {"name": "1m"},
@@ -62,3 +65,38 @@ def test_verify_producer_sync_fails_on_content_mismatch(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "content_mismatch" in result.stderr
     assert "preview/long_context_500k/manifest_qwen3.5.json" in result.stderr
+
+
+def test_verify_producer_sync_skips_subtrees_missing_on_both_sides(tmp_path: Path) -> None:
+    # Only one subtree is populated — others are legitimately empty on both
+    # sides (e.g. a producer that has not materialized 1M previews yet, run
+    # against a consumer that has not committed them). This must pass.
+    producer_root = tmp_path / "producer"
+    consumer_root = tmp_path / "consumer"
+    partial = {
+        "extension_131k/sglang/code_131k1k_qwen3.5.json": {"name": "only"},
+    }
+    _write_tree(producer_root, partial)
+    _write_tree(consumer_root, partial)
+
+    result = _run_verify(producer_root, consumer_root)
+
+    assert result.returncode == 0
+    assert "sync check passed" in result.stdout
+
+
+def test_verify_producer_sync_reports_one_sided_subtree(tmp_path: Path) -> None:
+    # Producer has a subtree but consumer is missing it — must fail.
+    producer_root = tmp_path / "producer"
+    consumer_root = tmp_path / "consumer"
+    _write_tree(
+        producer_root,
+        {"extension_131k/sglang/code_131k1k_qwen3.5.json": {"name": "p"}},
+    )
+    consumer_root.mkdir(parents=True, exist_ok=True)
+
+    result = _run_verify(producer_root, consumer_root)
+
+    assert result.returncode == 1
+    assert "missing_consumer_subtree" in result.stderr
+    assert "extension_131k" in result.stderr

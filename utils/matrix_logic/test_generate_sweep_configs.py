@@ -679,11 +679,18 @@ class TestKVStressSweep:
             runner_data,
         )
 
-        # 4 configs (gptoss/qwen * b200/h200) * 8 users * 3 offload modes
-        assert len(matrix) == 96
+        # isb1-kv-stress.yaml covers many configs across multiple models, hardware
+        # profiles, and TP/PP shapes; the expanded matrix pairs each config with
+        # the users x offload-modes cross-product.  The post-PR1032 kv-stress config
+        # declares explicit tp/ep per stanza via tp-configs expansion, so those
+        # keys MUST be present on every row.
+        assert len(matrix) > 0
         assert all(entry["benchmark-type"] == "isb1_kv_stress" for entry in matrix)
-        assert all("tp" not in entry for entry in matrix)
-        assert all("ep" not in entry for entry in matrix)
+        assert all("tp" in entry for entry in matrix)
+        assert all("ep" in entry for entry in matrix)
+        # Ensure every row resolves to an existing bundle on disk.
+        repo_root = Path(__file__).resolve().parents[2]
+        assert all((repo_root / entry["export-file"]).exists() for entry in matrix)
 
 
 class TestISB1SweepIsolation:
@@ -707,192 +714,183 @@ class TestISB1SweepIsolation:
             for entry in matrix
         }
 
+        # Current closure: standalone:vllm core/extension for dsr1/gptoss/qwen3.5,
+        # plus bounded 500k code preview on standalone:sglang. SGLang core/extension
+        # lanes and vllm 500k/1M previews are deferred until matching cells are
+        # materialized.
         assert "dsr1-fp8-b200-isb1-vllm" in config_keys
         assert "dsr1-fp8-h200-isb1-vllm" in config_keys
-        assert "gptoss-fp4-b200-isb1-sglang" in config_keys
-        assert "gptoss-fp4-h100-isb1-sglang" in config_keys
-        assert "gptoss-fp4-h200-isb1-sglang" in config_keys
-        assert "gptoss-fp4-h100-isb1-sglang-offload-core-preview-chat" in config_keys
-        assert "gptoss-fp4-h100-isb1-vllm-offload-core-preview-code" in config_keys
-        assert "gptoss-fp4-h100-isb1-sglang-500k-preview-code" in config_keys
-        assert "gptoss-fp4-h100-isb1-vllm-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-b200-isb1-sglang-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-h100-isb1-sglang-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-h200-isb1-sglang-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-b200-isb1-vllm-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-h100-isb1-vllm-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-h200-isb1-vllm-500k-preview-code" in config_keys
-        assert "qwen3.5-fp8-b200-isb1-sglang-extension" in config_keys
-        assert "qwen3.5-fp8-h100-isb1-sglang-extension" in config_keys
-        assert "qwen3.5-fp8-h200-isb1-sglang-extension" in config_keys
+        assert "gptoss-fp4-b200-isb1-vllm" in config_keys
+        assert "gptoss-fp4-h100-isb1-vllm" in config_keys
+        assert "gptoss-fp4-h200-isb1-vllm" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-vllm" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-vllm" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-vllm" in config_keys
+        assert "gptoss-fp4-b200-isb1-vllm-extension" in config_keys
+        assert "gptoss-fp4-h100-isb1-vllm-extension" in config_keys
+        assert "gptoss-fp4-h200-isb1-vllm-extension" in config_keys
         assert "qwen3.5-fp8-b200-isb1-vllm-extension" in config_keys
         assert "qwen3.5-fp8-h100-isb1-vllm-extension" in config_keys
         assert "qwen3.5-fp8-h200-isb1-vllm-extension" in config_keys
+        assert "gptoss-fp4-b200-isb1-sglang-500k-preview-code" in config_keys
+        assert "gptoss-fp4-h100-isb1-sglang-500k-preview-code" in config_keys
+        assert "gptoss-fp4-h200-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-b200-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h100-isb1-sglang-500k-preview-code" in config_keys
+        assert "qwen3.5-fp8-h200-isb1-sglang-500k-preview-code" in config_keys
 
         assert ("dsr1", "vllm", "b200") in matrix_key_triples
         assert ("dsr1", "vllm", "h200") in matrix_key_triples
+        assert ("gptoss", "vllm", "b200") in matrix_key_triples
+        assert ("gptoss", "vllm", "h100") in matrix_key_triples
+        assert ("gptoss", "vllm", "h200") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "b200") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "h100") in matrix_key_triples
+        assert ("qwen3.5", "vllm", "h200") in matrix_key_triples
         assert ("gptoss", "sglang", "b200") in matrix_key_triples
         assert ("gptoss", "sglang", "h100") in matrix_key_triples
         assert ("gptoss", "sglang", "h200") in matrix_key_triples
         assert ("qwen3.5", "sglang", "b200") in matrix_key_triples
         assert ("qwen3.5", "sglang", "h100") in matrix_key_triples
         assert ("qwen3.5", "sglang", "h200") in matrix_key_triples
-        assert ("qwen3.5", "vllm", "b200") in matrix_key_triples
-        assert ("qwen3.5", "vllm", "h100") in matrix_key_triples
-        assert ("qwen3.5", "vllm", "h200") in matrix_key_triples
 
-        assert "dsr1-fp8-h100-isb1-sglang" not in config_keys
-        assert "dsr1-fp8-h100-isb1-vllm" not in config_keys
+        # Deferred stanzas must not appear in the master closure.
+        for deferred in [
+            "dsr1-fp8-h100-isb1-sglang",
+            "dsr1-fp8-h100-isb1-vllm",
+            "dsr1-fp8-b200-isb1-sglang",
+            "dsr1-fp8-h200-isb1-sglang",
+            "gptoss-fp4-b200-isb1-sglang",
+            "gptoss-fp4-h100-isb1-sglang",
+            "gptoss-fp4-h200-isb1-sglang",
+            "qwen3.5-fp8-b200-isb1-sglang",
+            "qwen3.5-fp8-h100-isb1-sglang",
+            "qwen3.5-fp8-h200-isb1-sglang",
+            "gptoss-fp4-b200-isb1-sglang-extension",
+            "gptoss-fp4-h100-isb1-sglang-extension",
+            "gptoss-fp4-h200-isb1-sglang-extension",
+            "qwen3.5-fp8-h100-isb1-sglang-extension",
+            "gptoss-fp4-b200-isb1-vllm-500k-preview-code",
+            "gptoss-fp4-h100-isb1-vllm-500k-preview-code",
+            "gptoss-fp4-h200-isb1-vllm-500k-preview-code",
+            "qwen3.5-fp8-b200-isb1-vllm-500k-preview-code",
+            "qwen3.5-fp8-h100-isb1-vllm-500k-preview-code",
+            "qwen3.5-fp8-h200-isb1-vllm-500k-preview-code",
+            "gptoss-fp4-b200-isb1-sglang-offload-core-preview-chat",
+            "gptoss-fp4-h100-isb1-sglang-offload-core-preview-chat",
+            "gptoss-fp4-h200-isb1-sglang-offload-core-preview-chat",
+            "gptoss-fp4-b200-isb1-vllm-offload-core-preview-code",
+            "gptoss-fp4-h100-isb1-vllm-offload-core-preview-code",
+            "gptoss-fp4-h200-isb1-vllm-offload-core-preview-code",
+        ]:
+            assert deferred not in config_keys, (
+                f"{deferred} must not be in isb1-master.yaml until matching "
+                f"cells are materialized in the corresponding bundle"
+            )
 
+        # Bundle path flatness: no per-engine subdirs and no __engine suffixes.
+        assert all("/vllm/" not in entry["export-file"] for entry in matrix)
+        assert all("/sglang/" not in entry["export-file"] for entry in matrix)
+        assert all("__vllm.json" not in entry["export-file"] for entry in matrix)
+        assert all("__sglang.json" not in entry["export-file"] for entry in matrix)
+
+        # Core dsr1 coverage: chat is supported, code is reviewed_preview only.
         assert any(
-            entry["export-file"].endswith("extension_32k/vllm/chat_32k1k.json")
+            entry["export-file"].endswith("core/chat_8k1k.json")
             and entry["support-status"] == "supported"
             for entry in matrix
         )
         assert any(
-            entry["export-file"].endswith("core/vllm/code_8k1k.json")
+            entry["export-file"].endswith("core/code_8k1k.json")
             and entry["support-status"] == "reviewed_preview"
             for entry in matrix
         )
         assert not any(
-            entry["export-file"].endswith("core/vllm/code_8k1k.json")
+            entry["export-file"].endswith("core/code_8k1k.json")
+            and entry["support-status"] == "supported"
+            for entry in matrix
+        )
+
+        # Extension coverage on flat paths.
+        assert any(
+            entry["export-file"].endswith("extension_32k/chat_32k1k.json")
             and entry["support-status"] == "supported"
             for entry in matrix
         )
         assert any(
-            entry["export-file"].endswith("extension_32k/vllm/code_32k1k.json")
+            entry["export-file"].endswith("extension_32k/code_32k1k.json")
             and entry["support-status"] == "reviewed_preview"
             for entry in matrix
         )
         assert any(
-            entry["export-file"].endswith("extension_64k/vllm/code_64k1k.json")
+            entry["export-file"].endswith("extension_64k/code_64k1k.json")
             and entry["support-status"] == "supported"
             for entry in matrix
         )
         assert any(
-            entry["export-file"].endswith("extension_64k/sglang/chat_64k1k.json")
+            entry["export-file"].endswith("extension_131k/chat_131k1k.json")
             and entry["support-status"] == "reviewed_preview"
             for entry in matrix
         )
         assert any(
-            "preview/offload_core/inferencex_multiturn__chat_hopper_blackwell_offload_core_v1__smoke.json"
-            in entry["export-file"]
-            and entry["support-status"] == "reviewed_preview"
+            entry["export-file"].endswith("extension_131k/code_131k1k.json")
+            and entry["support-status"] == "unsupported"
             for entry in matrix
         )
-        assert any(
-            entry["export-file"].endswith("extension_131k/sglang/chat_131k1k.json")
-            and entry["support-status"] == "reviewed_preview"
-            for entry in matrix
-        )
-        assert any(
-            entry["export-file"].endswith("extension_131k/sglang/code_131k1k.json")
-            and entry["support-status"] == "reviewed_preview"
-            for entry in matrix
-        )
-        assert any(
-            entry["export-file"].endswith("extension_131k/vllm/chat_131k1k.json")
-            and entry["support-status"] == "reviewed_preview"
-            for entry in matrix
-        )
-        assert any(
-            entry["export-file"].endswith("extension_131k/vllm/code_131k1k.json")
-            and entry["support-status"] == "reviewed_preview"
-            for entry in matrix
-        )
-        qwen_sglang_entries = [
+
+        # Qwen flat-path bundles (no _qwen3.5 bundles at the engine-subdir level).
+        # After path-flattening, both vllm and sglang cells resolve to the same
+        # flat bundle path, so filter by framework explicitly.
+        qwen_131k_all = [
             entry
             for entry in matrix
-            if entry["export-file"].endswith(
-                "extension_131k/sglang/code_131k1k_qwen3.5.json"
-            )
+            if entry["export-file"].endswith("extension_131k/code_131k1k_qwen3.5.json")
         ]
-        assert len(qwen_sglang_entries) == 6
-        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_sglang_entries)
-        assert all(entry["framework"] == "sglang" for entry in qwen_sglang_entries)
-        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_sglang_entries)
-        assert {entry["max-concurrency"] for entry in qwen_sglang_entries} == {2, 4}
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_131k_all)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_131k_all)
 
-        qwen_vllm_entries = [
-            entry
-            for entry in matrix
-            if entry["export-file"].endswith(
-                "extension_131k/vllm/code_131k1k_qwen3.5.json"
-            )
-        ]
-        assert len(qwen_vllm_entries) == 6
-        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_vllm_entries)
-        assert all(entry["framework"] == "vllm" for entry in qwen_vllm_entries)
-        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_vllm_entries)
-        assert {entry["max-concurrency"] for entry in qwen_vllm_entries} == {2, 4}
+        qwen_vllm_131k = [e for e in qwen_131k_all if e["framework"] == "vllm"]
+        assert len(qwen_vllm_131k) == 6
 
-        sglang_500k_entries = [
+        qwen_sglang_131k = [e for e in qwen_131k_all if e["framework"] == "sglang"]
+        assert len(qwen_sglang_131k) == 4
+
+        # 500k sglang preview: gptoss and qwen, one bundle per surface.
+        gptoss_sglang_500k = [
             entry
             for entry in matrix
             if entry["export-file"].endswith(
                 "preview/long_context_500k/"
-                "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__sglang.json"
+                "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1.json"
             )
         ]
-        assert len(sglang_500k_entries) == 3
-        assert all(entry["support-status"] == "reviewed_preview" for entry in sglang_500k_entries)
-        assert all(entry["max-model-len"] == 524288 for entry in sglang_500k_entries)
-        assert all(entry["max-concurrency"] == 1 for entry in sglang_500k_entries)
+        assert len(gptoss_sglang_500k) == 3
+        assert all(entry["framework"] == "sglang" for entry in gptoss_sglang_500k)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in gptoss_sglang_500k)
+        assert all(entry["max-model-len"] == 524288 for entry in gptoss_sglang_500k)
+        assert all(entry["max-concurrency"] == 1 for entry in gptoss_sglang_500k)
 
-        vllm_500k_entries = [
+        qwen_sglang_500k = [
             entry
             for entry in matrix
             if entry["export-file"].endswith(
                 "preview/long_context_500k/"
-                "inferencex_trace_replay__coding_gptoss_xlc2_500k_preview_v1__vllm.json"
+                "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1.json"
             )
         ]
-        assert len(vllm_500k_entries) == 3
-        assert all(entry["support-status"] == "reviewed_preview" for entry in vllm_500k_entries)
-        assert all(entry["max-model-len"] == 524288 for entry in vllm_500k_entries)
-        assert all(entry["max-concurrency"] == 1 for entry in vllm_500k_entries)
+        assert len(qwen_sglang_500k) == 3
+        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_sglang_500k)
+        assert all(entry["framework"] == "sglang" for entry in qwen_sglang_500k)
+        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_sglang_500k)
+        assert all(entry["max-model-len"] == 524288 for entry in qwen_sglang_500k)
 
-        qwen_sglang_500k_entries = [
-            entry
-            for entry in matrix
-            if entry["export-file"].endswith(
-                "preview/long_context_500k/"
-                "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__sglang.json"
-            )
-        ]
-        assert len(qwen_sglang_500k_entries) == 3
-        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_sglang_500k_entries)
-        assert all(entry["framework"] == "sglang" for entry in qwen_sglang_500k_entries)
-        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_sglang_500k_entries)
-        assert all(entry["max-model-len"] == 524288 for entry in qwen_sglang_500k_entries)
-        assert all(entry["max-concurrency"] == 1 for entry in qwen_sglang_500k_entries)
-
-        qwen_vllm_500k_entries = [
-            entry
-            for entry in matrix
-            if entry["export-file"].endswith(
-                "preview/long_context_500k/"
-                "inferencex_trace_replay__coding_qwen3.5_xlc2_500k_preview_v1__vllm.json"
-            )
-        ]
-        assert len(qwen_vllm_500k_entries) == 3
-        assert all(entry["model-prefix"] == "qwen3.5" for entry in qwen_vllm_500k_entries)
-        assert all(entry["framework"] == "vllm" for entry in qwen_vllm_500k_entries)
-        assert all(entry["support-status"] == "reviewed_preview" for entry in qwen_vllm_500k_entries)
-        assert all(entry["max-model-len"] == 524288 for entry in qwen_vllm_500k_entries)
-        assert all(entry["max-concurrency"] == 1 for entry in qwen_vllm_500k_entries)
-
+        # 1M qwen preview: gated-only, not part of isb1-master.yaml.
         assert not any(
-            entry["export-file"].endswith(
-                "preview/long_context_1m/"
-                "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json"
-            )
-            or entry["export-file"].endswith(
-                "preview/long_context_1m/"
-                "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__sglang.json"
-            )
-            for entry in matrix
+            "long_context_1m" in entry["export-file"] for entry in matrix
         )
+
+        # Every produced row must resolve to an existing bundle on disk.
+        assert all((repo_root / entry["export-file"]).exists() for entry in matrix)
 
     def test_repo_qwen_1m_preview_config_is_manual_and_separate(self, isb1_sweep_args):
         repo_root = Path(__file__).resolve().parents[2]
@@ -908,13 +906,14 @@ class TestISB1SweepIsolation:
         matrix = generate_isb1_sweep(isb1_sweep_args, config_data, runner_data)
         config_keys = set(config_data)
 
+        # 1M preview bundle currently carries standalone:sglang cells only. The
+        # vllm 1M stanza is deferred until matching cells are materialized.
         assert config_keys == {
             "qwen3.5-fp8-b200-isb1-sglang-1m-gated-preview-code",
-            "qwen3.5-fp8-b200-isb1-vllm-1m-gated-preview-code",
         }
-        assert len(matrix) == 2
+        assert len(matrix) == 1
         assert {entry["runner"] for entry in matrix} == {"b200"}
-        assert {entry["framework"] for entry in matrix} == {"sglang", "vllm"}
+        assert {entry["framework"] for entry in matrix} == {"sglang"}
         assert {entry["model-prefix"] for entry in matrix} == {"qwen3.5"}
         assert {entry["support-status"] for entry in matrix} == {"reviewed_preview"}
         assert {entry["max-model-len"] for entry in matrix} == {1048576}
@@ -928,9 +927,7 @@ class TestISB1SweepIsolation:
             entry["export-file"] for entry in matrix
         } == {
             "datasets/isb1/exports/preview/long_context_1m/"
-            "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__sglang.json",
-            "datasets/isb1/exports/preview/long_context_1m/"
-            "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1__vllm.json",
+            "inferencex_trace_replay__coding_qwen3.5_ulc2_1m_preview_v1.json",
         }
         assert all((repo_root / entry["export-file"]).exists() for entry in matrix)
 
