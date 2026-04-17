@@ -2049,7 +2049,7 @@ kimik2.5-fp4-b200-vllm:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.17.0
+  image: vllm/vllm-openai:v0.19.0-cu130
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
