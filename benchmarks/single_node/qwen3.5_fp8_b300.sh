@@ -9,41 +9,55 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+nvidia-smi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-EVAL_CONTEXT_ARGS=""
+CONTEXT_LENGTH=$((ISL + OSL + 20))
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
 fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# following AMD Andy linkedin's recipe
-# https://www.linkedin.com/feed/update/urn:li:activity:7429203734389280768/
-python3 -m sglang.launch_server \
-    --attention-backend triton \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --mem-fraction-static 0.8 \
-    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+set -x
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
+--enable-symm-mem \
+--disable-radix-cache \
+--quantization fp8 \
+--kv-cache-dtype fp8_e4m3 \
+--mamba-ssm-dtype bfloat16 \
+--attention-backend trtllm_mha \
+--moe-runner-backend flashinfer_trtllm \
+--cuda-graph-max-bs $CONC \
+--max-running-requests $CONC \
+--max-prefill-tokens 16384 \
+--chunked-prefill-size 16384 \
+--mem-fraction-static 0.8 \
+--stream-interval 50 \
+--scheduler-recv-interval 10 \
+--tokenizer-worker-num 6 \
+--tokenizer-path $MODEL \
+--context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -55,7 +69,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

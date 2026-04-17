@@ -1315,16 +1315,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
 
 - config-keys:
-    - qwen3.5-bf16-mi300x-sglang
-    - qwen3.5-bf16-mi325x-sglang
-    - qwen3.5-fp8-mi300x-sglang
-    - qwen3.5-fp8-mi325x-sglang
-  description:
-    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI300X and  MI325X to achieve better performance"
-    - "Use lmsysorg/sglang:v0.5.10-rocm720-mi30x"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/986
-
-- config-keys:
     - glm5-fp4-b200-sglang
   description:
     - "Update GLM-5 NVFP4 B200 SGLang benchmark script with optimized launch parameters"
@@ -1360,6 +1350,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1022
   
 - config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Upgrade GLM5 FP8 MI355X SGLang image to v0.5.10rc0-rocm720-mi35x-20260413"
+    - "Set --kv-cache-dtype fp8_e4m3 and --disable-radix-cache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1023
+
+- config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
@@ -1388,3 +1385,91 @@
     - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
     - "EAGLE speculative decoding with MTP, TP=4, concurrency 4-256 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1035
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "TP=4, concurrency 4-256 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1048
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+  description:
+    - "Add DeepSeek-R1-0528 FP4 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP4 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1049
+
+- config-keys:
+    - dsr1-fp8-b300-sglang
+  description:
+    - "Add DeepSeek-R1-0528 FP8 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP8 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1050
+
+- config-keys:
+    - glm5-fp8-b300-sglang
+  description:
+    - "Add GLM-5 FP8 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5.1 does not have a B300-specific recipe, so this reuses the existing GLM5 FP8 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1051
+
+- config-keys:
+    - glm5-fp4-b300-sglang
+  description:
+    - "Add GLM-5 FP4 (NVFP4) B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5 does not have a B300-specific recipe, so this reuses the existing GLM-5 FP4 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1058
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-R1-0528 FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "EAGLE speculative decoding with MTP, TP=8, concurrency 4-512 for 1k1k and 8k1k"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP8 B200 SGLang MTP recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1059
+
+- config-keys:
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Add MiniMax-M2.5 FP4 (NVFP4) B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html does not have a B300-specific recipe, so this reuses the existing MiniMax-M2.5 FP4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1055
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html does not have a B300-specific recipe, so this reuses the existing MiniMax-M2.5 FP8 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1054
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 FP4 (NVFP4) B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 FP4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1056
+
+- config-keys:
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 INT4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1057
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
+    - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
