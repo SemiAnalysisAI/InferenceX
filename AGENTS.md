@@ -156,12 +156,14 @@ When working with benchmark configurations, use these valid values:
 - Kebab-case for field names: `model-prefix`, `conc-start`, `dp-attn`
 - Master configs define all benchmark configurations
 - `perf-changelog.yaml` triggers which configs to benchmark
+  - **The file is read in chronological order: oldest at the top, newest at the bottom. New entries MUST be appended to the END of the file — never insert in the middle or prepend.**
 
 ### Bash
 
 - Source shared utilities: `source benchmark_lib.sh`
 - Functions: `check_env_vars()`, `wait_for_server_ready()`, `run_benchmark_serving()`, `run_eval()`, `append_lm_eval_summary()`
 - Parameters passed via environment variables
+- **MTP scripts MUST pass `--use-chat-template` to `run_benchmark_serving` — no exceptions.** EAGLE-style speculative decoding is trained against chat-formatted inputs, so benchmarking against raw prompts silently regresses acceptance rate and produces misleading numbers. This applies to every `*_mtp.sh` script regardless of model, precision, or runner.
 
 ### Git
 

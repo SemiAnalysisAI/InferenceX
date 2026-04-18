@@ -20,3 +20,4 @@ Fixes #
 - [ ] I have tested my changes locally
 - [ ] I have updated documentation if necessary
 - [ ] **If I changed a container image or config, I have already updated `perf-changelog.yaml`**
+  - [ ] New `perf-changelog.yaml` entries are **appended to the end** of the file (the file is chronological: oldest at top, newest at bottom)

@@ -40,6 +40,10 @@ jobs:
 
             If it is not, please create a PR first before we can merge your PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
             - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sgl-cookbook`.replace(/^            /gm, '');
+            - https://github.com/sgl-project/sgl-cookbook
+
+            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. If re-running failed jobs is attempted, PR authors are responsible for ensuring it passes. See GitHub's docs on re-running failed jobs: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
+
+            If additional help is needed, PR authors can reach out to core maintainers over Slack.`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
