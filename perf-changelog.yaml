@@ -1475,3 +1475,14 @@
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
     - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Follows the SGLang cookbook recipe at https://cookbook.sglang.io/autoregressive/Qwen/Qwen3.5 as of 2026-04-17"
+    - "Mirrors the B200 FP4 recipe with mem-fraction-static lowered to 0.8 and an extra TP2/EP2 search-space entry"
+    - "Configs: 1k1k and 8k1k, TP4/EP1 conc 4-128 + TP2/EP2 conc 4-128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
