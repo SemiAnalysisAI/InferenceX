@@ -30,8 +30,12 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
         export SERVED_MODEL_NAME="deepseek-r1-fp8"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+    elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
+        export SERVED_MODEL_NAME="kimi-k2.5-nvfp4"
+        export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss or dsr1"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, or kimik2.5"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -121,6 +125,10 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026

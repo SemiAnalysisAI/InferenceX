@@ -1,4 +1,14 @@
 - config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
+    - "New framework: dynamo-trt (Dynamo frontend + TensorRT-LLM backend)"
+    - "Container: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "Runner script updated to support kimik2.5 model prefix with dynamo-trt framework"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1026
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
   description:
     - "Update SGLang image from 'lmsysorg/sglang:v0.5.10-rocm720-mi35x' to 'rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413'"
