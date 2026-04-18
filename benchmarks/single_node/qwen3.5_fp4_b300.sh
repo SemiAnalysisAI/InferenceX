@@ -66,7 +66,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
 --reasoning-parser qwen3 \
 --tool-call-parser qwen3_coder \
---mamba-scheduler-strategy extra_buffer \
+--mamba-scheduler-strategy no_buffer \
 --quantization modelopt_fp4 --fp4-gemm-backend flashinfer_cutlass \
 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
