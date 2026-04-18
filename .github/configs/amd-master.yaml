@@ -416,7 +416,7 @@ minimaxm2.5-fp8-mi355x-atom:
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
 minimaxm2.5-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-c48b2b83bd160cd684c8a2357f229e90de99298d # wait for vllm v0.19.1/v0.20.0's release
+  image: vllm/vllm-openai-rocm:v0.19.1
   model: amd/MiniMax-M2.5-MXFP4
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -427,11 +427,13 @@ minimaxm2.5-fp4-mi355x-vllm:
   - isl: 1024
     osl: 1024
     search-space:
+    - { tp: 1, conc-start: 4, conc-end: 32 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
+    - { tp: 1, conc-start: 4, conc-end: 32 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
 
