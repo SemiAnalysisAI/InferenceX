@@ -1909,6 +1909,24 @@ glm5-fp8-b300-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
+glm5-fp8-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b300
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.10.post1-cu130
   model: nvidia/GLM-5-NVFP4

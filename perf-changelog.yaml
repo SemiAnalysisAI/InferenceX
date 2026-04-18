@@ -1526,3 +1526,13 @@
     - "Mirrors the qwen3.5-fp4-b300-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
     - "Configs: 1k1k and 8k1k, TP4/EP1 conc 4-128 + TP2/EP2 conc 4-128, spec-decoding=mtp"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp8-b300-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: zai-org/GLM-5-FP8"
+    - "Mirrors the glm5-fp8-b300-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
