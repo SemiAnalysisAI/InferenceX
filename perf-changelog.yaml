@@ -1596,3 +1596,13 @@
     - "Mirrors the qwen3.5-fp4-b200-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
     - "Configs: 1k1k and 8k1k, TP=4/EP=1 conc 4-128 with spec-decoding=mtp"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp4-b200-sglang-mtp
+  description:
+    - "Add GLM-5 NVFP4 B200 SGLang MTP benchmark (draft)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/GLM-5-NVFP4"
+    - "Follows the glm5-fp8-b200-sglang launch recipe as requested, plus EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-4 + TP4/EP1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
