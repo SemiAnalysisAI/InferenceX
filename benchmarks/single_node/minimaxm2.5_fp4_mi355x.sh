@@ -17,7 +17,18 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+# Attempt the download. The "!" means "if this command fails"
+if ! hf download "$MODEL"; then
+    echo "Download failed. Cleaning up cache permissions and files..."
+    
+    # Fix permissions and remove the corrupted directory
+    chmod -R 777 /mnt/hf_hub_cache/models--amd--MiniMax-M2.5-MXFP4
+    rm -rf /mnt/hf_hub_cache/models--amd--MiniMax-M2.5-MXFP4
+    
+    echo "Retrying download..."
+    # Retry the download
+    hf download "$MODEL"
+fi
 
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
