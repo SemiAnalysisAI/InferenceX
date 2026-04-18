@@ -1702,3 +1702,14 @@
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
+
+- config-keys:
+    - glm5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add GLM-5 MXFP4 MI355X SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm700-mi35x-20260422"
+    - "Model: amd/GLM-5-MXFP4"
+    - "EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Image ships transformers with glm_moe_dsa support, so no extra pip install is needed (unlike glm5-fp8-mi355x-sglang)"
+    - "Configs: 1k1k and 8k1k, TP=8 conc 4-64 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
