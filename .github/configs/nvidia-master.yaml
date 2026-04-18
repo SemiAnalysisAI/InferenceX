@@ -1888,6 +1888,24 @@ glm5-fp8-b200-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
+glm5-fp8-b200-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5.1
 # does not have a B300-specific recipe, so this config reuses the existing GLM5 FP8
 # B200 SGLang recipe as-is until B300-specific tuning is available.
