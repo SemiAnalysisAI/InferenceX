@@ -1475,3 +1475,13 @@
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
     - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 MI355X SGLang MTP benchmark"
+    - "Image: rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413"
+    - "Model: amd/Qwen3.5-397B-A17B-MXFP4"
+    - "Mirrors the qwen3.5-fp4-mi355x-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP=2 conc 4-256 and TP=4 conc 4-16 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
