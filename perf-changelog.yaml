@@ -1496,3 +1496,13 @@
     - "Mirrors the B200 BF16 recipe with an extra TP4/EP1 search-space entry alongside the existing TP8/EP1 sweep"
     - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-64 + TP4/EP1 conc 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B200 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the qwen3.5-bf16-b200-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-64 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
