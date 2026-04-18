@@ -1485,4 +1485,14 @@
     - "Follows the SGLang cookbook recipe at https://cookbook.sglang.io/autoregressive/Qwen/Qwen3.5 as of 2026-04-17"
     - "Mirrors the B200 FP4 recipe with mem-fraction-static lowered to 0.8 and an extra TP2/EP2 search-space entry"
     - "Configs: 1k1k and 8k1k, TP4/EP1 conc 4-128 + TP2/EP2 conc 4-128"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1072
+
+- config-keys:
+    - qwen3.5-bf16-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the B200 BF16 recipe with an extra TP4/EP1 search-space entry alongside the existing TP8/EP1 sweep"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-64 + TP4/EP1 conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1073
