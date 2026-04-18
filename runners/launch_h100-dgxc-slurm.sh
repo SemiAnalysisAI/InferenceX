@@ -14,7 +14,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # local paths to avoid repeated downloading on the shared H100 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
@@ -22,7 +22,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
             export SERVED_MODEL_NAME="DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
         else
