@@ -163,6 +163,7 @@ When working with benchmark configurations, use these valid values:
 - Source shared utilities: `source benchmark_lib.sh`
 - Functions: `check_env_vars()`, `wait_for_server_ready()`, `run_benchmark_serving()`, `run_eval()`, `append_lm_eval_summary()`
 - Parameters passed via environment variables
+- **MTP scripts MUST pass `--use-chat-template` to `run_benchmark_serving` — no exceptions.** EAGLE-style speculative decoding is trained against chat-formatted inputs, so benchmarking against raw prompts silently regresses acceptance rate and produces misleading numbers. This applies to every `*_mtp.sh` script regardless of model, precision, or runner.
 
 ### Git
 
