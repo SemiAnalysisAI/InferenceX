@@ -1989,6 +1989,26 @@ qwen3.5-fp8-b300-sglang:
     search-space:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
+qwen3.5-fp4-b300-sglang:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
+
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.15.1
   model: moonshotai/Kimi-K2.5
