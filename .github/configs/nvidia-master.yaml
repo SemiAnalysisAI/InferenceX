@@ -6300,7 +6300,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/low-latency-dep4-1p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6313,7 +6313,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/low-latency-dep4-1p-tep8-6d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 6
         tp: 8
@@ -6326,7 +6326,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/max-tpt-dep4-1p-dep8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_maxtpt[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6339,7 +6339,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/max-tpt-dep4-1p-dep8-2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_maxtpt[1]"
       decode:
         num-worker: 2
         tp: 8
@@ -6356,7 +6356,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-1p-tep8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6369,7 +6369,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-1p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6382,7 +6382,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-2p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6395,7 +6395,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-tp4-1p-tp8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_stp_tp4"
       decode:
         num-worker: 1
         tp: 8
@@ -6408,7 +6408,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/max-tpt-dep4-7p-dep8-2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_stp_maxtpt_7p2d"
       decode:
         num-worker: 2
         tp: 8
@@ -6436,7 +6436,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/low-latency-tep8-1p1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6449,7 +6449,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/low-latency-tep8-1p3d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 3
         tp: 8
@@ -6462,7 +6462,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/max-tpt-dep8-1p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6475,7 +6475,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/max-tpt-dep8-2p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6607,7 +6607,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6622,7 +6622,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p3d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 3
         tp: 8
@@ -6637,7 +6637,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6652,7 +6652,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-2p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6667,7 +6667,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:override_mtp_maxtpt_1p2d"
       decode:
         num-worker: 2
         tp: 8
@@ -6805,8 +6805,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6820,8 +6820,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 6
         tp: 8
@@ -6835,8 +6835,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6850,8 +6850,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       decode:
         num-worker: 2
         tp: 8
@@ -6871,8 +6871,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6886,8 +6886,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6901,8 +6901,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6916,8 +6916,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_mtp_tp4"
       decode:
         num-worker: 1
         tp: 8
