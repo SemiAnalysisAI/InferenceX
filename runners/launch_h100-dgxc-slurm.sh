@@ -46,8 +46,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
-    export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
+    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
+    export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
+    mkdir -p "$UV_INSTALL_DIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
+    if ! [ -x "$UV_INSTALL_DIR/uv" ]; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
     export PATH="$UV_INSTALL_DIR:$PATH"
     source $UV_INSTALL_DIR/env
 
