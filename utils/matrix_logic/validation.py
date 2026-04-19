@@ -54,6 +54,7 @@ class Fields(Enum):
     # Eval
     RUN_EVAL = 'run-eval'
     EVAL_ONLY = 'eval-only'
+    EVAL_CONC = 'eval-conc'
 
 
 """
@@ -128,6 +129,8 @@ class MultiNodeMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
+    eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+    eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
@@ -363,6 +366,7 @@ class ChangelogMatrixEntry(BaseModel):
     multi_node: dict[str, list[MultiNodeMatrixEntry]
                      ] = Field(default_factory=dict)
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
+    multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 

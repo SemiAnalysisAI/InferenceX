@@ -1487,6 +1487,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
 
 - config-keys:
+    - dsr1-fp4-b200-dynamo-trt
+    - dsr1-fp8-b200-dynamo-trt
+    - dsr1-fp4-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b300-dynamo-trt
+    - dsr1-fp8-b300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Add multi-node lm-eval accuracy runs"
+    - "Eval picks the config with highest max eligible concurrency per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) group on 8k1k"
+    - "Eval concurrency set to the median eligible conc (>= MIN_EVAL_CONC=16) of the selected config to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1000
+  evals-only: true
+
+- config-keys:
     - qwen3.5-fp4-b300-sglang
   description:
     - "Add Qwen3.5-397B-A17B NVFP4 B300 SGLang benchmark"

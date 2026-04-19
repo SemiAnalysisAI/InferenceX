@@ -953,7 +953,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp4-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1161,7 +1161,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg

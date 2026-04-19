@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize import (
     load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION,
     TP, EP, CONC, DP_ATTENTION, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF,
-    SPEC_DECODING
+    SPEC_DECODING, PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
+    DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS
 )
 
 
@@ -160,19 +161,67 @@ def se(x: Any) -> str:
         return ''
 
 
+def as_int(x: Any, default: int = 0) -> int:
+    """Convert a metadata field to int with a fallback."""
+    try:
+        return int(x)
+    except Exception:
+        return default
+
+
+def as_bool(x: Any, default: bool = False) -> bool:
+    """Parse a metadata boolean stored as bool/string/int."""
+    if isinstance(x, bool):
+        return x
+    if x is None:
+        return default
+    return str(x).lower() == 'true'
+
+
 def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     """Build a result row from metadata and extracted metrics."""
+    is_multinode = as_bool(meta.get('is_multinode'), False)
+    prefill_tp = as_int(meta.get('prefill_tp', meta.get('tp', 1)), 1)
+    prefill_ep = as_int(meta.get('prefill_ep', meta.get('ep', 1)), 1)
+    prefill_num_workers = as_int(meta.get('prefill_num_workers', 1), 1)
+    decode_tp = as_int(meta.get('decode_tp', meta.get('tp', 1)), 1)
+    decode_ep = as_int(meta.get('decode_ep', meta.get('ep', 1)), 1)
+    decode_num_workers = as_int(meta.get('decode_num_workers', 1), 1)
+    prefill_dp_attention = meta.get('prefill_dp_attention')
+    decode_dp_attention = meta.get('decode_dp_attention')
+    dp_attention = meta.get('dp_attention', 'none')
+
+    if prefill_dp_attention is None:
+        prefill_dp_attention = dp_attention
+    if decode_dp_attention is None:
+        decode_dp_attention = dp_attention
+
+    if is_multinode:
+        if prefill_dp_attention == decode_dp_attention:
+            dp_attention = prefill_dp_attention
+        else:
+            dp_attention = f"prefill={str(prefill_dp_attention).lower()},decode={str(decode_dp_attention).lower()}"
+
     row = {
+        'is_multinode': is_multinode,
         'model_prefix': meta.get('infmax_model_prefix', 'unknown'),
         'model': m.get('model') or meta.get('model', 'unknown'),
         'hw': meta.get('hw', 'unknown').upper(),
         'framework': meta.get('framework', 'unknown').lower(),
         'precision': meta.get('precision', 'unknown').lower(),
         'spec_decoding': meta.get('spec_decoding', 'unknown'),
-        'tp': int(meta.get('tp', 1)),
-        'ep': int(meta.get('ep', 1)),
-        'conc': int(meta.get('conc', 0)),
-        'dp_attention': str(meta.get('dp_attention', "none")).lower(),
+        'tp': as_int(meta.get('tp', prefill_tp), prefill_tp),
+        'ep': as_int(meta.get('ep', prefill_ep), prefill_ep),
+        'prefill_tp': prefill_tp,
+        'prefill_ep': prefill_ep,
+        'prefill_num_workers': prefill_num_workers,
+        'decode_tp': decode_tp,
+        'decode_ep': decode_ep,
+        'decode_num_workers': decode_num_workers,
+        'conc': as_int(meta.get('conc', 0), 0),
+        'dp_attention': str(dp_attention).lower(),
+        'prefill_dp_attention': str(prefill_dp_attention).lower(),
+        'decode_dp_attention': str(decode_dp_attention).lower(),
         'task': m.get('task', 'unknown'),
         'em_strict': m.get('strict'),
         'em_strict_se': m.get('strict_se'),
@@ -226,49 +275,111 @@ def main():
             row = build_row(meta, m)
             rows.append(row)
 
+    single_node_rows = [r for r in rows if not r['is_multinode']]
+    multinode_rows = [r for r in rows if r['is_multinode']]
+
     # Sort for stable output (default: by model_prefix)
     sort_by = sys.argv[3] if len(sys.argv) > 3 else 'model_prefix'
-    if sort_by == 'hw':
-        rows.sort(key=lambda r: (
-            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc']
+    single_node_sort_key = (
+        (lambda r: (
+            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
+            r['tp'], r['ep'], r['conc'],
         ))
-    else:
-        rows.sort(key=lambda r: (
-            r['model_prefix'], r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc']
+        if sort_by == 'hw'
+        else (lambda r: (
+            r['model_prefix'], r['hw'], r['framework'], r['precision'],
+            r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc'],
         ))
+    )
+    multinode_sort_key = (
+        (lambda r: (
+            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
+            r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
+            r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
+        ))
+        if sort_by == 'hw'
+        else (lambda r: (
+            r['model_prefix'], r['hw'], r['framework'], r['precision'],
+            r.get('spec_decoding', ''),
+            r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
+            r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
+        ))
+    )
+    single_node_rows.sort(key=single_node_sort_key)
+    multinode_rows.sort(key=multinode_sort_key)
 
     if not rows:
         print('> No eval results found to summarize.')
     else:
         # Print table using tabulate
         MODEL_PREFIX = "Model Prefix"
-        headers = [
-            MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING, TP, EP, CONC, DP_ATTENTION,
-            TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL
-        ]
 
-        table_rows = [
-            [
-                r['model_prefix'],
-                r['hw'],
-                r['framework'].upper(),
-                r['precision'].upper(),
-                r['spec_decoding'],
-                r['tp'],
-                r['ep'],
-                r['conc'],
-                r['dp_attention'],
-                r['task'],
-                f"{pct(r['score'])}{se(r['score_se'])}",
-                f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
-                f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                r['n_eff'] or '',
-                r['model']
+        if single_node_rows:
+            headers = [
+                MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
+                TP, EP, CONC, DP_ATTENTION,
+                TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
             ]
-            for r in rows
-        ]
+            table_rows = [
+                [
+                    r['model_prefix'],
+                    r['hw'],
+                    r['framework'].upper(),
+                    r['precision'].upper(),
+                    r['spec_decoding'],
+                    r['tp'],
+                    r['ep'],
+                    r['conc'],
+                    r['dp_attention'],
+                    r['task'],
+                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
+                    f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
+                    r['n_eff'] or '',
+                    r['model'],
+                ]
+                for r in single_node_rows
+            ]
+            print("### Single-Node Eval Results\n")
+            print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
-        print(tabulate(table_rows, headers=headers, tablefmt="github"))
+        if multinode_rows:
+            headers = [
+                MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
+                PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
+                DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS,
+                CONC, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
+            ]
+            table_rows = [
+                [
+                    r['model_prefix'],
+                    r['hw'],
+                    r['framework'].upper(),
+                    r['precision'].upper(),
+                    r['spec_decoding'],
+                    r['prefill_tp'],
+                    r['prefill_ep'],
+                    r['prefill_dp_attention'],
+                    r['prefill_num_workers'],
+                    r['decode_tp'],
+                    r['decode_ep'],
+                    r['decode_dp_attention'],
+                    r['decode_num_workers'],
+                    r['conc'],
+                    r['task'],
+                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
+                    f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
+                    r['n_eff'] or '',
+                    r['model'],
+                ]
+                for r in multinode_rows
+            ]
+            if single_node_rows:
+                print("\n")
+            print("### Multi-Node Eval Results\n")
+            print(tabulate(table_rows, headers=headers, tablefmt="github"))
+
 
     # Write JSON aggregate
     out_path = Path(f'agg_eval_{exp_name}.json')
