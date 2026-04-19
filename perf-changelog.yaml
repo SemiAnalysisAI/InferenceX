@@ -1,4 +1,16 @@
 - config-keys:
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add GB300 and H200 multinode evals-only runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
+  evals-only: true
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
