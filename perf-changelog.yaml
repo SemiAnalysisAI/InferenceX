@@ -1,12 +1,4 @@
 - config-keys:
-    - dsr1-fp8-h200-dynamo-trt
-    - dsr1-fp8-h200-dynamo-sglang
-  description:
-    - "Add H200 multinode evals-only runs"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
-  evals-only: true
-
-- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
@@ -1648,3 +1640,11 @@
     - "Follows the glm5-fp8-b200-sglang launch recipe as requested, plus EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
     - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-4 + TP4/EP1 conc 4-256 with spec-decoding=mtp"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add H200 multinode evals-only runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
+  evals-only: true
