@@ -1,4 +1,3 @@
-from ast import For
 import fnmatch
 import json
 import argparse
@@ -265,26 +264,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_values = filtered_conc
 
-                    # For multinode, create a single entry with conc as a list
                     seq_len_str = seq_len_to_str(isl, osl)
-                    entry = {
-                        Fields.IMAGE.value: image,
-                        Fields.MODEL.value: model,
-                        Fields.MODEL_PREFIX.value: model_code,
-                        Fields.PRECISION.value: precision,
-                        Fields.FRAMEWORK.value: framework,
-                        Fields.RUNNER.value: runner,
-                        Fields.ISL.value: isl,
-                        Fields.OSL.value: osl,
-                        Fields.SPEC_DECODING.value: spec_decoding,
-                        Fields.PREFILL.value: prefill,
-                        Fields.DECODE.value: decode,
-                        Fields.CONC.value: conc_values,  # Pass the entire list for multinode
-                        Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                        Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                        Fields.DISAGG.value: disagg,
-                        Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                    }
 
                     # Determine which runner(s) to use
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
@@ -355,32 +335,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_end = min(conc_end, args.max_conc)
 
+                    seq_len_str = seq_len_to_str(isl, osl)
+                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
                     conc = conc_start
                     while conc <= conc_end:
-                        seq_len_str = seq_len_to_str(isl, osl)
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.TP.value: tp,
-                            Fields.CONC.value: conc,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                            Fields.EP.value: 1,  # Default
-                            Fields.DP_ATTN.value: False,  # Default
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                        }
-
-                        # Determine which runner(s) to use
-                        runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-
                         for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
