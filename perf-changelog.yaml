@@ -1495,6 +1495,10 @@
     - dsr1-fp4-b200-dynamo-sglang-mtp
     - dsr1-fp4-b300-dynamo-trt
     - dsr1-fp8-b300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
     - dsr1-fp8-mi355x-sglang-disagg
     - dsr1-fp8-mi355x-sglang-disagg-mtp
     - dsr1-fp4-mi355x-sglang-disagg
