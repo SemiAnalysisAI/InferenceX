@@ -530,14 +530,14 @@ gptoss-fp4-mi300x-vllm:
     - { tp: 1, conc-start: 64, conc-end: 256 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 8, conc-start: 1, conc-end: 16 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 16 }
+    - { tp: 8, conc-start: 1, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
