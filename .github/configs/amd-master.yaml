@@ -1411,7 +1411,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 dsr1-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai:v0.19.1
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
-  model-prefix: multiturn
+  model-prefix: dsr1
   runner: mi355x
   precision: fp4
   framework: vllm
