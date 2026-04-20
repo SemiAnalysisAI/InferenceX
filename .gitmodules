@@ -1,0 +1,4 @@
+[submodule "utils/trace-replay"]
+	path = utils/trace-replay
+	url = https://github.com/callanjfox/kv-cache-tester.git
+	branch = neon-trace-support

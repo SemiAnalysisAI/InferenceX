@@ -20,8 +20,12 @@ class Fields(Enum):
     PRECISION = 'precision'
     FRAMEWORK = 'framework'
     RUNNER = 'runner'
-    SEQ_LEN_CONFIGS = 'seq-len-configs'
+    SCENARIOS = 'scenarios'
     MULTINODE = 'multinode'
+
+    # Scenario type keys
+    FIXED_SEQ_LEN = 'fixed-seq-len'
+    AGENTIC_CODING = 'agentic-coding'
 
     # Seq-len-config fields
     ISL = 'isl'
@@ -44,6 +48,9 @@ class Fields(Enum):
     BATCH_SIZE = 'batch-size'
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
+
+    # Agentic coding fields
+    CPU_OFFLOADING = 'cpu-offloading'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -260,6 +267,61 @@ class MultiNodeSeqLenConfig(BaseModel):
         alias=Fields.SEARCH_SPACE.value)
 
 
+class AgenticCodingSearchSpaceEntry(BaseModel):
+    """Agentic coding search space configuration."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    tp: int
+    ep: Optional[int] = None
+    dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
+    cpu_offloading: bool = Field(default=False, alias=Fields.CPU_OFFLOADING.value)
+    conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
+    conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
+    conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+
+    @model_validator(mode='after')
+    def validate_conc_fields(self):
+        return _validate_conc_fields(self)
+
+
+class AgenticCodingConfig(BaseModel):
+    """Agentic coding scenario configuration for trace replay benchmarks."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    trace_source: str = Field(alias='trace-source')
+    search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+
+
+class SingleNodeScenarios(BaseModel):
+    """Scenarios wrapper for single-node configs."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    fixed_seq_len: Optional[List[SingleNodeSeqLenConfig]] = Field(
+        default=None, alias=Fields.FIXED_SEQ_LEN.value)
+    agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
+        default=None, alias=Fields.AGENTIC_CODING.value)
+
+    @model_validator(mode='after')
+    def at_least_one_scenario(self):
+        if not self.fixed_seq_len and not self.agentic_coding:
+            raise ValueError("At least one scenario type must be specified")
+        return self
+
+
+class MultiNodeScenarios(BaseModel):
+    """Scenarios wrapper for multinode configs."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    fixed_seq_len: Optional[List[MultiNodeSeqLenConfig]] = Field(
+        default=None, alias=Fields.FIXED_SEQ_LEN.value)
+
+    @model_validator(mode='after')
+    def at_least_one_scenario(self):
+        if not self.fixed_seq_len:
+            raise ValueError("At least one scenario type must be specified")
+        return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -272,8 +334,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: bool = Field(default=False)
-    seq_len_configs: List[SingleNodeSeqLenConfig] = Field(
-        alias=Fields.SEQ_LEN_CONFIGS.value)
+    scenarios: SingleNodeScenarios
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -288,8 +349,7 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
-    seq_len_configs: List[MultiNodeSeqLenConfig] = Field(
-        alias=Fields.SEQ_LEN_CONFIGS.value)
+    scenarios: MultiNodeScenarios
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:
@@ -343,6 +403,10 @@ class ChangelogEntry(BaseModel):
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
+    scenario_type: Optional[List[str]] = Field(
+        alias="scenario-type", default=None,
+        description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
+    )
 
 
 class ChangelogMetadata(BaseModel):

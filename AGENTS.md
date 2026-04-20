@@ -216,12 +216,13 @@ dsr1-fp8-h200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - conc-list: [1, 4, 16, 32, 64, 128, 256, 512]
-      prefill:
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - conc-list: [1, 4, 16, 32, 64, 128, 256, 512]
+        prefill:
         num-worker: 1
         tp: 8
         ep: 1

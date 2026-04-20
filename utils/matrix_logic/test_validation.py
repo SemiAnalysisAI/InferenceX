@@ -101,7 +101,7 @@ def valid_single_node_master_config():
         "framework": "sglang",
         "runner": "mi300x",
         "multinode": False,
-        "seq-len-configs": [
+        "scenarios": {"fixed-seq-len": [
             {
                 "isl": 1024,
                 "osl": 1024,
@@ -109,7 +109,7 @@ def valid_single_node_master_config():
                     {"tp": 8, "conc-start": 4, "conc-end": 64}
                 ]
             }
-        ]
+        ]}
     }
 
 
@@ -125,7 +125,7 @@ def valid_multinode_master_config():
         "runner": "gb200",
         "multinode": True,
         "disagg": True,
-        "seq-len-configs": [
+        "scenarios": {"fixed-seq-len": [
             {
                 "isl": 1024,
                 "osl": 1024,
@@ -155,7 +155,7 @@ def valid_multinode_master_config():
                     }
                 ]
             }
-        ]
+        ]}
     }
 
 

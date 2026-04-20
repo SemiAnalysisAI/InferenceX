@@ -30,7 +30,7 @@ def sample_single_node_config():
             "framework": "sglang",
             "runner": "mi300x",
             "multinode": False,
-            "seq-len-configs": [
+            "scenarios": {"fixed-seq-len": [
                 {
                     "isl": 1024,
                     "osl": 1024,
@@ -45,7 +45,7 @@ def sample_single_node_config():
                         {"tp": 8, "conc-start": 4, "conc-end": 64}
                     ]
                 }
-            ]
+            ]}
         }
     }
 
@@ -63,7 +63,7 @@ def sample_multinode_config():
             "runner": "gb200",
             "multinode": True,
             "disagg": True,
-            "seq-len-configs": [
+            "scenarios": {"fixed-seq-len": [
                 {
                     "isl": 1024,
                     "osl": 1024,
@@ -93,7 +93,7 @@ def sample_multinode_config():
                         }
                     ]
                 }
-            ]
+            ]}
         }
     }
 
@@ -566,7 +566,7 @@ class TestGenerateFullSweepSingleNode:
                 "framework": "sglang",
                 "runner": "mi300x",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -575,7 +575,7 @@ class TestGenerateFullSweepSingleNode:
                             {"tp": 8, "conc-start": 4, "conc-end": 64},  # should be skipped
                         ],
                     }
-                ],
+                ]},
             }
         }
 
@@ -761,7 +761,7 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -783,7 +783,7 @@ class TestGenerateFullSweepMultiNode:
                             }
                         ]
                     }
-                ]
+                ]}
             }
         }
         full_sweep_args_multi_node.runner_type = ["h200"]
@@ -1025,7 +1025,7 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1033,7 +1033,7 @@ class TestEdgeCases:
                             {"tp": 4, "ep": 4, "dp-attn": True, "conc-start": 4, "conc-end": 4}
                         ]
                     }
-                ]
+                ]}
             }
         }
         result = generate_full_sweep(
@@ -1056,7 +1056,7 @@ class TestEdgeCases:
                 "framework": "trt",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1064,7 +1064,7 @@ class TestEdgeCases:
                             {"tp": 8, "spec-decoding": "mtp", "conc-start": 4, "conc-end": 4}
                         ]
                     }
-                ]
+                ]}
             }
         }
         result = generate_full_sweep(
@@ -1086,7 +1086,7 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "mi300x",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1094,7 +1094,7 @@ class TestEdgeCases:
                             {"tp": 8, "conc-start": 4, "conc-end": 16}
                         ]
                     }
-                ]
+                ]}
             }
         }
         result = generate_full_sweep(
@@ -1119,7 +1119,7 @@ class TestEdgeCases:
                 "runner": "mi300x",
                 "multinode": False,
                 # No disagg field
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1127,7 +1127,7 @@ class TestEdgeCases:
                             {"tp": 8, "conc-start": 4, "conc-end": 4}
                         ]
                     }
-                ]
+                ]}
             }
         }
         result = generate_full_sweep(
@@ -1148,7 +1148,7 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1171,7 +1171,7 @@ class TestEdgeCases:
                             }
                         ]
                     }
-                ]
+                ]}
             }
         }
         result = generate_full_sweep(
@@ -1194,7 +1194,7 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1202,7 +1202,7 @@ class TestEdgeCases:
                             {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
                         ]
                     }
-                ]
+                ]}
             }
         }
         full_sweep_args_single_node.max_ep = 2
@@ -1226,7 +1226,7 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1234,7 +1234,7 @@ class TestEdgeCases:
                             {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
                         ]
                     }
-                ]
+                ]}
             }
         }
         for invalid_value in [0, -1, -100]:
@@ -1257,7 +1257,7 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1279,7 +1279,7 @@ class TestEdgeCases:
                             }
                         ]
                     }
-                ]
+                ]}
             }
         }
         for invalid_value in [0, -1, -100]:
@@ -1302,7 +1302,7 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1324,7 +1324,7 @@ class TestEdgeCases:
                             }
                         ]
                     }
-                ]
+                ]}
             }
         }
         full_sweep_args_multi_node.max_conc = 1
@@ -1348,7 +1348,7 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
+                "scenarios": {"fixed-seq-len": [
                     {
                         "isl": 1024,
                         "osl": 1024,
@@ -1357,7 +1357,7 @@ class TestEdgeCases:
                             {"tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},  # should remain
                         ]
                     }
-                ]
+                ]}
             }
         }
         full_sweep_args_single_node.max_tp = 2

@@ -181,7 +181,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
         # Get disagg value, defaulting to False if not specified
         disagg = val.get(Fields.DISAGG.value, False)
 
-        seq_len_configs = val[Fields.SEQ_LEN_CONFIGS.value]
+        scenarios = val[Fields.SCENARIOS.value]
+        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
+        seq_len_configs = scenarios.get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
         image = val[Fields.IMAGE.value]
         model = val[Fields.MODEL.value]
         precision = val[Fields.PRECISION.value]
@@ -430,7 +432,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
 
         # Find 1k1k config
         target_config = None
-        for config in val[Fields.SEQ_LEN_CONFIGS.value]:
+        for config in val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []):
             if config[Fields.ISL.value] == 1024 and config[Fields.OSL.value] == 1024:
                 target_config = config
                 break
@@ -564,7 +566,9 @@ def generate_test_config_sweep(args, all_config_data):
         if getattr(args, 'seq_lens', None):
             seq_lens_filter = {seq_len_stoi[s] for s in args.seq_lens}
 
-        for seq_len_config in val[Fields.SEQ_LEN_CONFIGS.value]:
+        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
+        fixed_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
+        for seq_len_config in fixed_configs:
             isl = seq_len_config[Fields.ISL.value]
             osl = seq_len_config[Fields.OSL.value]
 
@@ -746,6 +750,13 @@ def main():
         '--runner-node-filter',
         required=False,
         help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
+    )
+    parent_parser.add_argument(
+        '--scenario-type',
+        nargs='+',
+        choices=['fixed-seq-len', 'agentic-coding'],
+        required=False,
+        help='Scenario type(s) to include. If not specified, all scenario types are generated.'
     )
 
     # Create main parser

@@ -119,6 +119,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
+                if entry.scenario_type:
+                    base_cmd.extend(["--scenario-type", *entry.scenario_type])
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -145,6 +147,8 @@ def main():
                 *MASTER_CONFIGS,
                 "--evals-only",
             ]
+            if entry.scenario_type:
+                base_cmd.extend(["--scenario-type", *entry.scenario_type])
             try:
                 eval_result = subprocess.run(
                     base_cmd,
