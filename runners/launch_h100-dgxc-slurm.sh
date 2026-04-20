@@ -14,7 +14,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # local paths to avoid repeated downloading on the shared H100 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
@@ -22,7 +22,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/numa1/shared/models/dsr1-fp8"
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
             export SERVED_MODEL_NAME="DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
         else
@@ -41,13 +41,20 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q1-2026
+    git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
+    export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
+    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
+    export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
+    mkdir -p "$UV_INSTALL_DIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
+    if ! [ -x "$UV_INSTALL_DIR/uv" ]; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    export PATH="$UV_INSTALL_DIR:$PATH"
+    source $UV_INSTALL_DIR/env
 
     uv venv
     source .venv/bin/activate
@@ -75,6 +82,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
+    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -112,7 +120,17 @@ EOF
     echo "Running make setup..."
     make setup ARCH=x86_64
 
+    # Export eval-related env vars for srt-slurm post-benchmark eval
+    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+
     echo "Submitting job with srtctl..."
+
+    if [[ -z "$CONFIG_FILE" ]]; then
+        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+        echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
+        exit 1
+    fi
+
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
@@ -177,44 +195,65 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+        # Find all result subdirectories
+        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
+        if [ -z "$RESULT_SUBDIRS" ]; then
+            echo "Warning: No result subdirectories found in $LOGS_DIR"
+        else
+            # Process results from all configurations
+            for result_subdir in $RESULT_SUBDIRS; do
+                echo "Processing result subdirectory: $result_subdir"
 
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
+                # Extract configuration info from directory name
+                CONFIG_NAME=$(basename "$result_subdir")
 
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+                # Find all result JSON files
+                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
 
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+                for result_file in $RESULT_FILES; do
+                    if [ -f "$result_file" ]; then
+                        # Extract metadata from filename
+                        # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                        filename=$(basename "$result_file")
+                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                        cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
+                        echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                    fi
+                done
             done
-        done
+        fi
+
+        echo "All result files processed"
+    else
+        echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
-    echo "All result files processed"
+    # Collect eval results if eval was requested
+    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+        EVAL_DIR="$LOGS_DIR/eval_results"
+        if [ -d "$EVAL_DIR" ]; then
+            echo "Extracting eval results from $EVAL_DIR"
+            shopt -s nullglob
+            for eval_file in "$EVAL_DIR"/*; do
+                [ -f "$eval_file" ] || continue
+                cp "$eval_file" "$GITHUB_WORKSPACE/"
+                echo "Copied eval artifact: $(basename "$eval_file")"
+            done
+            shopt -u nullglob
+        else
+            echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
+        fi
+    fi
 
     # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
     # from blocking the next job's checkout on this runner

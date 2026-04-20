@@ -51,6 +51,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
+    # Ensure root-owned files are cleaned up even on early exit to prevent
+    # EACCES errors when the next GH Actions job checks out on this runner
+    trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
@@ -101,33 +105,53 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory that contains the data
 
-    cat > collect_latest_results.py <<'PY'
+    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+        cat > collect_latest_results.py <<'PY'
 import os, sys
 sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
-    LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
-    if [ -z "$LOGS_DIR" ]; then
-        echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
-        exit 1
+        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
+        if [ -z "$LOGS_DIR" ]; then
+            echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
+            exit 1
+        fi
+
+        echo "Found logs directory: $LOGS_DIR"
+        ls -la "$LOGS_DIR"
+
+        # Result JSON are contained within the result directory
+        for result_file in $(find $LOGS_DIR -type f); do
+            # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
+            file_name=$(basename $result_file)
+            if [ -f $result_file ]; then
+                # Copy the result file to workspace with a unique name
+                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
+                echo "Found result file ${result_file}. Copying it to ${WORKSPACE_RESULT_FILE}"
+                cp $result_file $WORKSPACE_RESULT_FILE
+            fi
+        done
     fi
 
-    echo "Found logs directory: $LOGS_DIR"
-    ls -la "$LOGS_DIR"
-
-    # Result JSON are contained within the result directory
-    for result_file in $(find $LOGS_DIR -type f); do
-        # result_file should directly be isl_ISL_osl_OSL_concurrency_CONC_req_rate_R_gpus_N_ctx_M_gen_N.json
-        file_name=$(basename $result_file)
-        if [ -f $result_file ]; then
-            # Copy the result file to workspace with a unique name
-            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
-            echo "Found result file ${result_file}. Copying it to ${WORKSPACE_RESULT_FILE}"
-            cp $result_file $WORKSPACE_RESULT_FILE
+    # Extract eval results if eval was requested
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        # Find eval_results in the slurm job logs directory
+        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -name eval_results 2>/dev/null | head -1)
+        if [ -n "$EVAL_DIR" ] && [ -d "$EVAL_DIR" ]; then
+            echo "Extracting eval results from $EVAL_DIR"
+            shopt -s nullglob
+            for eval_file in "$EVAL_DIR"/*; do
+                [ -f "$eval_file" ] || continue
+                cp "$eval_file" "$GITHUB_WORKSPACE/"
+                echo "Copied eval artifact: $(basename "$eval_file")"
+            done
+            shopt -u nullglob
+        else
+            echo "WARNING: RUN_EVAL=true but no eval results found under $BENCHMARK_LOGS_DIR/logs"
         fi
-    done
+    fi
 
     echo "All result files processed"
     # Use sync scancel to ensure nfs file handle is released in time
@@ -145,6 +169,9 @@ PY
         cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$ARTIFACT_DIR/" 2>/dev/null || true
         echo "Logs copied to $ARTIFACT_DIR for artifact upload"
     fi
+
+    # Clean up root-owned files to prevent EACCES on GH Actions checkout cleanup
+    sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
 
 else
 

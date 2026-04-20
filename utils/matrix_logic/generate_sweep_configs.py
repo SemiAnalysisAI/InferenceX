@@ -1,4 +1,3 @@
-from ast import For
 import fnmatch
 import json
 import argparse
@@ -20,6 +19,8 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
+MIN_EVAL_CONC = 16
+
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
@@ -33,26 +34,42 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Eval selection policy (single-node only):
-    - Only consider 8k1k (isl=8192, osl=1024).
-    - For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
+    """Eval selection policy:
+    - Single-node: only consider 8k1k (isl=8192, osl=1024).
+      For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
+        - Ignore entries with conc < MIN_EVAL_CONC
         - Mark all entries at the highest CONC (all TPs)
         - Mark all entries at the median CONC (all TPs)
+    - Multi-node: for each unique (model, runner, framework, precision,
+      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
+      Ignore entries with all conc values < MIN_EVAL_CONC. Mark the entry with
+      the highest max concurrency among the remaining entries. Sets eval-conc to
+      the median of the eligible conc list to avoid OOM during eval.
     """
     from collections import defaultdict
 
-    # Only run evals on 8k1k
     target_isl, target_osl = seq_len_stoi["8k1k"]
-    # Group entries by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only include entries that have a top-level TP (i.e., single-node schema).
-    groups = defaultdict(list)
+    eval_indices = set()
+    mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
+
+    def _eligible_eval_concs(entry):
+        conc = entry[Fields.CONC.value]
+        conc_values = conc if isinstance(conc, list) else [conc]
+        return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
+
+    def _max_eval_conc(ie):
+        return max(_eligible_eval_concs(ie[1]))
+
+    # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
+    # Only 8k1k entries with a top-level TP (single-node schema).
+    sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
             continue
-
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             continue
-
+        if not _eligible_eval_concs(entry):
+            continue
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
@@ -61,27 +78,54 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.ISL.value],
             entry[Fields.OSL.value],
             entry[Fields.SPEC_DECODING.value],
-            entry[Fields.DP_ATTN.value]
+            entry[Fields.DP_ATTN.value],
         )
-        groups[key].append((i, entry))
+        sn_groups[key].append((i, entry))
 
-    # For each group, select entries at highest CONC and median CONC (all TPs)
-    eval_indices = set()
-    for key, entries in groups.items():
-        if not entries:
-            continue
-
+    for entries in sn_groups.values():
         conc_values = sorted(set(e[Fields.CONC.value] for _, e in entries))
         median_conc = conc_values[len(conc_values) // 2]
         target_concs = {conc_values[-1], median_conc}
-
         for i, e in entries:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
+    # Multi-node: group by (model, runner, framework, precision, spec-decoding, prefill-dp, decode-dp).
+    # Only 8k1k entries with a prefill key (multi-node schema).
+    # Pick the entry with the highest max concurrency per group.
+    mn_groups = defaultdict(list)
+    for i, entry in enumerate(matrix_values):
+        if Fields.TP.value in entry:
+            continue
+        if Fields.PREFILL.value not in entry:
+            continue
+        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+            continue
+        if not _eligible_eval_concs(entry):
+            continue
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.SPEC_DECODING.value],
+            entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value),
+            entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value),
+        )
+        mn_groups[key].append((i, entry))
+
+    for entries in mn_groups.values():
+        best_idx, best_entry = max(entries, key=_max_eval_conc)
+        eval_indices.add(best_idx)
+        # Set eval-conc to median of eligible conc values to avoid OOM during eval
+        eval_concs = _eligible_eval_concs(best_entry)
+        mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
+
     # Mark the selected entries
     for i, entry in enumerate(matrix_values):
         entry[Fields.RUN_EVAL.value] = i in eval_indices
+        if i in mn_eval_conc:
+            entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 
     return matrix_values
 
@@ -220,28 +264,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_values = filtered_conc
 
-                    # For multinode, create a single entry with conc as a list
                     seq_len_str = seq_len_to_str(isl, osl)
-                    entry = {
-                        Fields.IMAGE.value: image,
-                        Fields.MODEL.value: model,
-                        Fields.MODEL_PREFIX.value: model_code,
-                        Fields.PRECISION.value: precision,
-                        Fields.FRAMEWORK.value: framework,
-                        Fields.RUNNER.value: runner,
-                        Fields.ISL.value: isl,
-                        Fields.OSL.value: osl,
-                        Fields.SPEC_DECODING.value: spec_decoding,
-                        Fields.PREFILL.value: prefill,
-                        Fields.DECODE.value: decode,
-                        Fields.CONC.value: conc_values,  # Pass the entire list for multinode
-                        Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                        Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                        Fields.DISAGG.value: disagg,
-                        Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                    }
-
-                    # Determine which runner(s) to use
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
                     for runner_value in runners_for_entry:
@@ -310,32 +333,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_end = min(conc_end, args.max_conc)
 
+                    seq_len_str = seq_len_to_str(isl, osl)
+                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
                     conc = conc_start
                     while conc <= conc_end:
-                        seq_len_str = seq_len_to_str(isl, osl)
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.TP.value: tp,
-                            Fields.CONC.value: conc,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
-                            Fields.EP.value: 1,  # Default
-                            Fields.DP_ATTN.value: False,  # Default
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                        }
-
-                        # Determine which runner(s) to use
-                        runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-
                         for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
@@ -557,9 +559,18 @@ def generate_test_config_sweep(args, all_config_data):
         runner = val[Fields.RUNNER.value]
         disagg = val.get(Fields.DISAGG.value, False)
 
+        # Build seq-len filter if --seq-lens was provided
+        seq_lens_filter = None
+        if getattr(args, 'seq_lens', None):
+            seq_lens_filter = {seq_len_stoi[s] for s in args.seq_lens}
+
         for seq_len_config in val[Fields.SEQ_LEN_CONFIGS.value]:
             isl = seq_len_config[Fields.ISL.value]
             osl = seq_len_config[Fields.OSL.value]
+
+            if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+                continue
+
             seq_len_str = seq_len_to_str(isl, osl)
 
             for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
@@ -904,6 +915,13 @@ def main():
         type=int,
         required=False,
         help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+    )
+    test_config_keys_parser.add_argument(
+        '--seq-lens',
+        nargs='+',
+        choices=list(seq_len_stoi.keys()),
+        required=False,
+        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',
