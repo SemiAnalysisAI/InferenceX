@@ -19,7 +19,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml"
       decode:
         num-worker: 2
@@ -34,7 +34,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -49,7 +49,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -64,7 +64,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -79,7 +79,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen4_dep8_batch128_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen4_dep8_batch128_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen4_dep8_batch128_eplb0_mtp1.yaml"
       decode:
         num-worker: 4
@@ -94,7 +94,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch512_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch512_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch512_eplb0_mtp1.yaml"
       decode:
         num-worker: 5
@@ -110,7 +110,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -124,7 +124,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen2_dep8_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen2_dep8_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen2_dep8_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -138,7 +138,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_dep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_dep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_dep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -152,7 +152,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -166,7 +166,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen5_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -180,7 +180,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen6_tep8_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen6_tep8_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/1k1k/stp/ctx1_gen6_tep8_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 6
@@ -199,7 +199,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -214,7 +214,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -229,7 +229,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -244,7 +244,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -259,7 +259,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -274,7 +274,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -289,7 +289,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 2
@@ -305,7 +305,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -319,7 +319,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -333,7 +333,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -347,7 +347,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -361,7 +361,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -375,7 +375,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp4/8k1k/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -405,7 +405,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 8
@@ -420,7 +420,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch4_eplb0_mtp3_32.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch4_eplb0_mtp3_32.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch4_eplb0_mtp3_32.yaml"
       decode:
         num-worker: 8
@@ -435,7 +435,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch8_eplb0_mtp3_64.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch8_eplb0_mtp3_64.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch8_eplb0_mtp3_64.yaml"
       decode:
         num-worker: 8
@@ -450,7 +450,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch32_eplb0_mtp3_256.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch32_eplb0_mtp3_256.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen8_tp8_batch32_eplb0_mtp3_256.yaml"
       decode:
         num-worker: 8
@@ -466,7 +466,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen7_dep8_batch128_eplb0_mtp3_896.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen7_dep8_batch128_eplb0_mtp3_896.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen7_dep8_batch128_eplb0_mtp3_896.yaml"
       decode:
         num-worker: 7
@@ -481,7 +481,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen4_dep8_batch256_eplb0_mtp3_1024.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen4_dep8_batch256_eplb0_mtp3_1024.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen4_dep8_batch256_eplb0_mtp3_1024.yaml"
       decode:
         num-worker: 4
@@ -496,7 +496,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen3_dep8_batch384_eplb0_mtp3_1184.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen3_dep8_batch384_eplb0_mtp3_1184.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen3_dep8_batch384_eplb0_mtp3_1184.yaml"
       decode:
         num-worker: 3
@@ -511,7 +511,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen2_dep8_batch768_eplb0_mtp2_1600.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen2_dep8_batch768_eplb0_mtp2_1600.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/mtp/ctx1_gen2_dep8_batch768_eplb0_mtp2_1600.yaml"
       decode:
         num-worker: 2
@@ -527,7 +527,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_4.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_4.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_4.yaml"
       decode:
         num-worker: 3
@@ -541,7 +541,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_32.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_32.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_32.yaml"
       decode:
         num-worker: 3
@@ -555,7 +555,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_128.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_128.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_128.yaml"
       decode:
         num-worker: 3
@@ -570,7 +570,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen5_dep8_batch48_eplb0_mtp0_1920.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen5_dep8_batch48_eplb0_mtp0_1920.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen5_dep8_batch48_eplb0_mtp0_1920.yaml"
       decode:
         num-worker: 5
@@ -584,7 +584,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4096.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4096.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4096.yaml"
       decode:
         num-worker: 1
@@ -598,7 +598,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx2_gen5_dep8_batch128_eplb0_mtp0_5152.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/1k1k/stp/ctx2_gen5_dep8_batch128_eplb0_mtp0_5152.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/1k1k/stp/ctx2_gen5_dep8_batch128_eplb0_mtp0_5152.yaml"
       decode:
         num-worker: 5
@@ -618,7 +618,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 6
@@ -633,7 +633,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 2
@@ -648,7 +648,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml"
       decode:
         num-worker: 6
@@ -663,7 +663,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml"
       decode:
         num-worker: 4
@@ -679,7 +679,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml"
       decode:
         num-worker: 3
@@ -694,7 +694,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml"
       decode:
         num-worker: 1
@@ -709,7 +709,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml"
       decode:
         num-worker: 1
@@ -725,7 +725,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml"
       decode:
         num-worker: 1
@@ -739,7 +739,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml"
       decode:
         num-worker: 4
@@ -753,7 +753,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml"
       decode:
         num-worker: 4
@@ -767,7 +767,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml"
       decode:
         num-worker: 6
@@ -782,7 +782,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml"
       decode:
         num-worker: 1
@@ -796,7 +796,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml"
       decode:
         num-worker: 2
@@ -810,7 +810,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml"
       decode:
         num-worker: 1
@@ -824,7 +824,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml
         - "CONFIG_FILE=recipes/trtllm/b200-fp8/8k1k/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml"
       decode:
         num-worker: 1
@@ -854,7 +854,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen1_dep8_batch64_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen1_dep8_batch64_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen1_dep8_batch64_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -869,7 +869,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen2_dep8_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen2_dep8_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen2_dep8_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 2
@@ -884,7 +884,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -899,7 +899,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -914,7 +914,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx2_gen1_dep8_batch256_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx2_gen1_dep8_batch256_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx2_gen1_dep8_batch256_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -929,7 +929,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch512_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch512_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch512_eplb0_mtp1.yaml"
       decode:
         num-worker: 2
@@ -944,7 +944,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch768_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch768_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/mtp/ctx5_gen2_dep8_batch768_eplb0_mtp1.yaml"
       decode:
         num-worker: 2
@@ -960,7 +960,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -974,7 +974,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -988,7 +988,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -1002,7 +1002,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep8_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep8_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx1_gen5_tep8_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -1016,7 +1016,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx2_gen1_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx2_gen1_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx2_gen1_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -1030,7 +1030,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen1_dep8_batch1024_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen1_dep8_batch1024_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen1_dep8_batch1024_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -1044,7 +1044,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen2_dep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen2_dep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/1k1k/stp/ctx3_gen2_dep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -1063,7 +1063,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -1078,7 +1078,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -1093,7 +1093,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -1108,7 +1108,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -1123,7 +1123,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -1138,7 +1138,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -1154,7 +1154,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -1168,7 +1168,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -1182,7 +1182,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -1196,7 +1196,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -1210,7 +1210,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -1224,7 +1224,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -1238,7 +1238,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp4/8k1k/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -1268,7 +1268,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_10.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_10.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_10.yaml"
       decode:
         num-worker: 8
@@ -1283,7 +1283,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch16_eplb0_mtp3_160.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch16_eplb0_mtp3_160.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen8_tp8_batch16_eplb0_mtp3_160.yaml"
       decode:
         num-worker: 8
@@ -1298,7 +1298,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen1_dp8_batch256_eplb0_mtp1_3072.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen1_dp8_batch256_eplb0_mtp1_3072.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen1_dp8_batch256_eplb0_mtp1_3072.yaml"
       decode:
         num-worker: 1
@@ -1313,7 +1313,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen2_dep8_batch128_eplb0_mtp1_2560.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen2_dep8_batch128_eplb0_mtp1_2560.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen2_dep8_batch128_eplb0_mtp1_2560.yaml"
       decode:
         num-worker: 2
@@ -1328,7 +1328,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp2_720.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp2_720.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp2_720.yaml"
       decode:
         num-worker: 5
@@ -1343,7 +1343,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx3_gen2_dp8_batch512_eplb0_mtp1_11264.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/mtp/ctx3_gen2_dp8_batch512_eplb0_mtp1_11264.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/mtp/ctx3_gen2_dp8_batch512_eplb0_mtp1_11264.yaml"
       decode:
         num-worker: 2
@@ -1361,7 +1361,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_2112.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_2112.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_2112.yaml"
       decode:
         num-worker: 1
@@ -1375,7 +1375,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen2_dp8_batch128_eplb0_mtp0_3072.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen2_dp8_batch128_eplb0_mtp0_3072.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen2_dp8_batch128_eplb0_mtp0_3072.yaml"
       decode:
         num-worker: 2
@@ -1389,7 +1389,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen3_dp8_batch48_eplb0_mtp0_1280.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen3_dp8_batch48_eplb0_mtp0_1280.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen3_dp8_batch48_eplb0_mtp0_1280.yaml"
       decode:
         num-worker: 3
@@ -1403,7 +1403,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_12.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_12.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_12.yaml"
       decode:
         num-worker: 8
@@ -1417,7 +1417,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_128.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_128.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_128.yaml"
       decode:
         num-worker: 8
@@ -1431,7 +1431,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_384.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_384.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_384.yaml"
       decode:
         num-worker: 8
@@ -1445,7 +1445,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx2_gen1_dp8_batch1024_eplb0_mtp0_16384.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/1k1k/stp/ctx2_gen1_dp8_batch1024_eplb0_mtp0_16384.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/1k1k/stp/ctx2_gen1_dp8_batch1024_eplb0_mtp0_16384.yaml"
       decode:
         num-worker: 1
@@ -1464,7 +1464,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml"
       decode:
         num-worker: 2
@@ -1479,7 +1479,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 4
@@ -1494,7 +1494,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml"
       decode:
         num-worker: 4
@@ -1509,7 +1509,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml"
       decode:
         num-worker: 1
@@ -1524,7 +1524,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml"
       decode:
         num-worker: 1
@@ -1539,7 +1539,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml"
       decode:
         num-worker: 1
@@ -1557,7 +1557,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml"
       decode:
         num-worker: 4
@@ -1571,7 +1571,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml"
       decode:
         num-worker: 8
@@ -1585,7 +1585,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml"
       decode:
         num-worker: 1
@@ -1599,7 +1599,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml"
       decode:
         num-worker: 1
@@ -1613,7 +1613,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml"
       decode:
         num-worker: 5
@@ -1627,7 +1627,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml"
       decode:
         num-worker: 1
@@ -1641,7 +1641,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml
         - "CONFIG_FILE=recipes/trtllm/b300-fp8/8k1k/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml"
       decode:
         num-worker: 1
@@ -1814,6 +1814,24 @@ qwen3.5-bf16-b200-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
+qwen3.5-bf16-b200-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  runner: b200
+  precision: bf16
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu130-amd64
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1852,6 +1870,24 @@ qwen3.5-fp4-b200-sglang:
     search-space:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
 
+qwen3.5-fp4-b200-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
   model: zai-org/GLM-5-FP8
@@ -1869,6 +1905,24 @@ glm5-fp8-b200-sglang:
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+
+glm5-fp8-b200-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5.1
 # does not have a B300-specific recipe, so this config reuses the existing GLM5 FP8
@@ -1891,6 +1945,24 @@ glm5-fp8-b300-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
+glm5-fp8-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b300
+  precision: fp8
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.10.post1-cu130
   model: nvidia/GLM-5-NVFP4
@@ -1910,6 +1982,26 @@ glm5-fp4-b200-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
+glm5-fp4-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -1933,6 +2025,26 @@ glm5-fp4-b300-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
+glm5-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.9-cu130
@@ -1989,32 +2101,91 @@ qwen3.5-fp8-b300-sglang:
     search-space:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
-kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.15.1
-  model: moonshotai/Kimi-K2.5
-  model-prefix: kimik2.5
-  runner: b200
-  precision: int4
-  framework: vllm
+qwen3.5-fp4-b300-sglang:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b300
+  precision: fp4
+  framework: sglang
   multinode: false
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
-kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+qwen3.5-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
+qwen3.5-bf16-b300-sglang:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  runner: b300
+  precision: bf16
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+
+qwen3.5-bf16-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  model: Qwen/Qwen3.5-397B-A17B
+  model-prefix: qwen3.5
+  runner: b300
+  precision: bf16
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
+kimik2.5-int4-b200-vllm:
+  image: vllm/vllm-openai:v0.15.1
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
-  runner: b300
+  runner: b200
   precision: int4
   framework: vllm
   multinode: false
@@ -2051,29 +2222,6 @@ kimik2.5-fp4-b200-vllm:
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
-  model: nvidia/Kimi-K2.5-NVFP4
-  model-prefix: kimik2.5
-  runner: b300
   precision: fp4
   framework: vllm
   multinode: false
@@ -2313,7 +2461,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c1_ctx1_gen11_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c1_ctx1_gen11_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c1_ctx1_gen11_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 11
@@ -2328,7 +2476,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c4_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c4_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c4_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 11
@@ -2343,7 +2491,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c8_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c8_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c8_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 11
@@ -2358,7 +2506,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c16_ctx1_gen9_tep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c16_ctx1_gen9_tep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c16_ctx1_gen9_tep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 9
@@ -2373,7 +2521,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c32_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c32_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c32_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 11
@@ -2388,7 +2536,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c64_ctx1_gen8_dep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c64_ctx1_gen8_dep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c64_ctx1_gen8_dep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 8
@@ -2403,7 +2551,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c128_ctx1_gen7_dep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c128_ctx1_gen7_dep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c128_ctx1_gen7_dep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 7
@@ -2418,7 +2566,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c256_ctx1_gen4_dep8_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c256_ctx1_gen4_dep8_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c256_ctx1_gen4_dep8_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -2433,7 +2581,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/mtp/c512_ctx1_gen2_dep8_batch256_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/mtp/c512_ctx1_gen2_dep8_batch256_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/mtp/c512_ctx1_gen2_dep8_batch256_eplb0_mtp1.yaml"
       decode:
         num-worker: 2
@@ -2448,7 +2596,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c1_ctx1_gen9_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c1_ctx1_gen9_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c1_ctx1_gen9_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2462,7 +2610,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c4_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c4_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c4_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2476,7 +2624,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c8_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c8_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c8_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2490,7 +2638,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c16_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c16_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c16_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2504,7 +2652,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c32_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c32_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c32_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2518,7 +2666,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c64_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c64_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c64_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2532,7 +2680,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c128_ctx1_gen9_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c128_ctx1_gen9_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c128_ctx1_gen9_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 9
@@ -2546,7 +2694,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c256_ctx1_gen6_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c256_ctx1_gen6_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c256_ctx1_gen6_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 6
@@ -2560,7 +2708,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/1k1k/stp/c512_ctx2_gen7_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/1k1k/stp/c512_ctx2_gen7_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/1k1k/stp/c512_ctx2_gen7_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 7
@@ -2579,7 +2727,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 7
@@ -2594,7 +2742,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 7
@@ -2609,7 +2757,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 6
@@ -2624,7 +2772,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml"
       decode:
         num-worker: 3
@@ -2639,7 +2787,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 5
@@ -2654,7 +2802,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml"
       decode:
         num-worker: 1
@@ -2669,7 +2817,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml"
       decode:
         num-worker: 1
@@ -2684,7 +2832,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml"
       decode:
         num-worker: 1
@@ -2699,7 +2847,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -2714,7 +2862,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 7
@@ -2728,7 +2876,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 7
@@ -2742,7 +2890,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 6
@@ -2756,7 +2904,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -2770,7 +2918,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -2784,7 +2932,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -2798,7 +2946,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -2812,7 +2960,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -2826,7 +2974,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h200/8k1k/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h200/8k1k/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -2856,7 +3004,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2871,7 +3019,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2886,7 +3034,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2901,7 +3049,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2916,7 +3064,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2931,7 +3079,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_dep16_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_dep16_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_dep16_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2946,7 +3094,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch128_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch128_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen3_tep16_batch128_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -2961,7 +3109,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp2.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp2.yaml"
       decode:
         num-worker: 1
@@ -2976,7 +3124,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -2991,7 +3139,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3005,7 +3153,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3019,7 +3167,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3033,7 +3181,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_tep16_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3047,7 +3195,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch4_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch4_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch4_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3061,7 +3209,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch8_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch8_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3075,7 +3223,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3089,7 +3237,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx1_gen3_dep16_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3103,7 +3251,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx2_gen1_dep16_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/1k1k/stp/ctx2_gen1_dep16_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/1k1k/stp/ctx2_gen1_dep16_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3122,7 +3270,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -3137,7 +3285,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -3152,7 +3300,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -3167,7 +3315,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -3184,7 +3332,7 @@ dsr1-fp8-h100-dynamo-trt:
     #     ep: 16
     #     dp-attn: true
     #     additional-settings:
-    #     # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml
+    #     # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml
     #     - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
     #   decode:
     #     num-worker: 2
@@ -3199,7 +3347,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -3214,7 +3362,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3228,7 +3376,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3242,7 +3390,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -3256,7 +3404,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -3270,7 +3418,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/h100-fp8/8k1k/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3701,7 +3849,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -3716,7 +3864,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -3731,7 +3879,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
@@ -3746,7 +3894,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
       decode:
         num-worker: 1
@@ -3761,7 +3909,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
       decode:
         num-worker: 5
@@ -3778,7 +3926,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3792,7 +3940,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3806,7 +3954,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
       decode:
         num-worker: 2
@@ -3820,7 +3968,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -3834,7 +3982,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -3848,7 +3996,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3862,7 +4010,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/1k1k/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -3882,7 +4030,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -3897,7 +4045,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -3912,7 +4060,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
@@ -3927,7 +4075,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -3942,7 +4090,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
@@ -3958,7 +4106,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -3972,7 +4120,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -3986,7 +4134,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4000,7 +4148,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4014,7 +4162,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4028,7 +4176,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4059,7 +4207,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch512_eplb0_mtp1_4301.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch512_eplb0_mtp1_4301.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch512_eplb0_mtp1_4301.yaml"
       decode:
         num-worker: 1
@@ -4074,7 +4222,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch256_eplb0_mtp1_2151.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch256_eplb0_mtp1_2151.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep8_batch256_eplb0_mtp1_2151.yaml"
       decode:
         num-worker: 1
@@ -4089,7 +4237,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
       decode:
         num-worker: 1
@@ -4104,7 +4252,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3_615.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3_615.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3_615.yaml"
       decode:
         num-worker: 1
@@ -4119,7 +4267,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3_36.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3_36.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3_36.yaml"
       decode:
         num-worker: 3
@@ -4134,7 +4282,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_18.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_18.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_18.yaml"
       decode:
         num-worker: 3
@@ -4149,7 +4297,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_9.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_9.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_9.yaml"
       decode:
         num-worker: 3
@@ -4164,7 +4312,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch768_eplb0_mtp0_6144.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch768_eplb0_mtp0_6144.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch768_eplb0_mtp0_6144.yaml"
       decode:
         num-worker: 1
@@ -4178,7 +4326,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4301.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4301.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4301.yaml"
       decode:
         num-worker: 1
@@ -4192,7 +4340,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep16_batch128_eplb0_mtp0_2151.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep16_batch128_eplb0_mtp0_2151.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep16_batch128_eplb0_mtp0_2151.yaml"
       decode:
         num-worker: 1
@@ -4206,7 +4354,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch32_eplb0_mtp0_1127.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch32_eplb0_mtp0_1127.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch32_eplb0_mtp0_1127.yaml"
       decode:
         num-worker: 1
@@ -4220,7 +4368,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch8_eplb0_mtp0_256.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch8_eplb0_mtp0_256.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen1_dep32_batch8_eplb0_mtp0_256.yaml"
       decode:
         num-worker: 1
@@ -4234,7 +4382,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch8_eplb0_mtp0_27.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch8_eplb0_mtp0_27.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch8_eplb0_mtp0_27.yaml"
       decode:
         num-worker: 3
@@ -4248,7 +4396,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/1k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_3.yaml"
       decode:
         num-worker: 3
@@ -4267,7 +4415,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml"
       decode:
         num-worker: 1
@@ -4282,7 +4430,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       decode:
         num-worker: 1
@@ -4297,7 +4445,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml"
       decode:
         num-worker: 1
@@ -4312,7 +4460,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
       decode:
         num-worker: 1
@@ -4327,7 +4475,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml"
       decode:
         num-worker: 1
@@ -4342,7 +4490,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml"
       decode:
         num-worker: 3
@@ -4357,7 +4505,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml"
       decode:
         num-worker: 3
@@ -4372,7 +4520,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
       decode:
         num-worker: 1
@@ -4386,7 +4534,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml"
       decode:
         num-worker: 1
@@ -4400,7 +4548,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml"
       decode:
         num-worker: 1
@@ -4414,7 +4562,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml"
       decode:
         num-worker: 1
@@ -4428,7 +4576,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml"
       decode:
         num-worker: 3
@@ -4442,7 +4590,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml"
       decode:
         num-worker: 3
@@ -4456,7 +4604,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml
         - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml"
       decode:
         num-worker: 3
@@ -4486,7 +4634,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/low-latency.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/1k1k/low-latency.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/1k1k/low-latency.yaml"
       decode:
         num-worker: 1
@@ -4502,7 +4650,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/mid-curve.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/1k1k/mid-curve.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/1k1k/mid-curve.yaml"
       decode:
         num-worker: 1
@@ -4518,7 +4666,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/max-tpt.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/1k1k/max-tpt.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/1k1k/max-tpt.yaml"
       decode:
         num-worker: 1
@@ -4534,7 +4682,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/1k1k/ultra-tpt.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/1k1k/ultra-tpt.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/1k1k/ultra-tpt.yaml"
       decode:
         num-worker: 1
@@ -4553,7 +4701,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/low-latency.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/8k1k/low-latency.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/8k1k/low-latency.yaml"
       decode:
         num-worker: 1
@@ -4569,7 +4717,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/mid-curve.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/8k1k/mid-curve.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/8k1k/mid-curve.yaml"
       decode:
         num-worker: 1
@@ -4585,7 +4733,7 @@ dsr1-fp8-gb200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb200-fp8/8k1k/max_tpt.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/8k1k/max_tpt.yaml
         - "CONFIG_FILE=recipes/gb200-fp8/8k1k/max_tpt.yaml"
       decode:
         num-worker: 1
@@ -4614,7 +4762,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/low-latency.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/1k1k/stp/low-latency.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/low-latency.yaml"
       decode:
         num-worker: 4
@@ -4630,7 +4778,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/mid.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/1k1k/stp/mid.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/mid.yaml"
       decode:
         num-worker: 1
@@ -4646,7 +4794,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/1k1k/stp/max.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/1k1k/stp/max.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/1k1k/stp/max.yaml"
       decode:
         num-worker: 1
@@ -4665,7 +4813,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/low-latency.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/8k1k/stp/low-latency.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/low-latency.yaml"
       decode:
         num-worker: 1
@@ -4681,7 +4829,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/mid.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/8k1k/stp/mid.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/mid.yaml"
       decode:
         num-worker: 1
@@ -4697,7 +4845,7 @@ dsr1-fp8-gb300-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/gb300-fp8/8k1k/stp/max.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb300-fp8/8k1k/stp/max.yaml
         - "CONFIG_FILE=recipes/gb300-fp8/8k1k/stp/max.yaml"
       decode:
         num-worker: 1
@@ -4841,7 +4989,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep4_batch768_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep4_batch768_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep4_batch768_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -4856,7 +5004,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep32_batch8_eplb0_mtp.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep32_batch8_eplb0_mtp.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen1_dep32_batch8_eplb0_mtp.yaml"
       decode:
         num-worker: 1
@@ -4871,7 +5019,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -4886,7 +5034,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -4901,7 +5049,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep16_batch128_eplb256_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep16_batch128_eplb256_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep16_batch128_eplb256_mtp1.yaml"
       decode:
         num-worker: 1
@@ -4916,7 +5064,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep32_batch32_eplb288_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep32_batch32_eplb288_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/mtp/ctx3_gen1_dep32_batch32_eplb288_mtp3.yaml"
       decode:
         num-worker: 1
@@ -4931,7 +5079,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -4945,7 +5093,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -4959,7 +5107,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep8_batch1024_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep8_batch1024_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep8_batch1024_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4973,7 +5121,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -4987,7 +5135,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep16_batch256_eplb256_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep16_batch256_eplb256_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep16_batch256_eplb256_mtp0.yaml"
       decode:
         num-worker: 1
@@ -5001,7 +5149,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep32_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep32_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/1k1k/stp/ctx3_gen1_dep32_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -5020,7 +5168,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 3
@@ -5035,7 +5183,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -5050,7 +5198,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 4
@@ -5065,7 +5213,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -5080,7 +5228,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -5095,7 +5243,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
       decode:
         num-worker: 1
@@ -5110,7 +5258,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml"
       decode:
         num-worker: 1
@@ -5125,7 +5273,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml"
       decode:
         num-worker: 1
@@ -5140,7 +5288,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -5154,7 +5302,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -5168,7 +5316,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml"
       decode:
         num-worker: 4
@@ -5182,7 +5330,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
       decode:
         num-worker: 5
@@ -5196,7 +5344,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -5210,7 +5358,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -5224,7 +5372,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml"
       decode:
         num-worker: 3
@@ -5238,7 +5386,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 2
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp4/8k1k/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml"
       decode:
         num-worker: 1
@@ -5382,7 +5530,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 4
@@ -5397,7 +5545,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
       decode:
         num-worker: 4
@@ -5412,7 +5560,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml"
       decode:
         num-worker: 1
@@ -5427,7 +5575,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml"
       decode:
         num-worker: 1
@@ -5442,7 +5590,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       decode:
         num-worker: 1
@@ -5457,7 +5605,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml"
       decode:
         num-worker: 1
@@ -5472,7 +5620,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml"
       decode:
         num-worker: 2
@@ -5487,7 +5635,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
       decode:
         num-worker: 4
@@ -5501,7 +5649,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
       decode:
         num-worker: 4
@@ -5515,7 +5663,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml"
       decode:
         num-worker: 4
@@ -5529,7 +5677,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml"
       decode:
         num-worker: 1
@@ -5543,7 +5691,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml"
       decode:
         num-worker: 1
@@ -5557,7 +5705,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml"
       decode:
         num-worker: 2
@@ -5571,7 +5719,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/1k1k/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml"
       decode:
         num-worker: 2
@@ -5590,7 +5738,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
       decode:
         num-worker: 4
@@ -5605,7 +5753,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
       decode:
         num-worker: 4
@@ -5620,7 +5768,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
       decode:
         num-worker: 1
@@ -5635,7 +5783,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       decode:
         num-worker: 1
@@ -5650,7 +5798,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
       decode:
         num-worker: 1
@@ -5665,7 +5813,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml"
       decode:
         num-worker: 1
@@ -5680,7 +5828,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
       decode:
         num-worker: 4
@@ -5694,7 +5842,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
       decode:
         num-worker: 4
@@ -5708,7 +5856,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml"
       decode:
         num-worker: 4
@@ -5722,7 +5870,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml"
       decode:
         num-worker: 1
@@ -5736,7 +5884,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml"
       decode:
         num-worker: 1
@@ -5750,7 +5898,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
       decode:
         num-worker: 1
@@ -5764,7 +5912,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml
         - "CONFIG_FILE=recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml"
       decode:
         num-worker: 1
@@ -6320,7 +6468,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/low-latency-dep4-1p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6333,7 +6481,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/low-latency-dep4-1p-tep8-6d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 6
         tp: 8
@@ -6346,7 +6494,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/max-tpt-dep4-1p-dep8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_maxtpt[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6359,7 +6507,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/stp/max-tpt-dep4-1p-dep8-2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_stp_maxtpt[1]"
       decode:
         num-worker: 2
         tp: 8
@@ -6376,7 +6524,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-1p-tep8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6389,7 +6537,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-1p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6402,7 +6550,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-dep4-2p-tep8-5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6415,7 +6563,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 1
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/low-latency-tp4-1p-tp8-1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_stp_tp4"
       decode:
         num-worker: 1
         tp: 8
@@ -6428,7 +6576,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 4
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/stp/max-tpt-dep4-7p-dep8-2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_stp_maxtpt_7p2d"
       decode:
         num-worker: 2
         tp: 8
@@ -6456,7 +6604,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/low-latency-tep8-1p1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6469,7 +6617,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/low-latency-tep8-1p3d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[1]"
       decode:
         num-worker: 3
         tp: 8
@@ -6482,7 +6630,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/max-tpt-dep8-1p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6495,7 +6643,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/stp/max-tpt-dep8-2p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6512,7 +6660,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_lowlat_0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_0.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_0.yaml"
       decode:
         num-worker: 3
@@ -6526,7 +6674,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_lowlat_1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_1.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_1.yaml"
       decode:
         num-worker: 4
@@ -6540,7 +6688,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_lowlat_2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_2.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_2.yaml"
       decode:
         num-worker: 6
@@ -6555,7 +6703,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml"
       decode:
         num-worker: 2
@@ -6569,7 +6717,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml"
       decode:
         num-worker: 1
@@ -6583,7 +6731,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml"
       decode:
         num-worker: 1
@@ -6597,7 +6745,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml"
       decode:
         num-worker: 1
@@ -6627,7 +6775,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p1d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6642,7 +6790,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/low-latency-tep8-1p3d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 3
         tp: 8
@@ -6657,7 +6805,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6672,7 +6820,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-2p5d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6687,7 +6835,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 8
         dp-attn: true
         additional-settings:
-        - "CONFIG_FILE=recipes/b200-fp8/1k1k/mtp/max-tpt-dep8-1p2d.yaml"
+        - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:override_mtp_maxtpt_1p2d"
       decode:
         num-worker: 2
         tp: 8
@@ -6705,7 +6853,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml"
       decode:
         num-worker: 3
@@ -6720,7 +6868,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml"
       decode:
         num-worker: 4
@@ -6735,7 +6883,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml"
       decode:
         num-worker: 6
@@ -6751,7 +6899,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml"
       decode:
         num-worker: 2
@@ -6766,7 +6914,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml"
       decode:
         num-worker: 1
@@ -6781,7 +6929,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml"
       decode:
         num-worker: 1
@@ -6796,7 +6944,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml
         - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml"
       decode:
         num-worker: 1
@@ -6825,8 +6973,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 5
         tp: 8
@@ -6840,8 +6988,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/low-latency-dep4-1p-tep8-6d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 6
         tp: 8
@@ -6855,8 +7003,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6870,8 +7018,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/1k1k/mtp/max-tpt-dep4-1p-dep8-2d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/1k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       decode:
         num-worker: 2
         tp: 8
@@ -6891,8 +7039,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[0]"
       decode:
         num-worker: 1
         tp: 8
@@ -6906,8 +7054,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-1p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[1]"
       decode:
         num-worker: 5
         tp: 8
@@ -6921,8 +7069,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 4
         dp-attn: true
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-dep4-2p-tep8-5d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:zip_override_mtp_lowlat[2]"
       decode:
         num-worker: 5
         tp: 8
@@ -6936,13 +7084,229 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         ep: 1
         dp-attn: false
         additional-settings:
-        # https://github.com/ishandhanani/srt-slurm/blob/sa-submission-q1-2026/recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml
-        - "CONFIG_FILE=recipes/b200-fp4/8k1k/mtp/low-latency-tp4-1p-tp8-1d.yaml"
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp4/8k1k.yaml
+        - "CONFIG_FILE=recipes/b200-fp4/8k1k.yaml:override_mtp_tp4"
       decode:
         num-worker: 1
         tp: 8
         ep: 1
         dp-attn: false
+
+kimik2.5-fp4-gb200-dynamo-trt:
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: gb200
+  precision: fp4
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Non-MTP configurations (default spec_decoding="none")
+    - conc-list: [ 4, 192, 360, 668 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [ 5, 15, 30, 55 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 5
+        tp: 4
+        ep: 4
+        dp-attn: false
+    - conc-list: [ 666 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [ 2253 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+    - conc-list: [ 4301, 6452 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [ 4301 ]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [ 4301 ]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch128_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch128_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 32
+        ep: 32
+        dp-attn: true
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Non-MTP configurations (default spec_decoding="none")
+    - conc-list: [ 4 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
+    - conc-list: [ 156 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: false
+    - conc-list: [ 5, 15, 30, 60, 105 ]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 5
+        tp: 4
+        ep: 4
+        dp-attn: false
+    - conc-list: [ 333 ]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [ 615 ]
+      prefill:
+        num-worker: 3
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    - conc-list: [ 2151 ]
+      prefill:
+        num-worker: 5
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    - conc-list: [ 2253 ]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
 
 kimik2.5-fp4-gb200-dynamo-vllm:
   image: vllm/vllm-openai:v0.18.0-cu130
