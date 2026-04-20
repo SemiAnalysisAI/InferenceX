@@ -2237,29 +2237,6 @@ kimik2.5-fp4-b200-vllm:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
-  model: nvidia/Kimi-K2.5-NVFP4
-  model-prefix: kimik2.5
-  runner: b300
-  precision: fp4
-  framework: vllm
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.9-cu130
   model: deepseek-ai/DeepSeek-R1-0528
