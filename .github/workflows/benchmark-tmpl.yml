@@ -67,6 +67,11 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      scenario-type:
+        description: "Scenario type (fixed-seq-len or agentic-coding)"
+        required: false
+        type: string
+        default: 'fixed-seq-len'
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -89,6 +94,8 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  SCENARIO_TYPE: ${{ inputs.scenario-type }}
+  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

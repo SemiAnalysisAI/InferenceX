@@ -222,7 +222,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 

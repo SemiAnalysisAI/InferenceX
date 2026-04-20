@@ -280,5 +280,5 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 fi
