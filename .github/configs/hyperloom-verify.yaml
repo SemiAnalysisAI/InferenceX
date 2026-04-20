@@ -1,0 +1,65 @@
+# Hyperloom verify-pr lookup table.
+# Maps Hyperloom-managed bench scripts to the local model path + the single
+# (tp, conc, isl, osl) configuration we run for PR validation.
+#
+# Used ONLY by .github/workflows/verify-pr.yml on this fork. Not consumed by
+# any upstream sweep / matrix logic.
+#
+# To add a new model: add an entry whose key is the script filename (under
+# benchmarks/single_node/) and fill in model_path / image / framework / etc.
+# To bump the verify config later (e.g. 2 conc points), extend `runs` to a list.
+
+scripts:
+  dsr1_fp8_mi355x.sh:
+    model_path: /hyperloom/models/DeepSeek-R1-0528
+    image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
+    framework: sglang
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
+
+  qwen3.5_bf16_mi355x.sh:
+    model_path: /hyperloom/models/Qwen-Qwen3.5-397B-A17B
+    image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260215
+    framework: sglang
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
+
+  glm5_fp8_mi355x.sh:
+    model_path: /hyperloom/models/zai-org-GLM-5
+    image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219
+    framework: sglang
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
+
+  kimik2.5_int4_mi355x.sh:
+    model_path: /hyperloom/models/Kimi-K2.5
+    image: vllm/vllm-openai-rocm:v0.18.0
+    framework: vllm
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
+
+  minimaxm2.5_fp8_mi355x.sh:
+    model_path: /hyperloom/models/MiniMaxAI-MiniMax-M2.5
+    image: vllm/vllm-openai-rocm:v0.19.0
+    framework: vllm
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
+
+  gptoss_fp4_mi355x.sh:
+    model_path: /hyperloom/models/gpt-oss-120b
+    image: vllm/vllm-openai-rocm:v0.17.0
+    framework: vllm
+    tp: 8
+    conc: 32
+    isl: 1024
+    osl: 1024
