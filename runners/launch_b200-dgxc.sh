@@ -1,9 +1,8 @@
 #!/usr/bin/bash
 
-source "$(dirname "$0")/lib_single_node_script.sh"
-
 HF_HUB_CACHE_MOUNT="/raid/hf_hub_cache/"
-SCRIPT_PATH=$(resolve_single_node_benchmark_script "${EXP_NAME%%_*}" "$PRECISION" "b200" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
+FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 PORT=8888
 
 # Create unique cache directory based on model parameters
@@ -31,17 +30,13 @@ docker run --rm --init --network host --name $server_name \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
 -e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e CONC -e MAX_MODEL_LEN -e ISL -e OSL -e PORT=$PORT -e EP_SIZE -e DP_ATTENTION \
--e SPEC_DECODING -e DISAGG \
--e BENCHMARK_TYPE -e EXPORT_FILE -e RUNTIME_STACK_ID -e HARDWARE_PROFILE_ID -e CANONICAL_MODEL_ID -e REQUEST_MODE -e MAX_CONCURRENCY \
--e SUPPORT_STATUS -e VLLM_CPU_OFFLOAD_GB -e VLLM_SWAP_SPACE_GB -e SGLANG_MEM_FRACTION_OVERRIDE -e SGLANG_CHUNKED_PREFILL_OVERRIDE \
--e MAX_SESSIONS -e MAX_TURNS_PER_SESSION -e MAX_OUTPUT_LEN -e NUM_WARMUP_SESSIONS -e IGNORE_WAITS -e IGNORE_EOS \
 -e NCCL_GRAPH_REGISTER=0 \
 -e TORCH_CUDA_ARCH_LIST="10.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 -e PROFILE -e SGLANG_TORCH_PROFILER_DIR -e VLLM_TORCH_PROFILER_DIR -e VLLM_RPC_TIMEOUT \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e RUN_EVAL -e EVAL_ONLY -e RUNNER_TYPE \
 --entrypoint=/bin/bash \
 $(echo "$IMAGE" | sed 's/#/\//') \
-"$SCRIPT_PATH"
+benchmarks/single_node/"${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
 
 # Try graceful first
 docker stop -t 90 "$server_name" || true

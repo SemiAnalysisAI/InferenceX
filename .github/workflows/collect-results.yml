@@ -29,7 +29,6 @@ jobs:
           pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
       - name: Print summary
-        if: inputs.result-prefix != 'isb1'
         run: |
           pip install tabulate
           python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
@@ -39,29 +38,8 @@ jobs:
           pip install tabulate
           python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
 
-      - name: ISB1 operator summary
-        if: inputs.result-prefix == 'isb1'
-        run: |
-          pip install tabulate
-          python3 utils/summarize_isb1.py results/ >> $GITHUB_STEP_SUMMARY
-
-      - name: ISB1 gate report
-        if: inputs.result-prefix == 'isb1'
-        run: |
-          AGGREGATE_PATH="agg_${{ inputs.result-prefix }}.json"
-          python3 utils/gate_isb1.py "$AGGREGATE_PATH" | tee isb1_gate_report.json
-          python3 utils/gate_isb1.py "$AGGREGATE_PATH" --format markdown >> $GITHUB_STEP_SUMMARY
-
       - name: Upload aggregated results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: results_${{ inputs.result-prefix || 'all' }}
           path: agg_${{ inputs.result-prefix || 'all' }}.json
-
-      - name: Upload ISB1 gate report
-        if: inputs.result-prefix == 'isb1'
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: isb1_gate_report
-          path: isb1_gate_report.json
-          if-no-files-found: ignore

@@ -1,10 +1,9 @@
 #!/usr/bin/bash
 
-source "$(dirname "$0")/lib_single_node_script.sh"
-
 HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"
-SCRIPT_PATH=$(resolve_single_node_benchmark_script "${EXP_NAME%%_*}" "$PRECISION" "b200" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
+FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 UCX_NET_DEVICES=eth0
 
@@ -18,4 +17,4 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME"
 --container-writable \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL,PORT=8888,UCX_NET_DEVICES=$UCX_NET_DEVICES \
-bash "$SCRIPT_PATH"
+bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh

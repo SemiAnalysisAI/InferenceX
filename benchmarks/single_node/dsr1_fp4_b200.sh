@@ -31,26 +31,13 @@ else
 fi
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
-RUNTIME_CONTEXT_ARGS=""
-if is_isb1_replay_benchmark && [ -n "${MAX_MODEL_LEN:-}" ]; then
-    RUNTIME_CONTEXT_ARGS="--context-length $MAX_MODEL_LEN"
-fi
+EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    RUNTIME_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
-fi
-RADIX_CACHE_ARGS="--disable-radix-cache"
-if is_isb1_replay_benchmark; then
-    RADIX_CACHE_ARGS=""
-fi
-if [[ -n "${OFFLOAD_MODE:-}" ]]; then
-    apply_sglang_offload_config
+    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
-if [[ -n "${OFFLOAD_MODE:-}" ]]; then
-    start_kv_metrics_collector "${PORT:-8888}" /workspace/kv_metrics.csv 2.0
-fi
 
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
@@ -58,7 +45,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.
 --cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
 --chunked-prefill-size 16384 \
 --ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem $RADIX_CACHE_ARGS --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 $RUNTIME_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+--enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -67,7 +54,7 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 pip install -q datasets pandas
 
-run_single_node_benchmark \
+run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
@@ -77,8 +64,7 @@ run_single_node_benchmark \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --server-pid "$SERVER_PID"
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
@@ -87,8 +73,5 @@ if [ "${RUN_EVAL}" = "true" ]; then
 fi
 
 # Stop GPU monitoring
-if [[ -n "${OFFLOAD_MODE:-}" ]]; then
-    stop_kv_metrics_collector
-fi
 stop_gpu_monitor
 set +x

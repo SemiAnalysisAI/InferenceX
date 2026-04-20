@@ -1,7 +1,5 @@
 #!/usr/bin/bash
 
-source "$(dirname "$0")/lib_single_node_script.sh"
-
 # System-specific configuration for B200 DGXC Slurm cluster
 SLURM_PARTITION="gpu"
 SLURM_ACCOUNT="benchmark"
@@ -217,7 +215,8 @@ else
 
     HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SCRIPT_PATH=$(resolve_single_node_benchmark_script "${EXP_NAME%%_*}" "$PRECISION" "b200" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
+    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
@@ -244,7 +243,5 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash "$SCRIPT_PATH"
-
-    scancel $JOB_ID
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 fi

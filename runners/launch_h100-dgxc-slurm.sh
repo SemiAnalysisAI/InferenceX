@@ -1,7 +1,5 @@
 #!/usr/bin/bash
 
-source "$(dirname "$0")/lib_single_node_script.sh"
-
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
@@ -232,7 +230,6 @@ else
 
     HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SCRIPT_PATH=$(resolve_single_node_benchmark_script "${EXP_NAME%%_*}" "$PRECISION" "h100" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
 
     salloc --exclude="$SLURM_EXCLUDED_NODELIST" --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
@@ -250,7 +247,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash "$SCRIPT_PATH"
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100.sh
 
     scancel $JOB_ID
 

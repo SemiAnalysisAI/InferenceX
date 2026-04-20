@@ -1,7 +1,0 @@
-# Python
-__pycache__/
-*.pyc
-
-# Generated artifacts
-*.log
-*.tmp

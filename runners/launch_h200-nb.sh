@@ -1,12 +1,11 @@
 #!/usr/bin/bash
 
-source "$(dirname "$0")/lib_single_node_script.sh"
-
 export HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
-SCRIPT_PATH=$(resolve_single_node_benchmark_script "$MODEL_CODE" "$PRECISION" "h200" "$FRAMEWORK" "${SPEC_DECODING:-none}") || exit 1
+FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="main"
 
@@ -20,4 +19,4 @@ srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME"
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash "$SCRIPT_PATH"
+bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
