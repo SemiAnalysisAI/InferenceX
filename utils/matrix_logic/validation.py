@@ -456,7 +456,7 @@ class ChangelogMatrixEntry(BaseModel):
     """
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    single_node: dict[str, list[SingleNodeMatrixEntry]
+    single_node: dict[str, list[Union[SingleNodeMatrixEntry, AgenticMatrixEntry]]
                       ] = Field(default_factory=dict)
     multi_node: dict[str, list[MultiNodeMatrixEntry]
                      ] = Field(default_factory=dict)

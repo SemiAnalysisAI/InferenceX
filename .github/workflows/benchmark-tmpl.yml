@@ -72,6 +72,16 @@ on:
         required: false
         type: string
         default: 'fixed-seq-len'
+      offload-mode:
+        description: "CPU offload mode for agentic scenarios (on/off/noprefix)"
+        required: false
+        type: string
+        default: 'off'
+      total-cpu-dram-gb:
+        description: "Total CPU DRAM in GB for KV offloading"
+        required: false
+        type: string
+        default: '600'
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -96,6 +106,9 @@ env:
   EVAL_ONLY: ${{ inputs.eval-only }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  USERS: ${{ inputs.conc }}
+  OFFLOAD_MODE: ${{ inputs.offload-mode }}
+  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

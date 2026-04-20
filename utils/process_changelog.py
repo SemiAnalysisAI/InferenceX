@@ -162,10 +162,13 @@ def main():
             all_eval_results.extend(json.loads(eval_result.stdout))
 
     for result in all_benchmark_results:
-        seq_len_str = seq_len_to_str(result["isl"], result["osl"])
-        if "prefill" in result and result["prefill"] is not None:
+        if result.get("scenario-type") == "agentic-coding":
+            final_results["single_node"]["agentic"].append(result)
+        elif "prefill" in result and result["prefill"] is not None:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["multi_node"][seq_len_str].append(result)
         else:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
     final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
