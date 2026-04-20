@@ -70,6 +70,11 @@ on:
         required: false
         type: string
         default: ''
+      debug-trace:
+        description: "Store full request/response text to debug_trace.jsonl"
+        required: false
+        type: string
+        default: 'false'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -91,6 +96,7 @@ env:
   IGNORE_EOS: ${{ inputs.ignore-eos }}
   HASH_BLOCK_MODE: ${{ inputs.hash-block-mode }}
   TRACE_DIR: ${{ inputs.trace-dir }}
+  DEBUG_TRACE: ${{ inputs.debug-trace }}
 
 permissions:
   contents: read

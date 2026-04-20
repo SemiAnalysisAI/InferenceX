@@ -165,6 +165,9 @@ fi
 if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
     REPLAY_CMD+=" --hash-block-mode"
 fi
+if [ "${DEBUG_TRACE:-false}" = "true" ]; then
+    REPLAY_CMD+=" --debug-trace"
+fi
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
 

@@ -103,6 +103,11 @@ on:
         required: false
         default: ''
         type: string
+      debug_trace:
+        description: 'Store full request/response text for every API call to debug_trace.jsonl (true/false)'
+        required: false
+        default: 'false'
+        type: string
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -209,6 +214,7 @@ jobs:
       ignore-eos: ${{ inputs.ignore_eos }}
       hash-block-mode: ${{ inputs.hash_block_mode }}
       trace-dir: ${{ inputs.trace_dir }}
+      debug-trace: ${{ inputs.debug_trace }}
 
   # ---------------------------------------------------------------------------
   # Collect & aggregate results
