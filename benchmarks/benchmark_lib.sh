@@ -847,3 +847,117 @@ run_eval() {
     fi
     return $eval_rc
 }
+
+
+# --------------------------------
+# Agentic trace replay helpers
+# --------------------------------
+
+AGENTIC_DIR=/workspace/utils/agentic-benchmark
+TRACE_REPLAY_DIR=/workspace/utils/trace-replay
+
+resolve_trace_source() {
+    if [[ "${TRACE_DIR:-}" == hf_* ]]; then
+        HF_DATASET="${TRACE_DIR#hf_}"
+        HF_DATASET="${HF_DATASET/--//}"
+        TRACE_SOURCE_FLAG="--hf-dataset $HF_DATASET"
+        echo "Loading traces from Hugging Face dataset: $HF_DATASET"
+    else
+        TRACE_DIR="${TRACE_DIR:-$TRACE_REPLAY_DIR/traces}"
+        if [ ! -d "$TRACE_DIR" ] && [ -d "$TRACE_REPLAY_DIR/$TRACE_DIR" ]; then
+            TRACE_DIR="$TRACE_REPLAY_DIR/$TRACE_DIR"
+        fi
+        TRACE_SOURCE_FLAG="--trace-directory $TRACE_DIR"
+    fi
+}
+
+install_agentic_deps() {
+    pip install --quiet urllib3 requests 2>/dev/null || true
+    pip install -q -r "$AGENTIC_DIR/requirements.txt"
+    pip install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
+}
+
+start_agentic_metrics_collector() {
+    local result_dir="$1"
+    local port="${2:-$PORT}"
+
+    export PYTHONPATH="$AGENTIC_DIR:${PYTHONPATH:-}"
+
+    echo "Starting server metrics collector..."
+    python3 -m bench.run_metrics_collector \
+        --url "http://localhost:$port" \
+        --output-prefix "$result_dir/metrics" \
+        --pid-file "$result_dir/metrics_collector.pid" &
+    METRICS_PID=$!
+    echo "Metrics collector PID: $METRICS_PID"
+    sleep 2
+}
+
+build_replay_cmd() {
+    local result_dir="$1"
+    local duration="${DURATION:-1800}"
+    local max_delay="${MAX_DELAY:-60}"
+    local advance_min="${ADVANCE_MIN:-0.0}"
+    local advance_max="${ADVANCE_MAX:-0.7}"
+
+    REPLAY_CMD="python3 $TRACE_REPLAY_DIR/trace_replay_tester.py"
+    REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
+    REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
+    REPLAY_CMD+=" --output-dir $result_dir/trace_replay"
+    REPLAY_CMD+=" --start-users $USERS"
+    REPLAY_CMD+=" --max-users $USERS"
+    REPLAY_CMD+=" --test-duration $duration"
+    REPLAY_CMD+=" --recycle"
+    REPLAY_CMD+=" --max-delay $max_delay"
+    REPLAY_CMD+=" --max-concurrent-requests 0"
+    REPLAY_CMD+=" --advance-min $advance_min"
+    REPLAY_CMD+=" --advance-max $advance_max"
+    REPLAY_CMD+=" --seed 42"
+    REPLAY_CMD+=" --no-color"
+    if [ "${IGNORE_EOS:-false}" = "true" ]; then
+        REPLAY_CMD+=" --ignore-eos"
+    fi
+    if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
+        REPLAY_CMD+=" --hash-block-mode"
+    fi
+    if [ "${DEBUG_TRACE:-false}" = "true" ]; then
+        REPLAY_CMD+=" --debug-trace"
+    fi
+    if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
+        REPLAY_CMD+=" --no-max-tokens"
+    fi
+}
+
+stop_agentic_metrics_collector() {
+    echo "Stopping metrics collector..."
+    if [ -n "${METRICS_PID:-}" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
+        kill -TERM "$METRICS_PID" 2>/dev/null || true
+        wait "$METRICS_PID" 2>/dev/null || true
+    fi
+}
+
+trim_idle_metrics() {
+    local result_dir="$1"
+    python3 -c "
+import csv, sys
+f = '$result_dir/metrics_server_metrics.csv'
+try:
+    with open(f) as fh:
+        reader = csv.DictReader(fh)
+        header = reader.fieldnames
+        rows = list(reader)
+    first = next((i for i, r in enumerate(rows) if float(r.get('num_requests_running', 0)) > 0 or float(r.get('prompt_tokens_total', 0)) > 0), 0)
+    if first > 0:
+        trimmed = rows[first:]
+        t0 = float(trimmed[0]['timestamp_sec'])
+        for r in trimmed:
+            r['relative_time_sec'] = f'{float(r[\"timestamp_sec\"]) - t0:.3f}'
+        with open(f, 'w', newline='') as fh:
+            w = csv.DictWriter(fh, fieldnames=header)
+            w.writeheader()
+            w.writerows(trimmed)
+        print(f'Trimmed {first} idle rows from metrics CSV')
+except Exception as e:
+    print(f'Warning: could not trim metrics CSV: {e}', file=sys.stderr)
+" 2>&1 || true
+}

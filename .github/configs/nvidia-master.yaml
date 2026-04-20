@@ -7483,7 +7483,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 16
           dp-attn: true
 
-dsr1-fp4-b200-vllm-agentic:
+dsr1-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.1
   model: nvidia/DeepSeek-R1-0528-FP4
   model-prefix: dsr1

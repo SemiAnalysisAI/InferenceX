@@ -1408,7 +1408,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 
-dsr1-fp4-mi355x-vllm-agentic:
+dsr1-fp4-mi355x-vllm:
   image: vllm/vllm-openai:v0.19.1
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1

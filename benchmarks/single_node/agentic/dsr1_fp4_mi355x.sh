@@ -2,32 +2,16 @@
 set -euo pipefail
 set -x
 
-# Trace replay benchmark for FP4 models on MI355X.
-# Replays real agentic coding traces at a fixed number of concurrent users.
-# Uses kv-cache-tester/trace_replay_tester.py with realistic cache patterns.
+# Agentic trace replay benchmark for DSR1 FP4 on MI355X.
 #
 # Required env vars:
 #   MODEL, TP, USERS, OFFLOAD_MODE, TOTAL_CPU_DRAM_GB, RESULT_DIR
-# Optional:
-#   PORT (default 8888), REQUEST_TIMEOUT (default 3600)
-#   TRACE_DIR (default: kv-cache-tester/traces_neon)
-#   DURATION (default 1800, benchmark duration in seconds)
-#   MAX_DELAY (default 60, max gap between requests in seconds)
-#   ADVANCE_MIN (default 0.0, min trace advancement fraction)
-#   ADVANCE_MAX (default 0.7, max trace advancement fraction)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars \
-    MODEL \
-    TP \
-    USERS \
-    OFFLOAD_MODE \
-    TOTAL_CPU_DRAM_GB \
-    RESULT_DIR
+check_env_vars MODEL TP USERS OFFLOAD_MODE TOTAL_CPU_DRAM_GB RESULT_DIR
 
 PORT=${PORT:-8888}
-REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-3600}
 DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
@@ -37,53 +21,22 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# ---- Download model --------------------------------------------------------
 hf download "$MODEL"
 
-nvidia-smi 2>/dev/null || rocm-smi 2>/dev/null || true
+# ---- Resolve traces and install deps ----------------------------------------
+resolve_trace_source
+install_agentic_deps
 
-# ---- Paths -----------------------------------------------------------------
-AGENTIC_DIR=/workspace/utils/agentic-benchmark
-TRACE_REPLAY_DIR=/workspace/utils/trace-replay
-# TRACE_DIR: local path (abs or relative to kv-cache-tester) or hf_<org>--<repo>
-# (e.g. hf_semianalysisai--cc-traces-0 loads from HF dataset semianalysisai/cc-traces-0)
-if [[ "${TRACE_DIR:-}" == hf_* ]]; then
-    HF_DATASET="${TRACE_DIR#hf_}"
-    HF_DATASET="${HF_DATASET/--//}"
-    TRACE_SOURCE_FLAG="--hf-dataset $HF_DATASET"
-    echo "Loading traces from Hugging Face dataset: $HF_DATASET"
-else
-    TRACE_DIR="${TRACE_DIR:-$TRACE_REPLAY_DIR/traces_neon}"
-    if [ ! -d "$TRACE_DIR" ] && [ -d "$TRACE_REPLAY_DIR/$TRACE_DIR" ]; then
-        TRACE_DIR="$TRACE_REPLAY_DIR/$TRACE_DIR"
-    fi
-    TRACE_SOURCE_FLAG="--trace-directory $TRACE_DIR"
-fi
-
-pip install --quiet urllib3 requests 2>/dev/null || true
-
-# Check vLLM version — patches for local_cache_hit and scheduler stale KV
-# transfer are fixed in 0.19.0+
-VLLM_VERSION=$(python3 -c "import vllm; print(vllm.__version__)" 2>/dev/null || echo "unknown")
-echo "vLLM version: $VLLM_VERSION"
-if python3 -c "from packaging.version import Version; exit(0 if Version('${VLLM_VERSION}') >= Version('0.19.0') else 1)" 2>/dev/null; then
-    echo "vLLM >= 0.19.0: no patches needed"
-else
-    echo "WARNING: vLLM $VLLM_VERSION < 0.19.0 — local_cache_hit and scheduler patches are no longer applied. Upgrade to 0.19.0+ for stability."
-fi
-
+# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-# ---- Generate vLLM config --------------------------------------------------
 cat > "$RESULT_DIR/config.yaml" << 'EOF'
 kv-cache-dtype: fp8
 async-scheduling: true
 EOF
 
-# ---- Build vLLM command -----------------------------------------------------
-offload_size=$TOTAL_CPU_DRAM_GB
-
+# ---- Build and start vLLM server --------------------------------------------
 VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
 VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
@@ -93,31 +46,14 @@ if [ "${EP_SIZE:-0}" -gt 1 ]; then
 fi
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
-    # SimpleCPUOffloadConnector uses cuda.bindings (NVIDIA-only), skip on ROCm
     VLLM_CMD+=" --kv_offloading_backend native"
-    VLLM_CMD+=" --kv_offloading_size $offload_size"
+    VLLM_CMD+=" --kv_offloading_size $TOTAL_CPU_DRAM_GB"
     VLLM_CMD+=" --disable-hybrid-kv-cache-manager"
 elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
 
 echo "$VLLM_CMD" > "$RESULT_DIR/vllm_command.txt"
-
-# # ---- ROCm / AITER tuning ----------------------------------------------------
-# # Keep AITER for attention perf, but disable AITER MoE kernels —
-# # ck_moe_stage1 crashes with MXFP4 + expert-parallel on MI355X.
-# # See: https://github.com/vllm-project/vllm/issues/35637
-# export VLLM_ROCM_USE_AITER=1
-# export VLLM_ROCM_USE_AITER_MOE=0
-
-# # If MEC FW < 177, RCCL cannot reclaim scratch memory — disable to avoid crashes.
-# # https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
-# version=$(rocm-smi --showfw | grep MEC | head -n 1 | awk '{print $NF}')
-# if [[ "$version" == "" || $version -lt 177 ]]; then
-#   export HSA_NO_SCRATCH_RECLAIM=1
-# fi
-
-# ---- Start vLLM server ------------------------------------------------------
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
@@ -125,110 +61,30 @@ $VLLM_CMD > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready \
-    --port "$PORT" \
-    --server-log "$SERVER_LOG" \
-    --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Install dependencies ---------------------------------------------------
-set -x
-pip install -q -r "$AGENTIC_DIR/requirements.txt"
-pip install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
-set +x
-
-# ---- Start server metrics collector -----------------------------------------
-export PYTHONPATH="$AGENTIC_DIR:${PYTHONPATH:-}"
-
-echo "Starting server metrics collector..."
-python3 -m bench.run_metrics_collector \
-    --url "http://localhost:$PORT" \
-    --output-prefix "$RESULT_DIR/metrics" \
-    --pid-file "$RESULT_DIR/metrics_collector.pid" &
-METRICS_PID=$!
-echo "Metrics collector PID: $METRICS_PID"
-
-sleep 2
-
-# ---- Run trace replay benchmark ---------------------------------------------
-REPLAY_CMD="python3 $TRACE_REPLAY_DIR/trace_replay_tester.py"
-REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
-REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
-REPLAY_CMD+=" --timing-strategy think-only"
-REPLAY_CMD+=" --output-dir $RESULT_DIR/trace_replay"
-REPLAY_CMD+=" --start-users $USERS"
-REPLAY_CMD+=" --max-users $USERS"
-REPLAY_CMD+=" --max-ttft 9999"
-REPLAY_CMD+=" --test-duration $DURATION"
-REPLAY_CMD+=" --recycle"
-REPLAY_CMD+=" --max-delay $MAX_DELAY"
-REPLAY_CMD+=" --max-concurrent-requests 0"
-REPLAY_CMD+=" --max-new-tokens-per-period 999999999"
-REPLAY_CMD+=" --advance-min $ADVANCE_MIN"
-REPLAY_CMD+=" --advance-max $ADVANCE_MAX"
-REPLAY_CMD+=" --seed 42"
-REPLAY_CMD+=" --no-color"
-if [ "${IGNORE_EOS:-false}" = "true" ]; then
-    REPLAY_CMD+=" --ignore-eos"
-fi
-if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
-    REPLAY_CMD+=" --hash-block-mode"
-fi
-if [ "${DEBUG_TRACE:-false}" = "true" ]; then
-    REPLAY_CMD+=" --debug-trace"
-fi
-if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
-    REPLAY_CMD+=" --no-max-tokens"
-fi
+# ---- Run benchmark ----------------------------------------------------------
+start_agentic_metrics_collector "$RESULT_DIR"
+build_replay_cmd "$RESULT_DIR"
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
 
 set -x
 if $REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log"; then
     echo "SUCCESS" > "$RESULT_DIR/status.txt"
-    echo "Benchmark completed successfully"
 else
     echo "FAILED" > "$RESULT_DIR/status.txt"
-    echo "Benchmark failed"
 fi
 set +x
 
-# ---- Analyze workload distributions -----------------------------------------
-echo "Analyzing workload distributions..."
+# ---- Post-processing --------------------------------------------------------
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
     "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
 
-# ---- Stop metrics collector -------------------------------------------------
-echo "Stopping metrics collector..."
-if [ -n "$METRICS_PID" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
-    kill -TERM "$METRICS_PID" 2>/dev/null || true
-    wait "$METRICS_PID" 2>/dev/null || true
-fi
+stop_agentic_metrics_collector
+trim_idle_metrics "$RESULT_DIR"
 
-# Trim leading idle rows (no requests running, no tokens processed)
-python3 -c "
-import csv, sys
-f = '$RESULT_DIR/metrics_server_metrics.csv'
-try:
-    with open(f) as fh:
-        reader = csv.DictReader(fh)
-        header = reader.fieldnames
-        rows = list(reader)
-    first = next((i for i, r in enumerate(rows) if float(r.get('num_requests_running', 0)) > 0 or float(r.get('prompt_tokens_total', 0)) > 0), 0)
-    if first > 0:
-        trimmed = rows[first:]
-        t0 = float(trimmed[0]['timestamp_sec'])
-        for r in trimmed:
-            r['relative_time_sec'] = f'{float(r[\"timestamp_sec\"]) - t0:.3f}'
-        with open(f, 'w', newline='') as fh:
-            w = csv.DictWriter(fh, fieldnames=header)
-            w.writeheader()
-            w.writerows(trimmed)
-        print(f'Trimmed {first} idle rows from metrics CSV')
-except Exception as e:
-    print(f'Warning: could not trim metrics CSV: {e}', file=sys.stderr)
-" 2>&1 || true
-
-# ---- Cleanup -----------------------------------------------------------------
+# ---- Cleanup ----------------------------------------------------------------
 echo "Stopping vllm server..."
 kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
