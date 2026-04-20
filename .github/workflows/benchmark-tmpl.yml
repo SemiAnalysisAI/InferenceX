@@ -109,6 +109,7 @@ env:
   USERS: ${{ inputs.conc }}
   OFFLOAD_MODE: ${{ inputs.offload-mode }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
