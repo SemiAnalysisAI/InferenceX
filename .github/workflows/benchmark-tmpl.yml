@@ -225,7 +225,21 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
-      - name: Upload agentic results
+      - name: Process agentic result
+        if: ${{ inputs.scenario-type == 'agentic-coding' }}
+        env:
+          RUNNER_TYPE: ${{ inputs.runner }}
+        run: |
+          python3 utils/process_agentic_result.py
+
+      - name: Upload agentic aggregated result
+        if: ${{ inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic raw results
         if: ${{ inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
