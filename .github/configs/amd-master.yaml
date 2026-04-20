@@ -1409,7 +1409,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp4-mi355x-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai-rocm:v0.19.0
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
