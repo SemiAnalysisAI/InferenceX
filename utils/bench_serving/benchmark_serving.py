@@ -26,6 +26,7 @@ On the client side, run:
 import argparse
 import asyncio
 import base64
+import contextlib
 import gc
 import io
 import json
@@ -183,6 +184,14 @@ def sample_random_requests(
     output_lens = sample_uniform(output_len)
     offsets = np.random.randint(0, vocab_size, size=num_prompts)
 
+    # Create a local RNG for retry-loop padding so that neither serial nor
+    # parallel path consumes global np.random draws beyond this point.
+    # This ensures downstream code (e.g. gamma draws for inter-arrival times)
+    # sees identical global RNG state regardless of num_workers.
+    local_rng = np.random.RandomState(
+        np.random.get_state()[1][:4].tolist()  # derive seed from current state without advancing it
+    )
+
     # Decide whether to use multiprocessing
     if num_workers <= 0:
         num_workers = min(cpu_count() or 1, 8)
@@ -206,7 +215,7 @@ def sample_random_requests(
                 prefix_len,
                 vocab_size,
                 use_chat_template,
-                int(np.random.randint(0, 2**31)),
+                int(local_rng.randint(0, 2**31)),
             ))
 
         actual_workers = len(chunk_args_list)
@@ -228,7 +237,8 @@ def sample_random_requests(
         elapsed = time.perf_counter() - t0
         print(f"Prompt generation completed in {elapsed:.1f}s")
     else:
-        # Original serial path
+        # Original serial path — also uses local_rng for retry-loop padding
+        # to keep global RNG consumption identical to the parallel path.
         if tokenizer_id is None and num_workers > 1:
             print("Warning: tokenizer_id not provided, falling back to serial prompt generation.")
         input_requests = []
@@ -243,7 +253,7 @@ def sample_random_requests(
                 prompt_token_ids = tokenizer.encode(prompt, add_special_tokens=False)
                 if len(prompt_token_ids) < tgt_prompt_len:
                     num_extras = tgt_prompt_len - len(prompt_token_ids)
-                    prompt_token_ids.extend(np.random.randint(0, vocab_size, size=num_extras).tolist())
+                    prompt_token_ids.extend(local_rng.randint(0, vocab_size, size=num_extras).tolist())
                 elif len(prompt_token_ids) > tgt_prompt_len:
                     prompt_token_ids = prompt_token_ids[:tgt_prompt_len]
                 else:
