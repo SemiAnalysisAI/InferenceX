@@ -116,22 +116,13 @@ jobs:
 
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == mi325x-amd* || "${{ runner.name }}" == mi300x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-cw* || "${{ runner.name }}" == h200-cw* || "${{ runner.name }}" == b200-nb* || "${{ runner.name }}" == h200-nb* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
-              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-              scancel --name="${{ runner.name }}" || true
-              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-                squeue --name="${{ runner.name }}"
-                sleep 5
-              done
-            else
-              echo "[Slurm] Cleaning up jobs for user: $USER ..."
-              scancel -u "$USER" || true
-              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
-                squeue -u "$USER"
-                sleep 5
-              done
-            fi
-          fi 
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
+          fi
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -139,6 +130,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
           clean: false
+
+      - name: Cleanup stale eval outputs (pre-run)
+        if: ${{ inputs.run-eval || inputs.eval-only }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
 
       - name: Launch job script
         env:

@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
+# does not have a B300-specific recipe, so this script reuses the existing
+# MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -15,43 +22,38 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# GLM-5 requires transformers with glm_moe_dsa model type support.
-# However, the Image rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219 doesn't provide this support.
-python3 -m pip install -U --no-cache-dir \
-  "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
+nvidia-smi
 
 hf download "$MODEL"
-
-# ROCm / SGLang performance tuning for MI355X
-export SGLANG_ROCM_FUSED_DECODE_MLA=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export SAFETENSORS_FAST_GPU=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-EVAL_CONTEXT_ARGS=""
+if [ "${DP_ATTENTION}" = "true" ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
+elif [ "$EP_SIZE" -gt 1 ]; then
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
+else
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+fi
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-python3 -m sglang.launch_server \
-    --model-path $MODEL \
-    --host=0.0.0.0 \
-    --port $PORT \
-    --tensor-parallel-size $TP \
-    --trust-remote-code \
-    --tool-call-parser glm47 \
-    --reasoning-parser glm45 \
-    --mem-fraction-static 0.85 \
-    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
-    --nsa-prefill-backend tilelang \
-    --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
-    --kv-cache-dtype fp8_e4m3 \
-    --disable-radix-cache> $SERVER_LOG 2>&1 &
+set -x
+vllm serve $MODEL --port $PORT \
+$PARALLEL_ARGS \
+--gpu-memory-utilization 0.90 \
+--max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
+--max-cudagraph-capture-size 2048 \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -68,7 +70,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
