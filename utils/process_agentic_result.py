@@ -110,7 +110,15 @@ def compute_workload_stats(rows):
 
 def compute_cache_stats(rows, server_metrics):
     """Compute cache hit rates from both detailed results and server metrics."""
-    result = {}
+    result = {
+        "theoretical_cache_hit_rate": None,
+        "theoretical_infinite_cache_hit_rate": None,
+        "server_gpu_cache_hit_rate": None,
+        "server_cpu_cache_hit_rate": None,
+        "total_prompt_tokens": None,
+        "total_generation_tokens": None,
+        "total_requests_completed": None,
+    }
 
     # From detailed results: theoretical cache hit rate (infinite cache)
     total_hit_blocks = sum(int(r.get('cache_hit_blocks', 0)) for r in rows)
