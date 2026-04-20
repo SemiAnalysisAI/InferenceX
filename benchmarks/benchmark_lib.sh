@@ -857,18 +857,8 @@ AGENTIC_DIR=/workspace/utils/agentic-benchmark
 TRACE_REPLAY_DIR=/workspace/utils/trace-replay
 
 resolve_trace_source() {
-    if [[ "${TRACE_DIR:-}" == hf_* ]]; then
-        HF_DATASET="${TRACE_DIR#hf_}"
-        HF_DATASET="${HF_DATASET/--//}"
-        TRACE_SOURCE_FLAG="--hf-dataset $HF_DATASET"
-        echo "Loading traces from Hugging Face dataset: $HF_DATASET"
-    else
-        TRACE_DIR="${TRACE_DIR:-$TRACE_REPLAY_DIR/traces}"
-        if [ ! -d "$TRACE_DIR" ] && [ -d "$TRACE_REPLAY_DIR/$TRACE_DIR" ]; then
-            TRACE_DIR="$TRACE_REPLAY_DIR/$TRACE_DIR"
-        fi
-        TRACE_SOURCE_FLAG="--trace-directory $TRACE_DIR"
-    fi
+    TRACE_SOURCE_FLAG="--hf-dataset semianalysisai/cc-traces-weka-042026"
+    echo "Loading traces from Hugging Face dataset: semianalysisai/cc-traces-weka-042026"
 }
 
 install_agentic_deps() {
