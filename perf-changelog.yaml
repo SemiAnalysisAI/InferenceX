@@ -1,5 +1,5 @@
 - config-keys:
-    -glm5-fp4-mi355x-sglang
+    - glm5.1-fp4-mi355x-sglang
   description:
     - "Add GLM5 MXFP4 (FP4) MI350X SGLang Support" 
     - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm700-mi35x-20260416"
