@@ -39,6 +39,7 @@ jobs:
             multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
             eval-config: ${{ steps.get-jobs.outputs.eval-config }}
             multi-node-eval-config: ${{ steps.get-jobs.outputs.multi-node-eval-config }}
+            agentic-config: ${{ steps.get-jobs.outputs.agentic-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -55,10 +56,12 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('eval-only', False)]))")
+                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding']))")
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and not x.get('eval-only', False)]))")
-                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('run-eval', False)]))")
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))")
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
+                  echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
                   echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
                   echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
@@ -142,6 +145,38 @@ jobs:
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config.eval-conc }}
+            ref: ${{ inputs.ref }}
+
+    test-sweep-agentic:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.agentic-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: agentic /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.users }}
+            offload-mode: ${{ matrix.config.offload-mode }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            spec-decoding: 'none'
+            disagg: 'false'
+            run-eval: false
+            scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
