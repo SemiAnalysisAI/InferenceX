@@ -288,7 +288,6 @@ class AgenticCodingConfig(BaseModel):
     """Agentic coding scenario configuration for trace replay benchmarks."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
-    trace_source: str = Field(alias='trace-source')
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 
