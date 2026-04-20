@@ -73,7 +73,7 @@ check_env_vars() {
     local missing_vars=()
 
     for var_name in "$@"; do
-        if [[ -z "${!var_name}" ]]; then
+        if [[ -z "${!var_name:-}" ]]; then
             missing_vars+=("$var_name")
         fi
     done
