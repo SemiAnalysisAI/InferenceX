@@ -173,7 +173,19 @@ jobs:
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
-          if [ "${{ inputs.eval-only }}" = "true" ]; then
+          if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+            # Agentic scenario: check status.txt from trace replay
+            if [ ! -f results/status.txt ]; then
+              echo "Run failed: results/status.txt not found." >&2
+              exit 1
+            fi
+            STATUS=$(cat results/status.txt)
+            if [ "$STATUS" != "SUCCESS" ]; then
+              echo "Run failed: status=$STATUS" >&2
+              cat results/benchmark.log 2>/dev/null || true
+              exit 1
+            fi
+          elif [ "${{ inputs.eval-only }}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
             if ! ls results*.json 1>/dev/null 2>&1; then
@@ -200,18 +212,36 @@ jobs:
           fi
 
       - name: Process result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           python3 utils/process_result.py
 
       - name: Upload result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic results
+        if: ${{ inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            results/metrics_server_metrics.csv
+            results/benchmark.log
+            results/config.yaml
+            results/vllm_command.txt
+            results/benchmark_command.txt
+            results/workload_distribution_summary.txt
+            results/workload_distribution_plots.png
+            results/trace_replay/detailed_results.csv
+            results/trace_replay/debug_trace.jsonl
+            results/status.txt
+          if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()
