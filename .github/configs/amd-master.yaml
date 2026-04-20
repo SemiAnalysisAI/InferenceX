@@ -131,24 +131,6 @@ qwen3.5-bf16-mi355x-sglang:
     search-space:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
-qwen3.5-bf16-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
-  model: Qwen/Qwen3.5-397B-A17B
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: bf16
-  framework: sglang
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
 qwen3.5-bf16-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B
@@ -224,27 +206,6 @@ qwen3.5-fp8-mi355x-sglang:
     - { tp: 2, ep: 2, conc-start: 4, conc-end: 32 }
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
 
-qwen3.5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-    - { tp: 2, ep: 2, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 2, ep: 2, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 4, ep: 1, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-
 qwen3.5-fp4-mi355x-sglang:
   image: rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413
   model: amd/Qwen3.5-397B-A17B-MXFP4
@@ -284,7 +245,7 @@ qwen3.5-fp8-mi300x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
+  image: rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -300,24 +261,6 @@ glm5-fp8-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
-
-glm5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 glm5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2.post
@@ -527,7 +470,7 @@ gptoss-fp4-mi300x-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 64, conc-end: 256 }
+    - { tp: 1, conc-start: 64, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
     - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 16 }
@@ -953,7 +896,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
 
 dsr1-fp4-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1161,7 +1104,7 @@ dsr1-fp4-mi355x-sglang-disagg:
         - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
+  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x-disagg

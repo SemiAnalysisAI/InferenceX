@@ -18,11 +18,11 @@ fi
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared B300 cluster.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp4"
+    export MODEL_PATH="/scratch/models/deepseek-r1-0528-nvfp4-v2"
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp8"
+    export MODEL_PATH="/scratch/models/deepseek-r1-0528"
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
@@ -37,9 +37,9 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR" || exit 1
-git checkout sa-submission-q2-2026
+git checkout sa-submission-q1-2026
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -66,7 +66,6 @@ srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 # Create srtslurm.yaml for srtctl
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -102,17 +101,7 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=x86_64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
-export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
-
 echo "Submitting job with srtctl..."
-
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
-    echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
-    exit 1
-fi
-
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
@@ -176,65 +165,44 @@ echo "Found logs directory: $LOGS_DIR"
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
+# Find all result subdirectories
+RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
-
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
-
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
-            done
-        done
-    fi
-
-    echo "All result files processed"
+if [ -z "$RESULT_SUBDIRS" ]; then
+    echo "Warning: No result subdirectories found in $LOGS_DIR"
 else
-    echo "EVAL_ONLY=true: Skipping benchmark result collection"
+    # Process results from all configurations
+    for result_subdir in $RESULT_SUBDIRS; do
+        echo "Processing result subdirectory: $result_subdir"
+
+        # Extract configuration info from directory name
+        CONFIG_NAME=$(basename "$result_subdir")
+
+        # Find all result JSON files
+        RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+
+        for result_file in $RESULT_FILES; do
+            if [ -f "$result_file" ]; then
+                # Extract metadata from filename
+                # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                filename=$(basename "$result_file")
+                concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+
+                echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                cp "$result_file" "$WORKSPACE_RESULT_FILE"
+
+                echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+            fi
+        done
+    done
 fi
 
-# Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
-    EVAL_DIR="$LOGS_DIR/eval_results"
-    if [ -d "$EVAL_DIR" ]; then
-        echo "Extracting eval results from $EVAL_DIR"
-        shopt -s nullglob
-        for eval_file in "$EVAL_DIR"/*; do
-            [ -f "$eval_file" ] || continue
-            cp "$eval_file" "$GITHUB_WORKSPACE/"
-            echo "Copied eval artifact: $(basename "$eval_file")"
-        done
-        shopt -u nullglob
-    else
-        echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
-    fi
-fi
+echo "All result files processed"
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
 # from blocking the next job's checkout on this runner
@@ -249,19 +217,12 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 else
 
     HF_HUB_CACHE_MOUNT="/scratch/models"
-    # Qwen3.5-397B-A17B-FP8 is pre-staged under /scratch/models on the B300 cluster,
-    # so point MODEL at the local copy. Other models fall through and use `hf download`
-    # against the mounted cache from their benchmark script.
-    if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
-        export MODEL="/scratch/models/${MODEL#*/}"
-    fi
+    export MODEL="/scratch/models/${MODEL#*/}"
     SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
-    # Pin to one of the known-good B300 nodes; others have hardware/network
-    # issues that cause benchmarks to hang or fail to start.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
