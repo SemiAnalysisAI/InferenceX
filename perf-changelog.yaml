@@ -1358,3 +1358,11 @@
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update DeepSeek R1 MI355X single-node SGLang container to lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+    - "Replaces lmsysorg/sglang:v0.5.10-rocm720-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
