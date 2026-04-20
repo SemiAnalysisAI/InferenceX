@@ -3399,8 +3399,8 @@ minimaxm2.5-fp4-b200-vllm:
   - isl: 8192
     osl: 1024
     search-space:
+    - { tp: 1, conc-start: 4, conc-end: 32 }
     - { tp: 1, conc-start: 256, conc-end: 256 }
-    - { tp: 1, conc-start: 1024, conc-end: 1024 }
     - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
     - { tp: 4, conc-start: 4, conc-end: 8 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
