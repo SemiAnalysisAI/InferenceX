@@ -138,7 +138,7 @@ qwen3.5-bf16-mi355x-atom:
   model-prefix: qwen3.5
   runner: mi355x
   precision: bf16
-  framework: sglang
+  framework: atom
   multinode: false
   seq-len-configs:
   - isl: 1024
