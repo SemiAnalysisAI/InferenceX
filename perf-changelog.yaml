@@ -1,7 +1,7 @@
 - config-keys:
     - glm5.1-fp4-mi355x-sglang
   description:
-    - "Add GLM5 MXFP4 (FP4) MI350X SGLang Support" 
+    - "Add GLM5.1 MXFP4 (FP4) MI350X SGLang Support" 
     - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1098
 
