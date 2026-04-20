@@ -14,8 +14,7 @@ On the client side, run:
     python benchmarks/benchmark_serving.py \
         --backend <backend> \
         --model <your_model> \
-        --dataset-name sharegpt \
-        --dataset-path <path to dataset> \
+        --dataset-name random \
         --request-rate <request_rate> \ # By default <request_rate> is inf
         --num-prompts <num_prompts> # By default <num_prompts> is 1000
 
@@ -432,7 +431,7 @@ async def _worker_async(shard: List[Tuple], config: Dict[str, Any],
                 if sem is not None:
                     sem.release()
 
-        for prompt, prompt_len, output_len, mm_content, lora_module in shard:
+        for prompt, prompt_len, output_len, mm_content in shard:
             # Semaphore on the DISPATCH side (not inside the task) bounds
             # in-flight tasks. Acquiring here prevents task pileup when
             # requests complete slower than they arrive.
@@ -443,12 +442,9 @@ async def _worker_async(shard: List[Tuple], config: Dict[str, Any],
                 interval = np.random.gamma(shape=burstiness, scale=theta)
                 await asyncio.sleep(interval)
 
-            model_id = lora_module or config["model_id"]
-            model_name = lora_module or config["model_name"]
-
             req_input = RequestFuncInput(
-                model=model_id,
-                model_name=model_name,
+                model=config["model_id"],
+                model_name=config["model_name"],
                 prompt=prompt,
                 api_url=config["api_url"],
                 prompt_len=prompt_len,
@@ -488,7 +484,6 @@ def run_benchmark(
     ignore_eos: bool,
     goodput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
-    lora_modules: Optional[List[str]],
     num_client_workers: int,
     client_connector_limit: int,
     seed: int,
@@ -552,20 +547,7 @@ def run_benchmark(
     print(f"Maximum request concurrency: {max_concurrency}")
     print(f"Client worker processes: {num_client_workers}")
 
-    # Pre-resolve per-request LoRA module so workers don't need to share RNG.
-    if lora_modules:
-        lora_per_prompt = [random.choice(lora_modules)
-                           for _ in range(len(input_requests))]
-    else:
-        lora_per_prompt = [None] * len(input_requests)
-
-    expanded: List[Tuple[str, int, int, Any, Optional[str]]] = [
-        (prompt, prompt_len, output_len, mm_content, lora)
-        for (prompt, prompt_len, output_len, mm_content), lora
-        in zip(input_requests, lora_per_prompt)
-    ]
-
-    shards = shard_round_robin(expanded, num_client_workers)
+    shards = shard_round_robin(input_requests, num_client_workers)
 
     rate_per_worker = (request_rate / num_client_workers
                        if request_rate != float("inf") else float("inf"))
@@ -610,7 +592,7 @@ def run_benchmark(
         processes.append(p)
 
     print("Starting main benchmark run...")
-    total = len(expanded)
+    total = len(input_requests)
     pbar = None if disable_tqdm else tqdm(total=total, desc="bench")
 
     # Wait on the barrier too so our stopwatch starts in sync with workers.
@@ -835,19 +817,18 @@ def main(args: argparse.Namespace):
                               trust_remote_code=args.trust_remote_code)
 
 
-    if args.dataset_name == "random":
-        input_requests = sample_random_requests(
-            prefix_len=args.random_prefix_len,
-            input_len=args.random_input_len,
-            output_len=args.random_output_len,
-            num_prompts=args.num_prompts,
-            range_ratio=args.random_range_ratio,
-            tokenizer=tokenizer,
-            use_chat_template=args.use_chat_template,
-        )
-
-    else:
+    if args.dataset_name != "random":
         raise ValueError(f"Unknown dataset: {args.dataset_name}")
+
+    input_requests = sample_random_requests(
+        prefix_len=args.random_prefix_len,
+        input_len=args.random_input_len,
+        output_len=args.random_output_len,
+        num_prompts=args.num_prompts,
+        range_ratio=args.random_range_ratio,
+        tokenizer=tokenizer,
+        use_chat_template=args.use_chat_template,
+    )
 
     goodput_config_dict = check_goodput_args(args)
 
@@ -877,7 +858,6 @@ def main(args: argparse.Namespace):
         ignore_eos=args.ignore_eos,
         goodput_config_dict=goodput_config_dict,
         max_concurrency=args.max_concurrency,
-        lora_modules=args.lora_modules,
         num_client_workers=args.num_client_workers,
         client_connector_limit=args.client_connector_limit,
         seed=args.seed,
@@ -972,15 +952,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset-name",
         type=str,
-        default="sharegpt",
+        default="random",
         choices=["random"],
         help="Name of the dataset to benchmark on.",
     )
-    parser.add_argument("--dataset-path",
-                        type=str,
-                        default=None,
-                        help="Path to the sharegpt/sonnet dataset. "
-                        "Or the huggingface dataset ID if using HF dataset.")
     parser.add_argument(
         "--max-concurrency",
         type=int,
@@ -1139,38 +1114,6 @@ if __name__ == "__main__":
         "goodput, refer to DistServe paper: https://arxiv.org/pdf/2401.09670 "
         "and the blog: https://hao-ai-lab.github.io/blogs/distserve")
 
-    # group for dataset specific arguments
-    sonnet_group = parser.add_argument_group("sonnet dataset options")
-    sonnet_group.add_argument(
-        "--sonnet-input-len",
-        type=int,
-        default=550,
-        help=
-        "Number of input tokens per request, used only for sonnet dataset.",
-    )
-    sonnet_group.add_argument(
-        "--sonnet-output-len",
-        type=int,
-        default=150,
-        help=
-        "Number of output tokens per request, used only for sonnet dataset.",
-    )
-    sonnet_group.add_argument(
-        "--sonnet-prefix-len",
-        type=int,
-        default=200,
-        help=
-        "Number of prefix tokens per request, used only for sonnet dataset.",
-    )
-
-    sharegpt_group = parser.add_argument_group("sharegpt dataset options")
-    sharegpt_group.add_argument(
-        "--sharegpt-output-len",
-        type=int,
-        default=None,
-        help="Output length for each request. Overrides the output length "
-        "from the ShareGPT dataset.")
-
     random_group = parser.add_argument_group("random dataset options")
     random_group.add_argument(
         "--random-input-len",
@@ -1207,23 +1150,6 @@ if __name__ == "__main__":
         help="Use chat template to format the prompt.",
     )
 
-    hf_group = parser.add_argument_group("hf dataset options")
-    hf_group.add_argument("--hf-subset",
-                          type=str,
-                          default=None,
-                          help="Subset of the HF dataset.")
-    hf_group.add_argument("--hf-split",
-                          type=str,
-                          default=None,
-                          help="Split of the HF dataset.")
-    hf_group.add_argument(
-        "--hf-output-len",
-        type=int,
-        default=None,
-        help="Output length for each request. Overrides the output lengths "
-        "from the sampled HF dataset.",
-    )
-
     parser.add_argument(
         '--tokenizer-mode',
         type=str,
@@ -1242,23 +1168,22 @@ if __name__ == "__main__":
                         "If not specified, the model name will be the "
                         "same as the ``--model`` argument. ")
 
-    parser.add_argument("--lora-modules",
-                        nargs='+',
-                        default=None,
-                        help="A subset of LoRA module names passed in when "
-                        "launching the server. For each request, the "
-                        "script chooses a LoRA module at random.")
-
     parser.add_argument('--num-warmups', type=int, default=0)
 
+    # Cap the auto-detected default so a 128-vCPU host doesn't spawn 128
+    # workers by accident. Override via BENCH_CLIENT_WORKERS_CAP env var when
+    # you actually want more (or fewer) by default.
+    _default_workers_cap = int(os.environ.get("BENCH_CLIENT_WORKERS_CAP", "8"))
     parser.add_argument(
         "--num-client-workers",
         type=int,
-        default=min(os.cpu_count() or 1, 8),
+        default=min(os.cpu_count() or 1, _default_workers_cap),
         help="Number of client worker processes. Each runs its own asyncio "
-        "loop and one shared aiohttp session. Defaults to min(cpu_count, 8). "
-        "Raise to drive higher QPS; single-process Python maxes out around "
-        "a few hundred QPS due to GIL/event-loop contention.")
+        f"loop and one shared aiohttp session. Defaults to min(cpu_count, "
+        f"{_default_workers_cap}) — the cap is set via "
+        "BENCH_CLIENT_WORKERS_CAP (default 8). Raise to drive higher QPS; "
+        "single-process Python maxes out around a few hundred QPS due to "
+        "GIL/event-loop contention.")
 
     parser.add_argument(
         "--client-connector-limit",
