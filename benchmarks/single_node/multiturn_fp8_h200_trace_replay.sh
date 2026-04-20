@@ -192,6 +192,30 @@ if [ -n "$METRICS_PID" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
     wait "$METRICS_PID" 2>/dev/null || true
 fi
 
+# Trim leading idle rows (no requests running, no tokens processed)
+python3 -c "
+import csv, sys
+f = '$RESULT_DIR/metrics_server_metrics.csv'
+try:
+    with open(f) as fh:
+        reader = csv.DictReader(fh)
+        header = reader.fieldnames
+        rows = list(reader)
+    first = next((i for i, r in enumerate(rows) if float(r.get('num_requests_running', 0)) > 0 or float(r.get('prompt_tokens_total', 0)) > 0), 0)
+    if first > 0:
+        trimmed = rows[first:]
+        t0 = float(trimmed[0]['timestamp_sec'])
+        for r in trimmed:
+            r['relative_time_sec'] = f'{float(r[\"timestamp_sec\"]) - t0:.3f}'
+        with open(f, 'w', newline='') as fh:
+            w = csv.DictWriter(fh, fieldnames=header)
+            w.writeheader()
+            w.writerows(trimmed)
+        print(f'Trimmed {first} idle rows from metrics CSV')
+except Exception as e:
+    print(f'Warning: could not trim metrics CSV: {e}', file=sys.stderr)
+" 2>&1 || true
+
 # ---- Cleanup -----------------------------------------------------------------
 echo "Stopping vllm server..."
 kill "$SERVER_PID" 2>/dev/null || true
