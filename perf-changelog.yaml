@@ -1472,14 +1472,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1054
 
 - config-keys:
-    - kimik2.5-fp4-b300-vllm
-  description:
-    - "Add Kimi-K2.5 FP4 (NVFP4) B300 vLLM benchmark"
-    - "Image: vllm/vllm-openai:v0.19.0-cu130"
-    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 FP4 B200 vLLM recipe as-is"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1056
-
-- config-keys:
     - gptoss-fp4-mi300x-vllm
   description:
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
