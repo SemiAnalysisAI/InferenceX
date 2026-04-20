@@ -342,7 +342,7 @@ glm5.1-fp4-mi355x-sglang:
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
-  precision: fp8
+  precision: fp4
   framework: sglang
   multinode: false
   seq-len-configs:
