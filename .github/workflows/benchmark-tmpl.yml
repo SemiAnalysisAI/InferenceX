@@ -131,6 +131,13 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           clean: false
 
+      - name: Cleanup stale eval outputs (pre-run)
+        if: ${{ inputs.run-eval || inputs.eval-only }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
+
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
