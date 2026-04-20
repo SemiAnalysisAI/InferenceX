@@ -122,21 +122,12 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-             if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
-              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-              scancel --name="${{ runner.name }}" || true
-              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-                squeue --name="${{ runner.name }}"
-                sleep 5
-              done
-            else
-              echo "[Slurm] Cleaning up jobs for user: $USER ..."
-              scancel -u "$USER" || true
-              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
-                squeue -u "$USER"
-                sleep 5
-              done
-            fi
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
           fi
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -189,14 +180,14 @@ jobs:
           done
 
       - name: Upload results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           path: multinode_server_logs.tar.gz
