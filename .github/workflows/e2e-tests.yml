@@ -38,6 +38,7 @@ jobs:
             single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
             multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
             eval-config: ${{ steps.get-jobs.outputs.eval-config }}
+            multi-node-eval-config: ${{ steps.get-jobs.outputs.multi-node-eval-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -55,11 +56,13 @@ jobs:
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and not x.get('eval-only', False)]))")
-                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x]))")
+                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and not x.get('eval-only', False)]))")
                   EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('run-eval', False)]))")
+                  MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
                   echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
                   echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
+                  echo "multi-node-eval-config=$MULTI_EVAL" >> $GITHUB_OUTPUT
 
     test-sweep-multi-node:
         needs: get-jobs
@@ -97,6 +100,48 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            run-eval: false
+            ref: ${{ inputs.ref }}
+
+    test-sweep-multi-node-evals:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node eval /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
+        secrets: inherit
+        with:
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            exp-name: ${{ matrix.config.exp-name }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+
+            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
+            prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-ep: ${{ matrix.config.prefill.ep }}
+            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
+            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
+
+            decode-num-worker: ${{ matrix.config.decode.num-worker }}
+            decode-tp: ${{ matrix.config.decode.tp }}
+            decode-ep: ${{ matrix.config.decode.ep }}
+            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
+            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            run-eval: true
+            eval-only: true
+            eval-conc: ${{ matrix.config.eval-conc }}
             ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
@@ -162,15 +207,15 @@ jobs:
 
     collect-results:
         needs: [test-sweep-multi-node, test-sweep-single-node]
-        if: ${{ always() }}
+        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped') }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [test-sweep-evals]
-        if: ${{ always() && needs.test-sweep-evals.result != 'skipped' }}
+        needs: [test-sweep-evals, test-sweep-multi-node-evals]
+        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped') }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 

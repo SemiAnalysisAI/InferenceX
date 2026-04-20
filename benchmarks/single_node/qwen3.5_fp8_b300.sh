@@ -8,45 +8,49 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
-
 nvidia-smi
-
-export TORCH_CUDA_ARCH_LIST="10.0"
-export PYTHONNOUSERSITE=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+CONTEXT_LENGTH=$((ISL + OSL + 20))
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
 fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---tensor-parallel-size=$TP \
---gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
---max-num-seqs $CONC \
---reasoning-parser kimi_k2 \
---tool-call-parser kimi_k2 \
---compilation_config.pass_config.fuse_allreduce_rms true \
---kv-cache-dtype fp8 \
---max-cudagraph-capture-size 2048 \
---max-num-batched-tokens "$((ISL * 2 ))" \
---stream-interval 20 --no-enable-prefix-caching \
---trust-remote-code > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
+--enable-symm-mem \
+--disable-radix-cache \
+--quantization fp8 \
+--kv-cache-dtype fp8_e4m3 \
+--mamba-ssm-dtype bfloat16 \
+--attention-backend trtllm_mha \
+--moe-runner-backend flashinfer_trtllm \
+--cuda-graph-max-bs $CONC \
+--max-running-requests $CONC \
+--max-prefill-tokens 16384 \
+--chunked-prefill-size 16384 \
+--mem-fraction-static 0.8 \
+--stream-interval 50 \
+--scheduler-recv-interval 10 \
+--tokenizer-worker-num 6 \
+--tokenizer-path $MODEL \
+--context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -62,11 +66,11 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( CONC * 10 )) \
+    --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --trust-remote-code
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

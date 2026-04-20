@@ -26,6 +26,7 @@ hf download "$MODEL"
 export SGLANG_ROCM_FUSED_DECODE_MLA=0
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export SAFETENSORS_FAST_GPU=1
+export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -51,6 +52,10 @@ python3 -m sglang.launch_server \
     --nsa-prefill-backend tilelang \
     --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
     --kv-cache-dtype fp8_e4m3 \
+    --speculative-algorithm EAGLE \
+    --speculative-num-steps 3 \
+    --speculative-eagle-topk 1 \
+    --speculative-num-draft-tokens 4 \
     --disable-radix-cache> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -68,7 +73,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

@@ -77,6 +77,20 @@ on:
         required: false
         type: string
         default: "[]"
+      run-eval:
+        type: boolean
+        required: false
+        default: false
+      eval-only:
+        description: "Run only evals (skip throughput benchmark)"
+        type: boolean
+        required: false
+        default: false
+      eval-conc:
+        description: "Concurrency to use for eval requests (overrides default max-of-conc-list)"
+        type: string
+        required: false
+        default: ""
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -96,6 +110,9 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  RUN_EVAL: ${{ inputs.run-eval }}
+  EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_CONC: ${{ inputs.eval-conc }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
@@ -116,27 +133,18 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | P(tp${{ inputs.prefill-tp }}/ep${{ inputs.prefill-ep }}/dp${{ inputs.prefill-dp-attn }}/nw${{ inputs.prefill-num-worker }}) D(tp${{ inputs.decode-tp }}/ep${{ inputs.decode-ep }}/dp${{ inputs.decode-dp-attn }}/nw${{ inputs.decode-num-worker }}) | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ join(fromJson(inputs.conc-list), 'x') }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | P(tp${{ inputs.prefill-tp }}/ep${{ inputs.prefill-ep }}/dp${{ inputs.prefill-dp-attn }}/nw${{ inputs.prefill-num-worker }}) D(tp${{ inputs.decode-tp }}/ep${{ inputs.decode-ep }}/dp${{ inputs.decode-dp-attn }}/nw${{ inputs.decode-num-worker }}) | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
 
     steps:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-             if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* || "${{ runner.name }}" == b300-nv* ]]; then
-              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-              scancel --name="${{ runner.name }}" || true
-              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-                squeue --name="${{ runner.name }}"
-                sleep 5
-              done
-            else
-              echo "[Slurm] Cleaning up jobs for user: $USER ..."
-              scancel -u "$USER" || true
-              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
-                squeue -u "$USER"
-                sleep 5
-              done
-            fi
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
           fi
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -146,9 +154,17 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           clean: false
 
+      - name: Cleanup stale eval outputs (pre-run)
+        if: ${{ inputs.run-eval || inputs.eval-only }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
+
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
+          RUNNER_TYPE: ${{ inputs.runner }}
           # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
           RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
@@ -159,16 +175,26 @@ jobs:
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-          # Check if at least one result file was created
-          if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-            echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-            echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+          if [ "${{ inputs.eval-only }}" = "true" ]; then
+            echo "Eval-only mode: skipping benchmark result file check"
+            # Verify eval produced results
+            if ! ls results*.json 1>/dev/null 2>&1; then
+              echo "Eval-only run failed: no results*.json files found." >&2
+              exit 1
+            fi
           else
-            echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
-            exit 1
+            # Check if at least one result file was created
+            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
+              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+              echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+            else
+              echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
+              exit 1
+            fi
           fi
 
       - name: Process results
+        if: ${{ !inputs.eval-only }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
@@ -189,10 +215,33 @@ jobs:
           done
 
       - name: Upload results
+        if: ${{ !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload eval results (if any)
+        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          path: |
+            meta_env.json
+            results*.json
+            sample*.jsonl
+          if-no-files-found: ignore
+
+      - name: Verify eval scores
+        if: ${{ inputs.eval-only }}
+        run: python3 utils/evals/validate_scores.py
+
+      - name: Cleanup eval outputs (post-upload)
+        if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
 
       - name: Upload logs
         if: always()
