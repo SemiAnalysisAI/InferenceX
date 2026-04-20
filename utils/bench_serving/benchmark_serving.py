@@ -121,6 +121,8 @@ def sample_random_requests(
 
     input_requests = []
     mismatches = []
+    print(f"Generating {num_prompts} prompts (serial)...")
+    t0 = time.perf_counter()
     for i in range(num_prompts):
         tgt_prompt_len = prefix_len + input_lens[i]
         prompt_token_ids = prefix_token_ids + [(offsets[i] + i + j) % tokenizer.vocab_size for j in range(input_lens[i])]
@@ -148,6 +150,9 @@ def sample_random_requests(
         prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
         mismatches.append(prompt_len - tgt_prompt_len)
         input_requests.append((prompt, prompt_len, output_lens[i], None))
+
+    elapsed = time.perf_counter() - t0
+    print(f"Prompt generation completed in {elapsed:.1f}s")
 
     header_str = f'{"-"*19}  Input/Output Length Statistics  {"-"*19}'
     print(header_str)
