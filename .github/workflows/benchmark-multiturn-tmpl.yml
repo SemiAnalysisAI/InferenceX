@@ -75,6 +75,11 @@ on:
         required: false
         type: string
         default: 'false'
+      no-max-tokens:
+        description: "Don't enforce max_tokens from trace; let model generate freely"
+        required: false
+        type: string
+        default: 'false'
 
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -97,6 +102,7 @@ env:
   HASH_BLOCK_MODE: ${{ inputs.hash-block-mode }}
   TRACE_DIR: ${{ inputs.trace-dir }}
   DEBUG_TRACE: ${{ inputs.debug-trace }}
+  NO_MAX_TOKENS: ${{ inputs.no-max-tokens }}
 
 permissions:
   contents: read

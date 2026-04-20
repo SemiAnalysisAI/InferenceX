@@ -108,6 +108,11 @@ on:
         required: false
         default: 'false'
         type: string
+      no_max_tokens:
+        description: 'Don''t enforce max_tokens from trace; let model generate freely until EOS (true/false). Use for reasoning models like DeepSeek R1.'
+        required: false
+        default: 'false'
+        type: string
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -215,6 +220,7 @@ jobs:
       hash-block-mode: ${{ inputs.hash_block_mode }}
       trace-dir: ${{ inputs.trace_dir }}
       debug-trace: ${{ inputs.debug_trace }}
+      no-max-tokens: ${{ inputs.no_max_tokens }}
 
   # ---------------------------------------------------------------------------
   # Collect & aggregate results

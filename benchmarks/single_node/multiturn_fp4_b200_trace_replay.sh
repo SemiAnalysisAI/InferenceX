@@ -177,6 +177,9 @@ fi
 if [ "${DEBUG_TRACE:-false}" = "true" ]; then
     REPLAY_CMD+=" --debug-trace"
 fi
+if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
+    REPLAY_CMD+=" --no-max-tokens"
+fi
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
 
