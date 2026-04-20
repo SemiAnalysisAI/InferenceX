@@ -241,8 +241,8 @@ jobs:
             ref: ${{ inputs.ref }}
 
     collect-results:
-        needs: [test-sweep-multi-node, test-sweep-single-node]
-        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped') }}
+        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic]
+        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped') }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
