@@ -57,6 +57,9 @@ class Fields(Enum):
     MAX_MODEL_LEN = 'max-model-len'
     EXP_NAME = 'exp-name'
     DISAGG = 'disagg'
+    SCENARIO_TYPE = 'scenario-type'
+    USERS = 'users'
+    OFFLOAD_MODE = 'offload-mode'
 
     # Eval
     RUN_EVAL = 'run-eval'
@@ -138,6 +141,35 @@ class MultiNodeMatrixEntry(BaseModel):
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+
+
+class AgenticMatrixEntry(BaseModel):
+    """Pydantic model for validating agentic coding matrix entry structure."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    image: str
+    model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
+    precision: str
+    framework: str
+    runner: str
+    tp: int
+    ep: int
+    dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    users: int
+    offload_mode: str = Field(alias=Fields.OFFLOAD_MODE.value)
+    exp_name: str = Field(alias=Fields.EXP_NAME.value)
+    scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+
+def validate_agentic_matrix_entry(entry: dict) -> dict:
+    """Validate that an agentic matrix entry matches the expected structure."""
+    try:
+        AgenticMatrixEntry(**entry)
+    except ValidationError as e:
+        raise ValueError(
+            f"The following parsed agentic matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}")
+    return entry
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:

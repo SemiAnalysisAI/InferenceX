@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from validation import (
     validate_matrix_entry,
+    validate_agentic_matrix_entry,
     load_config_files,
     load_runner_file,
     Fields
@@ -121,8 +122,10 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_concs = _eligible_eval_concs(best_entry)
         mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
 
-    # Mark the selected entries
+    # Mark the selected entries (skip agentic entries which don't support evals)
     for i, entry in enumerate(matrix_values):
+        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            continue
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
@@ -374,6 +377,70 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         conc *= args.step_size
                         if conc > conc_end:
                             conc = conc_end
+
+        # ---- Agentic-coding scenarios ----
+        agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
+
+        for agentic_config in agentic_configs:
+            if is_multinode:
+                continue  # agentic-coding not yet supported for multinode
+
+            bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
+
+            for bmk in bmk_space:
+                tp = bmk[Fields.TP.value]
+                ep = bmk.get(Fields.EP.value)
+                dp_attn = bmk.get(Fields.DP_ATTN.value)
+                cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
+                offload_mode = "on" if cpu_offloading else "off"
+
+                # Get concurrency values
+                conc_list = bmk.get(Fields.CONC_LIST.value)
+                if conc_list:
+                    conc_values = conc_list
+                else:
+                    conc_start = bmk[Fields.CONC_START.value]
+                    conc_end = bmk[Fields.CONC_END.value]
+                    conc_values = []
+                    conc = conc_start
+                    while conc <= conc_end:
+                        conc_values.append(conc)
+                        if conc == conc_end:
+                            break
+                        conc *= args.step_size
+                        if conc > conc_end:
+                            conc = conc_end
+
+                # Apply conc filters
+                if args.min_conc is not None:
+                    conc_values = [c for c in conc_values if c >= args.min_conc]
+                if args.max_conc is not None:
+                    conc_values = [c for c in conc_values if c <= args.max_conc]
+                if not conc_values:
+                    continue
+
+                runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
+                for users in conc_values:
+                    for runner_value in runners_for_entry:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner_value,
+                            Fields.TP.value: tp,
+                            Fields.EP.value: ep if ep is not None else 1,
+                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                            Fields.USERS.value: users,
+                            Fields.OFFLOAD_MODE.value: offload_mode,
+                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                            Fields.SCENARIO_TYPE.value: "agentic-coding",
+                        }
+
+                        validate_agentic_matrix_entry(entry)
+                        matrix_values.append(entry)
 
     return matrix_values
 
@@ -677,6 +744,58 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.RUN_EVAL.value: False,
                         }
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+
+        # ---- Agentic-coding scenarios ----
+        agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
+        for agentic_config in agentic_configs:
+            if is_multinode:
+                continue
+
+            for bmk in agentic_config[Fields.SEARCH_SPACE.value]:
+                tp = bmk[Fields.TP.value]
+                ep = bmk.get(Fields.EP.value)
+                dp_attn = bmk.get(Fields.DP_ATTN.value)
+                cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
+                offload_mode = "on" if cpu_offloading else "off"
+
+                conc_list = bmk.get(Fields.CONC_LIST.value)
+                if conc_list:
+                    conc_values = conc_list
+                else:
+                    conc_start = bmk[Fields.CONC_START.value]
+                    conc_end = bmk[Fields.CONC_END.value]
+                    conc_values = []
+                    conc = conc_start
+                    while conc <= conc_end:
+                        conc_values.append(conc)
+                        if conc == conc_end:
+                            break
+                        conc *= 2
+                        if conc > conc_end:
+                            conc = conc_end
+
+                if getattr(args, 'conc', None):
+                    conc_values = [c for c in conc_values if c in args.conc]
+                if not conc_values:
+                    continue
+
+                for users in conc_values:
+                    entry = {
+                        Fields.IMAGE.value: image,
+                        Fields.MODEL.value: model,
+                        Fields.MODEL_PREFIX.value: model_code,
+                        Fields.PRECISION.value: precision,
+                        Fields.FRAMEWORK.value: framework,
+                        Fields.RUNNER.value: runner,
+                        Fields.TP.value: tp,
+                        Fields.EP.value: ep if ep is not None else 1,
+                        Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                        Fields.USERS.value: users,
+                        Fields.OFFLOAD_MODE.value: offload_mode,
+                        Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                        Fields.SCENARIO_TYPE.value: "agentic-coding",
+                    }
+                    matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values
 
