@@ -2,7 +2,20 @@
 
 import argparse
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence, TypeVar
+
+T = TypeVar("T")
+
+
+def shard_round_robin(items: Sequence[T], n: int) -> List[List[T]]:
+    """Split `items` into `n` shards using round-robin assignment.
+
+    Round-robin (vs. contiguous chunks) spreads short/long prompts evenly
+    across worker shards so per-worker load is balanced.
+    """
+    if n <= 0:
+        raise ValueError(f"n must be positive, got {n}")
+    return [list(items[i::n]) for i in range(n)]
 
 
 def convert_to_pytorch_benchmark_format(args: argparse.Namespace,

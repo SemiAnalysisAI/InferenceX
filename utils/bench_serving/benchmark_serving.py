@@ -29,18 +29,22 @@ import base64
 import gc
 import io
 import json
+import math
+import multiprocessing as mp
 import os
 import random
 import time
+import traceback
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
 
+import aiohttp
 import numpy as np
-from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,
-                                  RequestFuncOutput)
-from tqdm.asyncio import tqdm
+from backend_request_func import (AIOHTTP_TIMEOUT, ASYNC_REQUEST_FUNCS,
+                                  RequestFuncInput, RequestFuncOutput)
+from tqdm import tqdm
 from transformers import PreTrainedTokenizerBase
 
 try:
@@ -53,7 +57,8 @@ try:
 except ImportError:
     from argparse import ArgumentParser as FlexibleArgumentParser
 
-from benchmark_utils import convert_to_pytorch_benchmark_format
+from benchmark_utils import (convert_to_pytorch_benchmark_format,
+                             shard_round_robin)
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
@@ -245,7 +250,10 @@ def calculate_metrics(
                     tokenizer(outputs[i].generated_text,
                               add_special_tokens=False).input_ids)
             actual_output_lens.append(output_len)
-            total_input += input_requests[i][1]
+            # Use outputs[i].prompt_len rather than input_requests[i][1] so
+            # metrics don't depend on output order matching input order —
+            # workers return outputs as they complete, not in dispatch order.
+            total_input += outputs[i].prompt_len
             tpot = 0
             if output_len > 1:
                 latency_minus_ttft = outputs[i].latency - outputs[i].ttft
@@ -321,14 +329,153 @@ def calculate_metrics(
     return metrics, actual_output_lens
 
 
-async def benchmark(
+# Per-worker batch size for streaming RequestFuncOutput back to main via mp.Queue.
+# Batching amortizes pickling/lock overhead so the queue isn't the bottleneck
+# at high QPS (at ~10k req/s, per-request puts contend on the queue's lock).
+_WORKER_QUEUE_BATCH_SIZE = 64
+
+
+def _build_client_session(connector_limit: int) -> aiohttp.ClientSession:
+    connector = aiohttp.TCPConnector(
+        limit=connector_limit,
+        limit_per_host=connector_limit,
+        keepalive_timeout=300,
+        enable_cleanup_closed=True,
+    )
+    return aiohttp.ClientSession(connector=connector,
+                                 trust_env=True,
+                                 timeout=AIOHTTP_TIMEOUT)
+
+
+async def _run_warmup(request_func, test_input: RequestFuncInput,
+                      num_warmups: int, max_concurrency: Optional[int],
+                      disable_tqdm: bool):
+    pbar = None if disable_tqdm else tqdm(total=num_warmups, desc="warmup")
+    sem = asyncio.Semaphore(max_concurrency) if max_concurrency else None
+    limit = max_concurrency or 256
+    async with _build_client_session(connector_limit=limit) as session:
+        async def _one():
+            if sem is None:
+                out = await request_func(request_func_input=test_input,
+                                         session=session)
+            else:
+                async with sem:
+                    out = await request_func(request_func_input=test_input,
+                                             session=session)
+            if pbar is not None:
+                pbar.update(1)
+            return out
+        await asyncio.gather(*[_one() for _ in range(num_warmups)])
+    if pbar is not None:
+        pbar.close()
+
+
+async def _one_off_request(request_func, req_input: RequestFuncInput
+                           ) -> RequestFuncOutput:
+    async with _build_client_session(connector_limit=4) as session:
+        return await request_func(request_func_input=req_input, session=session)
+
+
+def _worker_entry(worker_index: int, shard: List[Tuple], config: Dict[str, Any],
+                  barrier: Any, result_queue: Any, seed: int) -> None:
+    """Subprocess entrypoint. Runs an asyncio loop over a shard of requests."""
+    try:
+        random.seed(seed + worker_index)
+        np.random.seed(seed + worker_index)
+        asyncio.run(_worker_async(shard, config, barrier, result_queue))
+    except BaseException:
+        traceback.print_exc()
+    finally:
+        # Sentinel: main drains until it has received one sentinel per worker.
+        # Must run even on exception so main doesn't hang.
+        try:
+            result_queue.put(None)
+        except Exception:
+            pass
+
+
+async def _worker_async(shard: List[Tuple], config: Dict[str, Any],
+                        barrier: Any, result_queue: Any) -> None:
+    request_func = ASYNC_REQUEST_FUNCS[config["backend"]]
+    request_rate = config["rate_per_worker"]
+    burstiness = config["burstiness"]
+    sem_size = config["max_concurrency_per_worker"]
+    theta = (1.0 / (request_rate * burstiness)
+             if request_rate != float("inf") else 0.0)
+
+    batch_buffer: List[RequestFuncOutput] = []
+
+    def flush_batch(force: bool = False) -> None:
+        if not batch_buffer:
+            return
+        if force or len(batch_buffer) >= _WORKER_QUEUE_BATCH_SIZE:
+            result_queue.put(batch_buffer.copy())
+            batch_buffer.clear()
+
+    async with _build_client_session(
+            connector_limit=config["connector_limit"]) as session:
+        # Barrier synchronizes worker start across processes so aggregate QPS
+        # is measured from a single wall clock. Blocks the event loop briefly
+        # (only at startup, once), which is fine.
+        barrier.wait()
+
+        sem = asyncio.Semaphore(sem_size) if sem_size else None
+        in_flight: set = set()
+
+        async def _fire(req_input: RequestFuncInput) -> None:
+            try:
+                out = await request_func(request_func_input=req_input,
+                                         session=session)
+                batch_buffer.append(out)
+                flush_batch()
+            finally:
+                if sem is not None:
+                    sem.release()
+
+        for prompt, prompt_len, output_len, mm_content, lora_module in shard:
+            # Semaphore on the DISPATCH side (not inside the task) bounds
+            # in-flight tasks. Acquiring here prevents task pileup when
+            # requests complete slower than they arrive.
+            if sem is not None:
+                await sem.acquire()
+
+            if request_rate != float("inf"):
+                interval = np.random.gamma(shape=burstiness, scale=theta)
+                await asyncio.sleep(interval)
+
+            model_id = lora_module or config["model_id"]
+            model_name = lora_module or config["model_name"]
+
+            req_input = RequestFuncInput(
+                model=model_id,
+                model_name=model_name,
+                prompt=prompt,
+                api_url=config["api_url"],
+                prompt_len=prompt_len,
+                output_len=output_len,
+                logprobs=config["logprobs"],
+                best_of=config["best_of"],
+                multi_modal_content=mm_content,
+                ignore_eos=config["ignore_eos"],
+            )
+
+            task = asyncio.create_task(_fire(req_input))
+            in_flight.add(task)
+            task.add_done_callback(in_flight.discard)
+
+        if in_flight:
+            await asyncio.gather(*in_flight)
+        flush_batch(force=True)
+
+
+def run_benchmark(
     backend: str,
     api_url: str,
     base_url: str,
     model_id: str,
     model_name: str,
     tokenizer: PreTrainedTokenizerBase,
-    input_requests: List[Tuple[str, int, int]],
+    input_requests: List[Tuple[str, int, int, Any]],
     logprobs: Optional[int],
     best_of: int,
     request_rate: float,
@@ -342,17 +489,18 @@ async def benchmark(
     goodput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
     lora_modules: Optional[List[str]],
+    num_client_workers: int,
+    client_connector_limit: int,
+    seed: int,
 ):
-    if backend in ASYNC_REQUEST_FUNCS:
-        request_func = ASYNC_REQUEST_FUNCS[backend]
-    else:
+    if backend not in ASYNC_REQUEST_FUNCS:
         raise ValueError(f"Unknown backend: {backend}")
+    request_func = ASYNC_REQUEST_FUNCS[backend]
 
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = (
         input_requests[0])
     if backend != "openai-chat" and test_mm_content is not None:
-        # multi-modal benchmark is only available on OpenAI Chat backend.
         raise ValueError(
             "Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
@@ -370,42 +518,27 @@ async def benchmark(
 
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
-        warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else contextlib.nullcontext()
-
-        async def warmup_limited_req_fn():
-            async with warmup_semaphore:
-                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
-
-        warmup_tasks = []
-        for _ in range(num_warmups):
-            task = asyncio.create_task(warmup_limited_req_fn())
-            warmup_tasks.append(task)
-        _ = await asyncio.gather(*warmup_tasks)
-
-        if warmup_pbar is not None:
-            warmup_pbar.close()
+        asyncio.run(
+            _run_warmup(request_func, test_input, num_warmups, max_concurrency,
+                        disable_tqdm))
         print("Warmup completed.")
-
-    if lora_modules:
-        # For each input request, choose a LoRA module at random.
-        lora_modules = iter(
-            [random.choice(lora_modules) for _ in range(len(input_requests))])
 
     if profile:
         print("Starting profiler...")
-        profile_input = RequestFuncInput(model=model_id,
-                                         model_name=model_name,
-                                         prompt=test_prompt,
-                                         api_url=base_url + "/start_profile",
-                                         prompt_len=test_prompt_len,
-                                         output_len=test_output_len,
-                                         extra_body={"num_steps": 1, "merge_profiles": True, "profile_by_stage": True},
-                                         logprobs=logprobs,
-                                         best_of=best_of,
-                                         multi_modal_content=test_mm_content,
-                                         ignore_eos=ignore_eos)
-        profile_output = await request_func(request_func_input=profile_input)
+        profile_input = RequestFuncInput(
+            model=model_id,
+            model_name=model_name,
+            prompt=test_prompt,
+            api_url=base_url + "/start_profile",
+            prompt_len=test_prompt_len,
+            output_len=test_output_len,
+            extra_body={"num_steps": 1, "merge_profiles": True, "profile_by_stage": True},
+            logprobs=logprobs,
+            best_of=best_of,
+            multi_modal_content=test_mm_content,
+            ignore_eos=ignore_eos,
+        )
+        profile_output = asyncio.run(_one_off_request(request_func, profile_input))
         if profile_output.success:
             print("Profiler started")
 
@@ -417,54 +550,107 @@ async def benchmark(
     print(f"Traffic request rate: {request_rate}")
     print(f"Burstiness factor: {burstiness} ({distribution})")
     print(f"Maximum request concurrency: {max_concurrency}")
+    print(f"Client worker processes: {num_client_workers}")
 
-    pbar = None if disable_tqdm else tqdm(total=len(input_requests))
+    # Pre-resolve per-request LoRA module so workers don't need to share RNG.
+    if lora_modules:
+        lora_per_prompt = [random.choice(lora_modules)
+                           for _ in range(len(input_requests))]
+    else:
+        lora_per_prompt = [None] * len(input_requests)
 
-    # This can be used once the minimum Python version is 3.10 or higher,
-    # and it will simplify the code in limited_request_func.
-    #    semaphore = (asyncio.Semaphore(max_concurrency)
-    #                 if max_concurrency else contextlib.nullcontext())
-    semaphore = (asyncio.Semaphore(max_concurrency)
-                 if max_concurrency else None)
+    expanded: List[Tuple[str, int, int, Any, Optional[str]]] = [
+        (prompt, prompt_len, output_len, mm_content, lora)
+        for (prompt, prompt_len, output_len, mm_content), lora
+        in zip(input_requests, lora_per_prompt)
+    ]
 
-    async def limited_request_func(request_func_input, pbar):
-        if semaphore is None:
-            return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar)
-        async with semaphore:
-            return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar)
+    shards = shard_round_robin(expanded, num_client_workers)
+
+    rate_per_worker = (request_rate / num_client_workers
+                       if request_rate != float("inf") else float("inf"))
+    mc_per_worker = (math.ceil(max_concurrency / num_client_workers)
+                     if max_concurrency else None)
+    # Auto-size the per-worker aiohttp connector: must be at least as large as
+    # the in-flight cap, with a floor so unconstrained runs still get pooling.
+    if client_connector_limit and client_connector_limit > 0:
+        connector_limit = client_connector_limit
+    else:
+        connector_limit = max(256, mc_per_worker or 256)
+
+    config = {
+        "backend": backend,
+        "api_url": api_url,
+        "model_id": model_id,
+        "model_name": model_name,
+        "logprobs": logprobs,
+        "best_of": best_of,
+        "ignore_eos": ignore_eos,
+        "rate_per_worker": rate_per_worker,
+        "burstiness": burstiness,
+        "max_concurrency_per_worker": mc_per_worker,
+        "connector_limit": connector_limit,
+    }
+
+    ctx = mp.get_context("spawn")
+    # +1 for main so workers don't start timing the run before main's pbar
+    # and stopwatch are ready.
+    barrier = ctx.Barrier(num_client_workers + 1)
+    # Bounded queue provides back-pressure: if main can't drain fast enough,
+    # workers block on put rather than buffering unbounded results in memory.
+    result_queue = ctx.Queue(maxsize=num_client_workers * 32)
+
+    processes = []
+    for i, shard in enumerate(shards):
+        p = ctx.Process(
+            target=_worker_entry,
+            args=(i, shard, config, barrier, result_queue, seed),
+        )
+        p.start()
+        processes.append(p)
 
     print("Starting main benchmark run...")
+    total = len(expanded)
+    pbar = None if disable_tqdm else tqdm(total=total, desc="bench")
 
+    # Wait on the barrier too so our stopwatch starts in sync with workers.
+    barrier.wait()
     benchmark_start_time = time.perf_counter()
-    tasks: List[asyncio.Task] = []
-    async for request in get_request(input_requests, request_rate, burstiness):
-        prompt, prompt_len, output_len, mm_content = request
-        req_model_id, req_model_name = model_id, model_name
-        if lora_modules:
-            req_lora_module = next(lora_modules)
-            req_model_id, req_model_name = req_lora_module, req_lora_module
 
-        request_func_input = RequestFuncInput(model=req_model_id,
-                                              model_name=req_model_name,
-                                              prompt=prompt,
-                                              api_url=api_url,
-                                              prompt_len=prompt_len,
-                                              output_len=output_len,
-                                              logprobs=logprobs,
-                                              best_of=best_of,
-                                              multi_modal_content=mm_content,
-                                              ignore_eos=ignore_eos)
-        tasks.append(
-            asyncio.create_task(
-                limited_request_func(request_func_input=request_func_input,
-                                     pbar=pbar)))
-    outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
+    outputs: List[RequestFuncOutput] = []
+    sentinels = 0
+    while sentinels < num_client_workers:
+        item = result_queue.get()
+        if item is None:
+            sentinels += 1
+            continue
+        outputs.extend(item)
+        if pbar is not None:
+            pbar.update(len(item))
+
+    benchmark_duration = time.perf_counter() - benchmark_start_time
+
+    if pbar is not None:
+        pbar.close()
+
+    for p in processes:
+        p.join(timeout=30)
+        if p.is_alive():
+            warnings.warn(
+                f"Worker {p.pid} did not exit cleanly; terminating.",
+                stacklevel=2)
+            p.terminate()
+
+    for p in processes:
+        if p.exitcode not in (0, None):
+            warnings.warn(
+                f"Worker {p.pid} exited with code {p.exitcode}; "
+                "aggregated results may be incomplete.",
+                stacklevel=2)
 
     if profile:
         print("Stopping profiler...")
-        profile_input = RequestFuncInput(
+        stop_profile_input = RequestFuncInput(
             model=model_id,
             prompt=test_prompt,
             api_url=base_url + "/stop_profile",
@@ -473,14 +659,9 @@ async def benchmark(
             logprobs=logprobs,
             best_of=best_of,
         )
-        profile_output = await request_func(request_func_input=profile_input)
-        if profile_output.success:
+        stop_output = asyncio.run(_one_off_request(request_func, stop_profile_input))
+        if stop_output.success:
             print("Profiler stopped")
-
-    if pbar is not None:
-        pbar.close()
-
-    benchmark_duration = time.perf_counter() - benchmark_start_time
 
     metrics, actual_output_lens = calculate_metrics(
         input_requests=input_requests,
@@ -674,31 +855,33 @@ def main(args: argparse.Namespace):
     gc.collect()
     gc.freeze()
 
-    benchmark_result = asyncio.run(
-        benchmark(
-            backend=backend,
-            api_url=api_url,
-            base_url=base_url,
-            model_id=model_id,
-            model_name=model_name,
-            tokenizer=tokenizer,
-            input_requests=input_requests,
-            logprobs=args.logprobs,
-            best_of=args.best_of,
-            request_rate=args.request_rate,
-            burstiness=args.burstiness,
-            disable_tqdm=args.disable_tqdm,
-            num_warmups=args.num_warmups,
-            profile=args.profile,
-            selected_percentile_metrics=args.percentile_metrics.split(","),
-            selected_percentiles=[
-                float(p) for p in args.metric_percentiles.split(",")
-            ],
-            ignore_eos=args.ignore_eos,
-            goodput_config_dict=goodput_config_dict,
-            max_concurrency=args.max_concurrency,
-            lora_modules=args.lora_modules,
-        ))
+    benchmark_result = run_benchmark(
+        backend=backend,
+        api_url=api_url,
+        base_url=base_url,
+        model_id=model_id,
+        model_name=model_name,
+        tokenizer=tokenizer,
+        input_requests=input_requests,
+        logprobs=args.logprobs,
+        best_of=args.best_of,
+        request_rate=args.request_rate,
+        burstiness=args.burstiness,
+        disable_tqdm=args.disable_tqdm,
+        num_warmups=args.num_warmups,
+        profile=args.profile,
+        selected_percentile_metrics=args.percentile_metrics.split(","),
+        selected_percentiles=[
+            float(p) for p in args.metric_percentiles.split(",")
+        ],
+        ignore_eos=args.ignore_eos,
+        goodput_config_dict=goodput_config_dict,
+        max_concurrency=args.max_concurrency,
+        lora_modules=args.lora_modules,
+        num_client_workers=args.num_client_workers,
+        client_connector_limit=args.client_connector_limit,
+        seed=args.seed,
+    )
 
     # Save config and results to json
     if args.save_result:
@@ -1067,6 +1250,23 @@ if __name__ == "__main__":
                         "script chooses a LoRA module at random.")
 
     parser.add_argument('--num-warmups', type=int, default=0)
+
+    parser.add_argument(
+        "--num-client-workers",
+        type=int,
+        default=min(os.cpu_count() or 1, 8),
+        help="Number of client worker processes. Each runs its own asyncio "
+        "loop and one shared aiohttp session. Defaults to min(cpu_count, 8). "
+        "Raise to drive higher QPS; single-process Python maxes out around "
+        "a few hundred QPS due to GIL/event-loop contention.")
+
+    parser.add_argument(
+        "--client-connector-limit",
+        type=int,
+        default=0,
+        help="Per-worker aiohttp TCPConnector limit. 0 = auto (max(256, "
+        "max_concurrency/num_workers)). Raise if the client runs out of "
+        "sockets before the server is saturated.")
 
     args = parser.parse_args()
     main(args)
