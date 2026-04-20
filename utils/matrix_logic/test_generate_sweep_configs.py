@@ -643,14 +643,14 @@ class TestGenerateFullSweepSingleNode:
         assert all(entry["exp-name"] == "dsr1_1k1k" for entry in result)
 
     def test_max_model_len_calculation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max-model-len should be isl + osl + 200."""
+        """max-model-len should be isl + osl + 256."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
         )
         for entry in result:
-            expected_max_model_len = entry["isl"] + entry["osl"] + 200
+            expected_max_model_len = entry["isl"] + entry["osl"] + 256
             assert entry["max-model-len"] == expected_max_model_len
 
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):

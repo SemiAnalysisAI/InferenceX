@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this script reuses the existing
+# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
@@ -20,46 +24,30 @@ hf download "$MODEL"
 
 nvidia-smi
 
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
-elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
-    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 256))
-else
-    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}
-fi
-
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    CALCULATED_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
-fi
-
-cat > config.yaml << EOF
-kv-cache-dtype: fp8
-compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true}}'
-no-enable-prefix-caching: true
-max-cudagraph-capture-size: 2048
-max-num-batched-tokens: 8192
-max-model-len: $CALCULATED_MAX_MODEL_LEN
-EOF
-
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
-export VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---config config.yaml \
---gpu-memory-utilization 0.9 \
---tensor-parallel-size $TP \
---max-num-seqs 512 \
---disable-log-requests > $SERVER_LOG 2>&1 &
+--tensor-parallel-size=$TP \
+--gpu-memory-utilization 0.90 \
+--max-model-len $MAX_MODEL_LEN \
+--max-num-seqs $CONC \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
+--no-enable-prefix-caching \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -78,7 +66,8 @@ run_benchmark_serving \
     --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

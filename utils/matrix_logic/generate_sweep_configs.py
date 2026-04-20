@@ -281,7 +281,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.PREFILL.value: prefill,
                             Fields.DECODE.value: decode,
                             Fields.CONC.value: conc_values,  # Pass the entire list for multinode
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
@@ -350,7 +350,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.OSL.value: osl,
                                 Fields.TP.value: tp,
                                 Fields.CONC.value: conc,
-                                Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                                 Fields.EP.value: 1,  # Default
                                 Fields.DP_ATTN.value: False,  # Default
                                 Fields.SPEC_DECODING.value: spec_decoding,
@@ -616,7 +616,7 @@ def generate_test_config_sweep(args, all_config_data):
                         Fields.PREFILL.value: prefill,
                         Fields.DECODE.value: decode,
                         Fields.CONC.value: conc_values,
-                        Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                        Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                         Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                         Fields.DISAGG.value: disagg,
                         Fields.RUN_EVAL.value: False,
@@ -664,7 +664,7 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.OSL.value: osl,
                             Fields.TP.value: tp,
                             Fields.CONC.value: conc,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 200,
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                             Fields.EP.value: ep if ep is not None else 1,
                             Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                             Fields.SPEC_DECODING.value: spec_decoding,
