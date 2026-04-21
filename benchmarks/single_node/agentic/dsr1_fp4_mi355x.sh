@@ -49,7 +49,8 @@ python3 -m sglang.launch_server \
 --cuda-graph-max-bs=$USERS \
 --max-running-requests=$USERS \
 --attention-backend aiter \
---kv-cache-dtype fp8_e4m3 > "$SERVER_LOG" 2>&1 &
+--kv-cache-dtype fp8_e4m3 \
+--enable-metrics > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 

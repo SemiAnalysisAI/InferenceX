@@ -57,7 +57,8 @@ python3 -m sglang.launch_server \
 --enable-symm-mem \
 --attention-backend trtllm_mla \
 --moe-runner-backend flashinfer_trtllm \
---stream-interval 10 > "$SERVER_LOG" 2>&1 &
+--stream-interval 10 \
+--enable-metrics > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
