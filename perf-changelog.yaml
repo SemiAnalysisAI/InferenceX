@@ -1642,10 +1642,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
 
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Extend GPT-OSS FP4 TP=8 search to conc=1"
+    - "low-latency endpoint for users prioritizing interactive single-user use cases (chat, copilot, agentic)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1092
+
+- config-keys:
     - kimik2.5-fp4-b200-vllm
   description:
     - "Add kv-cache-dtype fp8, max-cudagraph-capture-size 2048, max-num-batched-tokens, and stream-interval 20 to server launch args"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1047
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add H200 multinode evals-only runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
+  evals-only: true
 
 - config-keys:
     - minimaxm2.5-fp8-b300-vllm
