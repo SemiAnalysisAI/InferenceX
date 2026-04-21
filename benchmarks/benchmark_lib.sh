@@ -904,7 +904,6 @@ build_replay_cmd() {
     REPLAY_CMD+=" --advance-max $advance_max"
     REPLAY_CMD+=" --seed 42"
     REPLAY_CMD+=" --no-color"
-    REPLAY_CMD+=" --max-consecutive-errors 10"
     if [ "${IGNORE_EOS:-false}" = "true" ]; then
         REPLAY_CMD+=" --ignore-eos"
     fi
