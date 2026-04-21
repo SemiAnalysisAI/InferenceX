@@ -254,7 +254,11 @@ else
         export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
     fi
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    if [[ "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+        FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "sglang" ]] && printf '_sglang' || ([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf ''))
+    else
+        FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    fi
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
