@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 """
 Plot Pareto frontiers for prefix caching modes.
 Modes: on (prefix + offload), off (prefix only), noprefix (no prefix caching)
@@ -15,6 +16,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+
+def _parse_experiment_name(name):
+    """Parse tp, users/bs, offload from experiment directory name."""
+    match = re.search(r'tp(\d+).*?(?:users|bs)(\d+).*?offload(on|off|noprefix)', name)
+    if not match:
+        return None, None, None
+    return int(match.group(1)), int(match.group(2)), match.group(3)
+
 
 
 def _load_aiperf_summary_csv(csv_path: Path, exp_dir: Path, tp: int,
@@ -58,10 +67,9 @@ def _load_aiperf_summary_csv(csv_path: Path, exp_dir: Path, tp: int,
         return 0
 
     exp_name = exp_dir.name
-    parts = exp_name.split("_")
-    tp_parsed = int(parts[0].replace("tp", ""))
-    bs = int(parts[1].replace("bs", ""))
-    offload = parts[2].replace("offload", "")
+    tp_parsed, bs, offload = _parse_experiment_name(exp_name)
+    if tp_parsed is None:
+        return None
 
     num_requests = int(scalar_val("Request Count"))
     throughput_rps = scalar_val("Request Throughput (requests/sec)")
@@ -167,8 +175,9 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
         # Use aiperf summary CSV directly if available (preferred over client CSV)
         if aiperf_summary_csv is not None:
             exp_name = exp_dir.name
-            parts = exp_name.split("_")
-            tp = int(parts[0].replace("tp", ""))
+            tp, _, _ = _parse_experiment_name(exp_name)
+            if tp is None:
+                return None
             return _load_aiperf_summary_csv(aiperf_summary_csv, exp_dir, tp, gpu_hit_rate, cpu_hit_rate)
 
         if client_metrics_file.exists():
@@ -183,10 +192,9 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
 
         # Parse experiment name: tp{N}_bs{M}_offload{on|off}
         exp_name = exp_dir.name
-        parts = exp_name.split("_")
-        tp = int(parts[0].replace("tp", ""))
-        bs = int(parts[1].replace("bs", ""))
-        offload = parts[2].replace("offload", "")
+        tp, bs, offload = _parse_experiment_name(exp_name)
+        if tp is None:
+            return None
 
         # Calculate metrics
         metadata_file = exp_dir / "benchmark_metadata.json"
@@ -1228,7 +1236,7 @@ def main(results_dir: Path):
     # Load all experiments
     experiments = []
     for exp_dir in results_dir.iterdir():
-        if exp_dir.is_dir() and exp_dir.name.startswith("tp"):
+        if exp_dir.is_dir() and _parse_experiment_name(exp_dir.name)[0] is not None:
             data = load_experiment_data(exp_dir)
             if data:
                 experiments.append(data)

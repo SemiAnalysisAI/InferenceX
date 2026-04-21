@@ -277,6 +277,8 @@ jobs:
                   path: results/
 
             - name: Run aggregation
+              env:
+                  PYTHONPATH: utils/agentic-benchmark/scripts:utils/agentic-benchmark/analysis
               run: |
                   python utils/agentic-benchmark/scripts/collect_sweep_results.py results/ aggregated/
 
