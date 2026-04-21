@@ -81,10 +81,3 @@ python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
 
 stop_agentic_metrics_collector
 trim_idle_metrics "$RESULT_DIR"
-
-# ---- Cleanup ----------------------------------------------------------------
-echo "Stopping server..."
-kill "$SERVER_PID" 2>/dev/null || true
-wait "$SERVER_PID" 2>/dev/null || true
-
-echo "Experiment finished at $(date)"
