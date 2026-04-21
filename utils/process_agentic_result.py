@@ -115,6 +115,11 @@ def compute_cache_stats(rows, server_metrics):
         "theoretical_infinite_cache_hit_rate": None,
         "server_gpu_cache_hit_rate": None,
         "server_cpu_cache_hit_rate": None,
+        "kv_offload_bytes_gpu_to_cpu": None,
+        "kv_offload_bytes_cpu_to_gpu": None,
+        "kv_offload_time_gpu_to_cpu": None,
+        "kv_offload_time_cpu_to_gpu": None,
+        "cpu_kv_cache_usage_pct": None,
         "total_prompt_tokens": None,
         "total_generation_tokens": None,
         "total_requests_completed": None,
@@ -143,6 +148,18 @@ def compute_cache_stats(rows, server_metrics):
         cpu_queries = int(last.get('cpu_prefix_cache_queries', 0))
         if cpu_queries > 0:
             result["server_cpu_cache_hit_rate"] = cpu_hits / cpu_queries
+
+        offload_g2c = float(last.get('kv_offload_bytes_gpu_to_cpu', 0))
+        offload_c2g = float(last.get('kv_offload_bytes_cpu_to_gpu', 0))
+        if offload_g2c > 0 or offload_c2g > 0:
+            result["kv_offload_bytes_gpu_to_cpu"] = offload_g2c
+            result["kv_offload_bytes_cpu_to_gpu"] = offload_c2g
+            result["kv_offload_time_gpu_to_cpu"] = float(last.get('kv_offload_time_gpu_to_cpu', 0))
+            result["kv_offload_time_cpu_to_gpu"] = float(last.get('kv_offload_time_cpu_to_gpu', 0))
+
+        cpu_cache_pct = float(last.get('cpu_kv_cache_usage_pct', 0))
+        if cpu_cache_pct > 0:
+            result["cpu_kv_cache_usage_pct"] = cpu_cache_pct
 
         result["total_prompt_tokens"] = int(last.get('prompt_tokens_total', 0))
         result["total_generation_tokens"] = int(last.get('generation_tokens_total', 0))
