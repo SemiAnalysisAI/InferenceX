@@ -68,7 +68,7 @@ vllm serve $MODEL \
 -cc.pass_config.fuse_rope_kvcache=True \
 -cc.use_inductor_graph_partition=True \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.85 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $USERS \
 --block-size=64 \
