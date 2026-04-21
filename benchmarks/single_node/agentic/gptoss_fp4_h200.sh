@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for DSR1 FP8 on H200.
+# Agentic trace replay benchmark for GPT-OSS FP4 on H200.
 #
 # Required env vars:
 #   MODEL, TP, USERS, OFFLOAD_MODE, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -34,6 +34,7 @@ mkdir -p "$RESULT_DIR"
 
 cat > "$RESULT_DIR/config.yaml" << 'EOF'
 kv-cache-dtype: fp8
+compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true},"custom_ops":["+quant_fp8","+rms_norm"],"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[]}'
 async-scheduling: true
 EOF
 
@@ -42,6 +43,9 @@ VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
 VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
+if [ "${EP_SIZE:-0}" -gt 1 ]; then
+    VLLM_CMD+=" --enable-expert-parallel"
+fi
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1

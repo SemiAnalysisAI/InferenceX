@@ -4449,6 +4449,60 @@ gptoss-fp4-h200-vllm:
       - tp: 8
         conc-start: 4
         conc-end: 32
+    agentic-coding:
+    - search-space:
+      - tp: 4
+        cpu-offloading: true
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 24
+        - 32
+        - 48
+        - 64
+      - tp: 4
+        cpu-offloading: false
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 24
+        - 32
+        - 48
+        - 64
+      - tp: 8
+        cpu-offloading: true
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 24
+        - 32
+        - 48
+        - 64
+      - tp: 8
+        cpu-offloading: false
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 24
+        - 32
+        - 48
+        - 64
 
 minimaxm2.5-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.18.0
@@ -8292,73 +8346,3 @@ dsr1-fp4-b200-vllm:
         - 128
         - 256
         - 512
-
-dsr1-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.19.1
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  runner: h200
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - tp: 4
-        cpu-offloading: true
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 24
-        - 32
-        - 48
-        - 64
-        - 128
-      - tp: 4
-        cpu-offloading: false
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 24
-        - 32
-        - 48
-        - 64
-        - 128
-      - tp: 8
-        cpu-offloading: true
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 24
-        - 32
-        - 48
-        - 64
-        - 128
-        - 256
-      - tp: 8
-        cpu-offloading: false
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 24
-        - 32
-        - 48
-        - 64
-        - 128
-        - 256
