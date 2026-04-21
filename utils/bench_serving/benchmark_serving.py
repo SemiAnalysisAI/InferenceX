@@ -25,6 +25,7 @@ On the client side, run:
 """
 import argparse
 import asyncio
+import contextlib
 import base64
 import gc
 import io

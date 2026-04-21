@@ -295,6 +295,7 @@ export MODEL_PREFIX="${MODEL_PREFIX:-}"
 export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
+export IS_MULTINODE="${IS_MULTINODE:-false}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -409,6 +410,7 @@ exec sudo docker run --rm \
     -e RUNNER_TYPE=\$RUNNER_TYPE \
     -e RESULT_FILENAME=\$RESULT_FILENAME \
     -e SPEC_DECODING=\$SPEC_DECODING \
+    -e IS_MULTINODE=\$IS_MULTINODE \
     --name \"$DOCKER_CONT_NAME\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
