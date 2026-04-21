@@ -1,1 +1,0 @@
-python3 /workspace/utils/trace-replay/trace_replay_tester.py --api-endpoint http://localhost:8888 --hf-dataset semianalysisai/cc-traces-weka-042026 --output-dir /workspace/results/trace_replay --start-users 256 --max-users 256 --test-duration 1800 --recycle --max-delay 60 --max-concurrent-requests 0 --advance-min 0.0 --advance-max 0.7 --seed 42 --no-color --no-max-tokens
