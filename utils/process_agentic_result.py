@@ -114,7 +114,6 @@ def compute_cache_stats(rows, server_metrics):
     """Compute cache hit rates from both detailed results and server metrics."""
     result = {
         "theoretical_cache_hit_rate": None,
-        "theoretical_infinite_cache_hit_rate": None,
         "server_gpu_cache_hit_rate": None,
         "server_cpu_cache_hit_rate": None,
         "kv_offload_bytes_gpu_to_cpu": None,
@@ -127,16 +126,13 @@ def compute_cache_stats(rows, server_metrics):
         "total_requests_completed": None,
     }
 
-    # From detailed results: theoretical cache hit rate (infinite cache)
+    # Theoretical infinite-cache hit rate from detailed results.
+    # A block counts as a hit iff its hash_id was seen earlier in the session.
     total_hit_blocks = sum(int(r.get('cache_hit_blocks', 0)) for r in rows)
     total_miss_blocks = sum(int(r.get('cache_miss_blocks', 0)) for r in rows)
     total_blocks = total_hit_blocks + total_miss_blocks
     if total_blocks > 0:
         result["theoretical_cache_hit_rate"] = total_hit_blocks / total_blocks
-
-    theoretical_hits = sum(int(r.get('theoretical_cache_hit_blocks', 0)) for r in rows)
-    if total_blocks > 0:
-        result["theoretical_infinite_cache_hit_rate"] = theoretical_hits / total_blocks
 
     # From server metrics: actual prefix cache hit rate (last row)
     if server_metrics:
