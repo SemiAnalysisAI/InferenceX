@@ -959,32 +959,12 @@ except Exception as e:
 " 2>&1 || true
 }
 
-check_agentic_success() {
+write_agentic_result_json() {
+    # Aggregate detailed_results.csv + metrics_server_metrics.csv into
+    # /workspace/$RESULT_FILENAME.json. The workflow's existing retry-based
+    # $RESULT_FILENAME.json existence check is the single success gate — same
+    # path the fixed-seq-len scenario writes its result to.
     local result_dir="$1"
-    local csv="$result_dir/trace_replay/detailed_results.csv"
-    # Write $RESULT_FILENAME.json at the workspace root as a sentinel so the
-    # workflow-level check uses the same retry-based $RESULT_FILENAME.json
-    # lookup for both agentic and fixed-seq-len — no separate status.txt and
-    # no results/ subdir to worry about in NFS-backed workspaces.
-    local sentinel="/workspace/$RESULT_FILENAME.json"
-    if [ ! -f "$csv" ]; then
-        echo "No detailed_results.csv found"
-        return 1
-    fi
-    local successful
-    successful=$(python3 -c "
-import csv, sys
-csv.field_size_limit(sys.maxsize)
-with open('$csv') as f:
-    rows = list(csv.DictReader(f))
-ok = sum(1 for r in rows if r.get('success') == 'True')
-print(ok)
-" 2>/dev/null || echo "0")
-    if [ "$successful" -eq 0 ] 2>/dev/null; then
-        echo "0 successful requests — benchmark failed"
-        return 1
-    fi
-    printf '{"status":"SUCCESS","successful_requests":%d}\n' "$successful" > "$sentinel"
-    echo "$successful successful requests"
-    return 0
+    RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="/workspace" \
+        python3 /workspace/utils/process_agentic_result.py
 }

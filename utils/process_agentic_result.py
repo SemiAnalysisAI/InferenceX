@@ -195,8 +195,14 @@ def main():
         print("ERROR: RESULT_FILENAME env var not set", file=sys.stderr)
         sys.exit(1)
 
-    detailed_path = Path("results/trace_replay/detailed_results.csv")
-    metrics_path = Path("results/metrics_server_metrics.csv")
+    # Result paths are relative to RESULT_DIR (set by the agentic script, e.g.
+    # /workspace/results). When run standalone from the repo root, fall back
+    # to ./results.
+    result_dir = Path(os.environ.get('RESULT_DIR', 'results'))
+    output_dir = Path(os.environ.get('AGENTIC_OUTPUT_DIR', '.'))
+
+    detailed_path = result_dir / "trace_replay/detailed_results.csv"
+    metrics_path = result_dir / "metrics_server_metrics.csv"
 
     if not detailed_path.exists():
         print(f"ERROR: {detailed_path} not found", file=sys.stderr)
@@ -240,7 +246,7 @@ def main():
         agg["output_tput_per_gpu"] = agg.get("output_tput_tps", 0) / num_gpus
         agg["input_tput_per_gpu"] = agg.get("input_tput_tps", 0) / num_gpus
 
-    output_path = f"agg_{result_filename}.json"
+    output_path = output_dir / f"{result_filename}.json"
     with open(output_path, 'w') as f:
         json.dump(agg, f, indent=2)
 

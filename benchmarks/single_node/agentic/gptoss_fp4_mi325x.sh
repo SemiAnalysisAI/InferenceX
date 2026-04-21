@@ -89,7 +89,7 @@ set -x
 $REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log" || true
 set +x
 
-check_agentic_success "$RESULT_DIR"
+write_agentic_result_json "$RESULT_DIR"
 
 # ---- Post-processing --------------------------------------------------------
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
