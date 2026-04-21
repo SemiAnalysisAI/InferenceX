@@ -48,7 +48,7 @@ start_gpu_monitor
 set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
-export ATOM_GPT_OSS_MODEL=1 #TODO remove this
+export ATOM_GPT_OSS_MODEL=1
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \

@@ -120,7 +120,7 @@ else
     fi
 fi
 
-# FIXME: WA for latest upstream 0305 image
+# Workaround for upstream 0305 image - aiter module location
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
 

@@ -25,10 +25,8 @@ On the client side, run:
 """
 import argparse
 import asyncio
-import base64
 import contextlib
 import gc
-import io
 import json
 import os
 import random
@@ -37,7 +35,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
-from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import numpy as np
 from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,

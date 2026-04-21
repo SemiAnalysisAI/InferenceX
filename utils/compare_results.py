@@ -3,18 +3,19 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psycopg2
 from tabulate import tabulate
 
 
-def parse_bool(value):
+def parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).lower() == "true"
 
 
-def colorize_delta(delta_val, pct_val, higher_is_better=True, fmt=".4f"):
+def colorize_delta(delta_val: float, pct_val: float, higher_is_better: bool = True, fmt: str = ".4f") -> str:
     """Format a colored delta string using LaTeX color syntax for GitHub markdown."""
     improved = (delta_val > 0) if higher_is_better else (delta_val < 0)
     regressed = (delta_val < 0) if higher_is_better else (delta_val > 0)
@@ -27,7 +28,7 @@ def colorize_delta(delta_val, pct_val, higher_is_better=True, fmt=".4f"):
     return f"{delta_str} {pct_str}"
 
 
-def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
+def compute_delta_str(current: Optional[float], baseline: Optional[float], higher_is_better: bool = True, fmt: str = ".4f") -> str:
     """Compute a colored delta string between current and baseline values."""
     if current is None or baseline is None or baseline == 0:
         return "N/A"
@@ -36,12 +37,12 @@ def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
     return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
-def extract_hardware(runner):
+def extract_hardware(runner: str) -> str:
     """Strip suffixes like -multinode, -trt, -disagg from runner to get hardware name."""
     return re.split(r"-(multinode|trt|disagg)$", runner)[0].lower()
 
 
-def build_config_params(result):
+def build_config_params(result: Dict[str, Any]) -> Dict[str, Any]:
     """Build the DB config lookup parameters from a result JSON."""
     is_multinode = result.get("is_multinode", False)
     hw = extract_hardware(result["hw"])
@@ -146,7 +147,7 @@ METRIC_DEFS = [
 MS_DISPLAY_KEYS = {"median_ttft", "p90_ttft", "p99_ttft", "p99.9_ttft"}
 
 
-def get_metric_value(data, key):
+def get_metric_value(data: Dict[str, Any], key: str) -> Optional[float]:
     """Get a metric value from a result dict, converting to float if present."""
     val = data.get(key)
     if val is None:
@@ -154,7 +155,7 @@ def get_metric_value(data, key):
     return float(val)
 
 
-def format_value(val, key, fmt):
+def format_value(val: Optional[float], key: str, fmt: str) -> str:
     """Format a metric value for display, converting seconds to ms for TTFT keys."""
     if val is None:
         return "N/A"
@@ -163,13 +164,18 @@ def format_value(val, key, fmt):
     return f"{val:{fmt}}"
 
 
-def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt):
+def compute_metric_delta(
+    current_data: Dict[str, Any],
+    baseline_data: Optional[Dict[str, Any]],
+    key: str,
+    higher_is_better: bool,
+    fmt: str
+) -> str:
     """Compute colored delta string for a metric."""
     current = get_metric_value(current_data, key)
     baseline = get_metric_value(baseline_data, key) if baseline_data else None
     if current is None or baseline is None or baseline == 0:
         return "N/A"
-    # For ms-display keys, convert both to ms before computing delta
     if key in MS_DISPLAY_KEYS:
         current_display = current * 1000
         baseline_display = baseline * 1000
@@ -181,7 +187,7 @@ def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt
     return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python compare_results.py <results_dir>")
         sys.exit(1)
