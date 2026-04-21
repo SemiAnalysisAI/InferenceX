@@ -1,2 +1,1 @@
-exports/**/*.json linguist-generated=true
-exports/**/*.json text eol=lf
+exports/**/*.json filter=lfs diff=lfs merge=lfs -text linguist-generated=true

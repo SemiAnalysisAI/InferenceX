@@ -4,6 +4,8 @@ This directory is the InferenceX-side consumer package for ISB1 replay.
 
 InferenceX consumes committed file artifacts only:
 - replay export JSON bundles under `datasets/isb1/exports/`
+- conversion to SemiAnalysis's `kv-cache-tester` format via
+  [`tools/isb1_to_kvcache_tester.py`](../../tools/isb1_to_kvcache_tester.py)
 - consumer configs in `.github/configs/isb1-*.yaml`
 - replay processing through `utils/bench_serving/benchmark_export_replay.py`
 - result normalization through `utils/process_result_isb1.py`
@@ -75,6 +77,10 @@ metadata.
 All export files are valid JSON and replay-hydratable via
 `utils/bench_serving/benchmark_export_replay.py`.
 
+All bundles can also be converted to SemiAnalysis's `kv-cache-tester`
+per-conversation trace format via [`tools/isb1_to_kvcache_tester.py`](../../tools/isb1_to_kvcache_tester.py);
+see [How to consume](#how-to-consume).
+
 ---
 
 ## Support-status vocabulary
@@ -110,6 +116,170 @@ Unsafe claims:
 - strict GPT-OSS `500k` coverage
 - strict Qwen3.5 `1M` coverage
 - turning preview-file existence into live benchmark certification
+
+---
+
+## How to consume
+
+Two consumption paths are supported, both fed from the same committed bundles:
+
+1. **InferenceX-internal replay** — `utils/bench_serving/benchmark_export_replay.py`
+   directly, with `utils/process_result_isb1.py` for result normalization.
+2. **SemiAnalysis `kv-cache-tester`** — convert via
+   [`tools/isb1_to_kvcache_tester.py`](../../tools/isb1_to_kvcache_tester.py),
+   then feed the resulting directory to
+   [`trace_replay_tester.py --trace-directory`](https://github.com/callanjfox/kv-cache-tester)
+   (PR #993 submodule).
+
+Path 2 is documented here because it is the path that lets ISB1 traces plug
+into SemiAnalysis's existing Slurm benchmarking pipeline without the consumer
+having to read our replay code.
+
+### Step 1 — fetch the bundles (LFS)
+
+From a clone of InferenceX:
+
+```bash
+git lfs install
+git lfs pull --include='datasets/isb1/exports/**/*.json'
+```
+
+Or, if the bundles are published to Hugging Face (see
+[HF publication](#hf-publication)), download directly:
+
+```bash
+huggingface-cli download <org>/<repo> \
+    --repo-type dataset \
+    --local-dir ./isb1_bundles
+```
+
+### Step 2 — convert one bundle to `kv-cache-tester` format
+
+```bash
+python tools/isb1_to_kvcache_tester.py \
+    --export-file datasets/isb1/exports/core/chat_8k1k_qwen3.5.json \
+    --output-dir  traces_isb1/core_chat_qwen/ \
+    --runtime-stack-id standalone:vllm \
+    --hardware-profile-id nvidia:h200_sxm_141gb \
+    --canonical-model-id qwen3_5_397b_a17b \
+    --support-status supported
+```
+
+This writes one `trace_<conversation_id>.json` per cell that passes the
+filters, in the flat layout `trace_replay_tester.py --trace-directory`
+expects. The schema matches `kv-cache-tester@main` (`trace.id`, `requests[].t/in/out/hash_ids`),
+so `normalize_trace()` accepts it as-is.
+
+To convert every bundle in one shot:
+
+```bash
+python tools/isb1_to_kvcache_tester.py \
+    --export-root datasets/isb1/exports/ \
+    --output-dir  traces_isb1/
+```
+
+### Step 3 — replay against a running vLLM / SGLang server
+
+Using PR #993's own recipes (e.g. `benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh`),
+set `TRACE_DIR` to the converted directory and let the existing Slurm wiring
+pick it up:
+
+```bash
+TRACE_DIR=$PWD/traces_isb1/core_chat_qwen \
+MODEL=Qwen/Qwen3.5-397B-A17B-FP8 \
+TP=8 USERS=8 OFFLOAD_MODE=off TOTAL_CPU_DRAM_GB=0 \
+RESULT_DIR=$PWD/results/isb1_smoke \
+bash experimental/multiturn/benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh
+```
+
+Or, equivalently, invoke Cam's tester directly:
+
+```bash
+python $KV_CACHE_TESTER_DIR/trace_replay_tester.py \
+    --api-endpoint http://127.0.0.1:8888 \
+    --trace-directory $PWD/traces_isb1/core_chat_qwen \
+    --output-dir      $PWD/results/isb1_smoke \
+    --start-users 2 --max-users 2 --test-duration 60
+```
+
+### Step 4 — verify the result
+
+```bash
+jq '.' results/isb1_smoke/results.json | head
+```
+
+Expected:
+
+- `trace_replay_tester.py` logs show `Loaded N traces (filtered from N)`.
+- Cache-hit rate reported during the run is non-zero for multi-turn bundles
+  (because each turn's `hash_ids` extends the previous turn's prefix).
+- Completed sessions ≥ 1; HTTP error count = 0.
+
+---
+
+## Smoke test
+
+The one-liner below is the binary go/no-go for "does this PR actually help
+SemiAnalysis":
+
+```bash
+# Assumes a vLLM OpenAI server is up on :8888 serving the model.
+python tools/isb1_to_kvcache_tester.py \
+    --export-file datasets/isb1/exports/core/chat_8k1k_qwen3.5.json \
+    --output-dir  /tmp/isb1_proof/ \
+    --canonical-model-id qwen3_5_397b_a17b \
+&& python $KV_CACHE_TESTER_DIR/trace_replay_tester.py \
+    --api-endpoint http://127.0.0.1:8888 \
+    --trace-directory /tmp/isb1_proof/ \
+    --output-dir      /tmp/isb1_proof/out \
+    --start-users 1 --max-users 1 --test-duration 30
+```
+
+Pass criteria:
+
+| Artifact | Threshold |
+|---|---|
+| Shim exit code | `0` |
+| `trace_replay_tester.py` exit code | `0` |
+| `Loaded N traces` (N) | `≥ 1` |
+| Completed sessions | `≥ 1` |
+| HTTP errors | `0` |
+
+Any failure of the above means the PR is not actually plumbed end-to-end for
+this bundle and should be reproduced against Cam's `trace_replay_tester.py`
+before being claimed as compatible.
+
+---
+
+## HF publication
+
+The `kv-cache-tester` Slurm recipes accept an HF dataset source via the
+`hf_<org>--<repo>` prefix convention on `TRACE_DIR` — the wrapper `.sh`
+scripts download with `huggingface-cli` and point the tester at the local
+mirror.
+
+To publish an HF mirror of these bundles:
+
+1. Create a dataset repo (e.g. `semianalysisai/isb1-core-v0`).
+2. Mirror the directory layout of `datasets/isb1/exports/` exactly.
+   (Do not copy the inner `datasets/isb1/.gitattributes` — one top-level
+   LFS-only `.gitattributes` at the HF repo root is sufficient.)
+3. For each published bundle, run
+   `tools/isb1_to_kvcache_tester.py --export-root <downloaded dir> --output-dir <out>`
+   locally to verify the conversion stays green at the new revision.
+4. Pin revisions by HF branch/tag matching the producer's
+   `schema_version` (e.g. `v0.2.0`).
+
+Once published, Cam's Slurm scripts can consume a bundle with no code change:
+
+```bash
+TRACE_DIR=hf_semianalysisai--isb1-core-v0 \
+bash experimental/multiturn/benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh
+```
+
+(Where the `.sh` does `huggingface-cli download semianalysisai/isb1-core-v0`
+into a scratch dir, then runs the converter shim against it before
+invoking `trace_replay_tester.py`.)
 
 ---
 
