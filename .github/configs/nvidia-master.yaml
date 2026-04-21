@@ -4259,6 +4259,25 @@ dsr1-fp4-gb200-dynamo-trt:
           ep: 16
           dp-attn: true
 
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml
+          - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
 
 dsr1-fp8-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
