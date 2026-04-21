@@ -48,10 +48,9 @@ if [ "${EP_SIZE:-0}" -gt 1 ]; then
 fi
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
-    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     VLLM_CMD+=" --kv_offloading_backend native"
     VLLM_CMD+=" --kv_offloading_size $TOTAL_CPU_DRAM_GB"
-    VLLM_CMD+=" --no-disable-hybrid-kv-cache-manager"
+    VLLM_CMD+=" --disable-hybrid-kv-cache-manager"
 elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
