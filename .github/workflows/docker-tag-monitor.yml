@@ -31,13 +31,12 @@ jobs:
           SEVEN_DAYS_AGO=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
 
           # Extract unique image:tag pairs from both config files
+          # Track highest version per repo and the tag suffixes actually in use
           declare -A CURRENT_VERSIONS
-          declare -A REPO_CURRENT_TAGS
+          declare -A REPO_SUFFIXES
 
           while IFS= read -r img; do
-            # Skip non-Docker-Hub registries
             [[ "$img" == nvcr.io* ]] && continue
-            # Skip nightly/dev builds
             [[ "$img" == *nightly* || "$img" == *-dev* ]] && continue
 
             repo="${img%%:*}"
@@ -46,24 +45,30 @@ jobs:
             base_ver=$(echo "$tag" | grep -oP 'v\d+\.\d+\.\d+(\.\w+)?' || true)
             [[ -z "$base_ver" ]] && continue
 
+            # Extract suffix after the version (e.g., "-cu130" from "v0.19.0-cu130")
+            suffix="${tag#"$base_ver"}"
+
             prev="${CURRENT_VERSIONS[$repo]:-}"
             if [[ -z "$prev" ]] || [[ "$(printf '%s\n%s\n' "$prev" "$base_ver" | sort -V | tail -1)" == "$base_ver" ]]; then
               CURRENT_VERSIONS[$repo]="$base_ver"
             fi
-            REPO_CURRENT_TAGS[$repo]="${REPO_CURRENT_TAGS[$repo]:-}${REPO_CURRENT_TAGS[$repo]:+, }$tag"
+            # Collect unique suffixes per repo (space-separated)
+            if [[ ! " ${REPO_SUFFIXES[$repo]:-} " == *" ${suffix} "* ]]; then
+              REPO_SUFFIXES[$repo]="${REPO_SUFFIXES[$repo]:-} ${suffix}"
+            fi
           done < <(grep -h '^\s*image:' .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml \
             | sed 's/.*image:\s*//; s/"//g; s/'"'"'//g' | sort -u)
 
           echo "=== Currently tracked repos ==="
           for repo in "${!CURRENT_VERSIONS[@]}"; do
-            echo "  $repo: ${CURRENT_VERSIONS[$repo]}"
+            echo "  $repo: ${CURRENT_VERSIONS[$repo]} (suffixes:${REPO_SUFFIXES[$repo]:-})"
           done
 
           FOUND_UPDATES=$(mktemp)
 
           check_dockerhub() {
-            local repo="$1" current_ver="$2" tag_pattern="$3"
-            echo "Checking $repo (current: $current_ver)..." >&2
+            local repo="$1" current_ver="$2" allowed_suffixes="$3"
+            echo "Checking $repo (current: $current_ver, suffixes:$allowed_suffixes)..." >&2
 
             local response
             response=$(curl -sf "https://hub.docker.com/v2/repositories/${repo}/tags?page_size=50&ordering=last_updated" 2>/dev/null) || {
@@ -71,16 +76,27 @@ jobs:
               return
             }
 
-            echo "$response" | jq -r --arg since "$SEVEN_DAYS_AGO" --arg pattern "$tag_pattern" '
+            echo "$response" | jq -r --arg since "$SEVEN_DAYS_AGO" '
               .results[]
               | select(.last_updated > $since)
-              | select(.name | test($pattern))
+              | select(.name | test("^v[0-9]"))
               | "\(.name)\t\(.last_updated)"
             ' 2>/dev/null | while IFS=$'\t' read -r tag updated; do
               local tag_ver
               tag_ver=$(echo "$tag" | grep -oP 'v\d+\.\d+\.\d+(\.\w+)?' || true)
               [[ -z "$tag_ver" ]] && continue
               [[ "$tag" == *nightly* || "$tag" == *dev* ]] && continue
+
+              # Only report tags whose suffix matches one already in use
+              local tag_suffix="${tag#"$tag_ver"}"
+              local matched=false
+              for s in $allowed_suffixes; do
+                if [[ "$tag_suffix" == "$s" ]]; then
+                  matched=true
+                  break
+                fi
+              done
+              [[ "$matched" == false ]] && continue
 
               local higher
               higher=$(printf '%s\n%s\n' "$current_ver" "$tag_ver" | sort -V | tail -1)
@@ -93,15 +109,8 @@ jobs:
 
           for repo in "${!CURRENT_VERSIONS[@]}"; do
             current="${CURRENT_VERSIONS[$repo]}"
-            case "$repo" in
-              lmsysorg/sglang)       check_dockerhub "$repo" "$current" '^v[0-9]' >> "$FOUND_UPDATES" ;;
-              lmsysorg/sglang-rocm)  check_dockerhub "$repo" "$current" '^v[0-9]' >> "$FOUND_UPDATES" ;;
-              vllm/vllm-openai)      check_dockerhub "$repo" "$current" '^v[0-9]+\.[0-9]+\.[0-9]' >> "$FOUND_UPDATES" ;;
-              vllm/vllm-openai-rocm) check_dockerhub "$repo" "$current" '^v[0-9]+\.[0-9]+\.[0-9]' >> "$FOUND_UPDATES" ;;
-              rocm/atom)             check_dockerhub "$repo" "$current" 'atom' >> "$FOUND_UPDATES" ;;
-              rocm/sgl-dev)          check_dockerhub "$repo" "$current" 'sglang' >> "$FOUND_UPDATES" ;;
-              *)                     echo "Skipping unknown repo: $repo" >&2 ;;
-            esac
+            suffixes="${REPO_SUFFIXES[$repo]:-}"
+            check_dockerhub "$repo" "$current" "$suffixes" >> "$FOUND_UPDATES"
           done
 
           UPDATES=$(grep '|' "$FOUND_UPDATES" | sort -u || true)
