@@ -47,6 +47,7 @@ jobs:
 
             # Extract suffix after the version (e.g., "-cu130" from "v0.19.0-cu130")
             suffix="${tag#"$base_ver"}"
+            [[ -z "$suffix" ]] && suffix="BARE"
 
             prev="${CURRENT_VERSIONS[$repo]:-}"
             if [[ -z "$prev" ]] || [[ "$(printf '%s\n%s\n' "$prev" "$base_ver" | sort -V | tail -1)" == "$base_ver" ]]; then
@@ -89,6 +90,7 @@ jobs:
 
               # Only report tags whose suffix matches one already in use
               local tag_suffix="${tag#"$tag_ver"}"
+              [[ -z "$tag_suffix" ]] && tag_suffix="BARE"
               local matched=false
               for s in $allowed_suffixes; do
                 if [[ "$tag_suffix" == "$s" ]]; then
