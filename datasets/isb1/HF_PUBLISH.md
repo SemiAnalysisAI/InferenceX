@@ -2,123 +2,178 @@
 
 Mirror `datasets/isb1/converted/` to Hugging Face so Cam's
 `TRACE_DIR=hf_<org>--<repo>` path works immediately with kv-cache-tester.
-Recommended target: `semianalysisai/isb1-cc-traces`.
+Preferred target: `semianalysisai/isb1-cc-traces`.
+Fallback if org write access is unavailable: `ocwc22/isb1-cc-traces`.
 
-## 1. Target namespace
+## 1. What gets published
 
-- Dataset repo: `semianalysisai/isb1-cc-traces`
-- Source directory: `datasets/isb1/converted/`
-- Consumer contract: Cam's replay scripts interpret `hf_<org>--<repo>` as a
-  Hugging Face dataset reference before calling `trace_replay_tester.py`
+This publish package is the checked-in trio below:
 
-## 2. Prereqs
+- `datasets/isb1/converted/` — 179 validated kv-cache-tester trace JSON files
+- `datasets/isb1/converted/manifest.json` — corpus metadata (`1226` total requests)
+- `datasets/isb1/hf_dataset_card.md` — staged to HF as `README.md`
 
-- `huggingface-cli >= 0.20`
-- `HF_TOKEN` with write scope to the destination org
-- Local validation already green:
-  `python3 tools/validate_kvcache_tester_trace.py datasets/isb1/converted/`
+The consumer contract is unchanged: Cam's replay scripts interpret
+`hf_<org>--<repo>` as a Hugging Face dataset source, hydrate it locally, and
+then invoke the existing replay path.
 
-Authenticate first:
+## 2. Pre-flight validation
+
+Run the stdlib validator before every publish attempt:
+
+```bash
+python3 tools/validate_kvcache_tester_trace.py datasets/isb1/converted/
+```
+
+Expected result:
+
+- `✓ 179 files valid | 0 failed`
+- Exit code `0`
+
+If validation fails, stop and fix the source corpus before publishing. Do not
+push a broken dataset mirror to HF.
+
+## 3. Token setup
+
+Authenticate with a token that has write access to the destination namespace:
+
+```bash
+huggingface-cli login
+```
+
+If you prefer explicit token injection:
 
 ```bash
 export HF_TOKEN=hf_xxx
 huggingface-cli login --token "$HF_TOKEN"
 ```
 
-## 3. Dataset card template
+## 4. Dry-run the publish package locally
 
-Create the HF dataset `README.md` with this content:
-
-```markdown
----
-license: apache-2.0
-task_categories: [text-generation]
-language: [en]
-pretty_name: ISB1 Converted kv-cache-tester Traces
-tags: [kv-cache, trace-replay, inference-benchmark, semianalysis, isb1]
----
-
-# ISB1 Converted kv-cache-tester Traces
-
-This dataset mirrors `datasets/isb1/converted/` from SemiAnalysisAI/InferenceX
-PR #1032 so Cam's kv-cache-tester replay flow from PR #993 can consume ISB1
-traces directly through the `hf_<org>--<repo>` `TRACE_DIR` convention.
-
-## Contents
-
-- 179 pre-converted trace JSON files
-- 8k / 32k / 64k / 131k / 500k preview / 1m preview coverage
-- Kimi K2.5 / DSR1 / GPT-OSS / Qwen3.5 coverage
-- `manifest.json` metadata catalog
-
-## Provenance
-
-- Source repo: `SemiAnalysisAI/InferenceX`
-- Source PR: `#1032`
-- Consumer workflow: `callanjfox/kv-cache-tester` PR `#993`
-- License: Apache-2.0
-```
-
-## 4. Upload command
+The uploader script stages the converted corpus plus the dataset card and
+prints the exact file list it would upload without making any remote changes.
 
 ```bash
-huggingface-cli upload \
-  semianalysisai/isb1-cc-traces \
-  datasets/isb1/converted/ \
-  . \
+python3 tools/publish_hf_dataset.py \
+  --source datasets/isb1/converted/ \
+  --repo semianalysisai/isb1-cc-traces \
+  --private \
+  --dry-run
+```
+
+Use the fallback namespace instead if needed:
+
+```bash
+python3 tools/publish_hf_dataset.py \
+  --source datasets/isb1/converted/ \
+  --repo ocwc22/isb1-cc-traces \
+  --private \
+  --dry-run
+```
+
+## 5. Publish for real
+
+Once the dry-run output looks correct and HF auth is configured, publish with
+one of the exact commands below.
+
+Private-first publish:
+
+```bash
+python3 tools/publish_hf_dataset.py \
+  --source datasets/isb1/converted/ \
+  --repo semianalysisai/isb1-cc-traces \
+  --private \
+  --commit-message "Publish ISB-1 kv-cache-tester traces"
+```
+
+Or make the dataset public at creation time:
+
+```bash
+python3 tools/publish_hf_dataset.py \
+  --source datasets/isb1/converted/ \
+  --repo semianalysisai/isb1-cc-traces \
+  --public \
+  --commit-message "Publish ISB-1 kv-cache-tester traces"
+```
+
+Fallback org:
+
+```bash
+python3 tools/publish_hf_dataset.py \
+  --source datasets/isb1/converted/ \
+  --repo ocwc22/isb1-cc-traces \
+  --public \
+  --commit-message "Publish ISB-1 kv-cache-tester traces"
+```
+
+The script will:
+
+1. Stage `datasets/isb1/converted/` into a temporary upload tree
+2. Copy `datasets/isb1/hf_dataset_card.md` into that tree as `README.md`
+3. Create the dataset repo if it does not already exist
+4. Upload the staged folder with `huggingface_hub`
+5. Verify the published snapshot with `snapshot_download` into `/tmp`
+
+## 6. Post-publish verification
+
+### Repository-level verification
+
+Re-download the published dataset and re-run the validator against the hydrated
+copy:
+
+```bash
+huggingface-cli download semianalysisai/isb1-cc-traces \
   --repo-type dataset \
-  --revision main
+  --local-dir /tmp/isb1-cc-traces-verify
+python3 tools/validate_kvcache_tester_trace.py /tmp/isb1-cc-traces-verify
 ```
 
-If the repo does not exist yet, create it in the HF UI first, then rerun the
-upload.
+### Harness-level verification
 
-## 5. Cam's Slurm integration
-
-After publication, switch Cam's script from a local directory to the HF path:
+The exact consumer path for Cam is the existing `TRACE_DIR=hf_<org>--<repo>`
+contract. In the replay harness checkout, the closest end-to-end verification
+command is:
 
 ```bash
-TRACE_DIR=hf_semianalysisai--isb1-cc-traces  # replaces datasets/isb1/converted
+TRACE_DIR=hf_semianalysisai--isb1-cc-traces \
+bash experimental/multiturn/benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh
 ```
 
-That triggers the `hf_<org>--<repo>` branch in Cam's PR #993 replay script
-(`benchmarks/single_node/multiturn_fp4_b200_trace_replay.sh`, lines 54-58),
-which rewrites the value into `--hf-dataset <org>/<repo>` before invoking
-`trace_replay_tester.py`.
+If the SemianalysisAI org is not available, swap in the fallback namespace:
 
-## 6. Versioning
+```bash
+TRACE_DIR=hf_ocwc22--isb1-cc-traces \
+bash experimental/multiturn/benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh
+```
+
+## 7. Consumer note for Cam
+
+This is the zero-friction handoff:
+
+```bash
+TRACE_DIR=hf_semianalysisai--isb1-cc-traces \
+bash experimental/multiturn/benchmarks/single_node/multiturn_fp8_h200_trace_replay.sh
+```
+
+No code change is required in Cam's harness. The only user action is publishing
+this dataset repo once with valid HF credentials.
+
+## 8. Versioning guidance
 
 When new traces land:
 
 1. Regenerate `datasets/isb1/converted/manifest.json`
-2. Re-run local validation on the converted directory
-3. Upload the updated directory to HF `main`
-4. Create a matching HF tag such as `v0.2.0` or `pr1032-r2`
-5. Record the InferenceX commit SHA and HF revision together
+2. Re-run `tools/validate_kvcache_tester_trace.py`
+3. Re-run the uploader dry-run
+4. Publish with a commit message that records the corpus revision
+5. Record the InferenceX commit SHA and the HF dataset revision together
 
-Consumers who need immutability should pin an HF revision instead of floating
+Consumers that need immutability should pin an HF revision instead of floating
 on `main`.
-
-## 7. Verification
-
-```bash
-rm -rf /tmp/verify
-huggingface-cli download semianalysisai/isb1-cc-traces \
-  --repo-type dataset \
-  --local-dir /tmp/verify
-python3 tools/validate_kvcache_tester_trace.py /tmp/verify
-```
-
-Expected result:
-
-- Download succeeds with all trace JSONs present
-- Validator reports all converted traces passing
-- Cam's replay wrapper accepts
-  `TRACE_DIR=hf_semianalysisai--isb1-cc-traces` with no shell-script changes
 
 ## Notes
 
 - Publish converted artifacts and metadata only
-- Keep the layout compatible with `trace_replay_tester.py`
-- If the org name changes, update both the upload command and `TRACE_DIR`
-  example together
+- Do not modify `datasets/isb1/converted/**` during publication prep
+- Keep the uploaded layout compatible with kv-cache-tester's existing
+  `TRACE_DIR=hf_<org>--<repo>` convention
