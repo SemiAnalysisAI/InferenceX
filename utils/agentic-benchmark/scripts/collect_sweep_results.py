@@ -127,11 +127,22 @@ def load_experiment(exp_dir: Path) -> dict | None:
     """Load metrics from a single experiment artifact directory."""
     client_csv = exp_dir / "metrics_client_metrics.csv"
     server_csv = exp_dir / "metrics_server_metrics.csv"
-    status_file = exp_dir / "status.txt"
 
-    if not status_file.exists():
-        return None
-    status = status_file.read_text().strip()
+    # No more status.txt: an experiment is considered SUCCESS iff its
+    # trace_replay/detailed_results.csv has at least one successful row.
+    # Failed / missing jobs show up as FAILED in the summary.
+    trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
+    status = "FAILED"
+    if trace_replay_csv.exists():
+        try:
+            import csv as _csv
+            import sys as _sys
+            _csv.field_size_limit(_sys.maxsize)
+            with open(trace_replay_csv) as _f:
+                if any(r.get('success') == 'True' for r in _csv.DictReader(_f)):
+                    status = "SUCCESS"
+        except Exception:
+            pass
 
     # Check for aiperf summary CSV (preferred) or per-record JSONL (fallback)
     aiperf_summary_csv = None
