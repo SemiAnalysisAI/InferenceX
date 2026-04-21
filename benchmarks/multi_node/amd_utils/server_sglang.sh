@@ -1,28 +1,68 @@
 #!/bin/bash
-# Dual-Engine Disaggregated Server Dispatcher
-# =============================================================================
-# Dispatches to the engine-specific server launcher based on ENGINE env var.
-#   ENGINE=sglang (default) -> server_sglang.sh (SGLang + MoRI)
-#   ENGINE=vllm             -> server_vllm.sh  (vLLM + Nixl/MoRI-IO)
+# SGLang Disaggregated Server Launcher with Model-Specific Configurations
 # =============================================================================
 
-ENGINE="${ENGINE:-sglang}"
-WS_PATH="${WS_PATH:-${SGLANG_WS_PATH:-${VLLM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}}}"
-export WS_PATH ENGINE
+# =============================================================================
+# Environment Configuration
+# =============================================================================
 
-echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"
+NODE0_ADDR="${NODE0_ADDR:-localhost}"
+NODE_RANK="${NODE_RANK:-0}"
+MODEL_DIR="${MODEL_DIR:-}"
+MODEL_NAME="${MODEL_NAME:-}"
 
-if [[ "$ENGINE" == "vllm" ]]; then
-    source "$WS_PATH/server_vllm.sh"
+xP="${xP:-1}" #-> Number of Prefill Workers
+yD="${yD:-1}" #-> Number of Decode Workers
+
+IPADDRS="${IPADDRS:-localhost}"
+HEADNODE_PORT="${HEADNODE_PORT:-20000}"
+# Parallelism Configuration
+PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-true}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-true}"
+DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-true}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-true}"
+DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+
+# Benchmark Configuration
+BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
+BENCH_OUTPUT_LEN="${BENCH_OUTPUT_LEN:-1024}"
+BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
+BENCH_REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
+BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
+BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
+
+# Dry Run for debugging purpose
+DRY_RUN="${DRY_RUN:-0}"
+
+# GPU count (expandable for different hardware)
+GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+
+
+# =============================================================================
+# Dependencies and Environment Setup
+# =============================================================================
+source $WS_PATH/env.sh
+
+host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
+host_name=$(hostname)
+
+# MORI_RDMA_TC configuration (optional)
+# If set by runner, use it for RDMA traffic class configuration
+# If not set, RDMA operations will proceed without QoS/traffic class settings
+if [[ -n "${MORI_RDMA_TC}" ]]; then
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC for RDMA traffic class configuration"
+    echo "[INFO] Host '$host_name' configured with MORI_RDMA_TC=$MORI_RDMA_TC"
 else
-    source "$WS_PATH/server_sglang.sh"
+    echo "[INFO] MORI_RDMA_TC not set. Skipping RDMA traffic class configuration."
+    echo "[INFO] This is normal for clusters without QoS requirements."
 fi
-<<<<<<< HEAD
 
 # =============================================================================
 # Model-Specific Configuration from YAML
 # =============================================================================
-MODELS_YAML="${SGLANG_WS_PATH}/models.yaml"
+MODELS_YAML="${WS_PATH}/models.yaml"
 
 if [[ ! -f "$MODELS_YAML" ]]; then
     echo "ERROR: models.yaml not found at $MODELS_YAML"
@@ -87,9 +127,6 @@ no_dp = prefill.get('no_dp', {})
 print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 24)}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_DP=\"{dp.get(\"cuda_graph_bs\", \"1 2 3\")}\"')
-print(f'PREFILL_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
-print(f'PREFILL_MAX_TOTAL_TOKENS_DP=\"{dp.get(\"max_total_tokens\", \"\")}\"')
-print(f'PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP=\"{dp.get(\"enable_two_batch_overlap\", False)}\"')
 print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
@@ -132,16 +169,10 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_cuda_graph_bs=($PREFILL_CUDA_GRAPH_BS_DP)
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_DP
     prefill_chunked_prefill_size=$PREFILL_CHUNKED_PREFILL_SIZE_DP
-    prefill_context_length=$PREFILL_CONTEXT_LENGTH_DP
-    prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_DP
-    prefill_enable_two_batch_overlap=$PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP
 else
     prefill_cuda_graph_bs=($(seq $PREFILL_CUDA_GRAPH_BS_NO_DP_START $PREFILL_CUDA_GRAPH_BS_NO_DP_END))
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_NO_DP
     prefill_chunked_prefill_size=$PREFILL_CHUNKED_PREFILL_SIZE_NO_DP
-    prefill_context_length=""
-    prefill_max_total_tokens=""
-    prefill_enable_two_batch_overlap="false"
 fi
 
 # Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
@@ -156,31 +187,29 @@ else
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
 fi
 
+# Use Decode configuration to configure different TP/DP size between P and D
+PREFILL_DECODE_DIFFERENT_TP=""
+if [[ "$PREFILL_ENABLE_DP" != "$DECODE_ENABLE_DP" ]]; then
+    if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
+        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp ${DECODE_TP_SIZE}"
+    else
+        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp 1"
+    fi
+fi
+
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} ${PREFILL_DECODE_DIFFERENT_TP}"
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
-if [[ -n "$prefill_context_length" ]]; then
-    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --context-length ${prefill_context_length}"
-fi
-if [[ -n "$prefill_max_total_tokens" ]]; then
-    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --max-total-tokens ${prefill_max_total_tokens}"
-fi
-if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_two_batch_overlap" == "true" ]]; then
-    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --enable-two-batch-overlap"
-    PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
-fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
-
+DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]}"
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
-    MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
 # =============================================================================
@@ -298,24 +327,12 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
-if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
-    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
-    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
-    unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
-    unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
-    # NOTE: that currently with fp8_combine set, the evals do not pass on InferenceX eval harness
-    # or on SGLang native harness for high concurrency 4k and gets no where near the golden score of
-    # 0.95 on even basic GSM8k grade school math as confirmed by @billishyahao from AMD
-    # and as confirmed by @Oseltamivir. This was initally merged with @billishyahao promising 
-    # that an fast follow PR to fix the evals via having quant correction in the fp8 combine
-fi
-
 # =============================================================================
 # Container Synchronization
 # =============================================================================
 
 echo "Waiting at the container creation barrier on $host_name"
-python3 $SGLANG_WS_PATH/sync.py barrier \
+python3 $WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
@@ -345,27 +362,20 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Decode  parallelism: TP=${DECODE_TP_SIZE},  EP enabled: ${DECODE_ENABLE_EP},  DP enabled: ${DECODE_ENABLE_DP},  MTP size=${DECODE_MTP_SIZE}"
     echo "Prefill servers ($((PREFILL_TP_SIZE/GPUS_PER_NODE)) nodes): ${PREFILL_ARGS}"
     echo "Decode servers  ($((DECODE_TP_SIZE/GPUS_PER_NODE))  nodes): ${DECODE_ARGS}"
-    echo "Prefill env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL}"
-    echo "Decode  env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} "
-    echo "Decode  env: SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE} "
-
+    echo "Prefill env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: ${MORI_MAX_DISPATCH_TOKENS_PREFILL}"
+    echo "Decode env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE}"
     echo "================================================"
 
     # start the head prefill server
-    PREFILL_MORI_MOE_ENV=""
-    set -x
-    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
-        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
-    fi
-    set +x
-    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} "
+        ${PREFILL_SERVER_CONFIG} \
+        --log-level-http warning"
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         PREFILL_CMD="$PREFILL_CMD --dist-init-addr ${PREFILL_HEADNODE_URLS[0]} --nnodes ${PREFILL_NODES_PER_WORKER} --node-rank 0"
@@ -386,7 +396,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Waiting for all prefill and decode servers to be up . . ."
 
 
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
@@ -423,7 +433,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pid=$!
 
         # Wait for router to be ready via health endpoint
-        HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+        HEALTH_BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
             --node-ports 30000 \
             --wait-for-all-health \
@@ -443,7 +453,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
 
     echo "Benchmarking on ${host_name}:${host_ip}"
-    cd $SGLANG_WS_PATH
+    cd $WS_PATH
 
     # Export IS_MTP based on whether MTP is enabled
     if [ "$DECODE_MTP_SIZE" -gt 0 ]; then
@@ -453,109 +463,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-    BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        echo "EVAL_ONLY mode: skipping throughput benchmark"
-    elif [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
         eval "$BENCH_CMD"
         set +x
-    fi
-
-    # Run evaluation if requested (before killing router)
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running lm-eval evaluation on Node 0..."
-
-        # Health check: verify the router is still serving before running eval.
-        # The throughput benchmark may have crashed/exhausted decode workers.
-        EVAL_HEALTH_OK=false
-        for _attempt in 1 2 3; do
-            if curl -sf --max-time 10 "http://0.0.0.0:30000/readiness" >/dev/null 2>&1; then
-                EVAL_HEALTH_OK=true
-                break
-            fi
-            echo "Eval health check attempt $_attempt failed, retrying in 10s..."
-            sleep 10
-        done
-
-        if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
-            echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
-        else
-            # Must run from repo root so utils/evals/${task}.yaml resolves
-            pushd /workspace
-
-            # Source eval functions from benchmark_lib.sh
-            source /workspace/benchmarks/benchmark_lib.sh
-
-            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
-            if [[ -n "${EVAL_CONC:-}" ]]; then
-                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
-            else
-                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
-            fi
-
-            # Override eval context length with model's configured context_length
-            if [[ -n "$prefill_context_length" ]]; then
-                export EVAL_MAX_MODEL_LEN="$prefill_context_length"
-            fi
-
-            if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
-            else
-                # Run lm-eval against the router on port 30000
-                run_eval --framework lm-eval --port 30000
-                eval_rc=$?
-
-                if [[ $eval_rc -ne 0 ]]; then
-                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
-                    EVAL_FAILED=1
-                else
-                    # Set metadata env vars for append_lm_eval_summary
-                    export TP="${PREFILL_TP_SIZE}"
-                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
-                    export EP_SIZE=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
-                    export PREFILL_TP="${PREFILL_TP_SIZE}"
-                    export PREFILL_EP=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-                    export PREFILL_NUM_WORKERS="${xP}"
-                    export DECODE_TP="${DECODE_TP_SIZE}"
-                    export DECODE_EP=1
-                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-                    export DECODE_NUM_WORKERS="${yD}"
-                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
-                    export ISL="${BENCH_INPUT_LEN}"
-                    export OSL="${BENCH_OUTPUT_LEN}"
-                    # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
-                    # RESULT_FILENAME are already set via Docker -e flags from job.slurm
-
-                    append_lm_eval_summary
-                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
-
-                    # Copy eval artifacts to run_logs for NFS extraction by runner
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    # Use find for glob patterns to avoid "no match" errors
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
-                fi
-            fi
-
-            popd
-        fi
     fi
 
     # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
@@ -574,30 +492,20 @@ if [ "$NODE_RANK" -eq 0 ]; then
         kill $prefill0_pid
     fi
 
-    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
-        echo "ERROR: eval failed; exiting node-0 with rc=1"
-        exit 1
-    fi
-
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME:-'default'})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
 
-    PREFILL_MORI_MOE_ENV=""
-    set -x
-    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
-        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
-    fi
-    set +x
-    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} "
+        ${PREFILL_SERVER_CONFIG} \
+        --log-level-http warning"
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((NODE_RANK % PREFILL_NODES_PER_WORKER))
@@ -616,7 +524,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
@@ -629,7 +537,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $SGLANG_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port 30000"
 
@@ -652,20 +560,15 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
-    DECODE_MORI_MOE_ENV=""
-    set -x
-    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_DECODE" ]]; then
-        DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
-    fi
-    set +x
-    DECODE_CMD="${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${DECODE_SERVER_CONFIG} "
+        ${DECODE_SERVER_CONFIG} \
+        --log-level-http warning"
 
     if [ "$DECODE_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((RANK % DECODE_NODES_PER_WORKER))
@@ -686,7 +589,7 @@ else
 
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
@@ -700,7 +603,7 @@ else
 
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $SGLANG_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port 30000"
 
@@ -719,5 +622,3 @@ fi
 
 echo "Script completed successfully"
 exit 0
-=======
->>>>>>> 766ba4ee (consolidate amd_utils for sglang and vllm)
