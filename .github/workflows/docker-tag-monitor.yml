@@ -2,8 +2,7 @@ name: Docker Tag Monitor
 
 on:
   schedule:
-    # Run weekly on Mondays at 6:00 UTC
-    - cron: '0 8 * * 6'
+    - cron: '0 7 * * 6'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -22,75 +21,176 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6.0.2
 
-      - name: Check for Docker image updates via Claude
-        uses: anthropics/claude-code-action@beta
-        with:
-          direct_prompt: |
-            Check Docker Hub for new vLLM and SGLang releases and create an issue if updates are available.
+      - name: Check for new Docker image releases
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
 
-            ## Your Task
+          SEVEN_DAYS_AGO=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
 
-            1. **Check Docker Hub for latest releases:**
-               - SGLang CUDA: `lmsysorg/sglang` - tags matching `v*-cu*-amd64` (e.g., v0.5.8-cu129-amd64)
-               - SGLang ROCm: `lmsysorg/sglang` - tags matching `v*-rocm*-mi*` (e.g., v0.5.8-rocm700-mi35x)
-               - vLLM CUDA: `vllm/vllm-openai` - tags matching `v*.*.*` (e.g., v0.13.0)
-               - vLLM ROCm: `vllm/vllm-openai-rocm` - tags matching `v*.*.*` (e.g., v0.14.0)
+          # Extract unique image:tag pairs from both config files
+          # Track highest version per repo and the tag suffixes actually in use
+          declare -A CURRENT_VERSIONS
+          declare -A REPO_SUFFIXES
 
-            2. **Compare with current configs:**
-               - Read `.github/configs/nvidia-master.yaml` for NVIDIA/CUDA images
-               - Read `.github/configs/amd-master.yaml` for AMD/ROCm images
-               - Extract current image versions being used
+          # Only monitor these Docker Hub repos for updates
+          MONITORED_REPOS="lmsysorg/sglang lmsysorg/sglang-rocm vllm/vllm-openai vllm/vllm-openai-rocm"
 
-            3. **If updates are available AND this is not a dry run (${{ inputs.dry_run }} == 'false'):**
-               Create a new GitHub issue with:
-               - Title: `[Auto] Docker Image Updates Available - YYYY-MM-DD`
-               - Labels: `docker-update`, `claude-task`
-               - Body containing:
-                 - Table of available updates (image, latest tag, current tags)
-                 - Links to Docker Hub for each image
-                 - An `@claude` mention at the end asking to update the configs
+          # Normalize suffix: strip rc prefixes and date stamps so suffixes
+          # like "rc0-rocm720-mi35x-20260413" become "-rocm720-mi35x"
+          normalize_suffix() {
+            local s="$1"
+            s=$(echo "$s" | sed -E 's/^rc[0-9]+//; s/-[0-9]{8}(-[0-9]+)?$//')
+            [[ -z "$s" ]] && s="BARE"
+            echo "$s"
+          }
 
-            4. **If dry run (${{ inputs.dry_run }} == 'true'):**
-               Just report what updates are available without creating an issue.
+          while IFS= read -r img; do
+            repo="${img%%:*}"
+            tag="${img#*:}"
 
-            ## Issue Body Template (when creating issue)
+            # Only track repos we want to auto-update
+            [[ ! " $MONITORED_REPOS " == *" $repo "* ]] && continue
+            [[ "$img" == *nightly* || "$img" == *-dev* ]] && continue
 
-            ```
-            ## Docker Image Updates Available
+            base_ver=$(echo "$tag" | grep -oP 'v\d+\.\d+\.\d+(\.\w+)?' || true)
+            [[ -z "$base_ver" ]] && continue
 
-            New release tags have been detected on Docker Hub.
+            suffix="${tag#"$base_ver"}"
+            suffix=$(normalize_suffix "$suffix")
 
-            ### Updates Found
+            prev="${CURRENT_VERSIONS[$repo]:-}"
+            if [[ -z "$prev" ]] || [[ "$(printf '%s\n%s\n' "$prev" "$base_ver" | sort -V | tail -1)" == "$base_ver" ]]; then
+              CURRENT_VERSIONS[$repo]="$base_ver"
+            fi
+            if [[ ! " ${REPO_SUFFIXES[$repo]:-} " == *" ${suffix} "* ]]; then
+              REPO_SUFFIXES[$repo]="${REPO_SUFFIXES[$repo]:-} ${suffix}"
+            fi
+          done < <(grep -h '^\s*image:' .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml \
+            | sed 's/.*image:\s*//; s/"//g; s/'"'"'//g' | sort -u)
 
-            | Framework | Platform | Current | Latest | Docker Hub |
-            |-----------|----------|---------|--------|------------|
-            | ... | ... | ... | ... | [Link](...) |
+          echo "=== Currently tracked repos ==="
+          for repo in "${!CURRENT_VERSIONS[@]}"; do
+            echo "  $repo: ${CURRENT_VERSIONS[$repo]} (suffixes:${REPO_SUFFIXES[$repo]:-})"
+          done
 
-            ---
+          FOUND_UPDATES=$(mktemp)
 
-            @claude Please update the configurations:
+          check_dockerhub() {
+            local repo="$1" current_ver="$2" allowed_suffixes="$3"
+            echo "Checking $repo (current: $current_ver, suffixes:$allowed_suffixes)..." >&2
 
-            1. Update image tags in `.github/configs/nvidia-master.yaml` and/or `.github/configs/amd-master.yaml`
-            2. Add entries to `perf-changelog.yaml` documenting the version changes
-            3. Create a PR with these changes
+            local response
+            response=$(curl -sf "https://hub.docker.com/v2/repositories/${repo}/tags?page_size=50&ordering=last_updated" 2>/dev/null) || {
+              echo "  Failed to fetch tags for $repo" >&2
+              return
+            }
 
-            Focus on updating single-node configurations. For each framework, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs.
-            ```
+            echo "$response" | jq -r --arg since "$SEVEN_DAYS_AGO" '
+              (.results // [])[]
+              | select(.last_updated > $since)
+              | select(.name | test("^v[0-9]"))
+              | "\(.name)\t\(.last_updated)"
+            ' 2>/dev/null | while IFS=$'\t' read -r tag updated; do
+              local tag_ver
+              tag_ver=$(echo "$tag" | grep -oP 'v\d+\.\d+\.\d+(\.\w+)?' || true)
+              [[ -z "$tag_ver" ]] && continue
+              [[ "$tag" == *nightly* || "$tag" == *dev* ]] && continue
 
-            ## Important Notes
+              # Only report tags whose normalized suffix matches one already in use
+              local tag_suffix
+              tag_suffix=$(normalize_suffix "${tag#"$tag_ver"}")
+              local matched=false
+              for s in $allowed_suffixes; do
+                if [[ "$tag_suffix" == "$s" ]]; then
+                  matched=true
+                  break
+                fi
+              done
+              [[ "$matched" == false ]] && continue
 
-            - Use `mcp__fetch__fetch` to check Docker Hub API: `https://hub.docker.com/v2/repositories/{repo}/tags?page_size=20&ordering=last_updated`
-            - Parse the JSON response to find matching version tags
-            - Compare semantic versions properly (v0.14.0 > v0.13.2)
-            - Only report genuine updates (newer versions than currently used)
-            - When checking SGLang, note that tags include CUDA version suffix (cu124, cu129) - compare the base version
+              local higher
+              higher=$(printf '%s\n%s\n' "$current_ver" "$tag_ver" | sort -V | tail -1)
+              if [[ "$higher" == "$tag_ver" && "$higher" != "$current_ver" ]]; then
+                echo "  Found update: $tag ($tag_ver > $current_ver)" >&2
+                echo "${repo}|${tag}|${tag_ver}|${current_ver}|${updated}"
+              fi
+            done || true
+          }
 
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          model: sonnet
-          timeout_minutes: 10
-          allowed_tools: |
-            mcp__fetch__fetch
-            mcp__github__create_issue
-            Read
-            Glob
+          for repo in "${!CURRENT_VERSIONS[@]}"; do
+            current="${CURRENT_VERSIONS[$repo]}"
+            suffixes="${REPO_SUFFIXES[$repo]:-}"
+            check_dockerhub "$repo" "$current" "$suffixes" >> "$FOUND_UPDATES" || true
+          done
+
+          UPDATES=$(grep '|' "$FOUND_UPDATES" | sort -u || true)
+          rm -f "$FOUND_UPDATES"
+
+          if [[ -z "$UPDATES" ]]; then
+            echo "No new releases found in the last 7 days."
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_updates=true" >> "$GITHUB_OUTPUT"
+
+          # Build issue body and write to file
+          BODY_FILE=$(mktemp)
+          {
+            echo "## Docker Image Updates Available"
+            echo ""
+            echo "New release tags have been detected on Docker Hub within the last 7 days."
+            echo ""
+            echo "### Updates Found"
+            echo ""
+            echo "| Image | New Tag | New Version | Current Version | Published |"
+            echo "|-------|---------|-------------|-----------------|-----------|"
+            while IFS='|' read -r repo tag tag_ver cur_ver updated; do
+              pub_date=$(echo "$updated" | cut -dT -f1)
+              echo "| \`$repo\` | \`$tag\` | $tag_ver | $cur_ver | $pub_date |"
+            done <<< "$UPDATES"
+            echo ""
+            echo "---"
+            echo ""
+            echo "@claude Please update the configurations:"
+            echo ""
+            echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
+            echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
+            echo "3. Create a PR with these changes"
+            echo ""
+            echo "Focus on updating single-node configurations. For each framework, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+          } > "$BODY_FILE"
+
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
+          echo "=== Issue body ==="
+          cat "$BODY_FILE"
+
+      - name: Create issue for updates
+        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          BODY_FILE="${{ steps.check.outputs.body_file }}"
+
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label "docker-update" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$EXISTING" ]]; then
+            echo "Updating existing issue #$EXISTING"
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "[Auto] Docker Image Updates Available - $DATE" \
+              --label "docker-update,claude-task" \
+              --body-file "$BODY_FILE"
+          fi
+
+      - name: Dry run output
+        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run == true
+        run: |
+          echo "## Dry Run - Updates Found"
+          cat "${{ steps.check.outputs.body_file }}"
