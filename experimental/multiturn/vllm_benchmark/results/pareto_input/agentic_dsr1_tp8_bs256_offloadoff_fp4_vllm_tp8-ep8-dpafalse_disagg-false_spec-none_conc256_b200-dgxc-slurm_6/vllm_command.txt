@@ -1,1 +1,0 @@
-vllm serve nvidia/DeepSeek-R1-0528-FP4 --host 0.0.0.0 --port 8888 --config /workspace/results/config.yaml --gpu-memory-utilization 0.9 --tensor-parallel-size 8 --enable-expert-parallel

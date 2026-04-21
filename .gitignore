@@ -1,2 +1,3 @@
 **/__pycache__/**
-**/.coverageexperimental/multiturn/vllm_benchmark/results/
+**/.coverage
+experimental/multiturn/vllm_benchmark/results/

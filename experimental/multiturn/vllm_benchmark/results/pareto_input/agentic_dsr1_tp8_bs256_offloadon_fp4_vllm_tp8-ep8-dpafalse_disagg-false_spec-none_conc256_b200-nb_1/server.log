@@ -1,1722 +1,0 @@
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299] 
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299]        █     █     █▄   ▄█
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.19.1
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299]   █▄█▀ █     █     █     █  model   nvidia/DeepSeek-R1-0528-FP4
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:299] 
-(APIServer pid=805180) INFO 04-21 05:44:29 [utils.py:233] non-default args: {'model_tag': 'nvidia/DeepSeek-R1-0528-FP4', 'host': '0.0.0.0', 'port': 8888, 'model': 'nvidia/DeepSeek-R1-0528-FP4', 'tensor_parallel_size': 8, 'enable_expert_parallel': True, 'kv_cache_dtype': 'fp8', 'kv_offloading_size': 600.0, 'disable_hybrid_kv_cache_manager': False, 'async_scheduling': True, 'compilation_config': {'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', '+rms_norm'], 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_DECODE_ONLY: (2, 0)>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {'fuse_allreduce_rms': True}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}}
-(APIServer pid=805180) INFO 04-21 05:44:32 [model.py:549] Resolved architecture: DeepseekV3ForCausalLM
-(APIServer pid=805180) INFO 04-21 05:44:32 [model.py:1678] Using max model len 163840
-(APIServer pid=805180) INFO 04-21 05:44:32 [cache.py:227] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor.
-(APIServer pid=805180) INFO 04-21 05:44:32 [scheduler.py:238] Chunked prefill is enabled with max_num_batched_tokens=8192.
-(APIServer pid=805180) WARNING 04-21 05:44:32 [modelopt.py:998] Detected ModelOpt NVFP4 checkpoint. Please note that the format is experimental and could change in future.
-(APIServer pid=805180) INFO 04-21 05:44:32 [vllm.py:790] Asynchronous scheduling is enabled.
-(APIServer pid=805180) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(APIServer pid=805180) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(APIServer pid=805180) INFO 04-21 05:44:40 [compilation.py:292] Enabled custom fusions: norm_quant, act_quant, allreduce_rms
-(EngineCore pid=805785) INFO 04-21 05:44:58 [core.py:105] Initializing a V1 LLM engine (v0.19.1) with config: model='nvidia/DeepSeek-R1-0528-FP4', speculative_config=None, tokenizer='nvidia/DeepSeek-R1-0528-FP4', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=163840, download_dir=None, load_format=auto, tensor_parallel_size=8, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=modelopt_fp4, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=nvidia/DeepSeek-R1-0528-FP4, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', '+rms_norm', 'none'], 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': [], 'compile_ranges_endpoints': [73, 8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_DECODE_ONLY: (2, 0)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': True}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': True, 'static_all_moe_layers': []}
-(EngineCore pid=805785) WARNING 04-21 05:44:58 [multiproc_executor.py:1014] Reducing Torch parallelism from 80 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
-(EngineCore pid=805785) INFO 04-21 05:44:58 [multiproc_executor.py:134] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=10.146.1.185 (local), world_size=8, local_world_size=8
-(Worker pid=806152) INFO 04-21 05:45:19 [parallel_state.py:1400] world_size=8 rank=0 local_rank=0 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806158) INFO 04-21 05:45:20 [parallel_state.py:1400] world_size=8 rank=6 local_rank=6 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806153) INFO 04-21 05:45:20 [parallel_state.py:1400] world_size=8 rank=1 local_rank=1 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806156) INFO 04-21 05:45:20 [parallel_state.py:1400] world_size=8 rank=4 local_rank=4 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806159) INFO 04-21 05:45:21 [parallel_state.py:1400] world_size=8 rank=7 local_rank=7 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806157) INFO 04-21 05:45:21 [parallel_state.py:1400] world_size=8 rank=5 local_rank=5 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806154) INFO 04-21 05:45:21 [parallel_state.py:1400] world_size=8 rank=2 local_rank=2 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806155) INFO 04-21 05:45:21 [parallel_state.py:1400] world_size=8 rank=3 local_rank=3 distributed_init_method=tcp://127.0.0.1:56827 backend=nccl
-(Worker pid=806155) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806155) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806154) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806154) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806157) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806157) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806152) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806152) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806158) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806158) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806156) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806156) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806159) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806159) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806152) INFO 04-21 05:45:22 [pynccl.py:111] vLLM is using nccl==2.27.5
-(Worker pid=806153) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(Worker pid=806153) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(Worker pid=806152) INFO 04-21 05:45:30 [parallel_state.py:1716] rank 0 in world size 8 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:31 [gpu_model_runner.py:4735] Starting to load model nvidia/DeepSeek-R1-0528-FP4...
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [cuda.py:334] Using FLASHINFER_MLA attention backend out of potential backends: ['FLASHINFER_MLA', 'CUTLASS_MLA', 'TRITON_MLA'].
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:45:32 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [mla_attention.py:2137] Using FlashAttention prefill for MLA
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [deep_gemm.py:115] DeepGEMM E8M0 enabled on current platform.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [nvfp4_utils.py:85] Using NvFp4LinearBackend.FLASHINFER_CUTLASS for NVFP4 GEMM
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [layer.py:396] [EP Rank 0/8] Expert parallelism is enabled. Expert placement strategy: linear. Local/global number of experts: 32/256. Experts local to global index map: 0->0, 1->1, 2->2, 3->3, 4->4, 5->5, 6->6, 7->7, 8->8, 9->9, 10->10, 11->11, 12->12, 13->13, 14->14, 15->15, 16->16, 17->17, 18->18, 19->19, 20->20, 21->21, 22->22, 23->23, 24->24, 25->25, 26->26, 27->27, 28->28, 29->29, 30->30, 31->31.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:45:32 [nvfp4.py:256] Using 'FLASHINFER_TRTLLM' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN'].
-(Worker_TP0_EP0 pid=806152) WARNING 04-21 05:45:33 [compilation.py:1223] Op 'quant_fp8' not present in model, enabling with '+quant_fp8' has no effect
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:45:35 [weight_utils.py:581] Time spent downloading weights for nvidia/DeepSeek-R1-0528-FP4: 0.517531 seconds
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   0% Completed | 0/163 [00:00<?, ?it/s]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   1% Completed | 1/163 [00:00<01:07,  2.41it/s]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   1% Completed | 2/163 [00:00<00:42,  3.83it/s]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   2% Completed | 3/163 [00:00<00:30,  5.19it/s]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   2% Completed | 4/163 [00:02<02:24,  1.10it/s]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   3% Completed | 5/163 [00:04<02:50,  1.08s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   4% Completed | 6/163 [00:05<03:16,  1.25s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   4% Completed | 7/163 [00:07<03:21,  1.29s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   5% Completed | 8/163 [00:08<03:24,  1.32s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   6% Completed | 9/163 [00:09<03:32,  1.38s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   6% Completed | 10/163 [00:11<03:43,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   7% Completed | 11/163 [00:12<03:39,  1.45s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   7% Completed | 12/163 [00:13<02:59,  1.19s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   8% Completed | 13/163 [00:15<03:15,  1.30s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   9% Completed | 14/163 [00:16<03:23,  1.36s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:   9% Completed | 15/163 [00:18<03:26,  1.39s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  10% Completed | 16/163 [00:19<03:20,  1.36s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  10% Completed | 17/163 [00:20<03:18,  1.36s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  11% Completed | 18/163 [00:22<03:18,  1.37s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  12% Completed | 19/163 [00:23<03:18,  1.38s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  12% Completed | 20/163 [00:24<03:20,  1.40s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  13% Completed | 21/163 [00:26<03:24,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  13% Completed | 22/163 [00:27<03:15,  1.39s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  14% Completed | 23/163 [00:29<03:29,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  15% Completed | 24/163 [00:31<03:33,  1.53s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  15% Completed | 25/163 [00:32<03:37,  1.58s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  16% Completed | 26/163 [00:34<03:42,  1.62s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  17% Completed | 27/163 [00:36<03:36,  1.59s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  17% Completed | 28/163 [00:37<03:45,  1.67s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  18% Completed | 29/163 [00:39<03:35,  1.61s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  18% Completed | 30/163 [00:40<03:31,  1.59s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  19% Completed | 31/163 [00:42<03:24,  1.55s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  20% Completed | 32/163 [00:44<03:57,  1.82s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  20% Completed | 33/163 [00:47<04:20,  2.01s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  21% Completed | 34/163 [00:47<03:20,  1.56s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  21% Completed | 35/163 [00:49<03:11,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  22% Completed | 36/163 [00:50<03:05,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  23% Completed | 37/163 [00:52<03:12,  1.53s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  23% Completed | 38/163 [00:53<03:05,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  24% Completed | 39/163 [00:54<02:56,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  25% Completed | 40/163 [00:56<02:53,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  25% Completed | 41/163 [00:57<02:51,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  26% Completed | 42/163 [00:59<03:11,  1.58s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  26% Completed | 43/163 [01:02<03:55,  1.97s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  27% Completed | 44/163 [01:03<03:28,  1.75s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  28% Completed | 45/163 [01:05<03:12,  1.63s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  28% Completed | 46/163 [01:06<02:58,  1.52s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  29% Completed | 47/163 [01:07<02:49,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  29% Completed | 48/163 [01:09<02:45,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  30% Completed | 49/163 [01:12<03:40,  1.93s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  31% Completed | 50/163 [01:13<03:21,  1.79s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  31% Completed | 51/163 [01:15<03:10,  1.70s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  32% Completed | 52/163 [01:16<03:06,  1.68s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  33% Completed | 53/163 [01:18<02:58,  1.62s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  33% Completed | 54/163 [01:19<02:58,  1.64s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  34% Completed | 55/163 [01:21<02:50,  1.57s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  34% Completed | 56/163 [01:21<02:17,  1.29s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  35% Completed | 57/163 [01:23<02:32,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  36% Completed | 58/163 [01:25<02:31,  1.45s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  36% Completed | 59/163 [01:26<02:33,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  37% Completed | 60/163 [01:28<02:28,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  37% Completed | 61/163 [01:29<02:19,  1.37s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  38% Completed | 62/163 [01:30<02:27,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  39% Completed | 63/163 [01:32<02:26,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  39% Completed | 64/163 [01:33<02:22,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  40% Completed | 65/163 [01:35<02:27,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  40% Completed | 66/163 [01:36<02:25,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  41% Completed | 67/163 [01:38<02:32,  1.59s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  42% Completed | 68/163 [01:40<02:27,  1.55s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  42% Completed | 69/163 [01:41<02:22,  1.52s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  43% Completed | 70/163 [01:43<02:15,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  44% Completed | 71/163 [01:44<02:15,  1.48s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  44% Completed | 72/163 [01:45<02:11,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  45% Completed | 73/163 [01:47<02:13,  1.48s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  45% Completed | 74/163 [01:48<02:08,  1.45s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  46% Completed | 75/163 [01:50<02:12,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  47% Completed | 76/163 [01:51<02:06,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  47% Completed | 77/163 [01:53<02:02,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  48% Completed | 78/163 [01:53<01:41,  1.19s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  48% Completed | 79/163 [01:55<01:53,  1.35s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  49% Completed | 80/163 [01:57<01:57,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  50% Completed | 81/163 [01:58<01:53,  1.39s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  50% Completed | 82/163 [02:00<01:58,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  51% Completed | 83/163 [02:01<02:06,  1.58s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  52% Completed | 84/163 [02:03<02:04,  1.58s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  52% Completed | 85/163 [02:04<02:00,  1.55s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  53% Completed | 86/163 [02:06<01:59,  1.55s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  53% Completed | 87/163 [02:08<02:01,  1.59s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  54% Completed | 88/163 [02:09<01:56,  1.56s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  55% Completed | 89/163 [02:11<01:49,  1.48s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  55% Completed | 90/163 [02:12<01:46,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  56% Completed | 91/163 [02:13<01:42,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  56% Completed | 92/163 [02:15<01:40,  1.42s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  57% Completed | 93/163 [02:16<01:39,  1.42s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  58% Completed | 94/163 [02:18<01:37,  1.42s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  58% Completed | 95/163 [02:19<01:39,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  59% Completed | 96/163 [02:21<01:44,  1.56s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  60% Completed | 97/163 [02:22<01:41,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  60% Completed | 98/163 [02:24<01:40,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  61% Completed | 99/163 [02:25<01:35,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  61% Completed | 100/163 [02:26<01:21,  1.29s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  62% Completed | 101/163 [02:28<01:23,  1.35s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  63% Completed | 102/163 [02:29<01:21,  1.34s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  63% Completed | 103/163 [02:31<01:24,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  64% Completed | 104/163 [02:32<01:21,  1.39s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  64% Completed | 105/163 [02:33<01:22,  1.42s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  65% Completed | 106/163 [02:35<01:27,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  66% Completed | 107/163 [02:37<01:25,  1.52s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  66% Completed | 108/163 [02:38<01:22,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  67% Completed | 109/163 [02:40<01:20,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  67% Completed | 110/163 [02:41<01:17,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  68% Completed | 111/163 [02:43<01:17,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  69% Completed | 112/163 [02:44<01:11,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  69% Completed | 113/163 [02:45<01:10,  1.41s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  70% Completed | 114/163 [02:47<01:10,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  71% Completed | 115/163 [02:48<01:07,  1.40s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  71% Completed | 116/163 [02:49<01:04,  1.38s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  72% Completed | 117/163 [02:51<01:05,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  72% Completed | 118/163 [02:52<01:05,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  73% Completed | 119/163 [02:54<01:06,  1.52s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  74% Completed | 120/163 [02:55<01:03,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  74% Completed | 121/163 [02:57<01:00,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  75% Completed | 122/163 [02:57<00:48,  1.17s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  75% Completed | 123/163 [02:59<00:52,  1.31s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  76% Completed | 124/163 [03:00<00:51,  1.33s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  77% Completed | 125/163 [03:02<00:54,  1.42s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  77% Completed | 126/163 [03:03<00:52,  1.43s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  78% Completed | 127/163 [03:05<00:51,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  79% Completed | 128/163 [03:06<00:51,  1.48s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  79% Completed | 129/163 [03:08<00:50,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  80% Completed | 130/163 [03:10<00:50,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  80% Completed | 131/163 [03:11<00:51,  1.60s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  81% Completed | 132/163 [03:13<00:48,  1.57s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  82% Completed | 133/163 [03:14<00:47,  1.59s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  82% Completed | 134/163 [03:16<00:46,  1.60s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  83% Completed | 135/163 [03:18<00:43,  1.57s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  83% Completed | 136/163 [03:19<00:42,  1.57s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  84% Completed | 137/163 [03:21<00:40,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  85% Completed | 138/163 [03:22<00:37,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  85% Completed | 139/163 [03:24<00:36,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  86% Completed | 140/163 [03:25<00:34,  1.49s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  87% Completed | 141/163 [03:26<00:29,  1.35s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  87% Completed | 142/163 [03:28<00:32,  1.56s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  88% Completed | 143/163 [03:29<00:30,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  88% Completed | 144/163 [03:31<00:28,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  89% Completed | 145/163 [03:33<00:27,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  90% Completed | 146/163 [03:34<00:26,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  90% Completed | 147/163 [03:36<00:24,  1.55s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  91% Completed | 148/163 [03:37<00:22,  1.53s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  91% Completed | 149/163 [03:39<00:21,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  92% Completed | 150/163 [03:40<00:18,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  93% Completed | 151/163 [03:42<00:18,  1.52s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  93% Completed | 152/163 [03:43<00:17,  1.60s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  94% Completed | 153/163 [03:45<00:15,  1.54s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  94% Completed | 154/163 [03:46<00:13,  1.46s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  95% Completed | 155/163 [03:48<00:11,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  96% Completed | 156/163 [03:49<00:10,  1.47s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  96% Completed | 157/163 [03:50<00:08,  1.44s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  97% Completed | 158/163 [03:52<00:07,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  98% Completed | 159/163 [03:54<00:06,  1.51s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  98% Completed | 160/163 [03:55<00:04,  1.50s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  99% Completed | 161/163 [04:03<00:07,  3.57s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards:  99% Completed | 162/163 [04:13<00:05,  5.26s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards: 100% Completed | 163/163 [04:16<00:00,  4.81s/it]
-(Worker_TP0_EP0 pid=806152) Loading safetensors checkpoint shards: 100% Completed | 163/163 [04:16<00:00,  1.58s/it]
-(Worker_TP0_EP0 pid=806152) 
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:49:57 [default_loader.py:384] Loading weights took 256.97 seconds
-(Worker_TP0_EP0 pid=806152) WARNING 04-21 05:49:57 [kv_cache.py:94] Checkpoint does not provide a q scaling factor. Setting it to k_scale. This only matters for FP8 Attention backends (flash-attn or flashinfer).
-(Worker_TP0_EP0 pid=806152) WARNING 04-21 05:49:57 [kv_cache.py:108] Using KV cache scaling factor 1.0 for fp8_e4m3. If this is unintended, verify that k/v_scale scaling factors are properly set in the checkpoint.
-(Worker_TP0_EP0 pid=806152) WARNING 04-21 05:49:57 [kv_cache.py:147] Using uncalibrated q_scale 1.0 and/or prob_scale 1.0 with fp8 attention. This may cause accuracy issues. Please make sure q/prob scaling factors are available in the fp8 checkpoint.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:49:57 [nvfp4.py:401] Using MoEPrepareAndFinalizeNoDPEPMonolithic
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:00 [gpu_model_runner.py:4820] Model loading took 48.13 GiB memory and 268.062004 seconds
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:05 [backends.py:1051] Using cache directory: /root/.cache/vllm/torch_compile_cache/28bcfd4be6/rank_0_0/backbone for vLLM's torch.compile
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:05 [backends.py:1111] Dynamo bytecode transform time: 4.49 s
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:05 [flashinfer_all_reduce.py:109] Auto-selected flashinfer allreduce backend: trtllm
-(Worker_TP0_EP0 pid=806152) /usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
-(Worker_TP0_EP0 pid=806152)   return func(*args, **kwargs)
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:09 [flashinfer_all_reduce.py:149] Initialized FlashInfer Allreduce norm fusion workspace with backend=trtllm
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:10 [backends.py:285] Directly load the compiled graph(s) for compile range (1, 73) from the cache, took 0.128 s
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_3_0/model
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_5_0/model
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:10 [backends.py:285] Directly load the compiled graph(s) for compile range (74, 8192) from the cache, took 0.096 s
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_0_0/model
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:10 [monitor.py:48] torch.compile took 9.15 s in total
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_7_0/model
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_2_0/model
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_1_0/model
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_6_0/model
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:10 [decorators.py:305] Directly load AOT compilation from path /root/.cache/vllm/torch_compile_cache/torch_aot_compile/2addfe8a64b233fb42510fd18877dc66e25f80e6bd6f15227b1c3227fe0d2240/rank_4_0/model
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:13 [monitor.py:76] Initial profiling/warmup run took 2.74 s
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:19 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:19 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:21 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:22 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 2.46 GiB total
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [gpu_worker.py:436] Available KV cache memory: 108.16 GiB
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:22 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9138 to maintain the same effective KV cache size.
-(EngineCore pid=805785) INFO 04-21 05:50:22 [kv_cache_utils.py:1319] GPU KV cache size: 3,305,408 tokens
-(EngineCore pid=805785) INFO 04-21 05:50:22 [kv_cache_utils.py:1324] Maximum concurrency for 163,840 tokens per request: 20.17x
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP2_EP2 pid=806154) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP3_EP3 pid=806155) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP5_EP5 pid=806157) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP4_EP4 pid=806156) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP1_EP1 pid=806153) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP0_EP0 pid=806152) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP6_EP6 pid=806158) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:22 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(Worker_TP7_EP7 pid=806159) WARNING 04-21 05:50:22 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:22 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=WORKER, per_rank=75.00 GB, world_size=8, mode=eager
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:50:22 [worker.py:144] SimpleCPUOffloadWorker: 61 unique GPU KV tensors, allocating 71624 CPU blocks (75.00 GB)
-(Worker_TP5_EP5 pid=806157) 2026-04-21 05:51:15,628 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP6_EP6 pid=806158) 2026-04-21 05:51:15,628 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP0_EP0 pid=806152) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP4_EP4 pid=806156) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP3_EP3 pid=806155) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP1_EP1 pid=806153) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP7_EP7 pid=806159) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP2_EP2 pid=806154) 2026-04-21 05:51:15,629 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(Worker_TP0_EP0 pid=806152) 2026-04-21 05:51:53,846 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP5_EP5 pid=806157) 2026-04-21 05:51:53,846 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP3_EP3 pid=806155) 2026-04-21 05:51:53,846 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP7_EP7 pid=806159) 2026-04-21 05:51:53,846 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP6_EP6 pid=806158) 2026-04-21 05:51:53,846 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP2_EP2 pid=806154) 2026-04-21 05:51:53,848 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP1_EP1 pid=806153) 2026-04-21 05:51:53,849 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP4_EP4 pid=806156) 2026-04-21 05:51:53,867 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(Worker_TP0_EP0 pid=806152) Capturing CUDA graphs (decode, FULL):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):   2%|▏         | 1/51 [00:00<00:18,  2.75it/s]Capturing CUDA graphs (decode, FULL):   4%|▍         | 2/51 [00:00<00:15,  3.22it/s]Capturing CUDA graphs (decode, FULL):   6%|▌         | 3/51 [00:00<00:13,  3.45it/s]Capturing CUDA graphs (decode, FULL):   8%|▊         | 4/51 [00:01<00:13,  3.45it/s]Capturing CUDA graphs (decode, FULL):  10%|▉         | 5/51 [00:01<00:13,  3.50it/s]Capturing CUDA graphs (decode, FULL):  12%|█▏        | 6/51 [00:01<00:12,  3.57it/s]Capturing CUDA graphs (decode, FULL):  14%|█▎        | 7/51 [00:02<00:12,  3.61it/s]Capturing CUDA graphs (decode, FULL):  16%|█▌        | 8/51 [00:02<00:11,  3.63it/s]Capturing CUDA graphs (decode, FULL):  18%|█▊        | 9/51 [00:02<00:11,  3.64it/s]Capturing CUDA graphs (decode, FULL):  20%|█▉        | 10/51 [00:02<00:11,  3.63it/s]Capturing CUDA graphs (decode, FULL):  22%|██▏       | 11/51 [00:03<00:11,  3.62it/s]Capturing CUDA graphs (decode, FULL):  24%|██▎       | 12/51 [00:03<00:10,  3.62it/s]Capturing CUDA graphs (decode, FULL):  25%|██▌       | 13/51 [00:03<00:10,  3.64it/s]Capturing CUDA graphs (decode, FULL):  27%|██▋       | 14/51 [00:03<00:10,  3.62it/s]Capturing CUDA graphs (decode, FULL):  29%|██▉       | 15/51 [00:04<00:09,  3.64it/s]Capturing CUDA graphs (decode, FULL):  31%|███▏      | 16/51 [00:04<00:09,  3.54it/s]Capturing CUDA graphs (decode, FULL):  33%|███▎      | 17/51 [00:04<00:09,  3.50it/s]Capturing CUDA graphs (decode, FULL):  35%|███▌      | 18/51 [00:05<00:09,  3.43it/s]Capturing CUDA graphs (decode, FULL):  37%|███▋      | 19/51 [00:05<00:09,  3.40it/s]Capturing CUDA graphs (decode, FULL):  39%|███▉      | 20/51 [00:05<00:09,  3.36it/s]Capturing CUDA graphs (decode, FULL):  41%|████      | 21/51 [00:06<00:08,  3.36it/s]Capturing CUDA graphs (decode, FULL):  43%|████▎     | 22/51 [00:06<00:08,  3.34it/s]Capturing CUDA graphs (decode, FULL):  45%|████▌     | 23/51 [00:06<00:08,  3.37it/s]Capturing CUDA graphs (decode, FULL):  47%|████▋     | 24/51 [00:06<00:07,  3.41it/s]Capturing CUDA graphs (decode, FULL):  49%|████▉     | 25/51 [00:07<00:07,  3.39it/s]Capturing CUDA graphs (decode, FULL):  51%|█████     | 26/51 [00:07<00:07,  3.42it/s]Capturing CUDA graphs (decode, FULL):  53%|█████▎    | 27/51 [00:07<00:07,  3.42it/s]Capturing CUDA graphs (decode, FULL):  55%|█████▍    | 28/51 [00:08<00:06,  3.40it/s]Capturing CUDA graphs (decode, FULL):  57%|█████▋    | 29/51 [00:08<00:06,  3.35it/s]Capturing CUDA graphs (decode, FULL):  59%|█████▉    | 30/51 [00:08<00:06,  3.32it/s]Capturing CUDA graphs (decode, FULL):  61%|██████    | 31/51 [00:08<00:05,  3.35it/s]Capturing CUDA graphs (decode, FULL):  63%|██████▎   | 32/51 [00:09<00:05,  3.33it/s]Capturing CUDA graphs (decode, FULL):  65%|██████▍   | 33/51 [00:09<00:05,  3.34it/s]Capturing CUDA graphs (decode, FULL):  67%|██████▋   | 34/51 [00:09<00:05,  3.39it/s]Capturing CUDA graphs (decode, FULL):  69%|██████▊   | 35/51 [00:10<00:04,  3.40it/s]Capturing CUDA graphs (decode, FULL):  71%|███████   | 36/51 [00:10<00:04,  3.43it/s]Capturing CUDA graphs (decode, FULL):  73%|███████▎  | 37/51 [00:10<00:04,  3.37it/s]Capturing CUDA graphs (decode, FULL):  75%|███████▍  | 38/51 [00:11<00:03,  3.40it/s]Capturing CUDA graphs (decode, FULL):  76%|███████▋  | 39/51 [00:11<00:03,  3.43it/s]Capturing CUDA graphs (decode, FULL):  78%|███████▊  | 40/51 [00:11<00:03,  3.27it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 41/51 [00:11<00:02,  3.44it/s]Capturing CUDA graphs (decode, FULL):  82%|████████▏ | 42/51 [00:12<00:02,  3.61it/s]Capturing CUDA graphs (decode, FULL):  84%|████████▍ | 43/51 [00:12<00:02,  3.69it/s]Capturing CUDA graphs (decode, FULL):  86%|████████▋ | 44/51 [00:12<00:01,  3.72it/s]Capturing CUDA graphs (decode, FULL):  88%|████████▊ | 45/51 [00:12<00:01,  3.64it/s]Capturing CUDA graphs (decode, FULL):  90%|█████████ | 46/51 [00:13<00:01,  3.59it/s]Capturing CUDA graphs (decode, FULL):  92%|█████████▏| 47/51 [00:13<00:01,  3.50it/s]Capturing CUDA graphs (decode, FULL):  94%|█████████▍| 48/51 [00:13<00:00,  3.59it/s]Capturing CUDA graphs (decode, FULL):  96%|█████████▌| 49/51 [00:14<00:00,  3.75it/s]Capturing CUDA graphs (decode, FULL):  98%|█████████▊| 50/51 [00:14<00:00,  3.87it/s](Worker_TP1_EP1 pid=806153) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:15<00:00,  2.37it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:15<00:00,  3.38it/s]
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:52:09 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
-(Worker_TP1_EP1 pid=806153) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:52:09 [gpu_model_runner.py:6046] Graph capturing finished in 16 secs, took 1.75 GiB
-(Worker_TP0_EP0 pid=806152) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP3_EP3 pid=806155) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP7_EP7 pid=806159) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP5_EP5 pid=806157) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP4_EP4 pid=806156) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP2_EP2 pid=806154) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(Worker_TP6_EP6 pid=806158) INFO 04-21 05:52:09 [gpu_worker.py:597] CUDA graph pool memory: 1.75 GiB (actual), 2.46 GiB (estimated), difference: 0.71 GiB (40.3%).
-(EngineCore pid=805785) INFO 04-21 05:52:10 [core.py:283] init engine (profile, create kv cache, warmup model) took 129.17 seconds
-(EngineCore pid=805785) INFO 04-21 05:52:14 [factory.py:64] Creating v1 connector with name: SimpleCPUOffloadConnector and engine_id: a2c28e17-e623-44a0-9e39-f634970dbd7c
-(EngineCore pid=805785) WARNING 04-21 05:52:14 [base.py:189] Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
-(EngineCore pid=805785) INFO 04-21 05:52:14 [simple_cpu_offload_connector.py:89] SimpleCPUOffloadConnector: role=SCHEDULER, per_rank=75.00 GB, world_size=8, mode=eager
-(EngineCore pid=805785) INFO 04-21 05:52:14 [manager.py:99] SimpleCPUOffloadScheduler: Allocating 71624 CPU blocks (75.00 GB, mode=eager)
-(EngineCore pid=805785) INFO 04-21 05:52:15 [vllm.py:790] Asynchronous scheduling is enabled.
-(EngineCore pid=805785) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
-(EngineCore pid=805785) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
-(EngineCore pid=805785) INFO 04-21 05:52:17 [compilation.py:292] Enabled custom fusions: norm_quant, act_quant, allreduce_rms
-(APIServer pid=805180) INFO 04-21 05:52:17 [api_server.py:592] Supported tasks: ['generate']
-(APIServer pid=805180) WARNING 04-21 05:52:18 [model.py:1435] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
-(APIServer pid=805180) INFO 04-21 05:52:24 [hf.py:314] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
-(APIServer pid=805180) INFO 04-21 05:52:25 [api_server.py:596] Starting vLLM server on http://0.0.0.0:8888
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:37] Available routes are:
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /openapi.json, Methods: HEAD, GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /docs, Methods: HEAD, GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /redoc, Methods: HEAD, GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /tokenize, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /detokenize, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /load, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /version, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /health, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /metrics, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/models, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /ping, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /ping, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /invocations, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/responses, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/completions, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/messages, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
-(APIServer pid=805180) INFO 04-21 05:52:25 [launcher.py:46] Route: /v1/completions/render, Methods: POST
-(APIServer pid=805180) INFO:     Started server process [805180]
-(APIServer pid=805180) INFO:     Waiting for application startup.
-(APIServer pid=805180) INFO:     Application startup complete.
-(APIServer pid=805180) INFO:     127.0.0.1:59762 - "GET /health HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:49728 - "GET /v1/models HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36428 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36442 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36524 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36672 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36716 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36772 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36404 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36410 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36416 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36448 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36462 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36512 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36526 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36536 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36550 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36552 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36574 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36582 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36644 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36658 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36688 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36694 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36714 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36718 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36726 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36730 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36764 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36800 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36816 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36892 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36922 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36926 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36936 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36938 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36960 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36974 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37004 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37028 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37066 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37112 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37116 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37296 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37432 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36438 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36472 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36486 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36496 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36548 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36562 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36566 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36576 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36596 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36610 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36626 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36642 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36662 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36704 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36736 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36750 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36786 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36820 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36830 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36834 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36850 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36856 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36872 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36876 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36896 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36908 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36910 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36940 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36950 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36958 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36964 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36988 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37022 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37036 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37046 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37054 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37076 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37142 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37144 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37170 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37186 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37208 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37216 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37222 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37242 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37248 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37280 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37292 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37354 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37364 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37386 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37388 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37390 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37396 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37410 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37448 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37474 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37484 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37498 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37514 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37520 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37536 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37560 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37580 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37628 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37656 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37660 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37666 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37682 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37692 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37726 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37736 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37740 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36692 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36882 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37006 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37074 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37082 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37090 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37096 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37126 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37148 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37160 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37234 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37256 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37264 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37272 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37302 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37314 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37330 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37344 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37372 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37382 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37420 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37436 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37458 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37516 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37522 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37552 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37576 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37594 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37604 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37606 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37620 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37642 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37708 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37710 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37756 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37758 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37194 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37618 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37762 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37772 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37778 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37780 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37794 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37782 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58982 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58996 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59008 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59020 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59022 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59032 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:55:35 [loggers.py:259] Engine 000: Avg prompt throughput: 9417.6 tokens/s, Avg generation throughput: 7.1 tokens/s, Running: 8 reqs, Waiting: 158 reqs, GPU KV cache usage: 4.2%, Prefix cache hit rate: 26.7%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59036 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59052 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59054 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59056 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59058 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59074 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59082 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59086 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59088 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59100 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59110 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59114 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59122 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59138 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59144 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59146 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36354 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36368 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36376 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36382 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36396 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36406 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36418 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36434 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36450 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45096 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45104 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45106 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45108 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45116 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:55:45 [loggers.py:259] Engine 000: Avg prompt throughput: 27064.9 tokens/s, Avg generation throughput: 33.5 tokens/s, Running: 13 reqs, Waiting: 183 reqs, GPU KV cache usage: 12.9%, Prefix cache hit rate: 12.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:55372 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55378 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55388 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55396 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55406 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55420 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55436 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55448 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55464 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55466 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55480 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55484 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55496 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56490 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56502 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56516 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56520 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56528 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56540 - "POST /v1/chat/completions HTTP/1.1" 400 Bad Request
-(APIServer pid=805180) ERROR:    Exception in ASGI application
-(APIServer pid=805180) Traceback (most recent call last):
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/uvicorn/protocols/http/httptools_impl.py", line 420, in run_asgi
-(APIServer pid=805180)     result = await app(  # type: ignore[func-returns-value]
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
-(APIServer pid=805180)     return await self.app(scope, receive, send)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/applications.py", line 1159, in __call__
-(APIServer pid=805180)     await super().__call__(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/applications.py", line 107, in __call__
-(APIServer pid=805180)     await self.middleware_stack(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/errors.py", line 186, in __call__
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/errors.py", line 164, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, _send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/cors.py", line 87, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/prometheus_fastapi_instrumentator/middleware.py", line 177, in __call__
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/prometheus_fastapi_instrumentator/middleware.py", line 175, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send_wrapper)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/exceptions.py", line 63, in __call__
-(APIServer pid=805180)     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-(APIServer pid=805180)     await app(scope, receive, sender)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 716, in __call__
-(APIServer pid=805180)     await self.middleware_stack(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 736, in app
-(APIServer pid=805180)     await route.handle(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 290, in handle
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 134, in app
-(APIServer pid=805180)     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-(APIServer pid=805180)     await app(scope, receive, sender)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 120, in app
-(APIServer pid=805180)     response = await f(request)
-(APIServer pid=805180)                ^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 674, in app
-(APIServer pid=805180)     raw_response = await run_endpoint_function(
-(APIServer pid=805180)                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 328, in run_endpoint_function
-(APIServer pid=805180)     return await dependant.call(**values)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/utils.py", line 95, in wrapper
-(APIServer pid=805180)     return handler_task.result()
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/utils.py", line 116, in wrapper
-(APIServer pid=805180)     return await func(*args, **kwargs)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/api_router.py", line 61, in create_chat_completion
-(APIServer pid=805180)     generator = await handler.create_chat_completion(request, raw_request)
-(APIServer pid=805180)                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 230, in create_chat_completion
-(APIServer pid=805180)     result = await self.render_chat_request(request)
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 202, in render_chat_request
-(APIServer pid=805180)     return await self.openai_serving_render.render_chat(request)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/serve/render/serving.py", line 247, in render_chat
-(APIServer pid=805180)     conversation, engine_inputs = await self.preprocess_chat(
-(APIServer pid=805180)                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/serve/render/serving.py", line 534, in preprocess_chat
-(APIServer pid=805180)     (conversation,), (engine_input,) = await renderer.render_chat_async(
-(APIServer pid=805180)                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 922, in render_chat_async
-(APIServer pid=805180)     tok_prompts = await self.tokenize_prompts_async(dict_prompts, tok_params)
-(APIServer pid=805180)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 538, in tokenize_prompts_async
-(APIServer pid=805180)     return await asyncio.gather(
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 531, in tokenize_prompt_async
-(APIServer pid=805180)     return await self._tokenize_singleton_prompt_async(prompt, params)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 464, in _tokenize_singleton_prompt_async
-(APIServer pid=805180)     return params.apply_post_tokenization(self.tokenizer, prompt)  # type: ignore[arg-type]
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 455, in apply_post_tokenization
-(APIServer pid=805180)     prompt["prompt_token_ids"] = self._validate_tokens(  # type: ignore[typeddict-unknown-key]
-(APIServer pid=805180)                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 439, in _validate_tokens
-(APIServer pid=805180)     tokens = validator(tokenizer, tokens)
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 418, in _token_len_check
-(APIServer pid=805180)     raise VLLMValidationError(
-(APIServer pid=805180) vllm.exceptions.VLLMValidationError: This model's maximum context length is 163840 tokens. However, you requested 0 output tokens and your prompt contains at least 163841 input tokens, for a total of at least 163841 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=163841)
-(APIServer pid=805180) INFO:     127.0.0.1:56556 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56566 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56578 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56590 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56592 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56598 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56610 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:55:55 [loggers.py:259] Engine 000: Avg prompt throughput: 25770.1 tokens/s, Avg generation throughput: 39.5 tokens/s, Running: 17 reqs, Waiting: 205 reqs, GPU KV cache usage: 19.8%, Prefix cache hit rate: 8.4%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56612 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56624 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56628 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56644 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56650 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56654 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56668 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56682 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56684 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56688 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56694 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56704 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56720 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56722 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56730 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56742 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56754 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56766 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56774 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56782 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56786 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56794 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:56808 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57938 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57946 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57962 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57964 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57978 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:57994 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58002 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58016 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58018 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58022 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:05 [loggers.py:259] Engine 000: Avg prompt throughput: 26390.7 tokens/s, Avg generation throughput: 64.0 tokens/s, Running: 22 reqs, Waiting: 233 reqs, GPU KV cache usage: 28.3%, Prefix cache hit rate: 7.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:15 [loggers.py:259] Engine 000: Avg prompt throughput: 27601.8 tokens/s, Avg generation throughput: 80.7 tokens/s, Running: 27 reqs, Waiting: 228 reqs, GPU KV cache usage: 36.7%, Prefix cache hit rate: 6.5%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:55320 - "POST /v1/chat/completions HTTP/1.1" 400 Bad Request
-(APIServer pid=805180) ERROR:    Exception in ASGI application
-(APIServer pid=805180) Traceback (most recent call last):
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/uvicorn/protocols/http/httptools_impl.py", line 420, in run_asgi
-(APIServer pid=805180)     result = await app(  # type: ignore[func-returns-value]
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
-(APIServer pid=805180)     return await self.app(scope, receive, send)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/applications.py", line 1159, in __call__
-(APIServer pid=805180)     await super().__call__(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/applications.py", line 107, in __call__
-(APIServer pid=805180)     await self.middleware_stack(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/errors.py", line 186, in __call__
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/errors.py", line 164, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, _send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/cors.py", line 87, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/prometheus_fastapi_instrumentator/middleware.py", line 177, in __call__
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/prometheus_fastapi_instrumentator/middleware.py", line 175, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send_wrapper)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/middleware/exceptions.py", line 63, in __call__
-(APIServer pid=805180)     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-(APIServer pid=805180)     await app(scope, receive, sender)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 716, in __call__
-(APIServer pid=805180)     await self.middleware_stack(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 736, in app
-(APIServer pid=805180)     await route.handle(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/routing.py", line 290, in handle
-(APIServer pid=805180)     await self.app(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 134, in app
-(APIServer pid=805180)     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-(APIServer pid=805180)     raise exc
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-(APIServer pid=805180)     await app(scope, receive, sender)
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 120, in app
-(APIServer pid=805180)     response = await f(request)
-(APIServer pid=805180)                ^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 674, in app
-(APIServer pid=805180)     raw_response = await run_endpoint_function(
-(APIServer pid=805180)                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/fastapi/routing.py", line 328, in run_endpoint_function
-(APIServer pid=805180)     return await dependant.call(**values)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/utils.py", line 95, in wrapper
-(APIServer pid=805180)     return handler_task.result()
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/utils.py", line 116, in wrapper
-(APIServer pid=805180)     return await func(*args, **kwargs)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/api_router.py", line 61, in create_chat_completion
-(APIServer pid=805180)     generator = await handler.create_chat_completion(request, raw_request)
-(APIServer pid=805180)                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 230, in create_chat_completion
-(APIServer pid=805180)     result = await self.render_chat_request(request)
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 202, in render_chat_request
-(APIServer pid=805180)     return await self.openai_serving_render.render_chat(request)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/serve/render/serving.py", line 247, in render_chat
-(APIServer pid=805180)     conversation, engine_inputs = await self.preprocess_chat(
-(APIServer pid=805180)                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/serve/render/serving.py", line 534, in preprocess_chat
-(APIServer pid=805180)     (conversation,), (engine_input,) = await renderer.render_chat_async(
-(APIServer pid=805180)                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 922, in render_chat_async
-(APIServer pid=805180)     tok_prompts = await self.tokenize_prompts_async(dict_prompts, tok_params)
-(APIServer pid=805180)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 538, in tokenize_prompts_async
-(APIServer pid=805180)     return await asyncio.gather(
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 531, in tokenize_prompt_async
-(APIServer pid=805180)     return await self._tokenize_singleton_prompt_async(prompt, params)
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/base.py", line 464, in _tokenize_singleton_prompt_async
-(APIServer pid=805180)     return params.apply_post_tokenization(self.tokenizer, prompt)  # type: ignore[arg-type]
-(APIServer pid=805180)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 455, in apply_post_tokenization
-(APIServer pid=805180)     prompt["prompt_token_ids"] = self._validate_tokens(  # type: ignore[typeddict-unknown-key]
-(APIServer pid=805180)                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 439, in _validate_tokens
-(APIServer pid=805180)     tokens = validator(tokenizer, tokens)
-(APIServer pid=805180)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(APIServer pid=805180)   File "/usr/local/lib/python3.12/dist-packages/vllm/renderers/params.py", line 418, in _token_len_check
-(APIServer pid=805180)     raise VLLMValidationError(
-(APIServer pid=805180) vllm.exceptions.VLLMValidationError: This model's maximum context length is 163840 tokens. However, you requested 0 output tokens and your prompt contains at least 163841 input tokens, for a total of at least 163841 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=163841)
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:25 [loggers.py:259] Engine 000: Avg prompt throughput: 26619.3 tokens/s, Avg generation throughput: 101.5 tokens/s, Running: 32 reqs, Waiting: 223 reqs, GPU KV cache usage: 45.4%, Prefix cache hit rate: 5.3%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47664 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:35 [loggers.py:259] Engine 000: Avg prompt throughput: 31175.0 tokens/s, Avg generation throughput: 135.4 tokens/s, Running: 44 reqs, Waiting: 212 reqs, GPU KV cache usage: 54.5%, Prefix cache hit rate: 6.7%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:45 [loggers.py:259] Engine 000: Avg prompt throughput: 11514.7 tokens/s, Avg generation throughput: 91.6 tokens/s, Running: 46 reqs, Waiting: 210 reqs, GPU KV cache usage: 59.8%, Prefix cache hit rate: 6.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:56:55 [loggers.py:259] Engine 000: Avg prompt throughput: 24034.4 tokens/s, Avg generation throughput: 108.8 tokens/s, Running: 47 reqs, Waiting: 209 reqs, GPU KV cache usage: 65.7%, Prefix cache hit rate: 5.7%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:05 [loggers.py:259] Engine 000: Avg prompt throughput: 20148.9 tokens/s, Avg generation throughput: 113.2 tokens/s, Running: 49 reqs, Waiting: 207 reqs, GPU KV cache usage: 71.6%, Prefix cache hit rate: 5.3%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:15 [loggers.py:259] Engine 000: Avg prompt throughput: 19546.2 tokens/s, Avg generation throughput: 122.8 tokens/s, Running: 51 reqs, Waiting: 205 reqs, GPU KV cache usage: 77.8%, Prefix cache hit rate: 4.9%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:25 [loggers.py:259] Engine 000: Avg prompt throughput: 17940.7 tokens/s, Avg generation throughput: 128.3 tokens/s, Running: 53 reqs, Waiting: 203 reqs, GPU KV cache usage: 84.0%, Prefix cache hit rate: 4.6%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:35 [loggers.py:259] Engine 000: Avg prompt throughput: 23197.4 tokens/s, Avg generation throughput: 116.9 tokens/s, Running: 55 reqs, Waiting: 201 reqs, GPU KV cache usage: 89.5%, Prefix cache hit rate: 4.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:45 [loggers.py:259] Engine 000: Avg prompt throughput: 10530.3 tokens/s, Avg generation throughput: 120.2 tokens/s, Running: 56 reqs, Waiting: 200 reqs, GPU KV cache usage: 94.9%, Prefix cache hit rate: 4.1%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:57:55 [loggers.py:259] Engine 000: Avg prompt throughput: 23103.8 tokens/s, Avg generation throughput: 403.0 tokens/s, Running: 57 reqs, Waiting: 199 reqs, GPU KV cache usage: 98.6%, Prefix cache hit rate: 1.5%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:05 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 1122.7 tokens/s, Running: 57 reqs, Waiting: 199 reqs, GPU KV cache usage: 98.9%, Prefix cache hit rate: 0.5%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:15 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 1128.4 tokens/s, Running: 57 reqs, Waiting: 199 reqs, GPU KV cache usage: 99.3%, Prefix cache hit rate: 0.3%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:25 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 1117.0 tokens/s, Running: 57 reqs, Waiting: 199 reqs, GPU KV cache usage: 99.6%, Prefix cache hit rate: 0.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:35 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 1120.1 tokens/s, Running: 56 reqs, Waiting: 199 reqs, GPU KV cache usage: 99.3%, Prefix cache hit rate: 0.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36166 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36168 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:45 [loggers.py:259] Engine 000: Avg prompt throughput: 9519.9 tokens/s, Avg generation throughput: 645.7 tokens/s, Running: 55 reqs, Waiting: 201 reqs, GPU KV cache usage: 97.3%, Prefix cache hit rate: 0.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:35586 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:58:55 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 269.1 tokens/s, Running: 55 reqs, Waiting: 201 reqs, GPU KV cache usage: 98.9%, Prefix cache hit rate: 0.1%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:05 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 994.3 tokens/s, Running: 54 reqs, Waiting: 200 reqs, GPU KV cache usage: 94.8%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:15 [loggers.py:259] Engine 000: Avg prompt throughput: 11007.2 tokens/s, Avg generation throughput: 307.1 tokens/s, Running: 53 reqs, Waiting: 199 reqs, GPU KV cache usage: 96.9%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:34602 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:25 [loggers.py:259] Engine 000: Avg prompt throughput: 11707.4 tokens/s, Avg generation throughput: 385.3 tokens/s, Running: 53 reqs, Waiting: 199 reqs, GPU KV cache usage: 97.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:35 [loggers.py:259] Engine 000: Avg prompt throughput: 10119.9 tokens/s, Avg generation throughput: 502.2 tokens/s, Running: 53 reqs, Waiting: 198 reqs, GPU KV cache usage: 97.6%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55288 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:45 [loggers.py:259] Engine 000: Avg prompt throughput: 10191.3 tokens/s, Avg generation throughput: 523.3 tokens/s, Running: 53 reqs, Waiting: 198 reqs, GPU KV cache usage: 99.3%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:55298 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55304 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:54064 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 05:59:55 [loggers.py:259] Engine 000: Avg prompt throughput: 10103.7 tokens/s, Avg generation throughput: 356.7 tokens/s, Running: 52 reqs, Waiting: 200 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:49200 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:49216 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:05 [loggers.py:259] Engine 000: Avg prompt throughput: 23200.1 tokens/s, Avg generation throughput: 372.8 tokens/s, Running: 52 reqs, Waiting: 201 reqs, GPU KV cache usage: 98.8%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55988 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:15 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 922.9 tokens/s, Running: 50 reqs, Waiting: 201 reqs, GPU KV cache usage: 97.5%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34826 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34840 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:25 [loggers.py:259] Engine 000: Avg prompt throughput: 8640.1 tokens/s, Avg generation throughput: 717.4 tokens/s, Running: 48 reqs, Waiting: 203 reqs, GPU KV cache usage: 97.2%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34846 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45544 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:35 [loggers.py:259] Engine 000: Avg prompt throughput: 11066.8 tokens/s, Avg generation throughput: 548.6 tokens/s, Running: 47 reqs, Waiting: 204 reqs, GPU KV cache usage: 97.5%, Prefix cache hit rate: 1.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45554 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:39584 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:45 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 938.6 tokens/s, Running: 43 reqs, Waiting: 205 reqs, GPU KV cache usage: 93.2%, Prefix cache hit rate: 0.9%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:39586 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:39602 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55568 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:00:55 [loggers.py:259] Engine 000: Avg prompt throughput: 12202.0 tokens/s, Avg generation throughput: 89.5 tokens/s, Running: 44 reqs, Waiting: 207 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 0.9%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55580 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:55596 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34894 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:05 [loggers.py:259] Engine 000: Avg prompt throughput: 10636.3 tokens/s, Avg generation throughput: 222.2 tokens/s, Running: 42 reqs, Waiting: 209 reqs, GPU KV cache usage: 99.5%, Prefix cache hit rate: 0.9%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34910 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34916 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34930 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:34934 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:15 [loggers.py:259] Engine 000: Avg prompt throughput: 18562.9 tokens/s, Avg generation throughput: 570.1 tokens/s, Running: 40 reqs, Waiting: 211 reqs, GPU KV cache usage: 96.1%, Prefix cache hit rate: 0.1%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:60870 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:25 [loggers.py:259] Engine 000: Avg prompt throughput: 19108.7 tokens/s, Avg generation throughput: 292.1 tokens/s, Running: 39 reqs, Waiting: 209 reqs, GPU KV cache usage: 96.2%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:60886 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:60896 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:60908 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:35 [loggers.py:259] Engine 000: Avg prompt throughput: 24752.9 tokens/s, Avg generation throughput: 132.0 tokens/s, Running: 41 reqs, Waiting: 207 reqs, GPU KV cache usage: 94.6%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51082 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51092 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51108 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51118 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:45 [loggers.py:259] Engine 000: Avg prompt throughput: 24543.2 tokens/s, Avg generation throughput: 435.0 tokens/s, Running: 44 reqs, Waiting: 207 reqs, GPU KV cache usage: 99.3%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:44622 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:01:55 [loggers.py:259] Engine 000: Avg prompt throughput: 4509.6 tokens/s, Avg generation throughput: 962.5 tokens/s, Running: 43 reqs, Waiting: 208 reqs, GPU KV cache usage: 98.8%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41702 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41712 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:05 [loggers.py:259] Engine 000: Avg prompt throughput: 4083.8 tokens/s, Avg generation throughput: 973.5 tokens/s, Running: 44 reqs, Waiting: 208 reqs, GPU KV cache usage: 99.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:58308 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45752 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45756 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45768 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:15 [loggers.py:259] Engine 000: Avg prompt throughput: 17468.6 tokens/s, Avg generation throughput: 475.1 tokens/s, Running: 45 reqs, Waiting: 209 reqs, GPU KV cache usage: 100.0%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45772 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45786 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:25 [loggers.py:259] Engine 000: Avg prompt throughput: 5086.1 tokens/s, Avg generation throughput: 863.2 tokens/s, Running: 42 reqs, Waiting: 209 reqs, GPU KV cache usage: 95.5%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47306 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:35 [loggers.py:259] Engine 000: Avg prompt throughput: 15490.4 tokens/s, Avg generation throughput: 471.5 tokens/s, Running: 43 reqs, Waiting: 207 reqs, GPU KV cache usage: 96.1%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:47310 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47320 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47322 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47338 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:45 [loggers.py:259] Engine 000: Avg prompt throughput: 11721.6 tokens/s, Avg generation throughput: 802.0 tokens/s, Running: 44 reqs, Waiting: 210 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:02:55 [loggers.py:259] Engine 000: Avg prompt throughput: 13348.1 tokens/s, Avg generation throughput: 467.7 tokens/s, Running: 45 reqs, Waiting: 207 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:54034 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:39280 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:39288 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:05 [loggers.py:259] Engine 000: Avg prompt throughput: 24232.6 tokens/s, Avg generation throughput: 388.8 tokens/s, Running: 47 reqs, Waiting: 206 reqs, GPU KV cache usage: 99.1%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:15 [loggers.py:259] Engine 000: Avg prompt throughput: 3475.3 tokens/s, Avg generation throughput: 1046.0 tokens/s, Running: 47 reqs, Waiting: 205 reqs, GPU KV cache usage: 99.6%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51334 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:50398 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:25 [loggers.py:259] Engine 000: Avg prompt throughput: 13375.4 tokens/s, Avg generation throughput: 623.2 tokens/s, Running: 48 reqs, Waiting: 203 reqs, GPU KV cache usage: 97.9%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:50410 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:36 [loggers.py:259] Engine 000: Avg prompt throughput: 16649.9 tokens/s, Avg generation throughput: 410.8 tokens/s, Running: 49 reqs, Waiting: 203 reqs, GPU KV cache usage: 99.5%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41278 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41292 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:47 [loggers.py:259] Engine 000: Avg prompt throughput: 9380.3 tokens/s, Avg generation throughput: 681.9 tokens/s, Running: 49 reqs, Waiting: 203 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:53638 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:53654 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:03:57 [loggers.py:259] Engine 000: Avg prompt throughput: 7406.9 tokens/s, Avg generation throughput: 583.3 tokens/s, Running: 49 reqs, Waiting: 204 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:37182 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:04:07 [loggers.py:259] Engine 000: Avg prompt throughput: 19165.6 tokens/s, Avg generation throughput: 560.4 tokens/s, Running: 52 reqs, Waiting: 199 reqs, GPU KV cache usage: 95.2%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36314 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:36330 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:04:17 [loggers.py:259] Engine 000: Avg prompt throughput: 13001.6 tokens/s, Avg generation throughput: 309.1 tokens/s, Running: 52 reqs, Waiting: 201 reqs, GPU KV cache usage: 99.1%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45840 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:45844 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:44078 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:44088 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:04:27 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 703.1 tokens/s, Running: 50 reqs, Waiting: 203 reqs, GPU KV cache usage: 96.7%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41612 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41624 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:41634 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:04:37 [loggers.py:259] Engine 000: Avg prompt throughput: 12988.0 tokens/s, Avg generation throughput: 152.4 tokens/s, Running: 50 reqs, Waiting: 206 reqs, GPU KV cache usage: 99.7%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:59764 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:04:48 [loggers.py:259] Engine 000: Avg prompt throughput: 11610.5 tokens/s, Avg generation throughput: 559.1 tokens/s, Running: 49 reqs, Waiting: 206 reqs, GPU KV cache usage: 99.0%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:04:59 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 632.0 tokens/s, Running: 48 reqs, Waiting: 205 reqs, GPU KV cache usage: 94.6%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:38700 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47724 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:47726 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:05:09 [loggers.py:259] Engine 000: Avg prompt throughput: 30519.8 tokens/s, Avg generation throughput: 285.8 tokens/s, Running: 49 reqs, Waiting: 206 reqs, GPU KV cache usage: 99.8%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:51840 - "GET /metrics HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:05:25 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 530.1 tokens/s, Running: 48 reqs, Waiting: 205 reqs, GPU KV cache usage: 95.8%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:05:44 [loggers.py:259] Engine 000: Avg prompt throughput: 5180.3 tokens/s, Avg generation throughput: 507.9 tokens/s, Running: 47 reqs, Waiting: 205 reqs, GPU KV cache usage: 97.7%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:06:15 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 489.3 tokens/s, Running: 47 reqs, Waiting: 205 reqs, GPU KV cache usage: 98.1%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:06:58 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 462.6 tokens/s, Running: 45 reqs, Waiting: 191 reqs, GPU KV cache usage: 96.9%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:07:27 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 413.0 tokens/s, Running: 45 reqs, Waiting: 125 reqs, GPU KV cache usage: 98.5%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:07:56 [loggers.py:259] Engine 000: Avg prompt throughput: 25697.7 tokens/s, Avg generation throughput: 479.3 tokens/s, Running: 48 reqs, Waiting: 61 reqs, GPU KV cache usage: 99.5%, Prefix cache hit rate: 2.7%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:08:31 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 493.5 tokens/s, Running: 47 reqs, Waiting: 62 reqs, GPU KV cache usage: 97.8%, Prefix cache hit rate: 8.2%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:09:33 [loggers.py:259] Engine 000: Avg prompt throughput: 2552.6 tokens/s, Avg generation throughput: 448.5 tokens/s, Running: 47 reqs, Waiting: 58 reqs, GPU KV cache usage: 98.4%, Prefix cache hit rate: 8.1%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     127.0.0.1:60342 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-(APIServer pid=805180) INFO 04-21 06:11:15 [loggers.py:259] Engine 000: Avg prompt throughput: 5507.4 tokens/s, Avg generation throughput: 444.9 tokens/s, Running: 51 reqs, Waiting: 47 reqs, GPU KV cache usage: 99.7%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO 04-21 06:20:57 [loggers.py:259] Engine 000: Avg prompt throughput: 1131.2 tokens/s, Avg generation throughput: 449.4 tokens/s, Running: 50 reqs, Waiting: 33 reqs, GPU KV cache usage: 96.5%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     Shutting down
-(APIServer pid=805180) INFO:     127.0.0.1:45816 - "POST /v1/chat/completions HTTP/1.1" 400 Bad Request
-(APIServer pid=805180) INFO 04-21 06:37:39 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 288.3 tokens/s, Running: 37 reqs, Waiting: 39 reqs, GPU KV cache usage: 96.7%, Prefix cache hit rate: 0.0%, External prefix cache hit rate: 0.0%
-(APIServer pid=805180) INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
-(APIServer pid=805180) INFO:     Waiting for application shutdown.
-(APIServer pid=805180) INFO:     Application shutdown complete.
-(APIServer pid=805180) INFO:     Finished server process [805180]
-(EngineCore pid=805785) INFO 04-21 06:37:39 [core.py:1210] Shutdown initiated (timeout=0)
-(EngineCore pid=805785) INFO 04-21 06:37:40 [core.py:1233] Shutdown complete
-(Worker_TP2_EP2 pid=806154) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP6_EP6 pid=806158) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP7_EP7 pid=806159) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP3_EP3 pid=806155) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 06:37:40 [multiproc_executor.py:764] Parent process exited, terminating worker queues
-(Worker_TP1_EP1 pid=806153) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP0_EP0 pid=806152) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP4_EP4 pid=806156) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-(Worker_TP5_EP5 pid=806157) INFO 04-21 06:37:40 [multiproc_executor.py:859] WorkerProc shutting down.
-/usr/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 1 leaked shared_memory objects to clean up at shutdown
-  warnings.warn('resource_tracker: There appear to be %d '
