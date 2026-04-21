@@ -11,12 +11,18 @@ dsr1-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 dsr1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
@@ -31,13 +37,25 @@ dsr1-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+      - tp: 4
+        ep: 1
+        conc-start: 32
+        conc-end: 256
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 32
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 4
 
 dsr1-fp4-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
@@ -45,7 +63,6 @@ dsr1-fp4-mi355x-atom-mtp:
   model-prefix: dsr1
   runner: mi355x
   precision: fp4
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   scenarios:
@@ -53,13 +70,21 @@ dsr1-fp4-mi355x-atom-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 4
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
     - isl: 8192
       osl: 1024
       search-space:
-      #- { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
 
 dsr1-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
@@ -74,11 +99,15 @@ dsr1-fp8-mi300x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
@@ -93,11 +122,15 @@ dsr1-fp8-mi325x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
@@ -112,12 +145,18 @@ dsr1-fp8-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 32, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 4
+        conc-start: 32
+        conc-end: 64
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 qwen3.5-bf16-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
@@ -132,11 +171,17 @@ qwen3.5-bf16-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 256
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 256
 
 qwen3.5-bf16-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
@@ -151,11 +196,19 @@ qwen3.5-bf16-mi355x-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
 
 qwen3.5-bf16-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
@@ -170,11 +223,15 @@ qwen3.5-bf16-mi300x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 qwen3.5-bf16-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
@@ -189,11 +246,15 @@ qwen3.5-bf16-mi325x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 qwen3.5-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
@@ -208,11 +269,15 @@ qwen3.5-fp8-mi325x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 qwen3.5-fp8-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
@@ -227,14 +292,29 @@ qwen3.5-fp8-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-      - { tp: 8, ep: 8, conc-start: 64, conc-end: 256 }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 256 }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 32
+      - tp: 8
+        ep: 8
+        conc-start: 64
+        conc-end: 256
+      - tp: 2
+        ep: 2
+        conc-start: 128
+        conc-end: 256
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 32 }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
+      - tp: 2
+        ep: 2
+        conc-start: 4
+        conc-end: 32
+      - tp: 4
+        ep: 1
+        conc-start: 32
+        conc-end: 256
 
 qwen3.5-fp8-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
@@ -249,14 +329,34 @@ qwen3.5-fp8-mi355x-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 32
+        spec-decoding: mtp
+      - tp: 8
+        ep: 8
+        conc-start: 64
+        conc-end: 256
+        spec-decoding: mtp
+      - tp: 2
+        ep: 2
+        conc-start: 128
+        conc-end: 256
+        spec-decoding: mtp
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 256, spec-decoding: mtp }
+      - tp: 2
+        ep: 2
+        conc-start: 4
+        conc-end: 32
+        spec-decoding: mtp
+      - tp: 4
+        ep: 1
+        conc-start: 32
+        conc-end: 256
+        spec-decoding: mtp
 
 qwen3.5-fp4-mi355x-sglang:
   image: rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413
@@ -271,13 +371,21 @@ qwen3.5-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 256
+      - tp: 4
+        conc-start: 4
+        conc-end: 16
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 256
+      - tp: 4
+        conc-start: 4
+        conc-end: 16
 
 qwen3.5-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
@@ -292,11 +400,15 @@ qwen3.5-fp8-mi300x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 glm5-fp8-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
@@ -311,11 +423,15 @@ glm5-fp8-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 glm5-fp8-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
@@ -330,11 +446,17 @@ glm5-fp8-mi355x-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
 
 glm5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2.post
@@ -349,11 +471,15 @@ glm5-fp8-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 256 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 256 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
 
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -368,11 +494,15 @@ kimik2.5-int4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
 
 kimik2.5-int4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -387,11 +517,41 @@ kimik2.5-int4-mi325x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+    agentic-coding:
+    - search-space:
+      - tp: 8
+        cpu-offloading: true
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 32
+        - 64
+        - 128
+      - tp: 8
+        cpu-offloading: false
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 32
+        - 64
+        - 128
 
 kimik2.5-int4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -406,11 +566,41 @@ kimik2.5-int4-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+    agentic-coding:
+    - search-space:
+      - tp: 8
+        cpu-offloading: true
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 32
+        - 64
+        - 128
+      - tp: 8
+        cpu-offloading: false
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 32
+        - 64
+        - 128
 
 kimik2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -425,13 +615,21 @@ kimik2.5-fp4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -446,13 +644,21 @@ kimik2.5-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 128
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 128
 
 minimaxm2.5-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.0
@@ -467,15 +673,33 @@ minimaxm2.5-fp8-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, ep: 2, conc-start: 2, conc-end: 512 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
+      - tp: 2
+        ep: 2
+        conc-start: 2
+        conc-end: 512
+      - tp: 4
+        ep: 4
+        conc-start: 4
+        conc-end: 256
+      - tp: 8
+        ep: 8
+        conc-start: 2
+        conc-end: 2
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, ep: 2, conc-start: 2, conc-end: 256 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 512 }
-      - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
+      - tp: 2
+        ep: 2
+        conc-start: 2
+        conc-end: 256
+      - tp: 4
+        ep: 4
+        conc-start: 4
+        conc-end: 512
+      - tp: 8
+        ep: 8
+        conc-start: 2
+        conc-end: 2
 
 minimaxm2.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -490,15 +714,29 @@ minimaxm2.5-fp8-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 128
+      - tp: 8
+        ep: 8
+        conc-start: 32
+        conc-end: 256
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 128
+      - tp: 8
+        ep: 8
+        conc-start: 32
+        conc-end: 256
 
 minimaxm2.5-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
@@ -513,13 +751,21 @@ minimaxm2.5-fp8-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
 
 minimaxm2.5-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -534,13 +780,23 @@ minimaxm2.5-fp8-mi325x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 512 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 512
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 256
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -555,17 +811,33 @@ gptoss-fp4-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 64, conc-end: 256 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
+      - tp: 1
+        conc-start: 64
+        conc-end: 256
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        conc-start: 4
+        conc-end: 16
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 64
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        conc-start: 4
+        conc-end: 16
 
 gptoss-fp4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -580,17 +852,33 @@ gptoss-fp4-mi325x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 64
+      - tp: 2
+        conc-start: 4
+        conc-end: 64
+      - tp: 4
+        conc-start: 4
+        conc-end: 64
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 8 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 64
+      - tp: 2
+        conc-start: 4
+        conc-end: 8
+      - tp: 4
+        conc-start: 4
+        conc-end: 8
+      - tp: 8
+        conc-start: 4
+        conc-end: 16
 
 gptoss-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -605,15 +893,27 @@ gptoss-fp4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 8
+      - tp: 8
+        conc-start: 4
+        conc-end: 16
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 4 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 128
+      - tp: 4
+        conc-start: 4
+        conc-end: 4
+      - tp: 8
+        conc-start: 4
+        conc-end: 8
 
 gptoss-fp4-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
@@ -628,13 +928,23 @@ gptoss-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 16, conc-end: 128 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+      - tp: 1
+        conc-start: 16
+        conc-end: 128
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 32
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+      - tp: 1
+        conc-start: 4
+        conc-end: 128
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 16
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
@@ -642,7 +952,6 @@ dsr1-fp8-mi355x-atom:
   model-prefix: dsr1
   runner: mi355x
   precision: fp8
-  # WIP framwork (no customers yet)
   framework: atom
   multinode: false
   scenarios:
@@ -650,11 +959,15 @@ dsr1-fp8-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 128
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 128
 
 dsr1-fp8-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -669,11 +982,17 @@ dsr1-fp8-mi355x-atom-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
+      - tp: 8
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
 
 dsr1-fp8-mi355x-sglang-disagg:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
@@ -689,147 +1008,163 @@ dsr1-fp8-mi355x-sglang-disagg:
     - isl: 1024
       osl: 1024
       search-space:
-      # non-MTP configurations
-      # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
+      - spec-decoding: none
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # "Middle of curve" (1 prefill workers each at TP8 and 2 decode workers at DEP8)
-      - spec-decoding: "none"
-        conc-list: [ 1536, 1024, 512 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 1536
+        - 1024
+        - 512
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-
-      # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
-      - spec-decoding: "none"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 256
+        - 128
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      - spec-decoding: "none"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
+        - 2
+        - 1
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
     - isl: 8192
       osl: 1024
       search-space:
-      # non-MTP configurations
-      # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
+      - spec-decoding: none
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=2"
+          - PREFILL_NODES=2
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
-      - spec-decoding: "none"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 256
+        - 128
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      - spec-decoding: "none"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
+        - 2
+        - 1
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
 
 dsr1-fp8-mi355x-sglang-disagg-mtp:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
@@ -845,147 +1180,165 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      # MTP configurations
-      # "Top of curve" (1 prefill worker at DEP8 and 1 decode worker at DEP16)
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
+      - spec-decoding: mtp
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # "Middle of curve" (1 prefill worker at TP8 and 2 decode workers each at DEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 1536, 1024, 512, 256 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 1536
+        - 1024
+        - 512
+        - 256
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-
-      # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 256
+        - 128
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=2
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
+        - 2
+        - 1
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=2
     - isl: 8192
       osl: 1024
       search-space:
-      # MTP configurations
-      # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
+      - spec-decoding: mtp
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=2"
+          - PREFILL_NODES=2
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-      # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 256
+        - 128
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
+        - 2
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=2
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 32
+        - 16
+        - 8
+        - 4
+        - 2
+        - 1
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=2
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
@@ -1001,200 +1354,214 @@ dsr1-fp4-mi355x-sglang-disagg:
     - isl: 1024
       osl: 1024
       search-space:
-      # non-MTP configurations
-      # 1P1D TP8
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8 ]
+      - spec-decoding: none
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 2, 4, 8, 16, 32 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP4
-      - spec-decoding: "none" 
-        conc-list: [ 64, 128, 256 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 128
+        - 256
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_NODES=1
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 128
+        - 256
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-    
-      # 1*DEP4+ 1*DEP8
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
     - isl: 8192
       osl: 1024
       search-space:
-      # non-MTP configurations
-      # 1P1D pure TP8
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8 ]
+      - spec-decoding: none
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 2, 4, 8, 16, 32 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP4
-      - spec-decoding: "none"
-        conc-list: [ 64, 128, 256 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 128
+        - 256
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_NODES=1
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 64
+        - 128
+        - 256
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 4*DEP4 + 1*DEP8
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048, 4096 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=0
+      - spec-decoding: none
+        conc-list:
+        - 1024
+        - 2048
+        - 4096
         prefill:
           num-worker: 4
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=4"
+          - PREFILL_NODES=4
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=0
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0313-2
@@ -1210,203 +1577,214 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      # MTP configurations
-      # 1P1D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
+      - spec-decoding: mtp
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 2, 4, 8, 16, 32 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=3
+      - spec-decoding: mtp
+        conc-list:
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # 1P2D TP4
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=3
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 128
+        - 256
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_NODES=1
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 128
+        - 256
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # 1*DEP4+ 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 1024
+        - 2048
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=1
     - isl: 8192
       osl: 1024
       search-space:
-      # MTP configurations
-      # 1P1D pure TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
+      - spec-decoding: mtp
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 2, 4, 8, 16, 32 ]
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=3
+      - spec-decoding: mtp
+        conc-list:
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # 1P2D TP4
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 128, 256 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=3
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 128
+        - 256
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_NODES=1
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 64
+        - 128
+        - 256
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - PREFILL_NODES=1
         decode:
           num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # 4*DEP4 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
+          - DECODE_NODES=2
+          - DECODE_MTP_SIZE=1
+      - spec-decoding: mtp
+        conc-list:
+        - 1024
+        - 2048
+        - 4096
         prefill:
           num-worker: 4
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=4"
+          - PREFILL_NODES=4
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
+          - DECODE_NODES=1
+          - DECODE_MTP_SIZE=1
 
 dsr1-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.1
@@ -1419,4 +1797,17 @@ dsr1-fp4-mi355x-vllm:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
+      - tp: 8
+        cpu-offloading: true
+        conc-list:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 512
