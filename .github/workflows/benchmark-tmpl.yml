@@ -247,6 +247,7 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
+            results/server.log
             results/metrics_server_metrics.csv
             results/benchmark.log
             results/config.yaml
