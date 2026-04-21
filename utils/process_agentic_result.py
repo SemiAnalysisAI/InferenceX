@@ -252,9 +252,9 @@ def main():
     print(f"  Requests: {len(successful)}/{len(rows)} successful")
     if "mean_qps" in agg:
         print(f"  QPS: mean={agg['mean_qps']:.2f} median={agg.get('median_qps', 0):.2f} p99={agg.get('p99_qps', 0):.2f}")
-    if "server_gpu_cache_hit_rate" in agg:
+    if agg.get("server_gpu_cache_hit_rate") is not None:
         print(f"  GPU cache hit rate: {agg['server_gpu_cache_hit_rate']:.1%}")
-    if "tput_per_gpu" in agg:
+    if agg.get("tput_per_gpu") is not None:
         print(f"  Throughput per GPU: {agg['tput_per_gpu']:.0f} tok/s")
 
 
