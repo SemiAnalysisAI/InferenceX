@@ -147,20 +147,21 @@ def load_experiment(exp_dir: Path) -> dict | None:
     if not client_csv.exists() and aiperf_summary_csv is None and not trace_replay_csv.exists():
         return None
 
-    # Parse experiment name from directory: multiturn_tp{N}_users{M}_offload{mode}
-    # or just tp{N}_users{M}_offload{mode}
+    # Parse experiment name from directory.
+    # Supports formats:
+    #   multiturn_tp{N}_users{M}_offload{mode}
+    #   tp{N}_users{M}_offload{mode}
+    #   agentic_{model}_tp{N}_users{M}_offload{mode}_{extra...}
+    import re
     name = exp_dir.name
-    if name.startswith("multiturn_"):
-        name = name[len("multiturn_"):]
-
-    try:
-        parts = name.split("_")
-        tp = int(parts[0].replace("tp", ""))
-        users = int(parts[1].replace("users", "").replace("bs", ""))
-        offload = parts[2].replace("offload", "")
-    except (IndexError, ValueError):
+    match = re.search(r'tp(\d+)_users(\d+)_offload(on|off|noprefix)', name)
+    if not match:
         print(f"Warning: cannot parse experiment name '{exp_dir.name}', skipping")
         return None
+
+    tp = int(match.group(1))
+    users = int(match.group(2))
+    offload = match.group(3)
 
     result = {
         "exp_name": name,

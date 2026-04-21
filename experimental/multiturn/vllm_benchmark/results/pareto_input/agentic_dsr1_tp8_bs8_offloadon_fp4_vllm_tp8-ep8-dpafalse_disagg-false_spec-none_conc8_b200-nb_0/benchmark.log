@@ -1,0 +1,856 @@
+[2026-04-21 07:38:20,261] INFO - ========================================================================================================================
+[2026-04-21 07:38:20,261] INFO - Trace Replay Performance Tester v1.0
+[2026-04-21 07:38:20,261] INFO - ========================================================================================================================
+[2026-04-21 07:38:20,261] INFO - Replay mode: conversational (pullback/growth heuristics)
+[2026-04-21 07:38:20,261] INFO - Loading traces from Hugging Face dataset semianalysisai/cc-traces-weka-042026 (split=train)...
+[2026-04-21 07:40:15,678] INFO - Loaded 588 traces (filtered from 739)
+[2026-04-21 07:40:16,079] INFO - Trace Statistics:
+[2026-04-21 07:40:16,079] INFO -   Total files: 739
+[2026-04-21 07:40:16,079] INFO -   After filtering (max_context <= 128000): 588
+[2026-04-21 07:40:16,079] INFO -   Total requests: 53,184
+[2026-04-21 07:40:16,079] INFO -   Avg requests/trace: 90.4
+[2026-04-21 07:40:16,079] INFO -   Avg cache hit rate: 97.4%
+[2026-04-21 07:40:16,079] INFO -   Traces with tool_use: 582
+[2026-04-21 07:40:16,079] INFO -   Max shared prefix (tool+system): 23,243 tokens
+[2026-04-21 07:40:16,079] INFO -   Theoretical cache-hit ceilings (infinite cache, within-trace):
+[2026-04-21 07:40:16,079] INFO -     Set-based (any hash_id seen before):  97.0%
+[2026-04-21 07:40:16,079] INFO -     Prefix-chain (hash-block mode ceiling): 96.9%
+[2026-04-21 07:40:16,079] INFO - ------------------------------------------------------------------------------------------------------------------------
+[2026-04-21 07:40:16,079] INFO - Configuration:
+[2026-04-21 07:40:16,079] INFO -   Max TTFT: 2.0s (avg)
+[2026-04-21 07:40:16,079] INFO -   Max Context: 128,000 tokens
+[2026-04-21 07:40:16,079] INFO -   Max Delay: 60.0s
+[2026-04-21 07:40:16,080] INFO -   Timing Strategy: think-only
+[2026-04-21 07:40:16,080] INFO -   Start Users: 1
+[2026-04-21 07:40:16,080] INFO -   Max Users: 1
+[2026-04-21 07:40:16,080] INFO -   Recycle: True
+[2026-04-21 07:40:16,080] INFO -   New Token Budget: 500,000 tokens/period
+[2026-04-21 07:40:16,080] INFO -   Working Set Limit: unlimited
+[2026-04-21 07:40:16,080] INFO -   Test Duration: 1800s
+[2026-04-21 07:40:16,080] INFO -   Warm Prefix: 50% of tool+system (11,621 tokens)
+[2026-04-21 07:40:16,080] INFO -   Trace Advancement: 0% - 70% (initial users only)
+[2026-04-21 07:40:16,080] INFO - ========================================================================================================================
+[2026-04-21 07:40:16,116] INFO - API Client initialized: http://localhost:8888
+[2026-04-21 07:40:16,122] INFO - Auto-detected model: nvidia/DeepSeek-R1-0528-FP4
+[2026-04-21 07:40:16,122] INFO - Loading tokenizer: Qwen/Qwen2.5-Coder-32B-Instruct
+[2026-04-21 07:40:17,641] INFO - Pre-generating user text pool (500,000 tokens)...
+[2026-04-21 07:40:22,038] INFO - User text pool ready: 609,068 tokens
+[2026-04-21 07:40:22,044] INFO - Generated canonical warm prefix: 11,621 tokens
+[2026-04-21 07:40:22,044] INFO - Warm prefix enabled: 11,621 tokens (--warm-prefix-pct 50% of 23,243 largest tool+system prefix across loaded traces)
+[2026-04-21 07:40:22,044] INFO - 
+Starting test with 1 user(s)...
+
+[2026-04-21 07:40:22,052] INFO -   👤 User-001 started (trace: trace_0641, 📍 advanced to req 102 (68%), 48 remaining, 37,720 tokens)
+[2026-04-21 07:40:27,050] INFO - Pre-generating tool result pool (500,000 tokens)...
+[2026-04-21 07:40:30,946] INFO - Tool result pool ready: 937,807 tokens
+[2026-04-21 07:40:52,121] INFO - ========================================================================================================================
+[2026-04-21 07:40:52,122] INFO - Assessment Period 1
+[2026-04-21 07:40:52,122] INFO - ========================================================================================================================
+[2026-04-21 07:40:52,122] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:40:52,122] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:40:52,122] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:40:52,122] INFO -   TTFT (cumulative): avg=0.00s | p50=0.00s | p95=0.00s | p99=0.00s (0 reqs)
+[2026-04-21 07:40:52,122] INFO -   Throughput: 0 input tok/s | 4 output tok/s
+[2026-04-21 07:40:52,122] INFO -   Throughput (cumulative): 0 input tok/s | 0 output tok/s | 0.00 req/s
+[2026-04-21 07:40:52,122] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:40:52,122] INFO -   Cache Hit Rate (cumulative): 0.0% | Theoretical cumulative (infinite cache): 0.0%
+[2026-04-21 07:40:52,122] INFO -   Working Set: 37,696 tokens (589 blocks)
+[2026-04-21 07:40:52,122] INFO -   Working Set by Age: 1m: 37,696 | 5m: 37,696 | 15m: 37,696 tokens
+[2026-04-21 07:41:22,103] INFO - ========================================================================================================================
+[2026-04-21 07:41:22,103] INFO - Assessment Period 2
+[2026-04-21 07:41:22,103] INFO - ========================================================================================================================
+[2026-04-21 07:41:22,103] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:41:22,103] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:41:22,103] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:41:22,103] INFO -   TTFT (cumulative): avg=20.04s | p50=20.04s | p95=20.04s | p99=20.04s (1 reqs)
+[2026-04-21 07:41:22,103] INFO -   Throughput: 0 input tok/s | 96 output tok/s
+[2026-04-21 07:41:22,103] INFO -   Throughput (cumulative): 629 input tok/s | 50 output tok/s | 0.02 req/s
+[2026-04-21 07:41:22,103] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:41:22,103] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 0.0%
+[2026-04-21 07:41:22,103] INFO -   Working Set: 37,888 tokens (592 blocks)
+[2026-04-21 07:41:22,103] INFO -   Working Set by Age: 1m: 37,888 | 5m: 37,888 | 15m: 37,888 tokens
+[2026-04-21 07:41:52,048] INFO - ========================================================================================================================
+[2026-04-21 07:41:52,049] INFO - Assessment Period 3
+[2026-04-21 07:41:52,049] INFO - ========================================================================================================================
+[2026-04-21 07:41:52,049] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:41:52,049] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:41:52,049] INFO -   Avg TTFT: 0.44s ✓ (threshold: 2.0s, headroom: 78%)
+[2026-04-21 07:41:52,049] INFO -   Avg TTFT (cumulative): avg=10.24s | p50=10.24s | p95=19.06s | p99=19.84s (2 reqs)
+[2026-04-21 07:41:52,049] INFO -   Throughput: 1,264 input tok/s | 96 output tok/s
+[2026-04-21 07:41:52,049] INFO -   Throughput (cumulative): 840 input tok/s | 66 output tok/s | 0.02 req/s
+[2026-04-21 07:41:52,049] INFO -   Workload Cache Hit Rate: 99.5% | New input tokens: 192 (budget: 500,000)
+[2026-04-21 07:41:52,049] INFO -   Cache Hit Rate (cumulative): 99.2% | Theoretical cumulative (infinite cache): 49.9%
+[2026-04-21 07:41:52,049] INFO -   Working Set: 37,888 tokens (592 blocks)
+[2026-04-21 07:41:52,049] INFO -   Working Set by Age: 1m: 37,888 | 5m: 37,888 | 15m: 37,888 tokens
+[2026-04-21 07:42:22,047] INFO - ========================================================================================================================
+[2026-04-21 07:42:22,048] INFO - Assessment Period 4
+[2026-04-21 07:42:22,048] INFO - ========================================================================================================================
+[2026-04-21 07:42:22,048] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:42:22,048] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:42:22,048] INFO -   Avg TTFT: 0.32s ✓ (threshold: 2.0s, headroom: 84%)
+[2026-04-21 07:42:22,048] INFO -   Avg TTFT (cumulative): avg=6.93s | p50=0.44s | p95=18.08s | p99=19.65s (3 reqs)
+[2026-04-21 07:42:22,048] INFO -   Throughput: 1,291 input tok/s | 108 output tok/s
+[2026-04-21 07:42:22,048] INFO -   Throughput (cumulative): 953 input tok/s | 76 output tok/s | 0.02 req/s
+[2026-04-21 07:42:22,048] INFO -   Workload Cache Hit Rate: 97.9% | New input tokens: 832 (budget: 500,000)
+[2026-04-21 07:42:22,048] INFO -   Cache Hit Rate (cumulative): 98.8% | Theoretical cumulative (infinite cache): 66.1%
+[2026-04-21 07:42:22,048] INFO -   Working Set: 38,720 tokens (605 blocks)
+[2026-04-21 07:42:22,048] INFO -   Working Set by Age: 1m: 38,720 | 5m: 38,720 | 15m: 38,720 tokens
+[2026-04-21 07:42:52,055] INFO - ========================================================================================================================
+[2026-04-21 07:42:52,055] INFO - Assessment Period 5
+[2026-04-21 07:42:52,055] INFO - ========================================================================================================================
+[2026-04-21 07:42:52,055] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:42:52,055] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:42:52,055] INFO -   Avg TTFT: 0.33s ✓ (threshold: 2.0s, headroom: 84%)
+[2026-04-21 07:42:52,055] INFO -   Avg TTFT (cumulative): avg=5.28s | p50=0.38s | p95=17.10s | p99=19.45s (4 reqs)
+[2026-04-21 07:42:52,055] INFO -   Throughput: 1,311 input tok/s | 91 output tok/s
+[2026-04-21 07:42:52,055] INFO -   Throughput (cumulative): 1,025 input tok/s | 79 output tok/s | 0.03 req/s
+[2026-04-21 07:42:52,055] INFO -   Workload Cache Hit Rate: 98.5% | New input tokens: 576 (budget: 500,000)
+[2026-04-21 07:42:52,055] INFO -   Cache Hit Rate (cumulative): 98.7% | Theoretical cumulative (infinite cache): 74.4%
+[2026-04-21 07:42:52,055] INFO -   Working Set: 39,296 tokens (614 blocks)
+[2026-04-21 07:42:52,055] INFO -   Working Set by Age: 1m: 39,296 | 5m: 39,296 | 15m: 39,296 tokens
+[2026-04-21 07:43:22,050] INFO - ========================================================================================================================
+[2026-04-21 07:43:22,050] INFO - Assessment Period 6
+[2026-04-21 07:43:22,050] INFO - ========================================================================================================================
+[2026-04-21 07:43:22,050] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:43:22,050] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:43:22,050] INFO -   Avg TTFT: 0.34s ✓ (threshold: 2.0s, headroom: 83%)
+[2026-04-21 07:43:22,050] INFO -   Avg TTFT (cumulative): avg=4.29s | p50=0.34s | p95=16.12s | p99=19.25s (5 reqs)
+[2026-04-21 07:43:22,050] INFO -   Throughput: 1,324 input tok/s | 87 output tok/s
+[2026-04-21 07:43:22,050] INFO -   Throughput (cumulative): 1,075 input tok/s | 80 output tok/s | 0.03 req/s
+[2026-04-21 07:43:22,051] INFO -   Workload Cache Hit Rate: 99.0% | New input tokens: 384 (budget: 500,000)
+[2026-04-21 07:43:22,051] INFO -   Cache Hit Rate (cumulative): 98.8% | Theoretical cumulative (infinite cache): 79.5%
+[2026-04-21 07:43:22,051] INFO -   Working Set: 39,680 tokens (620 blocks)
+[2026-04-21 07:43:22,051] INFO -   Working Set by Age: 1m: 39,680 | 5m: 39,680 | 15m: 39,680 tokens
+[2026-04-21 07:43:52,130] INFO - ========================================================================================================================
+[2026-04-21 07:43:52,130] INFO - Assessment Period 7
+[2026-04-21 07:43:52,130] INFO - ========================================================================================================================
+[2026-04-21 07:43:52,130] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:43:52,130] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:43:52,130] INFO -   Avg TTFT: 0.36s ✓ (threshold: 2.0s, headroom: 82%)
+[2026-04-21 07:43:52,130] INFO -   Avg TTFT (cumulative): avg=3.64s | p50=0.35s | p95=15.14s | p99=19.06s (6 reqs)
+[2026-04-21 07:43:52,130] INFO -   Throughput: 1,347 input tok/s | 58 output tok/s
+[2026-04-21 07:43:52,130] INFO -   Throughput (cumulative): 1,113 input tok/s | 76 output tok/s | 0.03 req/s
+[2026-04-21 07:43:52,130] INFO -   Workload Cache Hit Rate: 98.3% | New input tokens: 704 (budget: 500,000)
+[2026-04-21 07:43:52,130] INFO -   Cache Hit Rate (cumulative): 98.7% | Theoretical cumulative (infinite cache): 82.7%
+[2026-04-21 07:43:52,130] INFO -   Working Set: 40,704 tokens (636 blocks)
+[2026-04-21 07:43:52,130] INFO -   Working Set by Age: 1m: 40,704 | 5m: 40,704 | 15m: 40,704 tokens
+[2026-04-21 07:44:22,096] INFO - ========================================================================================================================
+[2026-04-21 07:44:22,097] INFO - Assessment Period 8
+[2026-04-21 07:44:22,097] INFO - ========================================================================================================================
+[2026-04-21 07:44:22,097] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:44:22,097] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:44:22,097] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:44:22,097] INFO -   TTFT (cumulative): avg=3.17s | p50=0.36s | p95=14.16s | p99=18.86s (7 reqs)
+[2026-04-21 07:44:22,097] INFO -   Throughput: 0 input tok/s | 96 output tok/s
+[2026-04-21 07:44:22,097] INFO -   Throughput (cumulative): 1,144 input tok/s | 76 output tok/s | 0.03 req/s
+[2026-04-21 07:44:22,097] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:44:22,097] INFO -   Cache Hit Rate (cumulative): 98.8% | Theoretical cumulative (infinite cache): 85.2%
+[2026-04-21 07:44:22,097] INFO -   Working Set: 41,280 tokens (645 blocks)
+[2026-04-21 07:44:22,097] INFO -   Working Set by Age: 1m: 41,280 | 5m: 41,280 | 15m: 41,280 tokens
+[2026-04-21 07:44:52,083] INFO - ========================================================================================================================
+[2026-04-21 07:44:52,083] INFO - Assessment Period 9
+[2026-04-21 07:44:52,083] INFO - ========================================================================================================================
+[2026-04-21 07:44:52,083] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:44:52,083] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:44:52,083] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:44:52,083] INFO -   TTFT (cumulative): avg=2.82s | p50=0.36s | p95=13.18s | p99=18.67s (8 reqs)
+[2026-04-21 07:44:52,083] INFO -   Throughput: 0 input tok/s | 93 output tok/s
+[2026-04-21 07:44:52,083] INFO -   Throughput (cumulative): 1,170 input tok/s | 76 output tok/s | 0.03 req/s
+[2026-04-21 07:44:52,083] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:44:52,083] INFO -   Cache Hit Rate (cumulative): 98.7% | Theoretical cumulative (infinite cache): 86.9%
+[2026-04-21 07:44:52,083] INFO -   Working Set: 41,536 tokens (649 blocks)
+[2026-04-21 07:44:52,083] INFO -   Working Set by Age: 1m: 41,536 | 5m: 41,536 | 15m: 41,536 tokens
+[2026-04-21 07:45:22,051] INFO - ========================================================================================================================
+[2026-04-21 07:45:22,051] INFO - Assessment Period 10
+[2026-04-21 07:45:22,051] INFO - ========================================================================================================================
+[2026-04-21 07:45:22,051] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:45:22,051] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:45:22,051] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:45:22,051] INFO -   TTFT (cumulative): avg=2.55s | p50=0.36s | p95=12.20s | p99=18.47s (9 reqs)
+[2026-04-21 07:45:22,051] INFO -   Throughput: 0 input tok/s | 94 output tok/s
+[2026-04-21 07:45:22,051] INFO -   Throughput (cumulative): 1,191 input tok/s | 76 output tok/s | 0.03 req/s
+[2026-04-21 07:45:22,051] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:45:22,051] INFO -   Cache Hit Rate (cumulative): 98.8% | Theoretical cumulative (infinite cache): 88.4%
+[2026-04-21 07:45:22,051] INFO -   Working Set: 41,664 tokens (651 blocks)
+[2026-04-21 07:45:22,051] INFO -   Working Set by Age: 1m: 41,664 | 5m: 41,664 | 15m: 41,664 tokens
+[2026-04-21 07:45:52,100] INFO - ========================================================================================================================
+[2026-04-21 07:45:52,100] INFO - Assessment Period 11
+[2026-04-21 07:45:52,100] INFO - ========================================================================================================================
+[2026-04-21 07:45:52,100] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:45:52,100] INFO -   Requests: 1 launched | 2 completed (1 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.07 req/s)
+[2026-04-21 07:45:52,100] INFO -   Avg TTFT: 0.38s ✓ (threshold: 2.0s, headroom: 81%)
+[2026-04-21 07:45:52,100] INFO -   Avg TTFT (cumulative): avg=2.15s | p50=0.36s | p95=10.24s | p99=18.08s (11 reqs)
+[2026-04-21 07:45:52,100] INFO -   Throughput: 1,396 input tok/s | 76 output tok/s
+[2026-04-21 07:45:52,100] INFO -   Throughput (cumulative): 1,336 input tok/s | 82 output tok/s | 0.03 req/s
+[2026-04-21 07:45:52,100] INFO -   Workload Cache Hit Rate: 99.5% | New input tokens: 192 (budget: 500,000)
+[2026-04-21 07:45:52,100] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 90.5%
+[2026-04-21 07:45:52,100] INFO -   Working Set: 42,048 tokens (657 blocks)
+[2026-04-21 07:45:52,101] INFO -   Working Set by Age: 1m: 42,048 | 5m: 42,048 | 15m: 42,048 tokens
+[2026-04-21 07:46:22,048] INFO - ========================================================================================================================
+[2026-04-21 07:46:22,048] INFO - Assessment Period 12
+[2026-04-21 07:46:22,048] INFO - ========================================================================================================================
+[2026-04-21 07:46:22,048] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:46:22,048] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:46:22,048] INFO -   Avg TTFT: 0.37s ✓ (threshold: 2.0s, headroom: 81%)
+[2026-04-21 07:46:22,048] INFO -   Avg TTFT (cumulative): avg=2.00s | p50=0.37s | p95=9.26s | p99=17.88s (12 reqs)
+[2026-04-21 07:46:22,048] INFO -   Throughput: 1,403 input tok/s | 81 output tok/s
+[2026-04-21 07:46:22,048] INFO -   Throughput (cumulative): 1,342 input tok/s | 82 output tok/s | 0.03 req/s
+[2026-04-21 07:46:22,048] INFO -   Workload Cache Hit Rate: 99.5% | New input tokens: 192 (budget: 500,000)
+[2026-04-21 07:46:22,048] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 91.3%
+[2026-04-21 07:46:22,048] INFO -   Working Set: 42,048 tokens (657 blocks)
+[2026-04-21 07:46:22,048] INFO -   Working Set by Age: 1m: 42,048 | 5m: 42,048 | 15m: 42,048 tokens
+[2026-04-21 07:46:52,052] INFO - ========================================================================================================================
+[2026-04-21 07:46:52,052] INFO - Assessment Period 13
+[2026-04-21 07:46:52,052] INFO - ========================================================================================================================
+[2026-04-21 07:46:52,052] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:46:52,052] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:46:52,052] INFO -   Avg TTFT: 0.39s ✓ (threshold: 2.0s, headroom: 80%)
+[2026-04-21 07:46:52,052] INFO -   Avg TTFT (cumulative): avg=1.88s | p50=0.37s | p95=8.28s | p99=17.69s (13 reqs)
+[2026-04-21 07:46:52,053] INFO -   Throughput: 1,414 input tok/s | 71 output tok/s
+[2026-04-21 07:46:52,053] INFO -   Throughput (cumulative): 1,348 input tok/s | 81 output tok/s | 0.03 req/s
+[2026-04-21 07:46:52,053] INFO -   Workload Cache Hit Rate: 99.2% | New input tokens: 320 (budget: 500,000)
+[2026-04-21 07:46:52,053] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 91.9%
+[2026-04-21 07:46:52,053] INFO -   Working Set: 42,368 tokens (662 blocks)
+[2026-04-21 07:46:52,053] INFO -   Working Set by Age: 1m: 42,368 | 5m: 42,368 | 15m: 42,368 tokens
+[2026-04-21 07:47:22,055] INFO - ========================================================================================================================
+[2026-04-21 07:47:22,055] INFO - Assessment Period 14
+[2026-04-21 07:47:22,055] INFO - ========================================================================================================================
+[2026-04-21 07:47:22,055] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:47:22,055] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:47:22,055] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:47:22,055] INFO -   TTFT (cumulative): avg=1.88s | p50=0.37s | p95=8.28s | p99=17.69s (13 reqs)
+[2026-04-21 07:47:22,055] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:47:22,055] INFO -   Throughput (cumulative): 1,251 input tok/s | 75 output tok/s | 0.03 req/s
+[2026-04-21 07:47:22,055] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:47:22,055] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 91.9%
+[2026-04-21 07:47:22,055] INFO -   Working Set: 42,368 tokens (662 blocks)
+[2026-04-21 07:47:22,056] INFO -   Working Set by Age: 1m: 42,368 | 5m: 42,368 | 15m: 42,368 tokens
+[2026-04-21 07:47:52,135] INFO - ========================================================================================================================
+[2026-04-21 07:47:52,136] INFO - Assessment Period 15
+[2026-04-21 07:47:52,136] INFO - ========================================================================================================================
+[2026-04-21 07:47:52,136] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:47:52,136] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:47:52,136] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:47:52,136] INFO -   TTFT (cumulative): avg=1.88s | p50=0.37s | p95=8.28s | p99=17.69s (13 reqs)
+[2026-04-21 07:47:52,136] INFO -   Throughput: 0 input tok/s | 40 output tok/s
+[2026-04-21 07:47:52,136] INFO -   Throughput (cumulative): 1,168 input tok/s | 70 output tok/s | 0.03 req/s
+[2026-04-21 07:47:52,136] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:47:52,136] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 91.9%
+[2026-04-21 07:47:52,136] INFO -   Working Set: 43,264 tokens (676 blocks)
+[2026-04-21 07:47:52,136] INFO -   Working Set by Age: 1m: 43,264 | 5m: 43,264 | 15m: 43,264 tokens
+[2026-04-21 07:48:22,054] INFO - ========================================================================================================================
+[2026-04-21 07:48:22,054] INFO - Assessment Period 16
+[2026-04-21 07:48:22,054] INFO - ========================================================================================================================
+[2026-04-21 07:48:22,054] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:48:22,054] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:48:22,054] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:48:22,054] INFO -   TTFT (cumulative): avg=1.78s | p50=0.38s | p95=7.30s | p99=17.49s (14 reqs)
+[2026-04-21 07:48:22,054] INFO -   Throughput: 0 input tok/s | 34 output tok/s
+[2026-04-21 07:48:22,054] INFO -   Throughput (cumulative): 1,185 input tok/s | 70 output tok/s | 0.03 req/s
+[2026-04-21 07:48:22,054] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:48:22,054] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 92.4%
+[2026-04-21 07:48:22,054] INFO -   Working Set: 43,264 tokens (676 blocks)
+[2026-04-21 07:48:22,054] INFO -   Working Set by Age: 1m: 43,264 | 5m: 43,264 | 15m: 43,264 tokens
+[2026-04-21 07:48:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:48:52,053] INFO - Assessment Period 17
+[2026-04-21 07:48:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:48:52,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:48:52,053] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:48:52,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:48:52,054] INFO -   TTFT (cumulative): avg=1.78s | p50=0.38s | p95=7.30s | p99=17.49s (14 reqs)
+[2026-04-21 07:48:52,054] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:48:52,054] INFO -   Throughput (cumulative): 1,115 input tok/s | 66 output tok/s | 0.03 req/s
+[2026-04-21 07:48:52,054] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:48:52,054] INFO -   Cache Hit Rate (cumulative): 99.0% | Theoretical cumulative (infinite cache): 92.4%
+[2026-04-21 07:48:52,054] INFO -   Working Set: 43,264 tokens (676 blocks)
+[2026-04-21 07:48:52,054] INFO -   Working Set by Age: 1m: 0 | 5m: 43,264 | 15m: 43,264 tokens
+[2026-04-21 07:49:22,049] INFO - ========================================================================================================================
+[2026-04-21 07:49:22,050] INFO - Assessment Period 18
+[2026-04-21 07:49:22,050] INFO - ========================================================================================================================
+[2026-04-21 07:49:22,050] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:49:22,050] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:49:22,050] INFO -   Avg TTFT: 1.38s ✓ (threshold: 2.0s, headroom: 31%)
+[2026-04-21 07:49:22,050] INFO -   Avg TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.98s | p99=17.43s (15 reqs)
+[2026-04-21 07:49:22,050] INFO -   Throughput: 1,940 input tok/s | 58 output tok/s
+[2026-04-21 07:49:22,050] INFO -   Throughput (cumulative): 1,161 input tok/s | 66 output tok/s | 0.03 req/s
+[2026-04-21 07:49:22,050] INFO -   Workload Cache Hit Rate: 74.4% | New input tokens: 14,912 (budget: 500,000)
+[2026-04-21 07:49:22,050] INFO -   Cache Hit Rate (cumulative): 96.7% | Theoretical cumulative (infinite cache): 90.7%
+[2026-04-21 07:49:22,050] INFO -   Working Set: 58,176 tokens (909 blocks)
+[2026-04-21 07:49:22,050] INFO -   Working Set by Age: 1m: 58,176 | 5m: 58,176 | 15m: 58,176 tokens
+[2026-04-21 07:49:52,052] INFO - ========================================================================================================================
+[2026-04-21 07:49:52,053] INFO - Assessment Period 19
+[2026-04-21 07:49:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:49:52,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:49:52,053] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:49:52,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:49:52,053] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.98s | p99=17.43s (15 reqs)
+[2026-04-21 07:49:52,053] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:49:52,053] INFO -   Throughput (cumulative): 1,100 input tok/s | 62 output tok/s | 0.03 req/s
+[2026-04-21 07:49:52,053] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:49:52,053] INFO -   Cache Hit Rate (cumulative): 96.7% | Theoretical cumulative (infinite cache): 90.7%
+[2026-04-21 07:49:52,053] INFO -   Working Set: 58,176 tokens (909 blocks)
+[2026-04-21 07:49:52,053] INFO -   Working Set by Age: 1m: 58,176 | 5m: 58,176 | 15m: 58,176 tokens
+[2026-04-21 07:50:22,143] INFO - ========================================================================================================================
+[2026-04-21 07:50:22,144] INFO - Assessment Period 20
+[2026-04-21 07:50:22,144] INFO - ========================================================================================================================
+[2026-04-21 07:50:22,144] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:50:22,144] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:50:22,144] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:50:22,144] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.98s | p99=17.43s (15 reqs)
+[2026-04-21 07:50:22,144] INFO -   Throughput: 0 input tok/s | 12 output tok/s
+[2026-04-21 07:50:22,144] INFO -   Throughput (cumulative): 1,045 input tok/s | 59 output tok/s | 0.02 req/s
+[2026-04-21 07:50:22,144] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:50:22,144] INFO -   Cache Hit Rate (cumulative): 96.7% | Theoretical cumulative (infinite cache): 90.7%
+[2026-04-21 07:50:22,144] INFO -   Working Set: 74,048 tokens (1157 blocks)
+[2026-04-21 07:50:22,144] INFO -   Working Set by Age: 1m: 74,048 | 5m: 74,048 | 15m: 74,048 tokens
+[2026-04-21 07:50:52,135] INFO - ========================================================================================================================
+[2026-04-21 07:50:52,135] INFO - Assessment Period 21
+[2026-04-21 07:50:52,135] INFO - ========================================================================================================================
+[2026-04-21 07:50:52,135] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:50:52,135] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 07:50:52,135] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:50:52,135] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.98s | p99=17.43s (15 reqs)
+[2026-04-21 07:50:52,135] INFO -   Throughput: 0 input tok/s | 114 output tok/s
+[2026-04-21 07:50:52,135] INFO -   Throughput (cumulative): 995 input tok/s | 56 output tok/s | 0.02 req/s
+[2026-04-21 07:50:52,135] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:50:52,135] INFO -   Cache Hit Rate (cumulative): 96.7% | Theoretical cumulative (infinite cache): 90.7%
+[2026-04-21 07:50:52,135] INFO -   Working Set: 74,048 tokens (1157 blocks)
+[2026-04-21 07:50:52,135] INFO -   Working Set by Age: 1m: 74,048 | 5m: 74,048 | 15m: 74,048 tokens
+[2026-04-21 07:51:22,054] INFO - ========================================================================================================================
+[2026-04-21 07:51:22,054] INFO - Assessment Period 22
+[2026-04-21 07:51:22,055] INFO - ========================================================================================================================
+[2026-04-21 07:51:22,055] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:51:22,055] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:51:22,055] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:51:22,055] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.28s | p99=17.29s (16 reqs)
+[2026-04-21 07:51:22,055] INFO -   Throughput: 0 input tok/s | 34 output tok/s
+[2026-04-21 07:51:22,055] INFO -   Throughput (cumulative): 1,062 input tok/s | 61 output tok/s | 0.02 req/s
+[2026-04-21 07:51:22,055] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:51:22,055] INFO -   Cache Hit Rate (cumulative): 94.8% | Theoretical cumulative (infinite cache): 89.4%
+[2026-04-21 07:51:22,055] INFO -   Working Set: 74,048 tokens (1157 blocks)
+[2026-04-21 07:51:22,055] INFO -   Working Set by Age: 1m: 0 | 5m: 74,048 | 15m: 74,048 tokens
+[2026-04-21 07:51:52,052] INFO - ========================================================================================================================
+[2026-04-21 07:51:52,052] INFO - Assessment Period 23
+[2026-04-21 07:51:52,052] INFO - ========================================================================================================================
+[2026-04-21 07:51:52,052] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:51:52,052] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:51:52,052] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:51:52,052] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=6.28s | p99=17.29s (16 reqs)
+[2026-04-21 07:51:52,052] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:51:52,052] INFO -   Throughput (cumulative): 1,016 input tok/s | 58 output tok/s | 0.02 req/s
+[2026-04-21 07:51:52,052] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:51:52,052] INFO -   Cache Hit Rate (cumulative): 94.8% | Theoretical cumulative (infinite cache): 89.4%
+[2026-04-21 07:51:52,053] INFO -   Working Set: 74,048 tokens (1157 blocks)
+[2026-04-21 07:51:52,053] INFO -   Working Set by Age: 1m: 0 | 5m: 74,048 | 15m: 74,048 tokens
+[2026-04-21 07:52:22,057] INFO - ========================================================================================================================
+[2026-04-21 07:52:22,057] INFO - Assessment Period 24
+[2026-04-21 07:52:22,057] INFO - ========================================================================================================================
+[2026-04-21 07:52:22,057] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:52:22,057] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:52:22,057] INFO -   Avg TTFT: 1.83s ✓ (threshold: 2.0s, headroom: 8%)
+[2026-04-21 07:52:22,057] INFO -   Avg TTFT (cumulative): avg=1.75s | p50=0.38s | p95=5.47s | p99=17.13s (17 reqs)
+[2026-04-21 07:52:22,057] INFO -   Throughput: 3,027 input tok/s | 61 output tok/s
+[2026-04-21 07:52:22,057] INFO -   Throughput (cumulative): 1,100 input tok/s | 58 output tok/s | 0.02 req/s
+[2026-04-21 07:52:22,057] INFO -   Workload Cache Hit Rate: 81.5% | New input tokens: 16,768 (budget: 500,000)
+[2026-04-21 07:52:22,057] INFO -   Cache Hit Rate (cumulative): 93.2% | Theoretical cumulative (infinite cache): 88.5%
+[2026-04-21 07:52:22,057] INFO -   Working Set: 90,816 tokens (1419 blocks)
+[2026-04-21 07:52:22,057] INFO -   Working Set by Age: 1m: 90,816 | 5m: 90,816 | 15m: 90,816 tokens
+[2026-04-21 07:52:22,057] INFO -   ⏸️ Headroom too low (8% < 20% minimum)
+[2026-04-21 07:52:52,057] INFO - ========================================================================================================================
+[2026-04-21 07:52:52,057] INFO - Assessment Period 25
+[2026-04-21 07:52:52,057] INFO - ========================================================================================================================
+[2026-04-21 07:52:52,057] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:52:52,057] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:52:52,057] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:52:52,057] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=5.47s | p99=17.13s (17 reqs)
+[2026-04-21 07:52:52,057] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:52:52,057] INFO -   Throughput (cumulative): 1,056 input tok/s | 56 output tok/s | 0.02 req/s
+[2026-04-21 07:52:52,057] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:52:52,057] INFO -   Cache Hit Rate (cumulative): 93.2% | Theoretical cumulative (infinite cache): 88.5%
+[2026-04-21 07:52:52,057] INFO -   Working Set: 90,816 tokens (1419 blocks)
+[2026-04-21 07:52:52,057] INFO -   Working Set by Age: 1m: 90,816 | 5m: 90,816 | 15m: 90,816 tokens
+[2026-04-21 07:53:22,058] INFO - ========================================================================================================================
+[2026-04-21 07:53:22,059] INFO - Assessment Period 26
+[2026-04-21 07:53:22,059] INFO - ========================================================================================================================
+[2026-04-21 07:53:22,059] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:53:22,059] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:53:22,059] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:53:22,059] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=5.47s | p99=17.13s (17 reqs)
+[2026-04-21 07:53:22,059] INFO -   Throughput: 0 input tok/s | 1 output tok/s
+[2026-04-21 07:53:22,059] INFO -   Throughput (cumulative): 1,015 input tok/s | 54 output tok/s | 0.02 req/s
+[2026-04-21 07:53:22,059] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:53:22,059] INFO -   Cache Hit Rate (cumulative): 93.2% | Theoretical cumulative (infinite cache): 88.5%
+[2026-04-21 07:53:22,059] INFO -   Working Set: 106,752 tokens (1668 blocks)
+[2026-04-21 07:53:22,059] INFO -   Working Set by Age: 1m: 106,752 | 5m: 106,752 | 15m: 106,752 tokens
+[2026-04-21 07:53:52,069] INFO - ========================================================================================================================
+[2026-04-21 07:53:52,069] INFO - Assessment Period 27
+[2026-04-21 07:53:52,069] INFO - ========================================================================================================================
+[2026-04-21 07:53:52,069] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:53:52,069] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 07:53:52,069] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:53:52,069] INFO -   TTFT (cumulative): avg=1.75s | p50=0.38s | p95=5.47s | p99=17.13s (17 reqs)
+[2026-04-21 07:53:52,069] INFO -   Throughput: 0 input tok/s | 109 output tok/s
+[2026-04-21 07:53:52,069] INFO -   Throughput (cumulative): 978 input tok/s | 52 output tok/s | 0.02 req/s
+[2026-04-21 07:53:52,069] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:53:52,069] INFO -   Cache Hit Rate (cumulative): 93.2% | Theoretical cumulative (infinite cache): 88.5%
+[2026-04-21 07:53:52,069] INFO -   Working Set: 106,752 tokens (1668 blocks)
+[2026-04-21 07:53:52,070] INFO -   Working Set by Age: 1m: 106,752 | 5m: 106,752 | 15m: 106,752 tokens
+[2026-04-21 07:54:22,048] INFO - ========================================================================================================================
+[2026-04-21 07:54:22,048] INFO - Assessment Period 28
+[2026-04-21 07:54:22,048] INFO - ========================================================================================================================
+[2026-04-21 07:54:22,048] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:54:22,048] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:54:22,048] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:54:22,048] INFO -   TTFT (cumulative): avg=1.78s | p50=0.38s | p95=4.90s | p99=17.01s (18 reqs)
+[2026-04-21 07:54:22,048] INFO -   Throughput: 0 input tok/s | 60 output tok/s
+[2026-04-21 07:54:22,048] INFO -   Throughput (cumulative): 1,070 input tok/s | 56 output tok/s | 0.02 req/s
+[2026-04-21 07:54:22,048] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:54:22,048] INFO -   Cache Hit Rate (cumulative): 92.3% | Theoretical cumulative (infinite cache): 88.1%
+[2026-04-21 07:54:22,048] INFO -   Working Set: 107,072 tokens (1673 blocks)
+[2026-04-21 07:54:22,048] INFO -   Working Set by Age: 1m: 107,072 | 5m: 107,072 | 15m: 107,072 tokens
+[2026-04-21 07:54:52,064] INFO - ========================================================================================================================
+[2026-04-21 07:54:52,064] INFO - Assessment Period 29
+[2026-04-21 07:54:52,064] INFO - ========================================================================================================================
+[2026-04-21 07:54:52,064] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:54:52,064] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 07:54:52,064] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:54:52,064] INFO -   TTFT (cumulative): avg=1.78s | p50=0.38s | p95=4.90s | p99=17.01s (18 reqs)
+[2026-04-21 07:54:52,064] INFO -   Throughput: 0 input tok/s | 110 output tok/s
+[2026-04-21 07:54:52,064] INFO -   Throughput (cumulative): 1,033 input tok/s | 54 output tok/s | 0.02 req/s
+[2026-04-21 07:54:52,064] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:54:52,064] INFO -   Cache Hit Rate (cumulative): 92.3% | Theoretical cumulative (infinite cache): 88.1%
+[2026-04-21 07:54:52,064] INFO -   Working Set: 107,072 tokens (1673 blocks)
+[2026-04-21 07:54:52,064] INFO -   Working Set by Age: 1m: 107,072 | 5m: 107,072 | 15m: 107,072 tokens
+[2026-04-21 07:55:22,140] INFO - ========================================================================================================================
+[2026-04-21 07:55:22,140] INFO - Assessment Period 30
+[2026-04-21 07:55:22,140] INFO - ========================================================================================================================
+[2026-04-21 07:55:22,140] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:55:22,140] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:55:22,140] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:55:22,140] INFO -   TTFT (cumulative): avg=1.73s | p50=0.38s | p95=4.00s | p99=16.83s (19 reqs)
+[2026-04-21 07:55:22,140] INFO -   Throughput: 0 input tok/s | 95 output tok/s
+[2026-04-21 07:55:22,140] INFO -   Throughput (cumulative): 1,118 input tok/s | 56 output tok/s | 0.02 req/s
+[2026-04-21 07:55:22,140] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:55:22,140] INFO -   Cache Hit Rate (cumulative): 93.1% | Theoretical cumulative (infinite cache): 89.3%
+[2026-04-21 07:55:22,140] INFO -   Working Set: 108,032 tokens (1688 blocks)
+[2026-04-21 07:55:22,140] INFO -   Working Set by Age: 1m: 108,032 | 5m: 108,032 | 15m: 108,032 tokens
+[2026-04-21 07:55:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:55:52,053] INFO - Assessment Period 31
+[2026-04-21 07:55:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:55:52,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:55:52,053] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:55:52,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:55:52,053] INFO -   TTFT (cumulative): avg=1.68s | p50=0.39s | p95=3.11s | p99=16.65s (20 reqs)
+[2026-04-21 07:55:52,053] INFO -   Throughput: 0 input tok/s | 63 output tok/s
+[2026-04-21 07:55:52,053] INFO -   Throughput (cumulative): 1,198 input tok/s | 59 output tok/s | 0.02 req/s
+[2026-04-21 07:55:52,053] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:55:52,053] INFO -   Cache Hit Rate (cumulative): 93.6% | Theoretical cumulative (infinite cache): 90.3%
+[2026-04-21 07:55:52,053] INFO -   Working Set: 108,032 tokens (1688 blocks)
+[2026-04-21 07:55:52,053] INFO -   Working Set by Age: 1m: 108,032 | 5m: 108,032 | 15m: 108,032 tokens
+[2026-04-21 07:56:22,053] INFO - ========================================================================================================================
+[2026-04-21 07:56:22,053] INFO - Assessment Period 32
+[2026-04-21 07:56:22,053] INFO - ========================================================================================================================
+[2026-04-21 07:56:22,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:56:22,053] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:56:22,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:56:22,053] INFO -   TTFT (cumulative): avg=1.68s | p50=0.39s | p95=3.11s | p99=16.65s (20 reqs)
+[2026-04-21 07:56:22,053] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 07:56:22,053] INFO -   Throughput (cumulative): 1,160 input tok/s | 58 output tok/s | 0.02 req/s
+[2026-04-21 07:56:22,053] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:56:22,053] INFO -   Cache Hit Rate (cumulative): 93.6% | Theoretical cumulative (infinite cache): 90.3%
+[2026-04-21 07:56:22,053] INFO -   Working Set: 108,032 tokens (1688 blocks)
+[2026-04-21 07:56:22,054] INFO -   Working Set by Age: 1m: 0 | 5m: 108,032 | 15m: 108,032 tokens
+[2026-04-21 07:56:52,058] INFO - ========================================================================================================================
+[2026-04-21 07:56:52,058] INFO - Assessment Period 33
+[2026-04-21 07:56:52,058] INFO - ========================================================================================================================
+[2026-04-21 07:56:52,058] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:56:52,058] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:56:52,058] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:56:52,058] INFO -   TTFT (cumulative): avg=1.68s | p50=0.39s | p95=3.11s | p99=16.65s (20 reqs)
+[2026-04-21 07:56:52,058] INFO -   Throughput: 0 input tok/s | 43 output tok/s
+[2026-04-21 07:56:52,058] INFO -   Throughput (cumulative): 1,125 input tok/s | 56 output tok/s | 0.02 req/s
+[2026-04-21 07:56:52,058] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:56:52,058] INFO -   Cache Hit Rate (cumulative): 93.6% | Theoretical cumulative (infinite cache): 90.3%
+[2026-04-21 07:56:52,058] INFO -   Working Set: 108,224 tokens (1691 blocks)
+[2026-04-21 07:56:52,058] INFO -   Working Set by Age: 1m: 108,096 | 5m: 108,224 | 15m: 108,224 tokens
+[2026-04-21 07:57:22,083] INFO - ========================================================================================================================
+[2026-04-21 07:57:22,083] INFO - Assessment Period 34
+[2026-04-21 07:57:22,083] INFO - ========================================================================================================================
+[2026-04-21 07:57:22,083] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:57:22,083] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 07:57:22,083] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:57:22,083] INFO -   TTFT (cumulative): avg=1.68s | p50=0.39s | p95=3.11s | p99=16.65s (20 reqs)
+[2026-04-21 07:57:22,083] INFO -   Throughput: 0 input tok/s | 110 output tok/s
+[2026-04-21 07:57:22,083] INFO -   Throughput (cumulative): 1,092 input tok/s | 54 output tok/s | 0.02 req/s
+[2026-04-21 07:57:22,083] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:57:22,083] INFO -   Cache Hit Rate (cumulative): 93.6% | Theoretical cumulative (infinite cache): 90.3%
+[2026-04-21 07:57:22,083] INFO -   Working Set: 108,224 tokens (1691 blocks)
+[2026-04-21 07:57:22,083] INFO -   Working Set by Age: 1m: 108,096 | 5m: 108,224 | 15m: 108,224 tokens
+[2026-04-21 07:57:52,058] INFO - ========================================================================================================================
+[2026-04-21 07:57:52,058] INFO - Assessment Period 35
+[2026-04-21 07:57:52,058] INFO - ========================================================================================================================
+[2026-04-21 07:57:52,058] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:57:52,058] INFO -   Requests: 1 launched | 2 completed (1 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.07 req/s)
+[2026-04-21 07:57:52,058] INFO -   Avg TTFT: 0.91s ✓ (threshold: 2.0s, headroom: 55%)
+[2026-04-21 07:57:52,058] INFO -   Avg TTFT (cumulative): avg=1.61s | p50=0.40s | p95=2.20s | p99=16.30s (22 reqs)
+[2026-04-21 07:57:52,058] INFO -   Throughput: 3,643 input tok/s | 80 output tok/s
+[2026-04-21 07:57:52,058] INFO -   Throughput (cumulative): 1,268 input tok/s | 59 output tok/s | 0.02 req/s
+[2026-04-21 07:57:52,058] INFO -   Workload Cache Hit Rate: 98.9% | New input tokens: 1,216 (budget: 500,000)
+[2026-04-21 07:57:52,058] INFO -   Cache Hit Rate (cumulative): 94.6% | Theoretical cumulative (infinite cache): 91.8%
+[2026-04-21 07:57:52,058] INFO -   Working Set: 109,440 tokens (1710 blocks)
+[2026-04-21 07:57:52,058] INFO -   Working Set by Age: 1m: 109,248 | 5m: 109,440 | 15m: 109,440 tokens
+[2026-04-21 07:58:22,131] INFO - ========================================================================================================================
+[2026-04-21 07:58:22,131] INFO - Assessment Period 36
+[2026-04-21 07:58:22,131] INFO - ========================================================================================================================
+[2026-04-21 07:58:22,131] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:58:22,131] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 07:58:22,131] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:58:22,131] INFO -   TTFT (cumulative): avg=1.61s | p50=0.40s | p95=2.20s | p99=16.30s (22 reqs)
+[2026-04-21 07:58:22,131] INFO -   Throughput: 0 input tok/s | 86 output tok/s
+[2026-04-21 07:58:22,131] INFO -   Throughput (cumulative): 1,233 input tok/s | 58 output tok/s | 0.02 req/s
+[2026-04-21 07:58:22,131] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:58:22,131] INFO -   Cache Hit Rate (cumulative): 94.6% | Theoretical cumulative (infinite cache): 91.8%
+[2026-04-21 07:58:22,131] INFO -   Working Set: 110,720 tokens (1730 blocks)
+[2026-04-21 07:58:22,131] INFO -   Working Set by Age: 1m: 110,528 | 5m: 110,720 | 15m: 110,720 tokens
+[2026-04-21 07:58:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:58:52,053] INFO - Assessment Period 37
+[2026-04-21 07:58:52,053] INFO - ========================================================================================================================
+[2026-04-21 07:58:52,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:58:52,053] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:58:52,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:58:52,053] INFO -   TTFT (cumulative): avg=1.58s | p50=0.41s | p95=2.18s | p99=16.12s (23 reqs)
+[2026-04-21 07:58:52,053] INFO -   Throughput: 0 input tok/s | 91 output tok/s
+[2026-04-21 07:58:52,053] INFO -   Throughput (cumulative): 1,299 input tok/s | 59 output tok/s | 0.02 req/s
+[2026-04-21 07:58:52,053] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:58:52,053] INFO -   Cache Hit Rate (cumulative): 94.9% | Theoretical cumulative (infinite cache): 92.3%
+[2026-04-21 07:58:52,053] INFO -   Working Set: 111,872 tokens (1748 blocks)
+[2026-04-21 07:58:52,053] INFO -   Working Set by Age: 1m: 111,680 | 5m: 111,872 | 15m: 111,872 tokens
+[2026-04-21 07:59:22,055] INFO - ========================================================================================================================
+[2026-04-21 07:59:22,056] INFO - Assessment Period 38
+[2026-04-21 07:59:22,056] INFO - ========================================================================================================================
+[2026-04-21 07:59:22,056] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 07:59:22,056] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:59:22,056] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 07:59:22,056] INFO -   TTFT (cumulative): avg=1.55s | p50=0.42s | p95=2.16s | p99=15.94s (24 reqs)
+[2026-04-21 07:59:22,056] INFO -   Throughput: 0 input tok/s | 102 output tok/s
+[2026-04-21 07:59:22,056] INFO -   Throughput (cumulative): 1,363 input tok/s | 62 output tok/s | 0.02 req/s
+[2026-04-21 07:59:22,056] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 07:59:22,056] INFO -   Cache Hit Rate (cumulative): 95.2% | Theoretical cumulative (infinite cache): 92.8%
+[2026-04-21 07:59:22,056] INFO -   Working Set: 111,872 tokens (1748 blocks)
+[2026-04-21 07:59:22,056] INFO -   Working Set by Age: 1m: 111,680 | 5m: 111,872 | 15m: 111,872 tokens
+[2026-04-21 07:59:52,056] INFO - ========================================================================================================================
+[2026-04-21 07:59:52,056] INFO - Assessment Period 39
+[2026-04-21 07:59:52,056] INFO - ========================================================================================================================
+[2026-04-21 07:59:52,056] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 07:59:52,056] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 07:59:52,056] INFO -   Avg TTFT: 0.89s ✓ (threshold: 2.0s, headroom: 55%)
+[2026-04-21 07:59:52,056] INFO -   Avg TTFT (cumulative): avg=1.52s | p50=0.44s | p95=2.14s | p99=15.76s (25 reqs)
+[2026-04-21 07:59:52,056] INFO -   Throughput: 3,732 input tok/s | 95 output tok/s
+[2026-04-21 07:59:52,056] INFO -   Throughput (cumulative): 1,423 input tok/s | 63 output tok/s | 0.02 req/s
+[2026-04-21 07:59:52,056] INFO -   Workload Cache Hit Rate: 99.8% | New input tokens: 256 (budget: 500,000)
+[2026-04-21 07:59:52,056] INFO -   Cache Hit Rate (cumulative): 95.5% | Theoretical cumulative (infinite cache): 93.3%
+[2026-04-21 07:59:52,056] INFO -   Working Set: 112,128 tokens (1752 blocks)
+[2026-04-21 07:59:52,056] INFO -   Working Set by Age: 1m: 111,936 | 5m: 112,128 | 15m: 112,128 tokens
+[2026-04-21 08:00:22,050] INFO - ========================================================================================================================
+[2026-04-21 08:00:22,050] INFO - Assessment Period 40
+[2026-04-21 08:00:22,050] INFO - ========================================================================================================================
+[2026-04-21 08:00:22,050] INFO -   Users: 1 total (1 active this period)
+[2026-04-21 08:00:22,050] INFO -   Requests: 1 launched | 1 completed (1 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:00:22,050] INFO -   Avg TTFT: 1.00s ✓ (threshold: 2.0s, headroom: 50%)
+[2026-04-21 08:00:22,050] INFO -   Avg TTFT (cumulative): avg=1.50s | p50=0.61s | p95=2.13s | p99=15.58s (26 reqs)
+[2026-04-21 08:00:22,050] INFO -   Throughput: 3,741 input tok/s | 81 output tok/s
+[2026-04-21 08:00:22,050] INFO -   Throughput (cumulative): 1,481 input tok/s | 63 output tok/s | 0.02 req/s
+[2026-04-21 08:00:22,050] INFO -   Workload Cache Hit Rate: 99.8% | New input tokens: 256 (budget: 500,000)
+[2026-04-21 08:00:22,050] INFO -   Cache Hit Rate (cumulative): 95.8% | Theoretical cumulative (infinite cache): 93.7%
+[2026-04-21 08:00:22,050] INFO -   Working Set: 112,384 tokens (1756 blocks)
+[2026-04-21 08:00:22,050] INFO -   Working Set by Age: 1m: 112,192 | 5m: 112,256 | 15m: 112,384 tokens
+[2026-04-21 08:00:52,108] INFO - ========================================================================================================================
+[2026-04-21 08:00:52,108] INFO - Assessment Period 41
+[2026-04-21 08:00:52,108] INFO - ========================================================================================================================
+[2026-04-21 08:00:52,108] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:00:52,108] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 08:00:52,108] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:00:52,108] INFO -   TTFT (cumulative): avg=1.50s | p50=0.61s | p95=2.13s | p99=15.58s (26 reqs)
+[2026-04-21 08:00:52,108] INFO -   Throughput: 0 input tok/s | 92 output tok/s
+[2026-04-21 08:00:52,108] INFO -   Throughput (cumulative): 1,445 input tok/s | 62 output tok/s | 0.02 req/s
+[2026-04-21 08:00:52,108] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:00:52,108] INFO -   Cache Hit Rate (cumulative): 95.8% | Theoretical cumulative (infinite cache): 93.7%
+[2026-04-21 08:00:52,108] INFO -   Working Set: 113,152 tokens (1768 blocks)
+[2026-04-21 08:00:52,108] INFO -   Working Set by Age: 1m: 112,960 | 5m: 113,024 | 15m: 113,152 tokens
+[2026-04-21 08:01:22,087] INFO - ========================================================================================================================
+[2026-04-21 08:01:22,087] INFO - Assessment Period 42
+[2026-04-21 08:01:22,087] INFO - ========================================================================================================================
+[2026-04-21 08:01:22,087] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:01:22,087] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:01:22,087] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:01:22,087] INFO -   TTFT (cumulative): avg=1.48s | p50=0.78s | p95=2.11s | p99=15.41s (27 reqs)
+[2026-04-21 08:01:22,087] INFO -   Throughput: 0 input tok/s | 83 output tok/s
+[2026-04-21 08:01:22,087] INFO -   Throughput (cumulative): 1,501 input tok/s | 64 output tok/s | 0.02 req/s
+[2026-04-21 08:01:22,087] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:01:22,087] INFO -   Cache Hit Rate (cumulative): 96.0% | Theoretical cumulative (infinite cache): 94.0%
+[2026-04-21 08:01:22,087] INFO -   Working Set: 114,048 tokens (1782 blocks)
+[2026-04-21 08:01:22,088] INFO -   Working Set by Age: 1m: 113,856 | 5m: 113,920 | 15m: 114,048 tokens
+[2026-04-21 08:01:52,115] INFO - ========================================================================================================================
+[2026-04-21 08:01:52,115] INFO - Assessment Period 43
+[2026-04-21 08:01:52,115] INFO - ========================================================================================================================
+[2026-04-21 08:01:52,115] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:01:52,115] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 08:01:52,115] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:01:52,115] INFO -   TTFT (cumulative): avg=1.48s | p50=0.78s | p95=2.11s | p99=15.41s (27 reqs)
+[2026-04-21 08:01:52,115] INFO -   Throughput: 0 input tok/s | 106 output tok/s
+[2026-04-21 08:01:52,115] INFO -   Throughput (cumulative): 1,466 input tok/s | 62 output tok/s | 0.02 req/s
+[2026-04-21 08:01:52,115] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:01:52,115] INFO -   Cache Hit Rate (cumulative): 96.0% | Theoretical cumulative (infinite cache): 94.0%
+[2026-04-21 08:01:52,115] INFO -   Working Set: 114,048 tokens (1782 blocks)
+[2026-04-21 08:01:52,115] INFO -   Working Set by Age: 1m: 113,856 | 5m: 113,856 | 15m: 114,048 tokens
+[2026-04-21 08:02:22,127] INFO - ========================================================================================================================
+[2026-04-21 08:02:22,127] INFO - Assessment Period 44
+[2026-04-21 08:02:22,127] INFO - ========================================================================================================================
+[2026-04-21 08:02:22,127] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:02:22,127] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:02:22,127] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:02:22,127] INFO -   TTFT (cumulative): avg=1.46s | p50=0.80s | p95=2.09s | p99=15.23s (28 reqs)
+[2026-04-21 08:02:22,127] INFO -   Throughput: 0 input tok/s | 75 output tok/s
+[2026-04-21 08:02:22,127] INFO -   Throughput (cumulative): 1,519 input tok/s | 64 output tok/s | 0.02 req/s
+[2026-04-21 08:02:22,127] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:02:22,127] INFO -   Cache Hit Rate (cumulative): 96.2% | Theoretical cumulative (infinite cache): 94.3%
+[2026-04-21 08:02:22,127] INFO -   Working Set: 114,304 tokens (1786 blocks)
+[2026-04-21 08:02:22,127] INFO -   Working Set by Age: 1m: 114,112 | 5m: 114,112 | 15m: 114,304 tokens
+[2026-04-21 08:02:52,049] INFO - ========================================================================================================================
+[2026-04-21 08:02:52,050] INFO - Assessment Period 45
+[2026-04-21 08:02:52,050] INFO - ========================================================================================================================
+[2026-04-21 08:02:52,050] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:02:52,050] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:02:52,050] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:02:52,050] INFO -   TTFT (cumulative): avg=1.45s | p50=0.81s | p95=2.07s | p99=15.05s (29 reqs)
+[2026-04-21 08:02:52,050] INFO -   Throughput: 0 input tok/s | 95 output tok/s
+[2026-04-21 08:02:52,050] INFO -   Throughput (cumulative): 1,569 input tok/s | 66 output tok/s | 0.02 req/s
+[2026-04-21 08:02:52,050] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:02:52,050] INFO -   Cache Hit Rate (cumulative): 96.4% | Theoretical cumulative (infinite cache): 94.6%
+[2026-04-21 08:02:52,050] INFO -   Working Set: 114,304 tokens (1786 blocks)
+[2026-04-21 08:02:52,050] INFO -   Working Set by Age: 1m: 114,112 | 5m: 114,112 | 15m: 114,304 tokens
+[2026-04-21 08:03:22,061] INFO - ========================================================================================================================
+[2026-04-21 08:03:22,061] INFO - Assessment Period 46
+[2026-04-21 08:03:22,061] INFO - ========================================================================================================================
+[2026-04-21 08:03:22,061] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:03:22,061] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 08:03:22,061] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:03:22,061] INFO -   TTFT (cumulative): avg=1.45s | p50=0.81s | p95=2.07s | p99=15.05s (29 reqs)
+[2026-04-21 08:03:22,062] INFO -   Throughput: 0 input tok/s | 99 output tok/s
+[2026-04-21 08:03:22,062] INFO -   Throughput (cumulative): 1,535 input tok/s | 65 output tok/s | 0.02 req/s
+[2026-04-21 08:03:22,062] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:03:22,062] INFO -   Cache Hit Rate (cumulative): 96.4% | Theoretical cumulative (infinite cache): 94.6%
+[2026-04-21 08:03:22,062] INFO -   Working Set: 114,880 tokens (1795 blocks)
+[2026-04-21 08:03:22,062] INFO -   Working Set by Age: 1m: 114,688 | 5m: 114,688 | 15m: 114,880 tokens
+[2026-04-21 08:03:52,097] INFO - ========================================================================================================================
+[2026-04-21 08:03:52,097] INFO - Assessment Period 47
+[2026-04-21 08:03:52,097] INFO - ========================================================================================================================
+[2026-04-21 08:03:52,097] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:03:52,097] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:03:52,097] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:03:52,097] INFO -   TTFT (cumulative): avg=1.43s | p50=0.82s | p95=2.05s | p99=14.87s (30 reqs)
+[2026-04-21 08:03:52,097] INFO -   Throughput: 0 input tok/s | 89 output tok/s
+[2026-04-21 08:03:52,097] INFO -   Throughput (cumulative): 1,584 input tok/s | 67 output tok/s | 0.02 req/s
+[2026-04-21 08:03:52,097] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:03:52,097] INFO -   Cache Hit Rate (cumulative): 96.5% | Theoretical cumulative (infinite cache): 94.9%
+[2026-04-21 08:03:52,097] INFO -   Working Set: 115,072 tokens (1798 blocks)
+[2026-04-21 08:03:52,098] INFO -   Working Set by Age: 1m: 114,880 | 5m: 114,880 | 15m: 115,072 tokens
+[2026-04-21 08:04:22,101] INFO - ========================================================================================================================
+[2026-04-21 08:04:22,101] INFO - Assessment Period 48
+[2026-04-21 08:04:22,101] INFO - ========================================================================================================================
+[2026-04-21 08:04:22,101] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:04:22,101] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:04:22,101] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:04:22,101] INFO -   TTFT (cumulative): avg=1.42s | p50=0.84s | p95=2.03s | p99=14.69s (31 reqs)
+[2026-04-21 08:04:22,101] INFO -   Throughput: 0 input tok/s | 89 output tok/s
+[2026-04-21 08:04:22,101] INFO -   Throughput (cumulative): 1,631 input tok/s | 67 output tok/s | 0.02 req/s
+[2026-04-21 08:04:22,101] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:04:22,101] INFO -   Cache Hit Rate (cumulative): 96.7% | Theoretical cumulative (infinite cache): 95.1%
+[2026-04-21 08:04:22,101] INFO -   Working Set: 115,264 tokens (1801 blocks)
+[2026-04-21 08:04:22,101] INFO -   Working Set by Age: 1m: 115,072 | 5m: 115,072 | 15m: 115,264 tokens
+[2026-04-21 08:04:52,148] INFO - ========================================================================================================================
+[2026-04-21 08:04:52,148] INFO - Assessment Period 49
+[2026-04-21 08:04:52,148] INFO - ========================================================================================================================
+[2026-04-21 08:04:52,148] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:04:52,148] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:04:52,148] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:04:52,148] INFO -   TTFT (cumulative): avg=1.41s | p50=0.86s | p95=2.01s | p99=14.52s (32 reqs)
+[2026-04-21 08:04:52,148] INFO -   Throughput: 0 input tok/s | 92 output tok/s
+[2026-04-21 08:04:52,148] INFO -   Throughput (cumulative): 1,676 input tok/s | 67 output tok/s | 0.02 req/s
+[2026-04-21 08:04:52,148] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:04:52,148] INFO -   Cache Hit Rate (cumulative): 96.8% | Theoretical cumulative (infinite cache): 95.3%
+[2026-04-21 08:04:52,148] INFO -   Working Set: 115,520 tokens (1805 blocks)
+[2026-04-21 08:04:52,148] INFO -   Working Set by Age: 1m: 115,328 | 5m: 115,328 | 15m: 115,520 tokens
+[2026-04-21 08:05:22,109] INFO - ========================================================================================================================
+[2026-04-21 08:05:22,109] INFO - Assessment Period 50
+[2026-04-21 08:05:22,109] INFO - ========================================================================================================================
+[2026-04-21 08:05:22,109] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:05:22,109] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:05:22,109] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:05:22,109] INFO -   TTFT (cumulative): avg=1.39s | p50=0.89s | p95=1.99s | p99=14.34s (33 reqs)
+[2026-04-21 08:05:22,109] INFO -   Throughput: 0 input tok/s | 81 output tok/s
+[2026-04-21 08:05:22,109] INFO -   Throughput (cumulative): 1,719 input tok/s | 68 output tok/s | 0.02 req/s
+[2026-04-21 08:05:22,109] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:05:22,109] INFO -   Cache Hit Rate (cumulative): 97.0% | Theoretical cumulative (infinite cache): 95.5%
+[2026-04-21 08:05:22,109] INFO -   Working Set: 116,416 tokens (1819 blocks)
+[2026-04-21 08:05:22,109] INFO -   Working Set by Age: 1m: 116,224 | 5m: 116,224 | 15m: 116,416 tokens
+[2026-04-21 08:05:52,101] INFO - ========================================================================================================================
+[2026-04-21 08:05:52,101] INFO - Assessment Period 51
+[2026-04-21 08:05:52,101] INFO - ========================================================================================================================
+[2026-04-21 08:05:52,101] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:05:52,101] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:05:52,101] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:05:52,101] INFO -   TTFT (cumulative): avg=1.38s | p50=0.90s | p95=1.97s | p99=14.16s (34 reqs)
+[2026-04-21 08:05:52,101] INFO -   Throughput: 0 input tok/s | 90 output tok/s
+[2026-04-21 08:05:52,101] INFO -   Throughput (cumulative): 1,761 input tok/s | 69 output tok/s | 0.02 req/s
+[2026-04-21 08:05:52,101] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:05:52,101] INFO -   Cache Hit Rate (cumulative): 97.1% | Theoretical cumulative (infinite cache): 95.7%
+[2026-04-21 08:05:52,101] INFO -   Working Set: 116,928 tokens (1827 blocks)
+[2026-04-21 08:05:52,101] INFO -   Working Set by Age: 1m: 116,736 | 5m: 116,736 | 15m: 116,928 tokens
+[2026-04-21 08:06:22,053] INFO - ========================================================================================================================
+[2026-04-21 08:06:22,053] INFO - Assessment Period 52
+[2026-04-21 08:06:22,053] INFO - ========================================================================================================================
+[2026-04-21 08:06:22,053] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:06:22,053] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:06:22,053] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:06:22,054] INFO -   TTFT (cumulative): avg=1.37s | p50=0.90s | p95=1.95s | p99=13.98s (35 reqs)
+[2026-04-21 08:06:22,054] INFO -   Throughput: 0 input tok/s | 103 output tok/s
+[2026-04-21 08:06:22,054] INFO -   Throughput (cumulative): 1,802 input tok/s | 70 output tok/s | 0.02 req/s
+[2026-04-21 08:06:22,054] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:06:22,054] INFO -   Cache Hit Rate (cumulative): 97.2% | Theoretical cumulative (infinite cache): 95.8%
+[2026-04-21 08:06:22,054] INFO -   Working Set: 116,928 tokens (1827 blocks)
+[2026-04-21 08:06:22,054] INFO -   Working Set by Age: 1m: 116,736 | 5m: 116,736 | 15m: 116,928 tokens
+[2026-04-21 08:06:52,085] INFO - ========================================================================================================================
+[2026-04-21 08:06:52,085] INFO - Assessment Period 53
+[2026-04-21 08:06:52,085] INFO - ========================================================================================================================
+[2026-04-21 08:06:52,085] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:06:52,085] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 08:06:52,085] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:06:52,085] INFO -   TTFT (cumulative): avg=1.37s | p50=0.90s | p95=1.95s | p99=13.98s (35 reqs)
+[2026-04-21 08:06:52,085] INFO -   Throughput: 0 input tok/s | 93 output tok/s
+[2026-04-21 08:06:52,085] INFO -   Throughput (cumulative): 1,768 input tok/s | 68 output tok/s | 0.02 req/s
+[2026-04-21 08:06:52,085] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:06:52,085] INFO -   Cache Hit Rate (cumulative): 97.2% | Theoretical cumulative (infinite cache): 95.8%
+[2026-04-21 08:06:52,085] INFO -   Working Set: 117,056 tokens (1829 blocks)
+[2026-04-21 08:06:52,085] INFO -   Working Set by Age: 1m: 116,864 | 5m: 116,864 | 15m: 117,056 tokens
+[2026-04-21 08:07:22,148] INFO - ========================================================================================================================
+[2026-04-21 08:07:22,148] INFO - Assessment Period 54
+[2026-04-21 08:07:22,148] INFO - ========================================================================================================================
+[2026-04-21 08:07:22,148] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:07:22,148] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:07:22,149] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:07:22,149] INFO -   TTFT (cumulative): avg=1.36s | p50=0.90s | p95=1.93s | p99=13.80s (36 reqs)
+[2026-04-21 08:07:22,149] INFO -   Throughput: 0 input tok/s | 57 output tok/s
+[2026-04-21 08:07:22,149] INFO -   Throughput (cumulative): 1,808 input tok/s | 69 output tok/s | 0.02 req/s
+[2026-04-21 08:07:22,149] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:07:22,149] INFO -   Cache Hit Rate (cumulative): 97.3% | Theoretical cumulative (infinite cache): 96.0%
+[2026-04-21 08:07:22,149] INFO -   Working Set: 117,632 tokens (1838 blocks)
+[2026-04-21 08:07:22,149] INFO -   Working Set by Age: 1m: 117,440 | 5m: 117,440 | 15m: 117,632 tokens
+[2026-04-21 08:07:52,090] INFO - ========================================================================================================================
+[2026-04-21 08:07:52,090] INFO - Assessment Period 55
+[2026-04-21 08:07:52,090] INFO - ========================================================================================================================
+[2026-04-21 08:07:52,090] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:07:52,090] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:07:52,090] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:07:52,090] INFO -   TTFT (cumulative): avg=1.35s | p50=0.91s | p95=1.91s | p99=13.62s (37 reqs)
+[2026-04-21 08:07:52,090] INFO -   Throughput: 0 input tok/s | 81 output tok/s
+[2026-04-21 08:07:52,090] INFO -   Throughput (cumulative): 1,846 input tok/s | 69 output tok/s | 0.02 req/s
+[2026-04-21 08:07:52,090] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:07:52,090] INFO -   Cache Hit Rate (cumulative): 97.4% | Theoretical cumulative (infinite cache): 96.1%
+[2026-04-21 08:07:52,090] INFO -   Working Set: 117,888 tokens (1842 blocks)
+[2026-04-21 08:07:52,090] INFO -   Working Set by Age: 1m: 117,696 | 5m: 117,696 | 15m: 117,888 tokens
+[2026-04-21 08:08:22,141] INFO - ========================================================================================================================
+[2026-04-21 08:08:22,142] INFO - Assessment Period 56
+[2026-04-21 08:08:22,142] INFO - ========================================================================================================================
+[2026-04-21 08:08:22,142] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:08:22,142] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (0 new, 1 prior) (0.00 req/s)
+[2026-04-21 08:08:22,142] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:08:22,142] INFO -   TTFT (cumulative): avg=1.35s | p50=0.91s | p95=1.91s | p99=13.62s (37 reqs)
+[2026-04-21 08:08:22,142] INFO -   Throughput: 0 input tok/s | 102 output tok/s
+[2026-04-21 08:08:22,142] INFO -   Throughput (cumulative): 1,813 input tok/s | 68 output tok/s | 0.02 req/s
+[2026-04-21 08:08:22,142] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:08:22,142] INFO -   Cache Hit Rate (cumulative): 97.4% | Theoretical cumulative (infinite cache): 96.1%
+[2026-04-21 08:08:22,142] INFO -   Working Set: 117,888 tokens (1842 blocks)
+[2026-04-21 08:08:22,142] INFO -   Working Set by Age: 1m: 117,696 | 5m: 117,696 | 15m: 117,888 tokens
+[2026-04-21 08:08:52,058] INFO - ========================================================================================================================
+[2026-04-21 08:08:52,058] INFO - Assessment Period 57
+[2026-04-21 08:08:52,058] INFO - ========================================================================================================================
+[2026-04-21 08:08:52,058] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:08:52,058] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 0 in-progress (0 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:08:52,058] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:08:52,058] INFO -   TTFT (cumulative): avg=1.34s | p50=0.91s | p95=1.89s | p99=13.45s (38 reqs)
+[2026-04-21 08:08:52,058] INFO -   Throughput: 0 input tok/s | 81 output tok/s
+[2026-04-21 08:08:52,058] INFO -   Throughput (cumulative): 1,850 input tok/s | 71 output tok/s | 0.02 req/s
+[2026-04-21 08:08:52,058] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:08:52,058] INFO -   Cache Hit Rate (cumulative): 97.5% | Theoretical cumulative (infinite cache): 96.3%
+[2026-04-21 08:08:52,058] INFO -   Working Set: 117,888 tokens (1842 blocks)
+[2026-04-21 08:08:52,058] INFO -   Working Set by Age: 1m: 0 | 5m: 117,696 | 15m: 117,888 tokens
+[2026-04-21 08:09:22,057] INFO - ========================================================================================================================
+[2026-04-21 08:09:22,057] INFO - Assessment Period 58
+[2026-04-21 08:09:22,058] INFO - ========================================================================================================================
+[2026-04-21 08:09:22,058] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:09:22,058] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 0 in-progress (0 new, 0 prior) (0.00 req/s)
+[2026-04-21 08:09:22,058] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:09:22,058] INFO -   TTFT (cumulative): avg=1.34s | p50=0.91s | p95=1.89s | p99=13.45s (38 reqs)
+[2026-04-21 08:09:22,058] INFO -   Throughput: 0 input tok/s | 0 output tok/s
+[2026-04-21 08:09:22,058] INFO -   Throughput (cumulative): 1,818 input tok/s | 70 output tok/s | 0.02 req/s
+[2026-04-21 08:09:22,058] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:09:22,058] INFO -   Cache Hit Rate (cumulative): 97.5% | Theoretical cumulative (infinite cache): 96.3%
+[2026-04-21 08:09:22,058] INFO -   Working Set: 117,888 tokens (1842 blocks)
+[2026-04-21 08:09:22,058] INFO -   Working Set by Age: 1m: 0 | 5m: 117,696 | 15m: 117,888 tokens
+[2026-04-21 08:09:45,561] WARNING -   ⚠️ User-001 stopped at request 140/150 (next request exceeds --max-context 128,000 tokens)
+[2026-04-21 08:09:45,561] INFO -   👤 User-002 started (trace: trace_0580, 100 requests, 17,897 initial tokens)
+[2026-04-21 08:09:52,120] INFO - ========================================================================================================================
+[2026-04-21 08:09:52,120] INFO - Assessment Period 59
+[2026-04-21 08:09:52,120] INFO - ========================================================================================================================
+[2026-04-21 08:09:52,120] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:09:52,120] INFO -   Requests: 0 launched | 0 completed (0 new, 0 prior) | 1 in-progress (1 new, 0 prior) (0.00 req/s)
+[2026-04-21 08:09:52,120] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:09:52,120] INFO -   TTFT (cumulative): avg=1.34s | p50=0.91s | p95=1.89s | p99=13.45s (38 reqs)
+[2026-04-21 08:09:52,120] INFO -   Throughput: 0 input tok/s | 23 output tok/s
+[2026-04-21 08:09:52,120] INFO -   Throughput (cumulative): 1,787 input tok/s | 68 output tok/s | 0.02 req/s
+[2026-04-21 08:09:52,120] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:09:52,120] INFO -   Cache Hit Rate (cumulative): 97.5% | Theoretical cumulative (infinite cache): 96.3%
+[2026-04-21 08:09:52,120] INFO -   Working Set: 135,744 tokens (2121 blocks)
+[2026-04-21 08:09:52,120] INFO -   Working Set by Age: 1m: 17,856 | 5m: 135,552 | 15m: 135,744 tokens
+[2026-04-21 08:10:22,087] INFO - ========================================================================================================================
+[2026-04-21 08:10:22,088] INFO - Assessment Period 60
+[2026-04-21 08:10:22,088] INFO - ========================================================================================================================
+[2026-04-21 08:10:22,088] INFO -   Users: 1 total (0 active this period)
+[2026-04-21 08:10:22,088] INFO -   Requests: 0 launched | 1 completed (0 new, 1 prior) | 1 in-progress (1 new, 0 prior) (0.03 req/s)
+[2026-04-21 08:10:22,088] INFO -   TTFT: ⏳ No data (threshold: 2.0s)
+[2026-04-21 08:10:22,088] INFO -   TTFT (cumulative): avg=1.32s | p50=0.91s | p95=1.87s | p99=13.27s (39 reqs)
+[2026-04-21 08:10:22,088] INFO -   Throughput: 0 input tok/s | 102 output tok/s
+[2026-04-21 08:10:22,088] INFO -   Throughput (cumulative): 1,768 input tok/s | 69 output tok/s | 0.02 req/s
+[2026-04-21 08:10:22,088] INFO -   Workload Cache Hit Rate: 0.0% | New input tokens: 0 (budget: 500,000)
+[2026-04-21 08:10:22,088] INFO -   Cache Hit Rate (cumulative): 96.9% | Theoretical cumulative (infinite cache): 95.7%
+[2026-04-21 08:10:22,088] INFO -   Working Set: 151,232 tokens (2363 blocks)
+[2026-04-21 08:10:22,088] INFO -   Working Set by Age: 1m: 33,472 | 5m: 151,168 | 15m: 151,232 tokens
+[2026-04-21 08:10:22,088] INFO - 
+Test duration reached (1800s)
+[2026-04-21 08:10:22,088] INFO - Waiting for 1 in-flight requests to complete...
+[2026-04-21 08:10:43,884] INFO - ========================================================================================================================
+[2026-04-21 08:10:43,884] INFO - Test Complete
+[2026-04-21 08:10:43,885] INFO - ========================================================================================================================
+[2026-04-21 08:10:43,885] INFO - Duration: 1821.8s
+[2026-04-21 08:10:43,885] INFO - Total Requests: 40
+[2026-04-21 08:10:43,885] INFO - Total Users Created: 2
+[2026-04-21 08:10:43,885] INFO - Peak Concurrent Users: 1
+[2026-04-21 08:10:43,885] INFO - 
+[2026-04-21 08:10:43,885] INFO - Performance Summary:
+[2026-04-21 08:10:43,885] INFO -   TTFT avg/p50/p95/max: 1.31s / 0.90s / 1.85s / 20.04s
+[2026-04-21 08:10:43,885] INFO -   Throughput: 1,765 input tok/s | 70 output tok/s
+[2026-04-21 08:10:43,885] INFO -   Avg Workload Cache Hit Rate: 96.5%
+[2026-04-21 08:10:43,885] INFO -   Peak Working Set: 151,232 tokens
+[2026-04-21 08:10:43,885] INFO -   Warm Prefix: 11,621 tokens (50% of max tool+system)
+[2026-04-21 08:10:43,885] INFO - 
+[2026-04-21 08:10:43,885] INFO - Results saved to: /workspace/results/trace_replay
+[2026-04-21 08:10:43,885] INFO - ========================================================================================================================
+[2026-04-21 08:10:44,035] INFO - Saved detailed results: 40 requests
+[2026-04-21 08:10:44,043] INFO - Saved assessment periods: 60 periods
+[2026-04-21 08:10:44,046] INFO - Saved user lifecycle: 3 events
+[2026-04-21 08:10:47,543] INFO - Generated: trace_replay_performance_over_time.html
+[2026-04-21 08:10:47,587] INFO - Generated: trace_replay_cache_hit_over_time.html
+[2026-04-21 08:10:47,620] INFO - Generated: trace_replay_user_timeline.html
+/usr/bin/python3: can't open file '/workspace/generate_index.py': [Errno 2] No such file or directory
+[2026-04-21 08:10:47,638] WARNING - Failed to generate index.html: Command '['/usr/bin/python3', 'generate_index.py', '/workspace/results/trace_replay']' returned non-zero exit status 2.

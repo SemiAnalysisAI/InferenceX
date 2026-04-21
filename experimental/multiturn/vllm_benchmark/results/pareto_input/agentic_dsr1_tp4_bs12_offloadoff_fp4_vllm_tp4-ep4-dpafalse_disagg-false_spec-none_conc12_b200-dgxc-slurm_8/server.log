@@ -1,0 +1,1672 @@
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299] 
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299]        █     █     █▄   ▄█
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.19.1
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299]   █▄█▀ █     █     █     █  model   nvidia/DeepSeek-R1-0528-FP4
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:299] 
+(APIServer pid=8033) INFO 04-21 06:06:27 [utils.py:233] non-default args: {'model_tag': 'nvidia/DeepSeek-R1-0528-FP4', 'host': '0.0.0.0', 'port': 8888, 'model': 'nvidia/DeepSeek-R1-0528-FP4', 'tensor_parallel_size': 4, 'enable_expert_parallel': True, 'kv_cache_dtype': 'fp8', 'async_scheduling': True, 'compilation_config': {'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', '+rms_norm'], 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_DECODE_ONLY: (2, 0)>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {'fuse_allreduce_rms': True}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}}
+(APIServer pid=8033) INFO 04-21 06:06:41 [model.py:549] Resolved architecture: DeepseekV3ForCausalLM
+(APIServer pid=8033) INFO 04-21 06:06:41 [model.py:1678] Using max model len 163840
+(APIServer pid=8033) INFO 04-21 06:06:41 [cache.py:227] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor.
+(APIServer pid=8033) INFO 04-21 06:06:41 [scheduler.py:238] Chunked prefill is enabled with max_num_batched_tokens=8192.
+(APIServer pid=8033) WARNING 04-21 06:06:41 [modelopt.py:998] Detected ModelOpt NVFP4 checkpoint. Please note that the format is experimental and could change in future.
+(APIServer pid=8033) INFO 04-21 06:06:41 [vllm.py:790] Asynchronous scheduling is enabled.
+(APIServer pid=8033) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(APIServer pid=8033) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+(APIServer pid=8033) INFO 04-21 06:06:43 [compilation.py:292] Enabled custom fusions: norm_quant, act_quant, allreduce_rms
+(EngineCore pid=8448) INFO 04-21 06:07:00 [core.py:105] Initializing a V1 LLM engine (v0.19.1) with config: model='nvidia/DeepSeek-R1-0528-FP4', speculative_config=None, tokenizer='nvidia/DeepSeek-R1-0528-FP4', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=163840, download_dir=None, load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=modelopt_fp4, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=nvidia/DeepSeek-R1-0528-FP4, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', '+rms_norm', 'none'], 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': [], 'compile_ranges_endpoints': [2340, 8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_DECODE_ONLY: (2, 0)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': True}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': True, 'static_all_moe_layers': []}
+(EngineCore pid=8448) WARNING 04-21 06:07:00 [multiproc_executor.py:1014] Reducing Torch parallelism from 112 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(EngineCore pid=8448) INFO 04-21 06:07:00 [multiproc_executor.py:134] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=192.168.2.13 (local), world_size=4, local_world_size=4
+(Worker pid=8654) INFO 04-21 06:07:14 [parallel_state.py:1400] world_size=4 rank=0 local_rank=0 distributed_init_method=tcp://127.0.0.1:55801 backend=nccl
+(Worker pid=8655) INFO 04-21 06:07:14 [parallel_state.py:1400] world_size=4 rank=1 local_rank=1 distributed_init_method=tcp://127.0.0.1:55801 backend=nccl
+(Worker pid=8657) INFO 04-21 06:07:14 [parallel_state.py:1400] world_size=4 rank=3 local_rank=3 distributed_init_method=tcp://127.0.0.1:55801 backend=nccl
+(Worker pid=8656) INFO 04-21 06:07:14 [parallel_state.py:1400] world_size=4 rank=2 local_rank=2 distributed_init_method=tcp://127.0.0.1:55801 backend=nccl
+(Worker pid=8654) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(Worker pid=8654) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+(Worker pid=8654) INFO 04-21 06:07:15 [pynccl.py:111] vLLM is using nccl==2.27.5
+(Worker pid=8657) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(Worker pid=8657) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+(Worker pid=8656) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(Worker pid=8656) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+(Worker pid=8655) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(Worker pid=8655) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+gpu-5:8654:8654 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8654:8654 [0] NCCL INFO Bootstrap: Using eth0:192.168.2.13<0>
+gpu-5:8654:8654 [0] NCCL INFO cudaDriverVersion 13000
+gpu-5:8654:8654 [0] NCCL INFO NCCL version 2.27.5+cuda12.9
+gpu-5:8654:8654 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gpu-5:8654:8654 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8654:8654 [0] NCCL INFO NCCL_IB_HCA set to mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
+gpu-5:8654:8654 [0] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_1:1/RoCE [2]mlx5_2:1/RoCE [3]mlx5_3:1/RoCE [4]mlx5_4:1/RoCE [5]mlx5_5:1/RoCE [6]mlx5_6:1/RoCE [7]mlx5_7:1/RoCE [RO]; OOB eth0:192.168.2.13<0>
+gpu-5:8654:8654 [0] NCCL INFO Initialized NET plugin IB
+gpu-5:8654:8654 [0] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8654:8654 [0] NCCL INFO Using network IB
+gpu-5:8654:8654 [0] NCCL INFO DMA-BUF is available on GPU device 0
+gpu-5:8654:8654 [0] NCCL INFO ncclCommInitRank comm 0x3468b920 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 8f000 commId 0xf55020e75d98a540 - Init START
+gpu-5:8654:8654 [0] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+gpu-5:8654:8654 [0] NCCL INFO Bootstrap timings total 0.028698 (create 0.000026, send 0.000062, recv 0.000259, ring 0.000061, delay 0.000000)
+gpu-5:8654:8654 [0] NCCL INFO MNNVL busId 0x8f000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8654:8654 [0] NCCL INFO Setting affinity for GPU 0 to 0-55,112-167
+gpu-5:8654:8654 [0] NCCL INFO NVLS multicast support is available on dev 0 (NVLS_NCHANNELS 24)
+gpu-5:8654:8654 [0] NCCL INFO comm 0x3468b920 rank 0 nRanks 4 nNodes 1 localRanks 4 localRank 0 MNNVL 0
+gpu-5:8654:8654 [0] NCCL INFO Channel 00/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 01/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 02/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 03/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 04/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 05/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 06/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 07/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 08/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 09/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 10/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 11/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 12/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 13/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 14/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 15/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 16/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 17/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 18/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 19/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 20/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 21/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 22/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 23/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 24/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 25/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 26/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 27/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 28/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 29/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 30/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 31/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] 1/-1/-1->0->-1 [3] 1/-1/-1->0->-1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] 1/-1/-1->0->-1 [7] 1/-1/-1->0->-1 [8] 1/-1/-1->0->-1 [9] 1/-1/-1->0->-1 [10] -1/-1/-1->0->3 [11] -1/-1/-1->0->3 [12] 1/-1/-1->0->3 [13] 1/-1/-1->0->3 [14] 1/-1/-1->0->3 [15] 1/-1/-1->0->3 [16] 1/-1/-1->0->-1 [17] 1/-1/-1->0->-1 [18] 1/-1/-1->0->-1 [19] 1/-1/-1->0->-1 [20] 1/-1/-1->0->-1 [21] 1/-1/-1->0->-1 [22] 1/-1/-1->0->-1 [23] 1/-1/-1->0->-1 [24] 1/-1/-1->0->-1 [25] 1/-1/-1->0->-1 [26] -1/-1/-1->0->3 [27] -1/-1/-1->0->3 [28] 1/-1/-1->0->3 [29] 1/-1/-1->0->3 [30] 1/-1/-1->0->3 [31] 1/-1/-1->0->3
+gpu-5:865gpu-5:8656:8656 [2] NCCL INFO cudaDriverVersion 13000
+gpu-5:8656:8656 [2] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8656:8656 [2] NCCL INFO Bootstrap: Using eth0:192.168.2.13<0>
+gpu-5:8656:8656 [2] NCCL INFO NCCL version 2.27.5+cuda12.9
+gpu-5:8656:8656 [2] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gpu-5:8656:8656 [2] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8656:8656 [2] NCCL INFO NCCL_IB_HCA set to mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
+gpu-5:8656:8656 [2] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_1:1/RoCE [2]mlx5_2:1/RoCE [3]mlx5_3:1/RoCE [4]mlx5_4:1/RoCE [5]mlx5_5:1/RoCE [6]mlx5_6:1/RoCE [7]mlx5_7:1/RoCE [RO]; OOB eth0:192.168.2.13<0>
+gpu-5:8656:8656 [2] NCCL INFO Initialized NET plugin IB
+gpu-5:8656:8656 [2] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8656:8656 [2] NCCL INFO Using network IB
+gpu-5:8656:8656 [2] NCCL INFO DMA-BUF is available on GPU device 2
+gpu-5:8656:8656 [2] NCCL INFO ncclCommInitRank comm 0x3dc902c0 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0xf55020e75d98a540 - Init START
+gpu-5:8656:8656 [2] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+gpu-5:8656:8656 [2] NCCL INFO Bootstrap timings total 0.159565 (create 0.000022, send 0.000047, recv 0.000094, ring 0.159154, delay 0.000000)
+gpu-5:8656:8656 [2] NCCL INFO MNNVL busId 0x96000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8656:8656 [2] NCCL INFO Setting affinity for GPU 2 to 0-55,112-167
+gpu-5:8656:8656 [2] NCCL INFO NVLS multicast support is available on dev 2 (NVLS_NCHANNELS 24)
+gpu-5:8656:8656 [2] NCCL INFO comm 0x3dc902c0 rank 2 nRanks 4 nNodes 1 localRanks 4 localRank 2 MNNVL 0
+gpu-5:8656:8656 [2] NCCL INFO Trees [0] 3/-1/-1->2->1 [1] 3/-1/-1->2->1 [2] 3/-1/-1->2->1 [3] 3/-1/-1->2->1 [4] 3/-1/-1->2->1 [5] 3/-1/-1->2->1 [6] 3/-1/-1->2->1 [7] 3/-1/-1->2->1 [8] 3/-1/-1->2->1 [9] 3/-1/-1->2->1 [10] 3/-1/-1->2->1 [11] 3/-1/-1->2->1 [12] 3/-1/-1->2->-1 [13] 3/-1/-1->2->-1 [14] -1/-1/-1->2->1 [15] -1/-1/-1->2->1 [16] 3/-1/-1->2->1 [17] 3/-1/-1->2->1 [18] 3/-1/-1->2->1 [19] 3/-1/-1->2->1 [20] 3/-1/-1->2->1 [21] 3/-1/-1->2->1 [22] 3/-1/-1->2->1 [23] 3/-1/-1->2->1 [24] 3/-1/-1->2->1 [25] 3/-1/-1->2->1 [26] 3/-1/-1->2->1 [27] 3/-1/-1->2->1 [28] 3/-1/-1->2->-1 [29] 3/-1/-1->2->-1 [30] -1/-1/-1->2->1 [31] -1/-1/-1->2->1
+gpu-5:8656:8656 [2] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8656:8656 [2] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+gpu-5:8656:8780 [2] NCCL INFO [Proxy Service] Device 2 CPU core 121
+gpu-5:8656:8783 [2] NCCL INFO [Proxy Service UDS] Device 2 CPU core 11
+gpu-5:8656:8656 [2] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8656:8656 [2] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8656:8656 [2] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+gpu-5:8656:8656 [2] NCCL INFO ncclCommInitRank comm 0x3dc902c0 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0xf55020e75d98a540 - Init COMPLETE
+gpu-5:8656:8656 [2] NCCL INFO Init timings - ncclCommInitRank: rank 2 nranks 4 total 1.18 (kernels 0.25, alloc 0.10, bootstrap 0.16, allgathers 0.01, topo 0.42, graphs 0.01, connections 0.23, rest 0.00)
+gpu-5:8656:8787 [2] NCCL INFO Channel 00/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 01/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 02/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 03/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 04/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 05/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 06/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 07/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 08/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 09/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8787 [2] NCCL INFO Channel 10/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:gpu-5:8655:8655 [1] NCCL INFO cudaDriverVersion 13000
+gpu-5:8655:8655 [1] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8655:8655 [1] NCCL INFO Bootstrap: Using eth0:192.168.2.13<0>
+gpu-5:8655:8655 [1] NCCL INFO NCCL version 2.27.5+cuda12.9
+gpu-5:8655:8655 [1] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gpu-5:8655:8655 [1] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8655:8655 [1] NCCL INFO NCCL_IB_HCA set to mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
+gpu-5:8655:8655 [1] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_1:1/RoCE [2]mlx5_2:1/RoCE [3]mlx5_3:1/RoCE [4]mlx5_4:1/RoCE [5]mlx5_5:1/RoCE [6]mlx5_6:1/RoCE [7]mlx5_7:1/RoCE [RO]; OOB eth0:192.168.2.13<0>
+gpu-5:8655:8655 [1] NCCL INFO Initialized NET plugin IB
+gpu-5:8655:8655 [1] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8655:8655 [1] NCCL INFO Using network IB
+gpu-5:8655:8655 [1] NCCL INFO DMA-BUF is available on GPU device 1
+gpu-5:8655:8655 [1] NCCL INFO ncclCommInitRank comm 0x266a5f10 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0xf55020e75d98a540 - Init START
+gpu-5:8655:8655 [1] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+gpu-5:8655:8655 [1] NCCL INFO Bootstrap timings total 0.171850 (create 0.000029, send 0.000072, recv 0.012323, ring 0.027256, delay 0.000000)
+gpu-5:8655:8655 [1] NCCL INFO MNNVL busId 0x90000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8655:8655 [1] NCCL INFO Setting affinity for GPU 1 to 0-55,112-167
+gpu-5:8655:8655 [1] NCCL INFO NVLS multicast support is available on dev 1 (NVLS_NCHANNELS 24)
+gpu-5:8655:8655 [1] NCCL INFO comm 0x266a5f10 rank 1 nRanks 4 nNodes 1 localRanks 4 localRank 1 MNNVL 0
+gpu-5:8655:8655 [1] NCCL INFO Trees [0] 2/-1/-1->1->0 [1] 2/-1/-1->1->0 [2] 2/-1/-1->1->0 [3] 2/-1/-1->1->0 [4] 2/-1/-1->1->0 [5] 2/-1/-1->1->0 [6] 2/-1/-1->1->0 [7] 2/-1/-1->1->0 [8] 2/-1/-1->1->0 [9] 2/-1/-1->1->0 [10] 2/-1/-1->1->-1 [11] 2/-1/-1->1->-1 [12] -1/-1/-1->1->0 [13] -1/-1/-1->1->0 [14] 2/-1/-1->1->0 [15] 2/-1/-1->1->0 [16] 2/-1/-1->1->0 [17] 2/-1/-1->1->0 [18] 2/-1/-1->1->0 [19] 2/-1/-1->1->0 [20] 2/-1/-1->1->0 [21] 2/-1/-1->1->0 [22] 2/-1/-1->1->0 [23] 2/-1/-1->1->0 [24] 2/-1/-1->1->0 [25] 2/-1/-1->1->0 [26] 2/-1/-1->1->-1 [27] 2/-1/-1->1->-1 [28] -1/-1/-1->1->0 [29] -1/-1/-1->1->0 [30] 2/-1/-1->1->0 [31] 2/-1/-1->1->0
+gpu-5:8655:8655 [1] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8655:8655 [1] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+gpu-5:8655:8779 [1] NCCL INFO [Proxy Service] Device 1 CPU core 120
+gpu-5:8655:8782 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 10
+gpu-5:8655:8655 [1] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8655:8655 [1] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8655:8655 [1] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+gpu-5:8655:8655 [1] NCCL INFO ncclCommInitRank comm 0x266a5f10 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0xf55020e75d98a540 - Init COMPLETE
+gpu-5:8655:8655 [1] NCCL INFO Init timings - ncclCommInitRank: rank 1 nranks 4 total 1.18 (kernels 0.24, alloc 0.09, bootstrap 0.17, allgathers 0.01, topo 0.42, graphs 0.01, connections 0.22, rest 0.01)
+gpu-5:8655:8788 [1] NCCL INFO Channel 00/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 01/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 02/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 03/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 04/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 05/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 06/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 07/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 08/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 09/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8788 [1] NCCL INFO Channel 10/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:gpu-5:8657:8657 [3] NCCL INFO cudaDriverVersion 13000
+gpu-5:8657:8657 [3] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8657:8657 [3] NCCL INFO Bootstrap: Using eth0:192.168.2.13<0>
+gpu-5:8657:8657 [3] NCCL INFO NCCL version 2.27.5+cuda12.9
+gpu-5:8657:8657 [3] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gpu-5:8657:8657 [3] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+gpu-5:8657:8657 [3] NCCL INFO NCCL_IB_HCA set to mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
+gpu-5:8657:8657 [3] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_1:1/RoCE [2]mlx5_2:1/RoCE [3]mlx5_3:1/RoCE [4]mlx5_4:1/RoCE [5]mlx5_5:1/RoCE [6]mlx5_6:1/RoCE [7]mlx5_7:1/RoCE [RO]; OOB eth0:192.168.2.13<0>
+gpu-5:8657:8657 [3] NCCL INFO Initialized NET plugin IB
+gpu-5:8657:8657 [3] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8657:8657 [3] NCCL INFO Using network IB
+gpu-5:8657:8657 [3] NCCL INFO DMA-BUF is available on GPU device 3
+gpu-5:8657:8657 [3] NCCL INFO ncclCommInitRank comm 0x3c727860 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0xf55020e75d98a540 - Init START
+gpu-5:8657:8657 [3] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+gpu-5:8657:8657 [3] NCCL INFO Bootstrap timings total 0.159601 (create 0.000023, send 0.000061, recv 0.131753, ring 0.027475, delay 0.000000)
+gpu-5:8657:8657 [3] NCCL INFO MNNVL busId 0x97000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8657:8657 [3] NCCL INFO Setting affinity for GPU 3 to 0-55,112-167
+gpu-5:8657:8657 [3] NCCL INFO NVLS multicast support is available on dev 3 (NVLS_NCHANNELS 24)
+gpu-5:8657:8657 [3] NCCL INFO comm 0x3c727860 rank 3 nRanks 4 nNodes 1 localRanks 4 localRank 3 MNNVL 0
+gpu-5:8657:8657 [3] NCCL INFO Trees [0] -1/-1/-1->3->2 [1] -1/-1/-1->3->2 [2] -1/-1/-1->3->2 [3] -1/-1/-1->3->2 [4] -1/-1/-1->3->2 [5] -1/-1/-1->3->2 [6] -1/-1/-1->3->2 [7] -1/-1/-1->3->2 [8] -1/-1/-1->3->2 [9] -1/-1/-1->3->2 [10] 0/-1/-1->3->2 [11] 0/-1/-1->3->2 [12] 0/-1/-1->3->2 [13] 0/-1/-1->3->2 [14] 0/-1/-1->3->-1 [15] 0/-1/-1->3->-1 [16] -1/-1/-1->3->2 [17] -1/-1/-1->3->2 [18] -1/-1/-1->3->2 [19] -1/-1/-1->3->2 [20] -1/-1/-1->3->2 [21] -1/-1/-1->3->2 [22] -1/-1/-1->3->2 [23] -1/-1/-1->3->2 [24] -1/-1/-1->3->2 [25] -1/-1/-1->3->2 [26] 0/-1/-1->3->2 [27] 0/-1/-1->3->2 [28] 0/-1/-1->3->2 [29] 0/-1/-1->3->2 [30] 0/-1/-1->3->-1 [31] 0/-1/-1->3->-1
+gpu-5:8657:8657 [3] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8657:8657 [3] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+gpu-5:8657:8781 [3] NCCL INFO [Proxy Service] Device 3 CPU core 2
+gpu-5:8657:8784 [3] NCCL INFO [Proxy Service UDS] Device 3 CPU core 115
+gpu-5:8657:8657 [3] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8657:8657 [3] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8657:8657 [3] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+gpu-5:8657:8657 [3] NCCL INFO ncclCommInitRank comm 0x3c727860 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0xf55020e75d98a540 - Init COMPLETE
+gpu-5:8657:8657 [3] NCCL INFO Init timings - ncclCommInitRank: rank 3 nranks 4 total 1.18 (kernels 0.25, alloc 0.09, bootstrap 0.16, allgathers 0.00, topo 0.42, graphs 0.01, connections 0.22, rest 0.01)
+gpu-5:8657:8789 [3] NCCL INFO Channel 00/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 01/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 02/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 03/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 04/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 05/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 06/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 07/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 08/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 09/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8789 [3] NCCL INFO Channel 10/0 : 3[3] -> 0[0] via P2P/CUgpu-5:8654:8654 [0] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8654:8654 [0] NCCL INFO Using network IB
+gpu-5:8654:8654 [0] NCCL INFO DMA-BUF is available on GPU device 0
+gpu-5:8654:8654 [0] NCCL INFO ncclCommInitRank comm 0x3d57d700 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 8f000 commId 0x2a4ee7d697d7110b - Init START
+gpu-5:8654:8654 [0] NCCL INFO Bootstrap timings total 0.000312 (create 0.000019, send 0.000050, recv 0.000071, ring 0.000031, delay 0.000000)
+gpu-5:8654:8654 [0] NCCL INFO MNNVL busId 0x8f000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8654:8654 [0] NCCL INFO Setting affinity for GPU 0 to 0-55,112-167
+gpu-5:8654:8654 [0] NCCL INFO NVLS multicast support is available on dev 0 (NVLS_NCHANNELS 24)
+gpu-5:8654:8654 [0] NCCL INFO comm 0x3d57d700 rank 0 nRanks 4 nNodes 1 localRanks 4 localRank 0 MNNVL 0
+gpu-5:8654:8654 [0] NCCL INFO Channel 00/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 01/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 02/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 03/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 04/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 05/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 06/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 07/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 08/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 09/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 10/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 11/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 12/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 13/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 14/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 15/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 16/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 17/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 18/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 19/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 20/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 21/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 22/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 23/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 24/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 25/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 26/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 27/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 28/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 29/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 30/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Channel 31/32 : 0 1 2 3
+gpu-5:8654:8654 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] 1/-1/-1->0->-1 [3] 1/-1/-1->0->-1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] 1/-1/-1->0->-1 [7] 1/-1/-1->0->-1 [8] 1/-1/-1->0->-1 [9] 1/-1/-1->0->-1 [10] -1/-1/-1->0->3 [11] -1/-1/-1->0->3 [12] 1/-1/-1->0->3 [13] 1/-1/-1->0->3 [14] 1/-1/-1->0->3 [15] 1/-1/-1->0->3 [16] 1/-1/-1->0->-1 [17] 1/-1/-1->0->-1 [18] 1/-1/-1->0->-1 [19] 1/-1/-1->0->-1 [20] 1/-1/-1->0->-1 [21] 1/-1/-1->0->-1 [22] 1/-1/-1->0->-1 [23] 1/-1/-1->0->-1 [24] 1/-1/-1->0->-1 [25] 1/-1/-1->0->-1 [26] -1/-1/-1->0->3 [27] -1/-1/-1->0->3 [28] 1/-1/-1->0->3 [29] 1/-1/-1->0->3 [30] 1/-1/-1->0->3 [31] 1/-1/-1->0->3
+gpu-5:8654:8654 [0] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8654:8654 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gpu-5:8654:8903 [0] NCCL INFO [Proxy Service] Device 0 CPU core 115
+gpu-5:8654:8905 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 115
+gpu-5:8654:8654 [0] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8654:8654 [0] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8654:8654 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gpu-5:8654:8654 [0] NCCL INFO ncclCommInitRank comm 0x3d57d700 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 8f000 commId 0x2a4ee7d697d7110b - Init COMPLETE
+gpu-5:8654:8654 [0] NCCL INFO Init timings - ncclCommInitRank: rank 0 nranks 4 total 0.47 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.39, graphs 0.01, congpu-5:8657:8657 [3] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8657:8657 [3] NCCL INFO Using network IB
+gpu-5:8657:8657 [3] NCCL INFO DMA-BUF is available on GPU device 3
+gpu-5:8657:8657 [3] NCCL INFO ncclCommInitRank comm 0x44b2c4c0 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0x2a4ee7d697d7110b - Init START
+gpu-5:8657:8657 [3] NCCL INFO Bootstrap timings total 0.000299 (create 0.000020, send 0.000051, recv 0.000125, ring 0.000028, delay 0.000000)
+gpu-5:8657:8657 [3] NCCL INFO MNNVL busId 0x97000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8657:8657 [3] NCCL INFO Setting affinity for GPU 3 to 0-55,112-167
+gpu-5:8657:8657 [3] NCCL INFO NVLS multicast support is available on dev 3 (NVLS_NCHANNELS 24)
+gpu-5:8657:8657 [3] NCCL INFO comm 0x44b2c4c0 rank 3 nRanks 4 nNodes 1 localRanks 4 localRank 3 MNNVL 0
+gpu-5:8657:8657 [3] NCCL INFO Trees [0] -1/-1/-1->3->2 [1] -1/-1/-1->3->2 [2] -1/-1/-1->3->2 [3] -1/-1/-1->3->2 [4] -1/-1/-1->3->2 [5] -1/-1/-1->3->2 [6] -1/-1/-1->3->2 [7] -1/-1/-1->3->2 [8] -1/-1/-1->3->2 [9] -1/-1/-1->3->2 [10] 0/-1/-1->3->2 [11] 0/-1/-1->3->2 [12] 0/-1/-1->3->2 [13] 0/-1/-1->3->2 [14] 0/-1/-1->3->-1 [15] 0/-1/-1->3->-1 [16] -1/-1/-1->3->2 [17] -1/-1/-1->3->2 [18] -1/-1/-1->3->2 [19] -1/-1/-1->3->2 [20] -1/-1/-1->3->2 [21] -1/-1/-1->3->2 [22] -1/-1/-1->3->2 [23] -1/-1/-1->3->2 [24] -1/-1/-1->3->2 [25] -1/-1/-1->3->2 [26] 0/-1/-1->3->2 [27] 0/-1/-1->3->2 [28] 0/-1/-1->3->2 [29] 0/-1/-1->3->2 [30] 0/-1/-1->3->-1 [31] 0/-1/-1->3->-1
+gpu-5:8657:8657 [3] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8657:8900 [3] NCCL INFO [Proxy Service] Device 3 CPU core 115
+gpu-5:8657:8907 [3] NCCL INFO [Proxy Service UDS] Device 3 CPU core 116
+gpu-5:8657:8657 [3] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8657:8657 [3] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8657:8657 [3] NCCL INFO ncclCommInitRank comm 0x44b2c4c0 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0x2a4ee7d697d7110b - Init COMPLETE
+gpu-5:8657:8657 [3] NCCL INFO Init timings - ncclCommInitRank: rank 3 nranks 4 total 0.47 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.39, graphs 0.01, connections 0.06, rest 0.00)
+gpu-5:8657:8909 [3] NCCL INFO Channel 00/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 01/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 02/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 03/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 04/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 05/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 06/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 07/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 08/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 09/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 10/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 11/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 12/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 13/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 14/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 15/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 16/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 17/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 18/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 19/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 20/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 21/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 22/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 23/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 24/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channelgpu-5:8656:8656 [2] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8656:8656 [2] NCCL INFO Using network IB
+gpu-5:8656:8656 [2] NCCL INFO DMA-BUF is available on GPU device 2
+gpu-5:8656:8656 [2] NCCL INFO ncclCommInitRank comm 0x4559b740 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0x2a4ee7d697d7110b - Init START
+gpu-5:8656:8656 [2] NCCL INFO Bootstrap timings total 0.000482 (create 0.000019, send 0.000050, recv 0.000285, ring 0.000057, delay 0.000000)
+gpu-5:8656:8656 [2] NCCL INFO MNNVL busId 0x96000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8656:8656 [2] NCCL INFO Setting affinity for GPU 2 to 0-55,112-167
+gpu-5:8656:8656 [2] NCCL INFO NVLS multicast support is available on dev 2 (NVLS_NCHANNELS 24)
+gpu-5:8656:8656 [2] NCCL INFO comm 0x4559b740 rank 2 nRanks 4 nNodes 1 localRanks 4 localRank 2 MNNVL 0
+gpu-5:8656:8656 [2] NCCL INFO Trees [0] 3/-1/-1->2->1 [1] 3/-1/-1->2->1 [2] 3/-1/-1->2->1 [3] 3/-1/-1->2->1 [4] 3/-1/-1->2->1 [5] 3/-1/-1->2->1 [6] 3/-1/-1->2->1 [7] 3/-1/-1->2->1 [8] 3/-1/-1->2->1 [9] 3/-1/-1->2->1 [10] 3/-1/-1->2->1 [11] 3/-1/-1->2->1 [12] 3/-1/-1->2->-1 [13] 3/-1/-1->2->-1 [14] -1/-1/-1->2->1 [15] -1/-1/-1->2->1 [16] 3/-1/-1->2->1 [17] 3/-1/-1->2->1 [18] 3/-1/-1->2->1 [19] 3/-1/-1->2->1 [20] 3/-1/-1->2->1 [21] 3/-1/-1->2->1 [22] 3/-1/-1->2->1 [23] 3/-1/-1->2->1 [24] 3/-1/-1->2->1 [25] 3/-1/-1->2->1 [26] 3/-1/-1->2->1 [27] 3/-1/-1->2->1 [28] 3/-1/-1->2->-1 [29] 3/-1/-1->2->-1 [30] -1/-1/-1->2->1 [31] -1/-1/-1->2->1
+gpu-5:8656:8656 [2] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8656:8906 [2] NCCL INFO [Proxy Service UDS] Device 2 CPU core 12
+gpu-5:8656:8901 [2] NCCL INFO [Proxy Service] Device 2 CPU core 121
+gpu-5:8656:8656 [2] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8656:8656 [2] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8656:8656 [2] NCCL INFO ncclCommInitRank comm 0x4559b740 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0x2a4ee7d697d7110b - Init COMPLETE
+gpu-5:8656:8656 [2] NCCL INFO Init timings - ncclCommInitRank: rank 2 nranks 4 total 0.47 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.39, graphs 0.01, connections 0.06, rest 0.00)
+gpu-5:8656:8908 [2] NCCL INFO Channel 00/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 01/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 02/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 03/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 04/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 05/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 06/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 07/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 08/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 09/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 10/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 11/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 12/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 13/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 14/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 15/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 16/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 17/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 18/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 19/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 20/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 21/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 22/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 23/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 24/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 25/0 : 2[2] -> 3gpu-5:8655:8655 [1] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8655:8655 [1] NCCL INFO Using network IB
+gpu-5:8655:8655 [1] NCCL INFO DMA-BUF is available on GPU device 1
+gpu-5:8655:8655 [1] NCCL INFO ncclCommInitRank comm 0x2e9c7fa0 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0x2a4ee7d697d7110b - Init START
+gpu-5:8655:8655 [1] NCCL INFO Bootstrap timings total 0.000338 (create 0.000020, send 0.000061, recv 0.000038, ring 0.000097, delay 0.000000)
+gpu-5:8655:8655 [1] NCCL INFO MNNVL busId 0x90000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8655:8655 [1] NCCL INFO Setting affinity for GPU 1 to 0-55,112-167
+gpu-5:8655:8655 [1] NCCL INFO NVLS multicast support is available on dev 1 (NVLS_NCHANNELS 24)
+gpu-5:8655:8655 [1] NCCL INFO comm 0x2e9c7fa0 rank 1 nRanks 4 nNodes 1 localRanks 4 localRank 1 MNNVL 0
+gpu-5:8655:8655 [1] NCCL INFO Trees [0] 2/-1/-1->1->0 [1] 2/-1/-1->1->0 [2] 2/-1/-1->1->0 [3] 2/-1/-1->1->0 [4] 2/-1/-1->1->0 [5] 2/-1/-1->1->0 [6] 2/-1/-1->1->0 [7] 2/-1/-1->1->0 [8] 2/-1/-1->1->0 [9] 2/-1/-1->1->0 [10] 2/-1/-1->1->-1 [11] 2/-1/-1->1->-1 [12] -1/-1/-1->1->0 [13] -1/-1/-1->1->0 [14] 2/-1/-1->1->0 [15] 2/-1/-1->1->0 [16] 2/-1/-1->1->0 [17] 2/-1/-1->1->0 [18] 2/-1/-1->1->0 [19] 2/-1/-1->1->0 [20] 2/-1/-1->1->0 [21] 2/-1/-1->1->0 [22] 2/-1/-1->1->0 [23] 2/-1/-1->1->0 [24] 2/-1/-1->1->0 [25] 2/-1/-1->1->0 [26] 2/-1/-1->1->-1 [27] 2/-1/-1->1->-1 [28] -1/-1/-1->1->0 [29] -1/-1/-1->1->0 [30] 2/-1/-1->1->0 [31] 2/-1/-1->1->0
+gpu-5:8655:8655 [1] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8655:8904 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 10
+gpu-5:8655:8902 [1] NCCL INFO [Proxy Service] Device 1 CPU core 115
+gpu-5:8655:8655 [1] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8655:8655 [1] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8655:8655 [1] NCCL INFO ncclCommInitRank comm 0x2e9c7fa0 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0x2a4ee7d697d7110b - Init COMPLETE
+gpu-5:8655:8655 [1] NCCL INFO Init timings - ncclCommInitRank: rank 1 nranks 4 total 0.47 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.39, graphs 0.01, connections 0.06, rest 0.00)
+gpu-5:8655:8910 [1] NCCL INFO Channel 00/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 01/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 02/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 03/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 04/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 05/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 06/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 07/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 08/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 09/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 10/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 11/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 12/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 13/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 14/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 15/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 16/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 17/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 18/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 19/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 20/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 21/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 22/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 23/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 24/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 25/0 : 1[1] -> 2(Worker pid=8654) INFO 04-21 06:07:18 [parallel_state.py:1716] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [gpu_model_runner.py:4735] Starting to load model nvidia/DeepSeek-R1-0528-FP4...
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:07:19 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [cuda.py:334] Using FLASHINFER_MLA attention backend out of potential backends: ['FLASHINFER_MLA', 'CUTLASS_MLA', 'TRITON_MLA'].
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [mla_attention.py:2137] Using FlashAttention prefill for MLA
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [deep_gemm.py:115] DeepGEMM E8M0 enabled on current platform.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [nvfp4_utils.py:85] Using NvFp4LinearBackend.FLASHINFER_CUTLASS for NVFP4 GEMM
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:07:19 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:07:19 [selector.py:124] Using HND KV cache layout for FLASHINFER_MLA backend.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [layer.py:396] [EP Rank 0/4] Expert parallelism is enabled. Expert placement strategy: linear. Local/global number of experts: 64/256. Experts local to global index map: 0->0, 1->1, 2->2, 3->3, 4->4, 5->5, 6->6, 7->7, 8->8, 9->9, 10->10, 11->11, 12->12, 13->13, 14->14, 15->15, 16->16, 17->17, 18->18, 19->19, 20->20, 21->21, 22->22, 23->23, 24->24, 25->25, 26->26, 27->27, 28->28, 29->29, 30->30, 31->31, 32->32, 33->33, 34->34, 35->35, 36->36, 37->37, 38->38, 39->39, 40->40, 41->41, 42->42, 43->43, 44->44, 45->45, 46->46, 47->47, 48->48, 49->49, 50->50, 51->51, 52->52, 53->53, 54->54, 55->55, 56->56, 57->57, 58->58, 59->59, 60->60, 61->61, 62->62, 63->63.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:19 [nvfp4.py:256] Using 'FLASHINFER_TRTLLM' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN'].
+(Worker_TP0_EP0 pid=8654) WARNING 04-21 06:07:20 [compilation.py:1223] Op 'quant_fp8' not present in model, enabling with '+quant_fp8' has no effect
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   0% Completed | 0/163 [00:00<?, ?it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   1% Completed | 1/163 [00:00<01:18,  2.07it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   1% Completed | 2/163 [00:00<01:00,  2.67it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   2% Completed | 3/163 [00:00<00:39,  4.00it/s]
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:07:23 [weight_utils.py:581] Time spent downloading weights for nvidia/DeepSeek-R1-0528-FP4: 0.561028 seconds
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   2% Completed | 4/163 [00:01<00:49,  3.24it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   3% Completed | 5/163 [00:01<00:37,  4.23it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   4% Completed | 6/163 [00:01<00:31,  4.99it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   4% Completed | 7/163 [00:01<00:42,  3.66it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   5% Completed | 8/163 [00:02<00:34,  4.45it/s]
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:07:25 [weight_utils.py:581] Time spent downloading weights for nvidia/DeepSeek-R1-0528-FP4: 0.559308 seconds
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   6% Completed | 9/163 [00:02<00:36,  4.25it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   6% Completed | 10/163 [00:02<00:36,  4.20it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   7% Completed | 12/163 [00:02<00:23,  6.44it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   8% Completed | 13/163 [00:03<00:32,  4.64it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   9% Completed | 14/163 [00:03<00:28,  5.26it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:   9% Completed | 15/163 [00:03<00:30,  4.92it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  10% Completed | 16/163 [00:03<00:31,  4.60it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  11% Completed | 18/163 [00:04<00:32,  4.44it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  12% Completed | 19/163 [00:04<00:29,  4.88it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  13% Completed | 21/163 [00:04<00:31,  4.45it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  13% Completed | 22/163 [00:04<00:28,  4.93it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  14% Completed | 23/163 [00:05<00:29,  4.71it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  15% Completed | 24/163 [00:05<00:31,  4.40it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  15% Completed | 25/163 [00:05<00:26,  5.17it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  16% Completed | 26/163 [00:05<00:33,  4.11it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  17% Completed | 27/163 [00:06<00:29,  4.63it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  18% Completed | 29/163 [00:06<00:30,  4.39it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  18% Completed | 30/163 [00:06<00:26,  4.98it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  19% Completed | 31/163 [00:06<00:27,  4.86it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  20% Completed | 32/163 [00:07<00:29,  4.41it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  20% Completed | 33/163 [00:07<00:25,  5.19it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  21% Completed | 35/163 [00:07<00:26,  4.91it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  22% Completed | 36/163 [00:07<00:22,  5.55it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  23% Completed | 37/163 [00:08<00:25,  4.96it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  23% Completed | 38/163 [00:08<00:28,  4.46it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  24% Completed | 39/163 [00:08<00:23,  5.25it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  25% Completed | 40/163 [00:08<00:29,  4.15it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  25% Completed | 41/163 [00:08<00:25,  4.73it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  26% Completed | 43/163 [00:09<00:27,  4.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  27% Completed | 44/163 [00:09<00:24,  4.93it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  28% Completed | 45/163 [00:09<00:25,  4.70it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  28% Completed | 46/163 [00:10<00:27,  4.33it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  29% Completed | 47/163 [00:10<00:22,  5.14it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  29% Completed | 48/163 [00:10<00:27,  4.15it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  30% Completed | 49/163 [00:10<00:24,  4.72it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  31% Completed | 51/163 [00:11<00:25,  4.40it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  32% Completed | 52/163 [00:11<00:22,  4.98it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  33% Completed | 53/163 [00:11<00:23,  4.77it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  33% Completed | 54/163 [00:11<00:25,  4.33it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  34% Completed | 55/163 [00:11<00:21,  5.10it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  35% Completed | 57/163 [00:12<00:21,  4.83it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  36% Completed | 58/163 [00:12<00:19,  5.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  36% Completed | 59/163 [00:12<00:20,  4.95it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  37% Completed | 60/163 [00:13<00:22,  4.59it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  38% Completed | 62/163 [00:13<00:22,  4.42it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  39% Completed | 63/163 [00:13<00:20,  4.86it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  40% Completed | 65/163 [00:14<00:21,  4.48it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  40% Completed | 66/163 [00:14<00:19,  5.01it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  41% Completed | 67/163 [00:14<00:19,  4.86it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  42% Completed | 68/163 [00:14<00:20,  4.53it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  43% Completed | 70/163 [00:15<00:20,  4.45it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  44% Completed | 71/163 [00:15<00:18,  4.86it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  45% Completed | 73/163 [00:15<00:19,  4.52it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  45% Completed | 74/163 [00:15<00:17,  5.06it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  46% Completed | 75/163 [00:16<00:17,  4.89it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  47% Completed | 76/163 [00:16<00:19,  4.43it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  47% Completed | 77/163 [00:16<00:16,  5.20it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  48% Completed | 79/163 [00:17<00:17,  4.91it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  49% Completed | 80/163 [00:17<00:15,  5.48it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  50% Completed | 81/163 [00:17<00:16,  5.02it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  50% Completed | 82/163 [00:17<00:17,  4.60it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  51% Completed | 83/163 [00:17<00:14,  5.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  52% Completed | 84/163 [00:18<00:18,  4.17it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  52% Completed | 85/163 [00:18<00:16,  4.75it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  53% Completed | 87/163 [00:18<00:17,  4.43it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  54% Completed | 88/163 [00:18<00:14,  5.05it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  55% Completed | 89/163 [00:19<00:15,  4.85it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  55% Completed | 90/163 [00:19<00:16,  4.50it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  56% Completed | 92/163 [00:19<00:16,  4.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  57% Completed | 93/163 [00:19<00:14,  4.75it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  58% Completed | 95/163 [00:20<00:15,  4.46it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  59% Completed | 96/163 [00:20<00:13,  5.03it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  60% Completed | 97/163 [00:20<00:13,  4.85it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  60% Completed | 98/163 [00:21<00:14,  4.40it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  61% Completed | 99/163 [00:21<00:12,  5.14it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  62% Completed | 101/163 [00:21<00:12,  4.86it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  63% Completed | 102/163 [00:21<00:11,  5.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  63% Completed | 103/163 [00:22<00:12,  5.00it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  64% Completed | 104/163 [00:22<00:12,  4.61it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  65% Completed | 106/163 [00:22<00:13,  4.18it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  66% Completed | 107/163 [00:22<00:12,  4.58it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  67% Completed | 109/163 [00:23<00:12,  4.34it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  67% Completed | 110/163 [00:23<00:10,  4.90it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  68% Completed | 111/163 [00:23<00:10,  4.75it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  69% Completed | 112/163 [00:24<00:11,  4.41it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  69% Completed | 113/163 [00:24<00:09,  5.16it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  70% Completed | 114/163 [00:24<00:11,  4.14it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  71% Completed | 115/163 [00:24<00:10,  4.63it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  72% Completed | 117/163 [00:25<00:10,  4.32it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  72% Completed | 118/163 [00:25<00:09,  4.83it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  73% Completed | 119/163 [00:25<00:09,  4.77it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  74% Completed | 120/163 [00:25<00:09,  4.38it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  75% Completed | 122/163 [00:25<00:06,  6.29it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  75% Completed | 123/163 [00:26<00:08,  4.65it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  76% Completed | 124/163 [00:26<00:07,  5.28it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  77% Completed | 125/163 [00:26<00:07,  4.85it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  77% Completed | 126/163 [00:26<00:08,  4.52it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  79% Completed | 128/163 [00:27<00:08,  4.36it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  79% Completed | 129/163 [00:27<00:07,  4.85it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  80% Completed | 131/163 [00:28<00:07,  4.49it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  81% Completed | 132/163 [00:28<00:06,  5.01it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  82% Completed | 133/163 [00:28<00:06,  4.83it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  82% Completed | 134/163 [00:28<00:06,  4.50it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  83% Completed | 136/163 [00:29<00:06,  4.41it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  84% Completed | 137/163 [00:29<00:05,  4.79it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  85% Completed | 139/163 [00:29<00:05,  4.51it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  86% Completed | 140/163 [00:29<00:04,  5.10it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  87% Completed | 142/163 [00:30<00:04,  4.77it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  88% Completed | 143/163 [00:30<00:03,  5.30it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  88% Completed | 144/163 [00:30<00:03,  4.92it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  89% Completed | 145/163 [00:31<00:03,  4.56it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  90% Completed | 147/163 [00:31<00:03,  4.37it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  91% Completed | 148/163 [00:31<00:03,  4.79it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  92% Completed | 150/163 [00:32<00:02,  4.43it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  93% Completed | 151/163 [00:32<00:02,  4.96it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  93% Completed | 152/163 [00:32<00:02,  4.76it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  94% Completed | 153/163 [00:32<00:02,  4.42it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  94% Completed | 154/163 [00:32<00:01,  5.19it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  95% Completed | 155/163 [00:33<00:01,  4.16it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  96% Completed | 156/163 [00:33<00:01,  4.70it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  97% Completed | 158/163 [00:33<00:01,  4.39it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  98% Completed | 159/163 [00:33<00:00,  4.98it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards:  98% Completed | 160/163 [00:34<00:00,  5.47it/s]
+(Worker_TP0_EP0 pid=8654) Loading safetensors checkpoint shards: 100% Completed | 163/163 [00:34<00:00,  4.78it/s]
+(Worker_TP0_EP0 pid=8654) 
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:56 [default_loader.py:384] Loading weights took 34.14 seconds
+(Worker_TP0_EP0 pid=8654) WARNING 04-21 06:07:56 [kv_cache.py:94] Checkpoint does not provide a q scaling factor. Setting it to k_scale. This only matters for FP8 Attention backends (flash-attn or flashinfer).
+(Worker_TP0_EP0 pid=8654) WARNING 04-21 06:07:56 [kv_cache.py:108] Using KV cache scaling factor 1.0 for fp8_e4m3. If this is unintended, verify that k/v_scale scaling factors are properly set in the checkpoint.
+(Worker_TP0_EP0 pid=8654) WARNING 04-21 06:07:56 [kv_cache.py:147] Using uncalibrated q_scale 1.0 and/or prob_scale 1.0 with fp8 attention. This may cause accuracy issues. Please make sure q/prob scaling factors are available in the fp8 checkpoint.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:07:56 [nvfp4.py:401] Using MoEPrepareAndFinalizeNoDPEPMonolithic
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:00 [gpu_model_runner.py:4820] Model loading took 94.08 GiB memory and 40.433437 seconds
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:00 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:08:01 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:08:02 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:08:05 [interface.py:469] Setting kv cache block size to 32 for FLASHINFER_MLA backend.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:13 [backends.py:1051] Using cache directory: /root/.cache/vllm/torch_compile_cache/5dc693d159/rank_0_0/backbone for vLLM's torch.compile
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:13 [backends.py:1111] Dynamo bytecode transform time: 7.22 s
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:13 [flashinfer_all_reduce.py:109] Auto-selected flashinfer allreduce backend: trtllm
+nections 0.06, rest 0.00)
+gpu-5:8654:8911 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 06/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 07/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 08/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 09/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 10/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 11/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 12/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 13/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 14/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 15/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 16/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 17/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 18/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 19/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 20/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 21/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 22/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 23/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 24/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 25/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 26/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 27/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 28/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 29/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 30/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Channel 31/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:8911 [0] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8654:8654 [0] NCCL INFO Comm config Blocking set to 1
+gpu-5:8654:9030 [0] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8654:9030 [0] NCCL INFO Using network IB
+gpu-5:8654:9030 [0] NCCL INFO DMA-BUF is available on GPU device 0
+gpu-5:8654:9030 [0] NCCL INFO ncclCommInitRankConfig comm 0x53c51800 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 8f000 commId 0x4fcce26c700131d7 - Init START
+gpu-5:8654:9030 [0] NCCL INFO Bootstrap timings total 0.031975 (create 0.000028, send 0.000073, recv 0.008750, ring 0.023010, delay 0.000000)
+gpu-5:8654:9030 [0] NCCL INFO MNNVL busId 0x8f000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8654:9030 [0] NCCL INFO Setting affinity for GPU 0 to 0-55,112-167
+gpu-5:8654:9030 [0] NCCL INFO NVLS multicast support is available on dev 0 (NVLS_NCHANNELS 24)
+gpu-5:8654:9030 [0] NCCL INFO comm 0x53c51800 rank 0 nRanks 4 nNodes 1 localRanks 4 localRank 0 MNNVL 0
+gpu-5:8654:9030 [0] NCCL INFO Channel 00/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 01/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 02/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 03/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 04/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 05/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 06/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 07/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 08/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 09/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 10/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 11/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 12/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 13/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO  25/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 26/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 27/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 28/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 29/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 30/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Channel 31/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:8909 [3] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8657:8657 [3] NCCL INFO Comm config Blocking set to 1
+gpu-5:8657:9031 [3] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8657:9031 [3] NCCL INFO Using network IB
+gpu-5:8657:9031 [3] NCCL INFO DMA-BUF is available on GPU device 3
+gpu-5:8657:9031 [3] NCCL INFO ncclCommInitRankConfig comm 0x5b2e7f60 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0x4fcce26c700131d7 - Init START
+gpu-5:8657:9031 [3] NCCL INFO Bootstrap timings total 0.031495 (create 0.000029, send 0.000068, recv 0.000052, ring 0.000535, delay 0.000000)
+gpu-5:8657:9031 [3] NCCL INFO MNNVL busId 0x97000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8657:9031 [3] NCCL INFO Setting affinity for GPU 3 to 0-55,112-167
+gpu-5:8657:9031 [3] NCCL INFO NVLS multicast support is available on dev 3 (NVLS_NCHANNELS 24)
+gpu-5:8657:9031 [3] NCCL INFO comm 0x5b2e7f60 rank 3 nRanks 4 nNodes 1 localRanks 4 localRank 3 MNNVL 0
+gpu-5:8657:9031 [3] NCCL INFO Trees [0] -1/-1/-1->3->2 [1] -1/-1/-1->3->2 [2] -1/-1/-1->3->2 [3] -1/-1/-1->3->2 [4] -1/-1/-1->3->2 [5] -1/-1/-1->3->2 [6] -1/-1/-1->3->2 [7] -1/-1/-1->3->2 [8] -1/-1/-1->3->2 [9] -1/-1/-1->3->2 [10] 0/-1/-1->3->2 [11] 0/-1/-1->3->2 [12] 0/-1/-1->3->2 [13] 0/-1/-1->3->2 [14] 0/-1/-1->3->-1 [15] 0/-1/-1->3->-1 [16] -1/-1/-1->3->2 [17] -1/-1/-1->3->2 [18] -1/-1/-1->3->2 [19] -1/-1/-1->3->2 [20] -1/-1/-1->3->2 [21] -1/-1/-1->3->2 [22] -1/-1/-1->3->2 [23] -1/-1/-1->3->2 [24] -1/-1/-1->3->2 [25] -1/-1/-1->3->2 [26] 0/-1/-1->3->2 [27] 0/-1/-1->3->2 [28] 0/-1/-1->3->2 [29] 0/-1/-1->3->2 [30] 0/-1/-1->3->-1 [31] 0/-1/-1->3->-1
+gpu-5:8657:9031 [3] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8657:9037 [3] NCCL INFO [Proxy Service] Device 3 CPU core 1
+gpu-5:8657:9039 [3] NCCL INFO [Proxy Service UDS] Device 3 CPU core 3
+gpu-5:8657:9031 [3] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8657:9031 [3] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8657:9031 [3] NCCL INFO ncclCommInitRankConfig comm 0x5b2e7f60 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId 97000 commId 0x4fcce26c700131d7 - Init COMPLETE
+gpu-5:8657:9031 [3] NCCL INFO Init timings - ncclCommInitRankConfig: rank 3 nranks 4 total 0.52 (kernels 0.00, alloc 0.00, bootstrap 0.03, allgathers 0.00, topo 0.41, graphs 0.01, connections 0.07, rest 0.00)
+gpu-5:8657:9045 [3] NCCL INFO Channel 00/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 01/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 02/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 03/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 04/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 05/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 06/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 07/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 08/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 09/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 10/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 11/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 12/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 13/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 14/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 15/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 16/0 : 3[3] -> 0[0] via P2P/CUMEM
+[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 26/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 27/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 28/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 29/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 30/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Channel 31/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:8910 [1] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8655:8655 [1] NCCL INFO Comm config Blocking set to 1
+gpu-5:8655:9032 [1] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8655:9032 [1] NCCL INFO Using network IB
+gpu-5:8655:9032 [1] NCCL INFO DMA-BUF is available on GPU device 1
+gpu-5:8655:9032 [1] NCCL INFO ncclCommInitRankConfig comm 0x44cde3f0 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0x4fcce26c700131d7 - Init START
+gpu-5:8655:9032 [1] NCCL INFO Bootstrap timings total 0.023494 (create 0.000035, send 0.000064, recv 0.023242, ring 0.000041, delay 0.000000)
+gpu-5:8655:9032 [1] NCCL INFO MNNVL busId 0x90000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8655:9032 [1] NCCL INFO Setting affinity for GPU 1 to 0-55,112-167
+gpu-5:8655:9032 [1] NCCL INFO NVLS multicast support is available on dev 1 (NVLS_NCHANNELS 24)
+gpu-5:8655:9032 [1] NCCL INFO comm 0x44cde3f0 rank 1 nRanks 4 nNodes 1 localRanks 4 localRank 1 MNNVL 0
+gpu-5:8655:9032 [1] NCCL INFO Trees [0] 2/-1/-1->1->0 [1] 2/-1/-1->1->0 [2] 2/-1/-1->1->0 [3] 2/-1/-1->1->0 [4] 2/-1/-1->1->0 [5] 2/-1/-1->1->0 [6] 2/-1/-1->1->0 [7] 2/-1/-1->1->0 [8] 2/-1/-1->1->0 [9] 2/-1/-1->1->0 [10] 2/-1/-1->1->-1 [11] 2/-1/-1->1->-1 [12] -1/-1/-1->1->0 [13] -1/-1/-1->1->0 [14] 2/-1/-1->1->0 [15] 2/-1/-1->1->0 [16] 2/-1/-1->1->0 [17] 2/-1/-1->1->0 [18] 2/-1/-1->1->0 [19] 2/-1/-1->1->0 [20] 2/-1/-1->1->0 [21] 2/-1/-1->1->0 [22] 2/-1/-1->1->0 [23] 2/-1/-1->1->0 [24] 2/-1/-1->1->0 [25] 2/-1/-1->1->0 [26] 2/-1/-1->1->-1 [27] 2/-1/-1->1->-1 [28] -1/-1/-1->1->0 [29] -1/-1/-1->1->0 [30] 2/-1/-1->1->0 [31] 2/-1/-1->1->0
+gpu-5:8655:9032 [1] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8655:9034 [1] NCCL INFO [Proxy Service] Device 1 CPU core 13
+gpu-5:8655:9036 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 126
+gpu-5:8655:9032 [1] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8655:9032 [1] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8655:9032 [1] NCCL INFO ncclCommInitRankConfig comm 0x44cde3f0 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId 90000 commId 0x4fcce26c700131d7 - Init COMPLETE
+gpu-5:8655:9032 [1] NCCL INFO Init timings - ncclCommInitRankConfig: rank 1 nranks 4 total 0.51 (kernels 0.00, alloc 0.00, bootstrap 0.02, allgathers 0.01, topo 0.41, graphs 0.01, connections 0.07, rest 0.00)
+gpu-5:8655:9042 [1] NCCL INFO Channel 00/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 01/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 02/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 03/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 04/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 05/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 06/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 07/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 08/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 09/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 10/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 11/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 12/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 13/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 14/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 15/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 16/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO [3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 26/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 27/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 28/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 29/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 30/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Channel 31/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:8908 [2] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8656:8656 [2] NCCL INFO Comm config Blocking set to 1
+gpu-5:8656:9033 [2] NCCL INFO Assigned NET plugin IB to comm
+gpu-5:8656:9033 [2] NCCL INFO Using network IB
+gpu-5:8656:9033 [2] NCCL INFO DMA-BUF is available on GPU device 2
+gpu-5:8656:9033 [2] NCCL INFO ncclCommInitRankConfig comm 0x5ba99040 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0x4fcce26c700131d7 - Init START
+gpu-5:8656:9033 [2] NCCL INFO Bootstrap timings total 0.000776 (create 0.000027, send 0.000068, recv 0.000050, ring 0.000043, delay 0.000000)
+gpu-5:8656:9033 [2] NCCL INFO MNNVL busId 0x96000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+gpu-5:8656:9033 [2] NCCL INFO Setting affinity for GPU 2 to 0-55,112-167
+gpu-5:8656:9033 [2] NCCL INFO NVLS multicast support is available on dev 2 (NVLS_NCHANNELS 24)
+gpu-5:8656:9033 [2] NCCL INFO comm 0x5ba99040 rank 2 nRanks 4 nNodes 1 localRanks 4 localRank 2 MNNVL 0
+gpu-5:8656:9033 [2] NCCL INFO Trees [0] 3/-1/-1->2->1 [1] 3/-1/-1->2->1 [2] 3/-1/-1->2->1 [3] 3/-1/-1->2->1 [4] 3/-1/-1->2->1 [5] 3/-1/-1->2->1 [6] 3/-1/-1->2->1 [7] 3/-1/-1->2->1 [8] 3/-1/-1->2->1 [9] 3/-1/-1->2->1 [10] 3/-1/-1->2->1 [11] 3/-1/-1->2->1 [12] 3/-1/-1->2->-1 [13] 3/-1/-1->2->-1 [14] -1/-1/-1->2->1 [15] -1/-1/-1->2->1 [16] 3/-1/-1->2->1 [17] 3/-1/-1->2->1 [18] 3/-1/-1->2->1 [19] 3/-1/-1->2->1 [20] 3/-1/-1->2->1 [21] 3/-1/-1->2->1 [22] 3/-1/-1->2->1 [23] 3/-1/-1->2->1 [24] 3/-1/-1->2->1 [25] 3/-1/-1->2->1 [26] 3/-1/-1->2->1 [27] 3/-1/-1->2->1 [28] 3/-1/-1->2->-1 [29] 3/-1/-1->2->-1 [30] -1/-1/-1->2->1 [31] -1/-1/-1->2->1
+gpu-5:8656:9033 [2] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8656:9035 [2] NCCL INFO [Proxy Service] Device 2 CPU core 13
+gpu-5:8656:9038 [2] NCCL INFO [Proxy Service UDS] Device 2 CPU core 128
+gpu-5:8656:9033 [2] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8656:9033 [2] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8656:9033 [2] NCCL INFO ncclCommInitRankConfig comm 0x5ba99040 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId 96000 commId 0x4fcce26c700131d7 - Init COMPLETE
+gpu-5:8656:9033 [2] NCCL INFO Init timings - ncclCommInitRankConfig: rank 2 nranks 4 total 0.49 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.01, topo 0.41, graphs 0.01, connections 0.07, rest 0.00)
+gpu-5:8656:9043 [2] NCCL INFO Channel 00/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 01/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 02/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 03/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 04/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 05/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 06/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 07/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 08/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 09/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 10/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 11/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 12/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 13/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 14/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 15/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 16/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 14/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 15/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 16/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 17/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 18/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 19/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 20/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 21/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 22/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 23/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 24/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 25/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 26/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 27/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 28/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 29/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 30/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Channel 31/32 : 0 1 2 3
+gpu-5:8654:9030 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] 1/-1/-1->0->-1 [3] 1/-1/-1->0->-1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] 1/-1/-1->0->-1 [7] 1/-1/-1->0->-1 [8] 1/-1/-1->0->-1 [9] 1/-1/-1->0->-1 [10] -1/-1/-1->0->3 [11] -1/-1/-1->0->3 [12] 1/-1/-1->0->3 [13] 1/-1/-1->0->3 [14] 1/-1/-1->0->3 [15] 1/-1/-1->0->3 [16] 1/-1/-1->0->-1 [17] 1/-1/-1->0->-1 [18] 1/-1/-1->0->-1 [19] 1/-1/-1->0->-1 [20] 1/-1/-1->0->-1 [21] 1/-1/-1->0->-1 [22] 1/-1/-1->0->-1 [23] 1/-1/-1->0->-1 [24] 1/-1/-1->0->-1 [25] 1/-1/-1->0->-1 [26] -1/-1/-1->0->3 [27] -1/-1/-1->0->3 [28] 1/-1/-1->0->3 [29] 1/-1/-1->0->3 [30] 1/-1/-1->0->3 [31] 1/-1/-1->0->3
+gpu-5:8654:9030 [0] NCCL INFO P2P Chunksize set to 524288
+gpu-5:8654:9030 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gpu-5:8654:9040 [0] NCCL INFO [Proxy Service] Device 0 CPU core 116
+gpu-5:8654:9041 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 117
+gpu-5:8654:9030 [0] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+gpu-5:8654:9030 [0] NCCL INFO 32 coll channels, 32 collnet channels, 24 nvls channels, 32 p2p channels, 32 p2p channels per peer
+gpu-5:8654:9030 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gpu-5:8654:9030 [0] NCCL INFO ncclCommInitRankConfig comm 0x53c51800 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 8f000 commId 0x4fcce26c700131d7 - Init COMPLETE
+gpu-5:8654:9030 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 4 total 0.52 (kernels 0.00, alloc 0.00, bootstrap 0.03, allgathers 0.00, topo 0.41, graphs 0.01, connections 0.07, rest 0.00)
+gpu-5:8654:9044 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 06/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 07/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 08/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 09/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 10/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 11/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 12/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 13/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 14/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 15/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 16/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 17/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 18/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 19/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 20/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 21/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:(Worker_TP0_EP0 pid=8654) /usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+(Worker_TP0_EP0 pid=8654)   return func(*args, **kwargs)
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:14 [flashinfer_all_reduce.py:149] Initialized FlashInfer Allreduce norm fusion workspace with backend=trtllm
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:58 [backends.py:372] Cache the graph of compile range (1, 2340) for later use
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:08:58 [backends.py:390] Compiling a graph for compile range (1, 2340) takes 43.05 s
+(EngineCore pid=8448) INFO 04-21 06:09:06 [shm_broadcast.py:681] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:38 [backends.py:372] Cache the graph of compile range (2341, 8192) for later use
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:38 [backends.py:390] Compiling a graph for compile range (2341, 8192) takes 39.68 s
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:41 [decorators.py:655] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/c8ca251b6fc0ed45b216c172367ae9520f26ae4a9b2e196f3674c851017b6c85/rank_0_0/model
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:41 [monitor.py:48] torch.compile took 95.55 s in total
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:42 [monitor.py:76] Initial profiling/warmup run took 1.13 s
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:48 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:48 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:48 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:48 [kv_cache_utils.py:829] Overriding num_gpu_blocks=0 with num_gpu_blocks_override=512
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:49 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:49 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:49 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:49 [gpu_model_runner.py:5876] Profiling CUDA graph memory: FULL=51 (largest=512)
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:51 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:51 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:51 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:51 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:52 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 1.90 GiB total
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:52 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 1.90 GiB total
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:52 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 1.90 GiB total
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:52 [gpu_model_runner.py:5955] Estimated CUDA graph memory: 1.90 GiB total
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:53 [gpu_worker.py:436] Available KV cache memory: 62.24 GiB
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:53 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9107 to maintain the same effective KV cache size.
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:53 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9107 to maintain the same effective KV cache size.
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:53 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9107 to maintain the same effective KV cache size.
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:53 [gpu_worker.py:470] In v0.19, CUDA graph memory profiling will be enabled by default (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1), which more accurately accounts for CUDA graph memory during KV cache allocation. To try it now, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1 and increase --gpu-memory-utilization from 0.9000 to 0.9107 to maintain the same effective KV cache size.
+(EngineCore pid=8448) INFO 04-21 06:09:53 [kv_cache_utils.py:1319] GPU KV cache size: 1,901,888 tokens
+(EngineCore pid=8448) INFO 04-21 06:09:53 [kv_cache_utils.py:1324] Maximum concurrency for 163,840 tokens per request: 11.61x
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:09:53 [gpu_worker.py:578] Compile and warming up model for size 8192
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:09:53 [gpu_worker.py:578] Compile and warming up model for size 8192
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:09:53 [gpu_worker.py:578] Compile and warming up model for size 8192
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:09:53 [gpu_worker.py:578] Compile and warming up model for size 8192
+(Worker_TP1_EP1 pid=8655) 2026-04-21 06:09:53,754 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP2_EP2 pid=8656) 2026-04-21 06:09:53,754 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP3_EP3 pid=8657) 2026-04-21 06:09:53,754 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP0_EP0 pid=8654) 2026-04-21 06:09:53,756 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP3_EP3 pid=8657) 2026-04-21 06:10:29,830 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP0_EP0 pid=8654) 2026-04-21 06:10:29,833 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP2_EP2 pid=8656) 2026-04-21 06:10:29,837 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP1_EP1 pid=8655) 2026-04-21 06:10:29,850 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP0_EP0 pid=8654) Capturing CUDA graphs (decode, FULL):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):   2%|▏         | 1/51 [00:00<00:26,  1.89it/s]Capturing CUDA graphs (decode, FULL):   4%|▍         | 2/51 [00:00<00:16,  2.94it/s]Capturing CUDA graphs (decode, FULL):   6%|▌         | 3/51 [00:00<00:13,  3.52it/s]Capturing CUDA graphs (decode, FULL):   8%|▊         | 4/51 [00:01<00:12,  3.90it/s]Capturing CUDA graphs (decode, FULL):  10%|▉         | 5/51 [00:01<00:11,  4.14it/s]Capturing CUDA graphs (decode, FULL):  12%|█▏        | 6/51 [00:01<00:10,  4.30it/s]Capturing CUDA graphs (decode, FULL):  14%|█▎        | 7/51 [00:01<00:09,  4.41it/s]Capturing CUDA graphs (decode, FULL):  16%|█▌        | 8/51 [00:02<00:09,  4.47it/s]Capturing CUDA graphs (decode, FULL):  18%|█▊        | 9/51 [00:02<00:09,  4.51it/s]Capturing CUDA graphs (decode, FULL):  20%|█▉        | 10/51 [00:02<00:08,  4.57it/s]Capturing CUDA graphs (decode, FULL):  22%|██▏       | 11/51 [00:02<00:08,  4.63it/s]Capturing CUDA graphs (decode, FULL):  24%|██▎       | 12/51 [00:02<00:08,  4.62it/s]Capturing CUDA graphs (decode, FULL):  25%|██▌       | 13/51 [00:03<00:08,  4.64it/s]Capturing CUDA graphs (decode, FULL):  27%|██▋       | 14/51 [00:03<00:08,  4.60it/s]Capturing CUDA graphs (decode, FULL):  29%|██▉       | 15/51 [00:03<00:07,  4.58it/s]Capturing CUDA graphs (decode, FULL):  31%|███▏      | 16/51 [00:03<00:07,  4.55it/s]Capturing CUDA graphs (decode, FULL):  33%|███▎      | 17/51 [00:03<00:07,  4.48it/s]Capturing CUDA graphs (decode, FULL):  35%|███▌      | 18/51 [00:04<00:07,  4.47it/s]Capturing CUDA graphs (decode, FULL):  37%|███▋      | 19/51 [00:04<00:07,  4.44it/s]Capturing CUDA graphs (decode, FULL):  39%|███▉      | 20/51 [00:04<00:06,  4.46it/s]Capturing CUDA graphs (decode, FULL):  41%|████      | 21/51 [00:04<00:06,  4.32it/s]Capturing CUDA graphs (decode, FULL):  43%|████▎     | 22/51 [00:05<00:06,  4.36it/s]Capturing CUDA graphs (decode, FULL):  45%|████▌     | 23/51 [00:05<00:06,  4.38it/s]Capturing CUDA graphs (decode, FULL):  47%|████▋     | 24/51 [00:05<00:06,  4.34it/s]Capturing CUDA graphs (decode, FULL):  49%|████▉     | 25/51 [00:05<00:05,  4.34it/s]Capturing CUDA graphs (decode, FULL):  51%|█████     | 26/51 [00:06<00:05,  4.33it/s]Capturing CUDA graphs (decode, FULL):  53%|█████▎    | 27/51 [00:06<00:05,  4.38it/s]Capturing CUDA graphs (decode, FULL):  55%|█████▍    | 28/51 [00:06<00:05,  4.33it/s]Capturing CUDA graphs (decode, FULL):  57%|█████▋    | 29/51 [00:06<00:05,  4.32it/s]Capturing CUDA graphs (decode, FULL):  59%|█████▉    | 30/51 [00:06<00:04,  4.34it/s]Capturing CUDA graphs (decode, FULL):  61%|██████    | 31/51 [00:07<00:04,  4.35it/s]Capturing CUDA graphs (decode, FULL):  63%|██████▎   | 32/51 [00:07<00:04,  4.33it/s]Capturing CUDA graphs (decode, FULL):  65%|██████▍   | 33/51 [00:07<00:04,  4.37it/s]Capturing CUDA graphs (decode, FULL):  67%|██████▋   | 34/51 [00:08<00:04,  3.88it/s]Capturing CUDA graphs (decode, FULL):  69%|██████▊   | 35/51 [00:08<00:03,  4.03it/s]Capturing CUDA graphs (decode, FULL):  71%|███████   | 36/51 [00:08<00:03,  4.13it/s]Capturing CUDA graphs (decode, FULL):  73%|███████▎  | 37/51 [00:08<00:03,  4.23it/s]Capturing CUDA graphs (decode, FULL):  75%|███████▍  | 38/51 [00:08<00:03,  4.32it/s]Capturing CUDA graphs (decode, FULL):  76%|███████▋  | 39/51 [00:09<00:02,  4.38it/s]Capturing CUDA graphs (decode, FULL):  78%|███████▊  | 40/51 [00:09<00:02,  4.30it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 41/51 [00:09<00:02,  4.33it/s]Capturing CUDA graphs (decode, FULL):  82%|████████▏ | 42/51 [00:09<00:02,  4.36it/s]Capturing CUDA graphs (decode, FULL):  84%|████████▍ | 43/51 [00:10<00:01,  4.34it/s]Capturing CUDA graphs (decode, FULL):  86%|████████▋ | 44/51 [00:10<00:01,  4.38it/s]Capturing CUDA graphs (decode, FULL):  88%|████████▊ | 45/51 [00:10<00:01,  4.40it/s]Capturing CUDA graphs (decode, FULL):  90%|█████████ | 46/51 [00:10<00:01,  4.43it/s]Capturing CUDA graphs (decode, FULL):  92%|█████████▏| 47/51 [00:10<00:00,  4.48it/s]Capturing CUDA graphs (decode, FULL):  94%|█████████▍| 48/51 [00:11<00:00,  4.53it/s]Capturing CUDA graphs (decode, FULL):  96%|█████████▌| 49/51 [00:11<00:00,  4.57it/s]Capturing CUDA graphs (decode, FULL):  98%|█████████▊| 50/51 [00:11<00:00,  4.62it/s](Worker_TP1_EP1 pid=8655) INFO 04-21 06:10:42 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:10:42 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:12<00:00,  2.75it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:12<00:00,  4.15it/s]
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:10:42 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:10:42 [custom_all_reduce.py:216] Registering 0 cuda graph addresses
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:10:43 [gpu_model_runner.py:6046] Graph capturing finished in 14 secs, took 1.10 GiB
+(Worker_TP0_EP0 pid=8654) INFO 04-21 06:10:43 [gpu_worker.py:597] CUDA graph pool memory: 1.1 GiB (actual), 1.9 GiB (estimated), difference: 0.8 GiB (73.0%).
+(Worker_TP3_EP3 pid=8657) INFO 04-21 06:10:43 [gpu_worker.py:597] CUDA graph pool memory: 1.1 GiB (actual), 1.9 GiB (estimated), difference: 0.8 GiB (73.0%).
+(Worker_TP2_EP2 pid=8656) INFO 04-21 06:10:43 [gpu_worker.py:597] CUDA graph pool memory: 1.1 GiB (actual), 1.9 GiB (estimated), difference: 0.8 GiB (73.0%).
+(Worker_TP1_EP1 pid=8655) INFO 04-21 06:10:43 [gpu_worker.py:597] CUDA graph pool memory: 1.1 GiB (actual), 1.9 GiB (estimated), difference: 0.8 GiB (73.0%).
+(EngineCore pid=8448) INFO 04-21 06:10:43 [core.py:283] init engine (profile, create kv cache, warmup model) took 158.05 seconds
+(EngineCore pid=8448) INFO 04-21 06:10:48 [vllm.py:790] Asynchronous scheduling is enabled.
+(EngineCore pid=8448) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+(EngineCore pid=8448) <frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+(EngineCore pid=8448) INFO 04-21 06:10:49 [compilation.py:292] Enabled custom fusions: norm_quant, act_quant, allreduce_rms
+(APIServer pid=8033) INFO 04-21 06:10:49 [api_server.py:592] Supported tasks: ['generate']
+(APIServer pid=8033) WARNING 04-21 06:10:49 [model.py:1435] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=8033) INFO 04-21 06:10:56 [hf.py:314] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=8033) INFO 04-21 06:10:57 [api_server.py:596] Starting vLLM server on http://0.0.0.0:8888
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:37] Available routes are:
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /openapi.json, Methods: HEAD, GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /docs, Methods: HEAD, GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /redoc, Methods: HEAD, GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=8033) INFO 04-21 06:10:57 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+(APIServer pid=8033) INFO:     Started server process [8033]
+(APIServer pid=8033) INFO:     Waiting for application startup.
+(APIServer pid=8033) INFO:     Application startup complete.
+(APIServer pid=8033) INFO:     127.0.0.1:34602 - "GET /health HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:36804 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59636 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59626 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59646 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59658 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59672 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59670 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59688 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59694 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59708 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:49092 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:13:57 [loggers.py:259] Engine 000: Avg prompt throughput: 3961.2 tokens/s, Avg generation throughput: 1.4 tokens/s, Running: 3 reqs, Waiting: 7 reqs, GPU KV cache usage: 8.2%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:07 [loggers.py:259] Engine 000: Avg prompt throughput: 19690.8 tokens/s, Avg generation throughput: 4.7 tokens/s, Running: 4 reqs, Waiting: 6 reqs, GPU KV cache usage: 16.4%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:17 [loggers.py:259] Engine 000: Avg prompt throughput: 9946.3 tokens/s, Avg generation throughput: 5.2 tokens/s, Running: 5 reqs, Waiting: 5 reqs, GPU KV cache usage: 22.4%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:39858 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:39872 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:27 [loggers.py:259] Engine 000: Avg prompt throughput: 11756.0 tokens/s, Avg generation throughput: 7.1 tokens/s, Running: 6 reqs, Waiting: 6 reqs, GPU KV cache usage: 28.9%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:37 [loggers.py:259] Engine 000: Avg prompt throughput: 12459.2 tokens/s, Avg generation throughput: 7.4 tokens/s, Running: 7 reqs, Waiting: 5 reqs, GPU KV cache usage: 34.5%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:47 [loggers.py:259] Engine 000: Avg prompt throughput: 10100.5 tokens/s, Avg generation throughput: 9.5 tokens/s, Running: 9 reqs, Waiting: 3 reqs, GPU KV cache usage: 40.5%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:14:57 [loggers.py:259] Engine 000: Avg prompt throughput: 15182.4 tokens/s, Avg generation throughput: 15.4 tokens/s, Running: 10 reqs, Waiting: 2 reqs, GPU KV cache usage: 48.2%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:07 [loggers.py:259] Engine 000: Avg prompt throughput: 12443.1 tokens/s, Avg generation throughput: 13.5 tokens/s, Running: 11 reqs, Waiting: 1 reqs, GPU KV cache usage: 54.3%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:17 [loggers.py:259] Engine 000: Avg prompt throughput: 10352.0 tokens/s, Avg generation throughput: 16.1 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 60.7%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:27 [loggers.py:259] Engine 000: Avg prompt throughput: 10292.8 tokens/s, Avg generation throughput: 347.9 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 61.3%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:37 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 418.8 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 61.5%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:47 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 418.8 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 61.8%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:15:57 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 394.8 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 56.5%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:07 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 377.2 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 53.3%, Prefix cache hit rate: 0.0%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:39694 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:45056 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:17 [loggers.py:259] Engine 000: Avg prompt throughput: 214.0 tokens/s, Avg generation throughput: 324.1 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 50.9%, Prefix cache hit rate: 13.9%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:45068 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:27 [loggers.py:259] Engine 000: Avg prompt throughput: 131.0 tokens/s, Avg generation throughput: 362.3 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 57.0%, Prefix cache hit rate: 20.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:37 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 380.6 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 57.2%, Prefix cache hit rate: 20.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:42730 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:42746 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:47 [loggers.py:259] Engine 000: Avg prompt throughput: 251.9 tokens/s, Avg generation throughput: 336.8 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 57.2%, Prefix cache hit rate: 26.7%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:42756 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:16:57 [loggers.py:259] Engine 000: Avg prompt throughput: 103.4 tokens/s, Avg generation throughput: 380.4 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 57.4%, Prefix cache hit rate: 31.2%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54172 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54184 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:07 [loggers.py:259] Engine 000: Avg prompt throughput: 314.9 tokens/s, Avg generation throughput: 356.5 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 41.7%, Prefix cache hit rate: 38.8%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54194 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57634 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57648 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:17 [loggers.py:259] Engine 000: Avg prompt throughput: 452.9 tokens/s, Avg generation throughput: 337.6 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 50.7%, Prefix cache hit rate: 45.8%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:27 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 344.0 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 50.9%, Prefix cache hit rate: 45.8%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:35664 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:37 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 309.3 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 51.1%, Prefix cache hit rate: 48.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:47 [loggers.py:259] Engine 000: Avg prompt throughput: 102.2 tokens/s, Avg generation throughput: 344.5 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 38.4%, Prefix cache hit rate: 48.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:44100 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:17:57 [loggers.py:259] Engine 000: Avg prompt throughput: 262.4 tokens/s, Avg generation throughput: 413.5 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 39.1%, Prefix cache hit rate: 50.4%
+(APIServer pid=8033) INFO:     127.0.0.1:44108 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:44120 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:38674 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:38680 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:38682 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:07 [loggers.py:259] Engine 000: Avg prompt throughput: 742.2 tokens/s, Avg generation throughput: 312.3 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 54.4%, Prefix cache hit rate: 58.8%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:37984 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:17 [loggers.py:259] Engine 000: Avg prompt throughput: 128.3 tokens/s, Avg generation throughput: 356.9 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 56.8%, Prefix cache hit rate: 59.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:27 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 352.7 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 50.5%, Prefix cache hit rate: 59.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:37 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 351.7 tokens/s, Running: 7 reqs, Waiting: 0 reqs, GPU KV cache usage: 33.4%, Prefix cache hit rate: 59.3%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:37280 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:55670 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:47 [loggers.py:259] Engine 000: Avg prompt throughput: 263.0 tokens/s, Avg generation throughput: 361.6 tokens/s, Running: 9 reqs, Waiting: 0 reqs, GPU KV cache usage: 45.2%, Prefix cache hit rate: 62.1%
+(APIServer pid=8033) INFO:     127.0.0.1:55674 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:18:57 [loggers.py:259] Engine 000: Avg prompt throughput: 210.5 tokens/s, Avg generation throughput: 334.5 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 52.1%, Prefix cache hit rate: 63.5%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:07 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 315.8 tokens/s, Running: 9 reqs, Waiting: 0 reqs, GPU KV cache usage: 46.6%, Prefix cache hit rate: 63.5%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:47222 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:47226 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:47240 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:17 [loggers.py:259] Engine 000: Avg prompt throughput: 672.3 tokens/s, Avg generation throughput: 280.2 tokens/s, Running: 7 reqs, Waiting: 0 reqs, GPU KV cache usage: 37.3%, Prefix cache hit rate: 66.5%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:47254 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33772 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:27 [loggers.py:259] Engine 000: Avg prompt throughput: 300.8 tokens/s, Avg generation throughput: 339.8 tokens/s, Running: 7 reqs, Waiting: 0 reqs, GPU KV cache usage: 38.2%, Prefix cache hit rate: 68.5%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57294 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57308 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:37 [loggers.py:259] Engine 000: Avg prompt throughput: 267.9 tokens/s, Avg generation throughput: 325.8 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 43.9%, Prefix cache hit rate: 69.6%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57318 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:57322 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54924 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:47 [loggers.py:259] Engine 000: Avg prompt throughput: 465.6 tokens/s, Avg generation throughput: 326.3 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 58.7%, Prefix cache hit rate: 71.5%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:19:57 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 363.3 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 52.6%, Prefix cache hit rate: 71.5%
+(APIServer pid=8033) INFO:     127.0.0.1:32882 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:32898 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:20:07 [loggers.py:259] Engine 000: Avg prompt throughput: 207.8 tokens/s, Avg generation throughput: 239.2 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 64.6%, Prefix cache hit rate: 72.9%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:20:17 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 390.0 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 64.8%, Prefix cache hit rate: 72.9%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:20:27 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 381.6 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 59.3%, Prefix cache hit rate: 72.9%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:48824 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:20:37 [loggers.py:259] Engine 000: Avg prompt throughput: 133.1 tokens/s, Avg generation throughput: 330.6 tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 53.8%, Prefix cache hit rate: 73.4%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:20:48 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 344.0 tokens/s, Running: 6 reqs, Waiting: 0 reqs, GPU KV cache usage: 32.1%, Prefix cache hit rate: 73.4%
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:37796 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34608 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:21:00 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 259.8 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 22.1%, Prefix cache hit rate: 73.4%
+(APIServer pid=8033) INFO 04-21 06:21:14 [loggers.py:259] Engine 000: Avg prompt throughput: 157.7 tokens/s, Avg generation throughput: 198.4 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 22.9%, Prefix cache hit rate: 74.0%
+(APIServer pid=8033) INFO:     127.0.0.1:37808 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:21:24 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 188.8 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 23.0%, Prefix cache hit rate: 74.0%
+(APIServer pid=8033) INFO 04-21 06:21:43 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 107.8 tokens/s, Running: 3 reqs, Waiting: 0 reqs, GPU KV cache usage: 14.6%, Prefix cache hit rate: 74.2%
+(APIServer pid=8033) INFO:     127.0.0.1:37814 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:22:14 [loggers.py:259] Engine 000: Avg prompt throughput: 52.7 tokens/s, Avg generation throughput: 126.3 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 9.0%, Prefix cache hit rate: 74.2%
+(APIServer pid=8033) INFO 04-21 06:23:13 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 83.5 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 13.5%, Prefix cache hit rate: 74.9%
+(APIServer pid=8033) INFO 04-21 06:25:08 [loggers.py:259] Engine 000: Avg prompt throughput: 16.3 tokens/s, Avg generation throughput: 67.9 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 7.0%, Prefix cache hit rate: 74.9%
+(APIServer pid=8033) INFO 04-21 06:29:04 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 46.6 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 7.6%, Prefix cache hit rate: 74.9%
+(APIServer pid=8033) INFO 04-21 06:36:10 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 46.8 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 74.9%
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54442 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54458 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:42384 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:49728 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:35824 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:35846 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:43560 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:44346 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:41844 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:34194 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:54544 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:59962 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:36:21 [loggers.py:259] Engine 000: Avg prompt throughput: 1810.6 tokens/s, Avg generation throughput: 110.4 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 65.2%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO:     127.0.0.1:33244 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=8033) INFO 04-21 06:36:31 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 270.8 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 65.4%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:36:48 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 276.8 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 65.6%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:37:02 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 272.2 tokens/s, Running: 12 reqs, Waiting: 0 reqs, GPU KV cache usage: 65.8%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:37:23 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 258.5 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 60.4%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:37:53 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 246.4 tokens/s, Running: 11 reqs, Waiting: 0 reqs, GPU KV cache usage: 60.8%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:38:52 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 178.7 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 24.5%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO 04-21 06:42:36 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 53.0 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 14.0%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO:     Shutting down
+(APIServer pid=8033) INFO 04-21 06:57:13 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 45.4 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 16.1%, Prefix cache hit rate: 79.6%
+(EngineCore pid=8448) INFO 04-21 07:04:53 [core.py:1210] Shutdown initiated (timeout=0)
+(EngineCore pid=8448) INFO 04-21 07:04:53 [core.py:1233] Shutdown complete
+(Worker_TP0_EP0 pid=8654) INFO 04-21 07:04:53 [multiproc_executor.py:764] Parent process exited, terminating worker queues
+(Worker_TP2_EP2 pid=8656) INFO 04-21 07:04:53 [multiproc_executor.py:859] WorkerProc shutting down.
+(Worker_TP1_EP1 pid=8655) INFO 04-21 07:04:53 [multiproc_executor.py:859] WorkerProc shutting down.
+(Worker_TP0_EP0 pid=8654) INFO 04-21 07:04:53 [multiproc_executor.py:859] WorkerProc shutting down.
+(Worker_TP3_EP3 pid=8657) INFO 04-21 07:04:53 [multiproc_executor.py:859] WorkerProc shutting down.
+(APIServer pid=8033) INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+(APIServer pid=8033) INFO 04-21 07:04:53 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 45.5 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 79.6%
+(APIServer pid=8033) INFO:     Waiting for application shutdown.
+(APIServer pid=8033) INFO:     Application shutdown complete.
+(APIServer pid=8033) INFO:     Finished server process [8033]
+8654:9044 [0] NCCL INFO Channel 22/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 23/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 24/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 25/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 26/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 27/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 28/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 29/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 30/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Channel 31/0 : 0[0] -> 1[1] via P2P/CUMEM
+gpu-5:8654:9044 [0] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8654:8654 [0] NCCL INFO comm 0x53c51800 rank 0 nranks 4 cudaDev 0 busId 8f000 - Destroy COMPLETE
+gpu-5:8654:8654 [0] NCCL INFO comm 0x3468b920 rank 0 nranks 4 cudaDev 0 busId 8f000 - Destroy COMPLETE
+gpu-5:8654:8654 [0] NCCL INFO comm 0x3d57d700 rank 0 nranks 4 cudaDev 0 busId 8f000 - Destroy COMPLETE
+Channel 17/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 18/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 19/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 20/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 21/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 22/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 23/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 24/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 25/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 26/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 27/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 28/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 29/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 30/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Channel 31/0 : 1[1] -> 2[2] via P2P/CUMEM
+gpu-5:8655:9042 [1] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8655:8655 [1] NCCL INFO comm 0x44cde3f0 rank 1 nranks 4 cudaDev 1 busId 90000 - Destroy COMPLETE
+gpu-5:8655:8655 [1] NCCL INFO comm 0x266a5f10 rank 1 nranks 4 cudaDev 1 busId 90000 - Destroy COMPLETE
+gpu-5:8655:8655 [1] NCCL INFO comm 0x2e9c7fa0 rank 1 nranks 4 cudaDev 1 busId 90000 - Destroy COMPLETE
+gpu-5:8657:9045 [3] NCCL INFO Channel 17/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 18/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 19/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 20/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 21/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 22/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 23/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 24/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 25/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 26/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 27/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 28/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 29/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 30/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Channel 31/0 : 3[3] -> 0[0] via P2P/CUMEM
+gpu-5:8657:9045 [3] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8657:8657 [3] NCCL INFO comm 0x5b2e7f60 rank 3 nranks 4 cudaDev 3 busId 97000 - Destroy COMPLETE
+gpu-5:8657:8657 [3] NCCL INFO comm 0x3c727860 rank 3 nranks 4 cudaDev 3 busId 97000 - Destroy COMPLETE
+gpu-5:8657:8657 [3] NCCL INFO comm 0x44b2c4c0 rank 3 nranks 4 cudaDev 3 busId 97000 - Destroy COMPLETE
+Channel 17/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 18/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 19/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 20/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 21/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 22/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 23/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 24/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 25/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 26/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 27/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 28/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 29/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 30/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Channel 31/0 : 2[2] -> 3[3] via P2P/CUMEM
+gpu-5:8656:9043 [2] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gpu-5:8656:8656 [2] NCCL INFO comm 0x5ba99040 rank 2 nranks 4 cudaDev 2 busId 96000 - Destroy COMPLETE
+gpu-5:8656:8656 [2] NCCL INFO comm 0x3dc902c0 rank 2 nranks 4 cudaDev 2 busId 96000 - Destroy COMPLETE
+gpu-5:8656:8656 [2] NCCL INFO comm 0x4559b740 rank 2 nranks 4 cudaDev 2 busId 96000 - Destroy COMPLETE
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 1 leaked shared_memory objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
