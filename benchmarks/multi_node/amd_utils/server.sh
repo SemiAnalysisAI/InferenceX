@@ -515,42 +515,48 @@ if [ "$NODE_RANK" -eq 0 ]; then
             else
                 # Run lm-eval against the router on port 30000
                 run_eval --framework lm-eval --port 30000
+                eval_rc=$?
 
-                # Set metadata env vars for append_lm_eval_summary
-                export TP="${PREFILL_TP_SIZE}"
-                export CONC="${EVAL_CONCURRENT_REQUESTS}"
-                export EP_SIZE=1
-                [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
-                export PREFILL_TP="${PREFILL_TP_SIZE}"
-                export PREFILL_EP=1
-                [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-                export PREFILL_NUM_WORKERS="${xP}"
-                export DECODE_TP="${DECODE_TP_SIZE}"
-                export DECODE_EP=1
-                [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-                export DECODE_NUM_WORKERS="${yD}"
-                export DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
-                export ISL="${BENCH_INPUT_LEN}"
-                export OSL="${BENCH_OUTPUT_LEN}"
-                # FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE, RESULT_FILENAME
-                # are already set via Docker -e flags from job.slurm
+                if [[ $eval_rc -ne 0 ]]; then
+                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    EVAL_FAILED=1
+                else
+                    # Set metadata env vars for append_lm_eval_summary
+                    export TP="${PREFILL_TP_SIZE}"
+                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
+                    export EP_SIZE=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
+                    export PREFILL_TP="${PREFILL_TP_SIZE}"
+                    export PREFILL_EP=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
+                    export PREFILL_NUM_WORKERS="${xP}"
+                    export DECODE_TP="${DECODE_TP_SIZE}"
+                    export DECODE_EP=1
+                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
+                    export DECODE_NUM_WORKERS="${yD}"
+                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
+                    export ISL="${BENCH_INPUT_LEN}"
+                    export OSL="${BENCH_OUTPUT_LEN}"
+                    # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
+                    # RESULT_FILENAME are already set via Docker -e flags from job.slurm
 
-                append_lm_eval_summary
-                # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
+                    append_lm_eval_summary
+                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
 
-                # Copy eval artifacts to run_logs for NFS extraction by runner
-                EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                mkdir -p "$EVAL_COPY_DIR"
-                for f in meta_env.json; do
-                    [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                done
-                # Use find for glob patterns to avoid "no match" errors
-                find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    # Copy eval artifacts to run_logs for NFS extraction by runner
+                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    mkdir -p "$EVAL_COPY_DIR"
+                    for f in meta_env.json; do
+                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                    done
+                    # Use find for glob patterns to avoid "no match" errors
+                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
-                echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                fi
             fi
 
             popd
@@ -571,6 +577,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
         kill $proxy_pid
         kill $prefill0_pid
+    fi
+
+    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
+        echo "ERROR: eval failed; exiting node-0 with rc=1"
+        exit 1
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
