@@ -337,6 +337,26 @@ glm5-fp8-mi355x-atom:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 256 }
 
+glm5.1-fp4-mi355x-sglang:
+  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  model: amd/GLM-5.1-MXFP4
+  model-prefix: glm5.1
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
   model: moonshotai/Kimi-K2.5
