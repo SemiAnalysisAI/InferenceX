@@ -1420,4 +1420,3 @@ dsr1-fp4-mi355x-vllm:
     agentic-coding:
     - search-space:
       - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
-      - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
