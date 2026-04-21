@@ -386,6 +386,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 continue  # agentic-coding not yet supported for multinode
 
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
+            duration = agentic_config.get(Fields.DURATION.value, 1800)
 
             for bmk in bmk_space:
                 tp = bmk[Fields.TP.value]
@@ -435,6 +436,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                             Fields.USERS.value: users,
                             Fields.OFFLOAD_MODE.value: offload_mode,
+                            Fields.DURATION.value: duration,
                             Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
                             Fields.SCENARIO_TYPE.value: "agentic-coding",
                         }
@@ -751,6 +753,8 @@ def generate_test_config_sweep(args, all_config_data):
             if is_multinode:
                 continue
 
+            duration = agentic_config.get(Fields.DURATION.value, 1800)
+
             for bmk in agentic_config[Fields.SEARCH_SPACE.value]:
                 tp = bmk[Fields.TP.value]
                 ep = bmk.get(Fields.EP.value)
@@ -792,6 +796,7 @@ def generate_test_config_sweep(args, all_config_data):
                         Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                         Fields.USERS.value: users,
                         Fields.OFFLOAD_MODE.value: offload_mode,
+                        Fields.DURATION.value: duration,
                         Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
                         Fields.SCENARIO_TYPE.value: "agentic-coding",
                     }

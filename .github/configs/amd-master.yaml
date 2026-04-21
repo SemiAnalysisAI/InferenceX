@@ -530,28 +530,10 @@ kimik2.5-int4-mi325x-vllm:
     - search-space:
       - tp: 8
         cpu-offloading: true
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 32
-        - 64
-        - 128
+        conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128]
       - tp: 8
         cpu-offloading: false
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 32
-        - 64
-        - 128
+        conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128]
 
 kimik2.5-int4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.1
@@ -579,28 +561,10 @@ kimik2.5-int4-mi300x-vllm:
     - search-space:
       - tp: 8
         cpu-offloading: true
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 32
-        - 64
-        - 128
+        conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128]
       - tp: 8
         cpu-offloading: false
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 32
-        - 64
-        - 128
+        conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128]
 
 kimik2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -1009,9 +973,7 @@ dsr1-fp8-mi355x-sglang-disagg:
       osl: 1024
       search-space:
       - spec-decoding: none
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 1
           tp: 8
@@ -1028,10 +990,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 1536
-        - 1024
-        - 512
+        conc-list: [1536, 1024, 512]
         prefill:
           num-worker: 1
           tp: 8
@@ -1048,14 +1007,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 256
-        - 128
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
+        conc-list: [256, 128, 64, 32, 16, 8, 4]
         prefill:
           num-worker: 1
           tp: 8
@@ -1072,14 +1024,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
-        - 2
-        - 1
+        conc-list: [64, 32, 16, 8, 4, 2, 1]
         prefill:
           num-worker: 1
           tp: 4
@@ -1099,9 +1044,7 @@ dsr1-fp8-mi355x-sglang-disagg:
       osl: 1024
       search-space:
       - spec-decoding: none
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 2
           tp: 8
@@ -1118,14 +1061,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 256
-        - 128
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
+        conc-list: [256, 128, 64, 32, 16, 8, 4]
         prefill:
           num-worker: 1
           tp: 8
@@ -1142,14 +1078,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
-        - 2
-        - 1
+        conc-list: [64, 32, 16, 8, 4, 2, 1]
         prefill:
           num-worker: 1
           tp: 4
@@ -1181,9 +1110,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
       osl: 1024
       search-space:
       - spec-decoding: mtp
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 1
           tp: 8
@@ -1200,11 +1127,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 1536
-        - 1024
-        - 512
-        - 256
+        conc-list: [1536, 1024, 512, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -1221,14 +1144,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 256
-        - 128
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
+        conc-list: [256, 128, 64, 32, 16, 8, 4]
         prefill:
           num-worker: 1
           tp: 8
@@ -1245,14 +1161,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=2
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
-        - 2
-        - 1
+        conc-list: [64, 32, 16, 8, 4, 2, 1]
         prefill:
           num-worker: 1
           tp: 4
@@ -1272,9 +1181,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
       osl: 1024
       search-space:
       - spec-decoding: mtp
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 2
           tp: 8
@@ -1291,15 +1198,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 256
-        - 128
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
-        - 2
+        conc-list: [256, 128, 64, 32, 16, 8, 4, 2]
         prefill:
           num-worker: 1
           tp: 8
@@ -1316,14 +1215,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=2
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 32
-        - 16
-        - 8
-        - 4
-        - 2
-        - 1
+        conc-list: [64, 32, 16, 8, 4, 2, 1]
         prefill:
           num-worker: 1
           tp: 4
@@ -1355,11 +1247,7 @@ dsr1-fp4-mi355x-sglang-disagg:
       osl: 1024
       search-space:
       - spec-decoding: none
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
           tp: 8
@@ -1376,12 +1264,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 2
-        - 4
-        - 8
-        - 16
-        - 32
+        conc-list: [2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
@@ -1398,10 +1281,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -1418,10 +1298,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 4
@@ -1438,9 +1315,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 1
           tp: 4
@@ -1460,11 +1335,7 @@ dsr1-fp4-mi355x-sglang-disagg:
       osl: 1024
       search-space:
       - spec-decoding: none
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
           tp: 8
@@ -1481,12 +1352,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 2
-        - 4
-        - 8
-        - 16
-        - 32
+        conc-list: [2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
@@ -1503,10 +1369,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -1523,10 +1386,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 4
@@ -1543,10 +1403,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=0
       - spec-decoding: none
-        conc-list:
-        - 1024
-        - 2048
-        - 4096
+        conc-list: [1024, 2048, 4096]
         prefill:
           num-worker: 4
           tp: 4
@@ -1578,11 +1435,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
       osl: 1024
       search-space:
       - spec-decoding: mtp
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
           tp: 8
@@ -1599,12 +1452,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=3
       - spec-decoding: mtp
-        conc-list:
-        - 2
-        - 4
-        - 8
-        - 16
-        - 32
+        conc-list: [2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
@@ -1621,10 +1469,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=3
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -1641,10 +1486,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 4
@@ -1661,9 +1503,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 1024
-        - 2048
+        conc-list: [1024, 2048]
         prefill:
           num-worker: 1
           tp: 4
@@ -1683,11 +1523,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
       osl: 1024
       search-space:
       - spec-decoding: mtp
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
           tp: 8
@@ -1704,12 +1540,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=1
           - DECODE_MTP_SIZE=3
       - spec-decoding: mtp
-        conc-list:
-        - 2
-        - 4
-        - 8
-        - 16
-        - 32
+        conc-list: [2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
@@ -1726,10 +1557,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=3
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -1746,10 +1574,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 64
-        - 128
-        - 256
+        conc-list: [64, 128, 256]
         prefill:
           num-worker: 1
           tp: 4
@@ -1766,10 +1591,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - DECODE_NODES=2
           - DECODE_MTP_SIZE=1
       - spec-decoding: mtp
-        conc-list:
-        - 1024
-        - 2048
-        - 4096
+        conc-list: [1024, 2048, 4096]
         prefill:
           num-worker: 4
           tp: 4
@@ -1799,15 +1621,4 @@ dsr1-fp4-mi355x-vllm:
     - search-space:
       - tp: 8
         cpu-offloading: true
-        conc-list:
-        - 1
-        - 2
-        - 4
-        - 8
-        - 12
-        - 16
-        - 32
-        - 64
-        - 128
-        - 256
-        - 512
+        conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512]

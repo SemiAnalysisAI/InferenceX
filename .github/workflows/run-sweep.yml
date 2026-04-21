@@ -183,6 +183,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.users }}
             offload-mode: ${{ matrix.config.offload-mode }}
+            duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'

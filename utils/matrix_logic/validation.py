@@ -51,6 +51,7 @@ class Fields(Enum):
 
     # Agentic coding fields
     CPU_OFFLOADING = 'cpu-offloading'
+    DURATION = 'duration'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -158,6 +159,7 @@ class AgenticMatrixEntry(BaseModel):
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     users: int
     offload_mode: str = Field(alias=Fields.OFFLOAD_MODE.value)
+    duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
 
@@ -321,6 +323,7 @@ class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+    duration: int = Field(default=1800, alias=Fields.DURATION.value)
 
 
 class SingleNodeScenarios(BaseModel):

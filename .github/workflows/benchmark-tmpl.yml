@@ -82,6 +82,11 @@ on:
         required: false
         type: string
         default: '600'
+      duration:
+        description: "Benchmark duration in seconds"
+        required: false
+        type: string
+        default: '1800'
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -109,6 +114,7 @@ env:
   USERS: ${{ inputs.conc }}
   OFFLOAD_MODE: ${{ inputs.offload-mode }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  DURATION: ${{ inputs.duration }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
