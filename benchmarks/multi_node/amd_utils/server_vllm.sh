@@ -282,19 +282,24 @@ if [ "$NODE_RANK" -eq 0 ]; then
     setup_vllm_env
 
     # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
-    echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
-        python3 $WS_PATH/moriio_proxy.py"
+    # Skipped when ROUTER_TYPE=vllm-router (external router container started by job.slurm)
+    if [[ "${ROUTER_TYPE:-vllm-router}" == "moriio" ]]; then
+        echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+        PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
+            python3 $WS_PATH/moriio_proxy.py"
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-        echo "DRY RUN: $PROXY_CMD"
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo "DRY RUN: $PROXY_CMD"
+        else
+            PROXY_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/moriio_proxy_${host_name}.log"
+            set -x
+            eval "$PROXY_CMD" > "$PROXY_LOG_FILE" 2>&1 &
+            set +x
+            proxy_pid=$!
+            sleep 3
+        fi
     else
-        PROXY_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/moriio_proxy_${host_name}.log"
-        set -x
-        eval "$PROXY_CMD" > "$PROXY_LOG_FILE" 2>&1 &
-        set +x
-        proxy_pid=$!
-        sleep 3
+        echo "Using external vLLM router (ROUTER_TYPE=${ROUTER_TYPE:-vllm-router})"
     fi
 
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
@@ -368,13 +373,16 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
-    echo "Killing the proxy server and prefill server"
+    echo "Killing the prefill server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        [[ -n "${proxy_pid:-}" ]] && kill $proxy_pid 2>/dev/null || true
+        if [[ "${ROUTER_TYPE:-vllm-router}" == "moriio" ]]; then
+            [[ -n "${proxy_pid:-}" ]] && kill $proxy_pid 2>/dev/null || true
+        fi
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
         sleep 2
-        # Fallback: ensure no orphaned processes keep ports open
-        pkill -f moriio_proxy 2>/dev/null || true
+        if [[ "${ROUTER_TYPE:-vllm-router}" == "moriio" ]]; then
+            pkill -f moriio_proxy 2>/dev/null || true
+        fi
         pkill -f "vllm serve" 2>/dev/null || true
     fi
 

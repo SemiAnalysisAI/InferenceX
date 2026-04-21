@@ -77,6 +77,11 @@ PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
 DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 
+# Router selection: "vllm-router" (external container) or "moriio" (in-container proxy)
+ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+ROUTER_PORT="${ROUTER_PORT:-30000}"
+PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+
 # =============================================================================
 # Docker privilege detection
 # =============================================================================
@@ -288,6 +293,10 @@ export SPEC_DECODING="${SPEC_DECODING:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+
+# vLLM external router container
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-ghcr.io/simondanielsson/vllm-router:dev-streaming-cn-cjy}"
+ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
@@ -396,6 +405,24 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$_DCMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$_DCMD stop || true
 
+# Start vLLM external router container on node 0
+if [[ \"$ENGINE\" == \"vllm\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+    \$DOCKER_CMD run -d \\
+        --name \"$ROUTER_CONT_NAME\" \\
+        --network host \\
+        \"$VLLM_ROUTER_IMAGE\" \\
+        vllm-router \\
+            --vllm-pd-disaggregation \\
+            --vllm-discovery-address \"0.0.0.0:${PROXY_PING_PORT}\" \\
+            --port \"${ROUTER_PORT}\" \\
+            --host 0.0.0.0 \\
+            --policy consistent_hash \\
+            --prefill-policy consistent_hash \\
+            --decode-policy consistent_hash \\
+            --log-level info
+fi
+
 exec \$DOCKER_CMD run --rm \
     --init \
     --stop-timeout 10 \
@@ -444,3 +471,10 @@ fi
 "
 
 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '$DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+
+# Clean up vLLM external router container on node 0
+if [[ "$ENGINE" == "vllm" && "$ROUTER_TYPE" == "vllm-router" ]]; then
+    srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
+        '"$DOCKER_CMD"' rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
+    '
+fi
