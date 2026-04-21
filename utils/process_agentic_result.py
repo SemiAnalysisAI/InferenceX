@@ -16,6 +16,8 @@ import json
 import os
 import sys
 import statistics
+
+csv.field_size_limit(sys.maxsize)
 from pathlib import Path
 
 

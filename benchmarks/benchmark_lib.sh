@@ -960,7 +960,8 @@ check_agentic_success() {
     fi
     local successful
     successful=$(python3 -c "
-import csv
+import csv, sys
+csv.field_size_limit(sys.maxsize)
 with open('$csv') as f:
     rows = list(csv.DictReader(f))
 ok = sum(1 for r in rows if r.get('success') == 'True')
