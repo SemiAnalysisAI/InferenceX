@@ -962,8 +962,12 @@ except Exception as e:
 check_agentic_success() {
     local result_dir="$1"
     local csv="$result_dir/trace_replay/detailed_results.csv"
+    # Write $RESULT_FILENAME.json at the workspace root as a sentinel so the
+    # workflow-level check uses the same retry-based $RESULT_FILENAME.json
+    # lookup for both agentic and fixed-seq-len — no separate status.txt and
+    # no results/ subdir to worry about in NFS-backed workspaces.
+    local sentinel="/workspace/$RESULT_FILENAME.json"
     if [ ! -f "$csv" ]; then
-        echo "FAILED" > "$result_dir/status.txt"
         echo "No detailed_results.csv found"
         return 1
     fi
@@ -977,11 +981,10 @@ ok = sum(1 for r in rows if r.get('success') == 'True')
 print(ok)
 " 2>/dev/null || echo "0")
     if [ "$successful" -eq 0 ] 2>/dev/null; then
-        echo "FAILED" > "$result_dir/status.txt"
         echo "0 successful requests — benchmark failed"
         return 1
     fi
-    echo "SUCCESS" > "$result_dir/status.txt"
+    printf '{"status":"SUCCESS","successful_requests":%d}\n' "$successful" > "$sentinel"
     echo "$successful successful requests"
     return 0
 }
