@@ -42,7 +42,10 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
---no-enable-prefix-caching \
+--kv-cache-dtype fp8 \
+--max-cudagraph-capture-size 2048 \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
