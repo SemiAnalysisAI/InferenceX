@@ -254,8 +254,40 @@ jobs:
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
+    collect-agentic-results:
+        needs: [test-sweep-agentic]
+        if: ${{ always() && needs.test-sweep-agentic.result != 'skipped' }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  submodules: true
+
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: '3.11'
+
+            - name: Install dependencies
+              run: pip install pandas matplotlib numpy
+
+            - name: Download agentic artifacts
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  pattern: 'agentic_*'
+                  path: results/
+
+            - name: Run aggregation
+              run: |
+                  python utils/agentic-benchmark/scripts/collect_sweep_results.py results/ aggregated/
+
+            - name: Upload aggregated results
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: agentic_aggregated
+                  path: aggregated/
+
     calc-success-rate:
-        needs: [collect-results, collect-evals]
+        needs: [collect-results, collect-evals, collect-agentic-results]
         if: ${{ always() }}
         runs-on: ubuntu-latest
 

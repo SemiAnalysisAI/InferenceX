@@ -252,6 +252,9 @@ jobs:
           path: |
             results/server.log
             results/metrics_server_metrics.csv
+            results/metrics_plots.png
+            results/metrics_workload.png
+            results/metrics_client_metrics.csv
             results/benchmark.log
             results/config.yaml
             results/vllm_command.txt
