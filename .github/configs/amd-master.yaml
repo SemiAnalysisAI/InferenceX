@@ -581,7 +581,7 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     agentic-coding:
-    - duration: 300
+    - duration: 1800
       search-space:
       - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
@@ -611,7 +611,7 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     agentic-coding:
-    - duration: 300
+    - duration: 1800
       search-space:
       - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
