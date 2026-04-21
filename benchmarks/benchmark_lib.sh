@@ -857,8 +857,13 @@ AGENTIC_DIR=/workspace/utils/agentic-benchmark
 TRACE_REPLAY_DIR=/workspace/utils/trace-replay
 
 resolve_trace_source() {
-    TRACE_SOURCE_FLAG="--hf-dataset semianalysisai/cc-traces-weka-042026"
-    echo "Loading traces from Hugging Face dataset: semianalysisai/cc-traces-weka-042026"
+    local dataset="semianalysisai/cc-traces-weka-042026"
+    TRACE_SOURCE_FLAG="--hf-dataset $dataset"
+    echo "Loading traces from Hugging Face dataset: $dataset"
+    # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
+    # for model weights) so datasets.load_dataset() reads from cache on
+    # subsequent runs instead of re-downloading every job.
+    hf download --repo-type dataset "$dataset"
 }
 
 install_agentic_deps() {
