@@ -18,7 +18,7 @@ dsr1-fp4-mi355x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     agentic-coding:
-    - duration: 1800
+    - duration: 300
       search-space:
       - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
