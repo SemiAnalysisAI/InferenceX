@@ -505,7 +505,7 @@ kimik2.5-int4-mi355x-vllm:
         conc-end: 64
 
 kimik2.5-int4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:v0.19.1
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x
@@ -554,7 +554,7 @@ kimik2.5-int4-mi325x-vllm:
         - 128
 
 kimik2.5-int4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:v0.19.1
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi300x
