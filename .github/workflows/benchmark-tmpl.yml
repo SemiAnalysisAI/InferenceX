@@ -151,6 +151,12 @@ jobs:
             done
           fi
 
+          # Cleanup results/ from a prior job on this runner. Agentic jobs
+          # write to fixed subpaths (trace_replay/, metrics_*, etc.), so stale
+          # data from a previous job would otherwise be picked up as this
+          # job's output when replay fails early.
+          rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
@@ -178,9 +184,6 @@ jobs:
         run: |
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-
-          # Remove stale status.txt from previous runs on this runner
-          rm -f results/status.txt 2>/dev/null || true
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
