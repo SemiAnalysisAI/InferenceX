@@ -1,30 +1,5 @@
 #!/usr/bin/env bash
 
-# Poll until the SLURM job really exits so the NFS-backed $GITHUB_WORKSPACE
-# mount flushes all of the container's writes back to the actions runner
-# before the host-side status.txt check runs. A bare `scancel` returns
-# immediately and leaves results/* invisible to the workflow.
-scancel_sync() {
-    local jobid=$1
-    local timeout=${2:-600}
-    local interval=5
-    local start
-    start=$(date +%s)
-    scancel "$jobid" || true
-    while [[ -n "$(squeue -j "$jobid" --noheader 2>/dev/null)" ]]; do
-        local now
-        now=$(date +%s)
-        if (( now - start >= timeout )); then
-            echo "[scancel_sync][WARN] job $jobid still present after ${timeout}s"
-            return 1
-        fi
-        echo "[scancel_sync] waiting for job $jobid to exit ($((timeout-(now-start)))s remaining)"
-        sleep "$interval"
-    done
-    echo "[scancel_sync] job $jobid exited"
-    return 0
-}
-
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
 export PORT=8888
 
@@ -62,6 +37,4 @@ srun --jobid=$JOB_ID \
 --no-container-entrypoint --export=ALL \
 bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
 
-set +x
-scancel_sync $JOB_ID
-set -x
+scancel $JOB_ID
