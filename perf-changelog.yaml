@@ -1651,4 +1651,4 @@
     - minimaxm2.5-fp8-b300-vllm
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1106
