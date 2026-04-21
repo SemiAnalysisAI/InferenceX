@@ -839,7 +839,7 @@ except Exception as e:
 #     MixtureOfExperts EPLB protocol. Idempotent: skips if already patched.
 # ---------------------------------------------------------------------------
 patch_minimax_m2_wideep_mori() {
-    local patch_file="${VLLM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}/patches/minimax_m2.py"
+    local patch_file="${WS_PATH:-${VLLM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}}/patches/minimax_m2.py"
     if [[ ! -f "$patch_file" ]]; then
         # Also check the Docker-baked location
         patch_file="/opt/vllm_disagg/patches/minimax_m2.py"

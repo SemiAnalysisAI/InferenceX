@@ -1,28 +1,68 @@
 #!/bin/bash
-# Dual-Engine Disaggregated Server Dispatcher
-# =============================================================================
-# Dispatches to the engine-specific server launcher based on ENGINE env var.
-#   ENGINE=sglang (default) -> server_sglang.sh (SGLang + MoRI)
-#   ENGINE=vllm             -> server_vllm.sh  (vLLM + Nixl/MoRI-IO)
+# SGLang Disaggregated Server Launcher with Model-Specific Configurations
 # =============================================================================
 
-ENGINE="${ENGINE:-sglang}"
-WS_PATH="${WS_PATH:-${SGLANG_WS_PATH:-${VLLM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}}}"
-export WS_PATH ENGINE
+# =============================================================================
+# Environment Configuration
+# =============================================================================
 
-echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"
+NODE0_ADDR="${NODE0_ADDR:-localhost}"
+NODE_RANK="${NODE_RANK:-0}"
+MODEL_DIR="${MODEL_DIR:-}"
+MODEL_NAME="${MODEL_NAME:-}"
 
-if [[ "$ENGINE" == "vllm" ]]; then
-    source "$WS_PATH/server_vllm.sh"
+xP="${xP:-1}" #-> Number of Prefill Workers
+yD="${yD:-1}" #-> Number of Decode Workers
+
+IPADDRS="${IPADDRS:-localhost}"
+HEADNODE_PORT="${HEADNODE_PORT:-20000}"
+# Parallelism Configuration
+PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-true}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-true}"
+DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-true}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-true}"
+DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+
+# Benchmark Configuration
+BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
+BENCH_OUTPUT_LEN="${BENCH_OUTPUT_LEN:-1024}"
+BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
+BENCH_REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
+BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
+BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
+
+# Dry Run for debugging purpose
+DRY_RUN="${DRY_RUN:-0}"
+
+# GPU count (expandable for different hardware)
+GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+
+
+# =============================================================================
+# Dependencies and Environment Setup
+# =============================================================================
+source $WS_PATH/env.sh
+
+host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
+host_name=$(hostname)
+
+# MORI_RDMA_TC configuration (optional)
+# If set by runner, use it for RDMA traffic class configuration
+# If not set, RDMA operations will proceed without QoS/traffic class settings
+if [[ -n "${MORI_RDMA_TC}" ]]; then
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC for RDMA traffic class configuration"
+    echo "[INFO] Host '$host_name' configured with MORI_RDMA_TC=$MORI_RDMA_TC"
 else
-    source "$WS_PATH/server_sglang.sh"
+    echo "[INFO] MORI_RDMA_TC not set. Skipping RDMA traffic class configuration."
+    echo "[INFO] This is normal for clusters without QoS requirements."
 fi
-<<<<<<< HEAD
 
 # =============================================================================
 # Model-Specific Configuration from YAML
 # =============================================================================
-MODELS_YAML="${SGLANG_WS_PATH}/models.yaml"
+MODELS_YAML="${WS_PATH}/models.yaml"
 
 if [[ ! -f "$MODELS_YAML" ]]; then
     echo "ERROR: models.yaml not found at $MODELS_YAML"
@@ -292,7 +332,7 @@ fi
 # =============================================================================
 
 echo "Waiting at the container creation barrier on $host_name"
-python3 $SGLANG_WS_PATH/sync.py barrier \
+python3 $WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
@@ -356,7 +396,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Waiting for all prefill and decode servers to be up . . ."
 
 
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
@@ -393,7 +433,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pid=$!
 
         # Wait for router to be ready via health endpoint
-        HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+        HEALTH_BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
             --node-ports 30000 \
             --wait-for-all-health \
@@ -413,7 +453,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
 
     echo "Benchmarking on ${host_name}:${host_ip}"
-    cd $SGLANG_WS_PATH
+    cd $WS_PATH
 
     # Export IS_MTP based on whether MTP is enabled
     if [ "$DECODE_MTP_SIZE" -gt 0 ]; then
@@ -423,98 +463,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-    BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        echo "EVAL_ONLY mode: skipping throughput benchmark"
-    elif [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
         eval "$BENCH_CMD"
         set +x
-    fi
-
-    # Run evaluation if requested (before killing router)
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running lm-eval evaluation on Node 0..."
-
-        # Health check: verify the router is still serving before running eval.
-        # The throughput benchmark may have crashed/exhausted decode workers.
-        EVAL_HEALTH_OK=false
-        for _attempt in 1 2 3; do
-            if curl -sf --max-time 10 "http://0.0.0.0:30000/readiness" >/dev/null 2>&1; then
-                EVAL_HEALTH_OK=true
-                break
-            fi
-            echo "Eval health check attempt $_attempt failed, retrying in 10s..."
-            sleep 10
-        done
-
-        if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
-            echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
-        else
-            # Must run from repo root so utils/evals/${task}.yaml resolves
-            pushd /workspace
-
-            # Source eval functions from benchmark_lib.sh
-            source /workspace/benchmarks/benchmark_lib.sh
-
-            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
-            if [[ -n "${EVAL_CONC:-}" ]]; then
-                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
-            else
-                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
-            fi
-
-            if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"
-            else
-                # Run lm-eval against the router on port 30000
-                run_eval --framework lm-eval --port 30000
-
-                # Set metadata env vars for append_lm_eval_summary
-                export TP="${PREFILL_TP_SIZE}"
-                export CONC="${EVAL_CONCURRENT_REQUESTS}"
-                export EP_SIZE=1
-                [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
-                export PREFILL_TP="${PREFILL_TP_SIZE}"
-                export PREFILL_EP=1
-                [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-                export PREFILL_NUM_WORKERS="${xP}"
-                export DECODE_TP="${DECODE_TP_SIZE}"
-                export DECODE_EP=1
-                [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-                export DECODE_NUM_WORKERS="${yD}"
-                export DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
-                export ISL="${BENCH_INPUT_LEN}"
-                export OSL="${BENCH_OUTPUT_LEN}"
-                # FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE, RESULT_FILENAME
-                # are already set via Docker -e flags from job.slurm
-
-                append_lm_eval_summary
-                # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
-
-                # Copy eval artifacts to run_logs for NFS extraction by runner
-                EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                mkdir -p "$EVAL_COPY_DIR"
-                for f in meta_env.json; do
-                    [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                done
-                # Use find for glob patterns to avoid "no match" errors
-                find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-
-                echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
-            fi
-
-            popd
-        fi
     fi
 
     # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
@@ -565,7 +524,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
@@ -578,7 +537,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $SGLANG_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port 30000"
 
@@ -630,7 +589,7 @@ else
 
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
@@ -644,7 +603,7 @@ else
 
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $SGLANG_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port 30000"
 
@@ -663,5 +622,3 @@ fi
 
 echo "Script completed successfully"
 exit 0
-=======
->>>>>>> 766ba4ee (consolidate amd_utils for sglang and vllm)

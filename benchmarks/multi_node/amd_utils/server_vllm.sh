@@ -49,7 +49,7 @@ MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
 # =============================================================================
 # Dependencies and Environment Setup
 # =============================================================================
-source $VLLM_WS_PATH/env.sh
+source $WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 # RDMA IP for Nixl KV transfer (prefer 192.168.x.x subnet if available)
@@ -110,7 +110,7 @@ fi
 # =============================================================================
 # Model-Specific Configuration from YAML
 # =============================================================================
-MODELS_YAML="${VLLM_WS_PATH}/models.yaml"
+MODELS_YAML="${WS_PATH}/models_vllm.yaml"
 
 if [[ ! -f "$MODELS_YAML" ]]; then
     echo "ERROR: models.yaml not found at $MODELS_YAML"
@@ -150,19 +150,19 @@ print(f'DECODE_MODEL_ENVS=\"{dev}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
-# Apply tensor-parallel size and EP/DP flags from submit pipeline (YAML PREFILL_TP / dp-attn / ep).
-if [[ -n "${PREFILL_TP:-}" ]]; then
+# Apply tensor-parallel size and EP/DP flags from submit pipeline.
+if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
     if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP}/g")
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP_SIZE}/g")
     else
-        PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP}"
+        PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP_SIZE}"
     fi
 fi
-if [[ -n "${DECODE_TP:-}" ]]; then
+if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
     if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP}/g")
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP_SIZE}/g")
     else
-        DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP}"
+        DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
     fi
 fi
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
@@ -186,7 +186,7 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # =============================================================================
 
 echo "Waiting at the container creation barrier on $host_name"
-python3 $VLLM_WS_PATH/sync.py barrier \
+python3 $WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
@@ -200,11 +200,11 @@ python3 $VLLM_WS_PATH/sync.py barrier \
 # =============================================================================
 
 echo "Proceeding to start etcd server on $host_name"
-bash ${VLLM_WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
+bash ${WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
 etcd_pid=$!
 
 echo "Waiting at etcd server barrier on $host_name"
-python3 $VLLM_WS_PATH/sync.py barrier \
+python3 $WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 2379 \
     --wait-for-all-ports \
@@ -217,7 +217,7 @@ echo "etcd endpoint health=================="
 etcdctl endpoint health 2>&1 || /usr/local/bin/etcd/etcdctl endpoint health 2>&1 || true
 echo "======================================"
 
-python3 $VLLM_WS_PATH/sync.py barrier \
+python3 $WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 2379 \
     --wait-for-all-ports \
@@ -284,7 +284,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
     echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
     PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
-        python3 $VLLM_WS_PATH/moriio_proxy.py"
+        python3 $WS_PATH/moriio_proxy.py"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PROXY_CMD"
@@ -317,7 +317,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
     else
-        python3 $VLLM_WS_PATH/sync.py barrier \
+        python3 $WS_PATH/sync.py barrier \
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
@@ -327,7 +327,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
     # Wait for proxy /health to confirm it is accepting requests
-    HEALTH_BARRIER_CMD="python3 $VLLM_WS_PATH/sync.py barrier \
+    HEALTH_BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-health \
@@ -343,10 +343,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
     echo "Benchmarking on ${host_name}:${host_ip}"
-    cd $VLLM_WS_PATH
+    cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $VLLM_WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
+    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
@@ -401,7 +401,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     fi
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $VLLM_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
@@ -414,7 +414,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     fi
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $VLLM_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port ${ROUTER_PORT}"
 
@@ -455,7 +455,7 @@ else
     fi
 
     echo "Waiting for proxy server to be up..."
-    BARRIER_CMD="python3 $VLLM_WS_PATH/sync.py barrier \
+    BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
@@ -468,7 +468,7 @@ else
     fi
 
     echo "Waiting until proxy server closes..."
-    WAIT_CMD="python3 $VLLM_WS_PATH/sync.py wait \
+    WAIT_CMD="python3 $WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port ${ROUTER_PORT}"
 
