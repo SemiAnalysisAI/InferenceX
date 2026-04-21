@@ -55,7 +55,6 @@ elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
 
-echo "$VLLM_CMD" > "$RESULT_DIR/vllm_command.txt"
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="9.0"
 export PYTHONNOUSERSITE=1

@@ -38,16 +38,26 @@ echo "Starting SGLang server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 
-SGLANG_CMD="python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code"
-SGLANG_CMD+=" --tensor-parallel-size=$TP --data-parallel-size=1"
-SGLANG_CMD+=" --cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3"
-SGLANG_CMD+=" --chunked-prefill-size 16384"
-SGLANG_CMD+=" --ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL"
-SGLANG_CMD+=" --enable-symm-mem --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10"
-
-echo "$SGLANG_CMD" > "$RESULT_DIR/vllm_command.txt"
-
-$SGLANG_CMD > "$SERVER_LOG" 2>&1 &
+python3 -m sglang.launch_server \
+--model-path $MODEL \
+--host 0.0.0.0 \
+--port $PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP \
+--data-parallel-size=1 \
+--cuda-graph-max-bs $USERS \
+--max-running-requests $USERS \
+--mem-fraction-static 0.85 \
+--kv-cache-dtype fp8_e4m3 \
+--chunked-prefill-size 16384 \
+--ep-size $EP_SIZE \
+--quantization modelopt_fp4 \
+--enable-flashinfer-allreduce-fusion \
+--scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+--enable-symm-mem \
+--attention-backend trtllm_mla \
+--moe-runner-backend flashinfer_trtllm \
+--stream-interval 10 > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 

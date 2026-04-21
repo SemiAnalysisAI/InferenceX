@@ -53,7 +53,6 @@ elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
     VLLM_CMD+=" --no-enable-prefix-caching"
 fi
 
-echo "$VLLM_CMD" > "$RESULT_DIR/vllm_command.txt"
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
