@@ -250,7 +250,9 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/scratch/fsw/models"
-    export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
+    if [[ "${SCENARIO_TYPE:-}" != "agentic-coding" ]]; then
+        export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
+    fi
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
