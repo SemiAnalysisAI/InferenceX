@@ -2,14 +2,14 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for DSR1 FP4 on MI355X.
+# Agentic trace replay benchmark for DSR1 FP4 on MI355X using SGLang.
 #
 # Required env vars:
-#   MODEL, TP, USERS, OFFLOAD_MODE, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, USERS, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP USERS OFFLOAD_MODE TOTAL_CPU_DRAM_GB RESULT_DIR
+check_env_vars MODEL TP USERS RESULT_DIR
 
 PORT=${PORT:-8888}
 DURATION=${DURATION:-1800}
@@ -22,41 +22,34 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
 fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+rocm-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# ---- Server config ----------------------------------------------------------
+# ---- Start SGLang server ----------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-cat > "$RESULT_DIR/config.yaml" << 'EOF'
-kv-cache-dtype: fp8
-async-scheduling: true
-EOF
-
-# ---- Build and start vLLM server --------------------------------------------
-VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
-VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
-VLLM_CMD+=" --gpu-memory-utilization 0.9"
-VLLM_CMD+=" --tensor-parallel-size $TP"
-if [ "${EP_SIZE:-0}" -gt 1 ]; then
-    VLLM_CMD+=" --enable-expert-parallel"
-fi
-
-if [ "$OFFLOAD_MODE" = "on" ]; then
-    VLLM_CMD+=" --kv_offloading_backend native"
-    VLLM_CMD+=" --kv_offloading_size $TOTAL_CPU_DRAM_GB"
-    VLLM_CMD+=" --disable-hybrid-kv-cache-manager"
-elif [ "$OFFLOAD_MODE" = "noprefix" ]; then
-    VLLM_CMD+=" --no-enable-prefix-caching"
-fi
-
-echo "Starting vllm server..."
+echo "Starting SGLang server..."
+export SGLANG_USE_AITER=1
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export PYTHONNOUSERSITE=1
 
-$VLLM_CMD > "$SERVER_LOG" 2>&1 &
+python3 -m sglang.launch_server \
+--model-path=$MODEL \
+--host=0.0.0.0 \
+--port=$PORT \
+--trust-remote-code \
+--tensor-parallel-size=$TP \
+--chunked-prefill-size=16384 \
+--mem-fraction-static=0.8 \
+--num-continuous-decode-steps=4 \
+--cuda-graph-max-bs=$USERS \
+--max-running-requests=$USERS \
+--attention-backend aiter \
+--kv-cache-dtype fp8_e4m3 > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
@@ -80,10 +73,3 @@ python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
 
 stop_agentic_metrics_collector
 trim_idle_metrics "$RESULT_DIR"
-
-# ---- Cleanup ----------------------------------------------------------------
-echo "Stopping vllm server..."
-kill "$SERVER_PID" 2>/dev/null || true
-wait "$SERVER_PID" 2>/dev/null || true
-
-echo "Experiment finished at $(date)"

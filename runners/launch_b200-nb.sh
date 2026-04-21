@@ -2,11 +2,7 @@
 
 HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"
-if [[ "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "sglang" ]] && printf '_sglang' || ([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf ''))
-else
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
-fi
+FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 UCX_NET_DEVICES=eth0

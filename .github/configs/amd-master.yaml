@@ -17,6 +17,10 @@ dsr1-fp4-mi355x-sglang:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
 dsr1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
@@ -1418,15 +1422,15 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 
-dsr1-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
-  model: amd/DeepSeek-R1-0528-MXFP4-Preview
-  model-prefix: dsr1
-  runner: mi355x
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
+# dsr1-fp4-mi355x-vllm:
+#   image: vllm/vllm-openai-rocm:v0.19.1
+#   model: amd/DeepSeek-R1-0528-MXFP4-Preview
+#   model-prefix: dsr1
+#   runner: mi355x
+#   precision: fp4
+#   framework: vllm
+#   multinode: false
+#   scenarios:
+#     agentic-coding:
+#     - search-space:
+#       - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
