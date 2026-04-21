@@ -42,6 +42,7 @@ VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
 VLLM_CMD+=" --trust-remote-code"
+VLLM_CMD+=" --max-model-len 131072"
 if [ "${EP_SIZE:-0}" -gt 1 ]; then
     VLLM_CMD+=" --enable-expert-parallel"
 fi

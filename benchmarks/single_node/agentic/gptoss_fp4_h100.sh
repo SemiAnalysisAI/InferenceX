@@ -42,6 +42,7 @@ VLLM_CMD="vllm serve $MODEL --host 0.0.0.0 --port $PORT"
 VLLM_CMD+=" --config $RESULT_DIR/config.yaml"
 VLLM_CMD+=" --gpu-memory-utilization 0.9"
 VLLM_CMD+=" --tensor-parallel-size $TP"
+VLLM_CMD+=" --max-model-len 131072"
 
 if [ "$OFFLOAD_MODE" = "on" ]; then
     VLLM_CMD+=" --kv_offloading_backend native"
