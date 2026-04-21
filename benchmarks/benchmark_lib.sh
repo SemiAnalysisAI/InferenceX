@@ -865,6 +865,10 @@ install_agentic_deps() {
     pip install --quiet urllib3 requests 2>/dev/null || true
     pip install -q -r "$AGENTIC_DIR/requirements.txt"
     pip install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
+    # Force-upgrade datasets: some containers ship an older version without the
+    # `Json` feature type used by the HF traces dataset, and unpinned installs
+    # won't upgrade an already-present package.
+    pip install -q --upgrade "datasets>=4.0.0"
 }
 
 start_agentic_metrics_collector() {
