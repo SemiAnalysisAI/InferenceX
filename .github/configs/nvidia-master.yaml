@@ -3538,15 +3538,16 @@ minimaxm2.5-fp8-b300-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
-    - { tp: 2, ep: 2, conc-start: 512, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
+    - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
+    - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
+    - { tp: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 2, conc-start: 64, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 8 }
 
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
