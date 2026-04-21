@@ -67,7 +67,6 @@ vllm serve $MODEL \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $USERS \
---max-num-batched-tokens 8192 \
 --block-size=64 \
 --kv-cache-dtype fp8 \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
