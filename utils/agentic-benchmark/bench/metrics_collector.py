@@ -121,16 +121,7 @@ class SGLangMetricsParser:
         snapshot.num_requests_running = int(g(r'sglang:num_running_reqs\{[^}]*\}\s+([\d.e+-]+)'))
         snapshot.num_requests_waiting = int(g(r'sglang:num_queue_reqs\{[^}]*\}\s+([\d.e+-]+)'))
 
-        # sglang exposes cache_hit_rate as a direct gauge (0-1)
-        # We convert to cumulative-style by tracking hits/queries from token sources
-        cache_hit_rate = g(r'sglang:cache_hit_rate\{[^}]*\}\s+([\d.e+-]+)')
-        prompt_tokens = int(g(r'sglang:prompt_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
-        snapshot.prompt_tokens = prompt_tokens
-        # Approximate cumulative cache hits from rate × total prompts
-        if prompt_tokens > 0 and cache_hit_rate > 0:
-            snapshot.prefix_cache_queries = prompt_tokens
-            snapshot.prefix_cache_hits = int(prompt_tokens * cache_hit_rate)
-
+        snapshot.prompt_tokens = int(g(r'sglang:prompt_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
         snapshot.generation_tokens = int(g(r'sglang:generation_tokens_total\{[^}]*\}\s+([\d.e+-]+)'))
 
         # Preemptions — sglang calls them "retractions"
@@ -138,11 +129,22 @@ class SGLangMetricsParser:
 
         snapshot.request_success = int(g(r'sglang:num_requests_total\{[^}]*\}\s+([\d.e+-]+)'))
 
-        # Token source breakdown from realtime_tokens_total
+        # Token source breakdown from realtime_tokens_total (cumulative)
         snapshot.prompt_tokens_local_compute = int(g(
             r'sglang:realtime_tokens_total\{[^}]*mode="prefill_compute"[^}]*\}\s+([\d.e+-]+)'))
         snapshot.prompt_tokens_local_cache_hit = int(g(
             r'sglang:realtime_tokens_total\{[^}]*mode="prefill_cache"[^}]*\}\s+([\d.e+-]+)'))
+
+        # Derive cumulative hits/queries from the per-source token counters.
+        # This is the correct cumulative cache hit ratio — unlike sglang's
+        # instantaneous `cache_hit_rate` gauge, which is 0 during decode-only
+        # periods and thus yielded spurious 0% hit rates when sampled at
+        # benchmark shutdown.
+        snapshot.prefix_cache_hits = snapshot.prompt_tokens_local_cache_hit
+        snapshot.prefix_cache_queries = (
+            snapshot.prompt_tokens_local_cache_hit
+            + snapshot.prompt_tokens_local_compute
+        )
 
         return snapshot
 
