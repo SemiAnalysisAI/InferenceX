@@ -217,6 +217,22 @@ class MetricsCollector:
             except asyncio.CancelledError:
                 pass
 
+    def _trim_idle_prefix(self) -> None:
+        """Drop leading snapshots where the server was idle (no running requests
+        and no prompt tokens processed). Keeps plot x-axis starting at the first
+        real activity instead of showing a long zero-flat prefix."""
+        first_active = next(
+            (
+                i for i, s in enumerate(self.snapshots)
+                if s.num_requests_running > 0 or s.prompt_tokens > 0
+            ),
+            None,
+        )
+        if first_active is not None and first_active > 0:
+            dropped = first_active
+            self.snapshots = self.snapshots[first_active:]
+            print(f"Trimmed {dropped} idle leading snapshots before output")
+
     def generate_plots(
         self,
         output_prefix: str = "metrics",
@@ -228,6 +244,8 @@ class MetricsCollector:
             output_prefix: Prefix for output file names
             client_metrics: Optional list of RequestStats from benchmark clients
         """
+        self._trim_idle_prefix()
+
         if len(self.snapshots) < 2:
             print("Not enough data points for plots")
             return
@@ -695,6 +713,8 @@ class MetricsCollector:
             - {output_prefix}_gpu_transfer.csv: GPU PCIe transfer stats
             - {output_prefix}_client_metrics.csv: Per-request client metrics (if provided)
         """
+        self._trim_idle_prefix()
+
         output_dir = Path(output_prefix).parent
         if output_dir and not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
