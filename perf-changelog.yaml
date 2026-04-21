@@ -1,4 +1,11 @@
 - config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Add GLM5.1 MXFP4 (FP4) MI355X SGLang Support" 
+    - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1098
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
@@ -1275,6 +1282,16 @@
     - "Upgrade vLLM image to v0.19.0"
     - "Enable FP8 KV cache + AITER FA for minimaxm2.5-fp8-mi355x-vllm"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1003
+  
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Add MiniMax M2.5 MXFP4 vLLM benchmark for MI355X"
+    - "Model: amd/MiniMax-M2.5-MXFP4 with --trust-remote-code and --block-size=32"
+    - "Image: vllm/vllm-openai-rocm:v0.19.1"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "Tp=1, TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
 
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
