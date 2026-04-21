@@ -70,12 +70,10 @@ build_replay_cmd "$RESULT_DIR"
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
 
 set -x
-if $REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log"; then
-    echo "SUCCESS" > "$RESULT_DIR/status.txt"
-else
-    echo "FAILED" > "$RESULT_DIR/status.txt"
-fi
+$REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log" || true
 set +x
+
+check_agentic_success "$RESULT_DIR"
 
 # ---- Post-processing --------------------------------------------------------
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \

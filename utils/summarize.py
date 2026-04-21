@@ -73,8 +73,9 @@ def main():
         if result and 'is_multinode' in result:
             results.append(result)
 
-    single_node_results = [r for r in results if not r['is_multinode']]
+    single_node_results = [r for r in results if not r['is_multinode'] and r.get('scenario_type') != 'agentic-coding']
     multinode_results = [r for r in results if r['is_multinode']]
+    agentic_results = [r for r in results if r.get('scenario_type') == 'agentic-coding']
 
     # Single-node and multi-node results have different fields and therefore need to be printed separately
     if single_node_results:

@@ -904,6 +904,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --advance-max $advance_max"
     REPLAY_CMD+=" --seed 42"
     REPLAY_CMD+=" --no-color"
+    REPLAY_CMD+=" --max-consecutive-errors 10"
     if [ "${IGNORE_EOS:-false}" = "true" ]; then
         REPLAY_CMD+=" --ignore-eos"
     fi
@@ -950,4 +951,30 @@ try:
 except Exception as e:
     print(f'Warning: could not trim metrics CSV: {e}', file=sys.stderr)
 " 2>&1 || true
+}
+
+check_agentic_success() {
+    local result_dir="$1"
+    local csv="$result_dir/trace_replay/detailed_results.csv"
+    if [ ! -f "$csv" ]; then
+        echo "FAILED" > "$result_dir/status.txt"
+        echo "No detailed_results.csv found"
+        return 1
+    fi
+    local successful
+    successful=$(python3 -c "
+import csv
+with open('$csv') as f:
+    rows = list(csv.DictReader(f))
+ok = sum(1 for r in rows if r.get('success') == 'True')
+print(ok)
+" 2>/dev/null || echo "0")
+    if [ "$successful" -eq 0 ] 2>/dev/null; then
+        echo "FAILED" > "$result_dir/status.txt"
+        echo "0 successful requests — benchmark failed"
+        return 1
+    fi
+    echo "SUCCESS" > "$result_dir/status.txt"
+    echo "$successful successful requests"
+    return 0
 }
