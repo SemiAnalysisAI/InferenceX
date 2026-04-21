@@ -200,6 +200,13 @@ jobs:
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
+          elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+            if [ -f "${RESULT_FILENAME}.json" ]; then
+              echo "Found agentic result file: ${RESULT_FILENAME}.json"
+            else
+              echo "Run failed: Agentic benchmark result ${RESULT_FILENAME}.json not found." >&2
+              exit 1
+            fi
           else
             # Check if at least one result file was created
             if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
@@ -212,7 +219,7 @@ jobs:
           fi
 
       - name: Process results
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
@@ -233,11 +240,32 @@ jobs:
           done
 
       - name: Upload results
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload agentic aggregated result
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic raw results
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            LOGS/agentic/benchmark.log
+            LOGS/agentic/benchmark_command.txt
+            LOGS/agentic/workload_distribution_summary.txt
+            LOGS/agentic/workload_distribution_plots.png
+            LOGS/agentic/trace_replay/detailed_results.csv
+            LOGS/agentic/trace_replay/debug_trace.jsonl
+          if-no-files-found: ignore
 
       - name: Upload eval results (if any)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
