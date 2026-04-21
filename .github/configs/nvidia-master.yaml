@@ -3541,7 +3541,7 @@ minimaxm2.5-fp8-b300-vllm:
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
     - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
-    - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 2048 }
+    - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
