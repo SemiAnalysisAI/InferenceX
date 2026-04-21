@@ -38,6 +38,15 @@ jobs:
           # Only monitor these Docker Hub repos for updates
           MONITORED_REPOS="lmsysorg/sglang lmsysorg/sglang-rocm vllm/vllm-openai vllm/vllm-openai-rocm"
 
+          # Normalize suffix: strip rc prefixes and date stamps so suffixes
+          # like "rc0-rocm720-mi35x-20260413" become "-rocm720-mi35x"
+          normalize_suffix() {
+            local s="$1"
+            s=$(echo "$s" | sed -E 's/^rc[0-9]+//; s/-[0-9]{8}(-[0-9]+)?$//')
+            [[ -z "$s" ]] && s="BARE"
+            echo "$s"
+          }
+
           while IFS= read -r img; do
             repo="${img%%:*}"
             tag="${img#*:}"
@@ -49,15 +58,13 @@ jobs:
             base_ver=$(echo "$tag" | grep -oP 'v\d+\.\d+\.\d+(\.\w+)?' || true)
             [[ -z "$base_ver" ]] && continue
 
-            # Extract suffix after the version (e.g., "-cu130" from "v0.19.0-cu130")
             suffix="${tag#"$base_ver"}"
-            [[ -z "$suffix" ]] && suffix="BARE"
+            suffix=$(normalize_suffix "$suffix")
 
             prev="${CURRENT_VERSIONS[$repo]:-}"
             if [[ -z "$prev" ]] || [[ "$(printf '%s\n%s\n' "$prev" "$base_ver" | sort -V | tail -1)" == "$base_ver" ]]; then
               CURRENT_VERSIONS[$repo]="$base_ver"
             fi
-            # Collect unique suffixes per repo (space-separated)
             if [[ ! " ${REPO_SUFFIXES[$repo]:-} " == *" ${suffix} "* ]]; then
               REPO_SUFFIXES[$repo]="${REPO_SUFFIXES[$repo]:-} ${suffix}"
             fi
@@ -92,9 +99,9 @@ jobs:
               [[ -z "$tag_ver" ]] && continue
               [[ "$tag" == *nightly* || "$tag" == *dev* ]] && continue
 
-              # Only report tags whose suffix matches one already in use
-              local tag_suffix="${tag#"$tag_ver"}"
-              [[ -z "$tag_suffix" ]] && tag_suffix="BARE"
+              # Only report tags whose normalized suffix matches one already in use
+              local tag_suffix
+              tag_suffix=$(normalize_suffix "${tag#"$tag_ver"}")
               local matched=false
               for s in $allowed_suffixes; do
                 if [[ "$tag_suffix" == "$s" ]]; then
