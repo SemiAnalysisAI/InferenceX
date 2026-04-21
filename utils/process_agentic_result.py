@@ -43,6 +43,20 @@ def load_server_metrics(path):
         return list(csv.DictReader(f))
 
 
+def env_int(name, default=0):
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    return int(value)
+
+
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
 def compute_qps_stats(rows):
     """Compute QPS from request completion timestamps using 1-second sliding windows."""
     if len(rows) < 2:
@@ -213,8 +227,28 @@ def main():
 
     successful = [r for r in rows if r.get('success') == 'True']
 
-    tp = int(os.environ.get('TP', '1'))
+    is_multinode = env_bool('IS_MULTINODE')
+    tp = env_int('TP', 1)
+    ep = env_int('EP_SIZE', 1)
+    dp_attention = os.environ.get('DP_ATTENTION', 'false')
     num_gpus = tp
+
+    if is_multinode:
+        prefill_num_workers = env_int('PREFILL_NUM_WORKERS')
+        prefill_tp = env_int('PREFILL_TP')
+        prefill_ep = env_int('PREFILL_EP', 1)
+        prefill_dp_attention = os.environ.get('PREFILL_DP_ATTN', 'false')
+        decode_num_workers = env_int('DECODE_NUM_WORKERS')
+        decode_tp = env_int('DECODE_TP')
+        decode_ep = env_int('DECODE_EP', 1)
+        decode_dp_attention = os.environ.get('DECODE_DP_ATTN', 'false')
+        num_prefill_gpu = prefill_num_workers * prefill_tp
+        num_decode_gpu = decode_num_workers * decode_tp
+        num_gpus = num_prefill_gpu + num_decode_gpu
+        # Keep legacy fields populated for consumers that have not split by topology yet.
+        tp = prefill_tp + decode_tp
+        ep = max(prefill_ep, decode_ep)
+        dp_attention = "true" if env_bool('PREFILL_DP_ATTN') or env_bool('DECODE_DP_ATTN') else "false"
 
     agg = {
         "hw": os.environ.get('RUNNER_TYPE', ''),
@@ -224,15 +258,31 @@ def main():
         "infmax_model_prefix": os.environ.get('MODEL_PREFIX', ''),
         "framework": os.environ.get('FRAMEWORK', ''),
         "precision": os.environ.get('PRECISION', ''),
+        "spec_decoding": os.environ.get('SPEC_DECODING', 'none'),
+        "disagg": env_bool('DISAGG'),
         "scenario_type": "agentic-coding",
-        "is_multinode": False,
+        "is_multinode": is_multinode,
         "tp": tp,
-        "ep": int(os.environ.get('EP_SIZE', '1')),
-        "dp_attention": os.environ.get('DP_ATTENTION', 'false'),
+        "ep": ep,
+        "dp_attention": dp_attention,
         "offload_mode": os.environ.get('OFFLOAD_MODE', 'off'),
         "num_requests_total": len(rows),
         "num_requests_successful": len(successful),
     }
+
+    if is_multinode:
+        agg.update({
+            "prefill_num_workers": prefill_num_workers,
+            "prefill_tp": prefill_tp,
+            "prefill_ep": prefill_ep,
+            "prefill_dp_attention": prefill_dp_attention,
+            "num_prefill_gpu": num_prefill_gpu,
+            "decode_num_workers": decode_num_workers,
+            "decode_tp": decode_tp,
+            "decode_ep": decode_ep,
+            "decode_dp_attention": decode_dp_attention,
+            "num_decode_gpu": num_decode_gpu,
+        })
 
     agg.update(compute_qps_stats(successful))
     agg.update(compute_latency_stats(successful))

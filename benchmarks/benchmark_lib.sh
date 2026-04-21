@@ -853,8 +853,9 @@ run_eval() {
 # Agentic trace replay helpers
 # --------------------------------
 
-AGENTIC_DIR=/workspace/utils/agentic-benchmark
-TRACE_REPLAY_DIR=/workspace/utils/trace-replay
+INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
+TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
 resolve_trace_source() {
     local dataset="semianalysisai/cc-traces-weka-042026"
@@ -966,10 +967,9 @@ except Exception as e:
 
 write_agentic_result_json() {
     # Aggregate detailed_results.csv + metrics_server_metrics.csv into
-    # /workspace/$RESULT_FILENAME.json. The workflow's existing retry-based
-    # $RESULT_FILENAME.json existence check is the single success gate — same
-    # path the fixed-seq-len scenario writes its result to.
+    # $INFMAX_CONTAINER_WORKSPACE/$RESULT_FILENAME.json. The workflow's
+    # existing retry-based existence check is the single success gate.
     local result_dir="$1"
-    RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="/workspace" \
-        python3 /workspace/utils/process_agentic_result.py
+    RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
+        python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
 }

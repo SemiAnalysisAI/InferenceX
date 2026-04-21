@@ -4,9 +4,11 @@ from validation import (
     Fields,
     SingleNodeMatrixEntry,
     MultiNodeMatrixEntry,
+    MultiNodeAgenticMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
     MultiNodeSearchSpaceEntry,
+    AgenticCodingSearchSpaceEntry,
     SingleNodeSeqLenConfig,
     MultiNodeSeqLenConfig,
     SingleNodeMasterConfigEntry,
@@ -91,6 +93,38 @@ def valid_multinode_matrix_entry():
 
 
 @pytest.fixture
+def valid_multinode_agentic_matrix_entry():
+    """Valid multinode agentic matrix entry for trace replay benchmarks."""
+    return {
+        "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+        "model": "deepseek-r1-fp4",
+        "model-prefix": "dsr1",
+        "precision": "fp4",
+        "framework": "dynamo-trt",
+        "spec-decoding": "none",
+        "runner": "gb200",
+        "prefill": {
+            "num-worker": 5,
+            "tp": 4,
+            "ep": 4,
+            "dp-attn": True,
+        },
+        "decode": {
+            "num-worker": 1,
+            "tp": 8,
+            "ep": 8,
+            "dp-attn": True,
+        },
+        "users": 16,
+        "conc": [16],
+        "duration": 1800,
+        "exp-name": "dsr1_p5x4_d1x8_users16",
+        "disagg": True,
+        "scenario-type": "agentic-coding",
+    }
+
+
+@pytest.fixture
 def valid_single_node_master_config():
     """Valid single node master config based on dsr1-fp8-mi300x-sglang."""
     return {
@@ -154,6 +188,43 @@ def valid_multinode_master_config():
                         "conc-list": [2150],
                     }
                 ]
+            }
+        ]}
+    }
+
+
+@pytest.fixture
+def valid_multinode_agentic_master_config():
+    """Valid multinode master config with an agentic coding scenario."""
+    return {
+        "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+        "model": "deepseek-r1-fp4",
+        "model-prefix": "dsr1",
+        "precision": "fp4",
+        "framework": "dynamo-trt",
+        "runner": "gb200",
+        "multinode": True,
+        "disagg": True,
+        "scenarios": {"agentic-coding": [
+            {
+                "duration": 1800,
+                "search-space": [
+                    {
+                        "prefill": {
+                            "num-worker": 5,
+                            "tp": 4,
+                            "ep": 4,
+                            "dp-attn": True,
+                        },
+                        "decode": {
+                            "num-worker": 1,
+                            "tp": 8,
+                            "ep": 8,
+                            "dp-attn": True,
+                        },
+                        "conc-list": [16],
+                    }
+                ],
             }
         ]}
     }
@@ -338,6 +409,28 @@ class TestMultiNodeMatrixEntry:
         del valid_multinode_matrix_entry["decode"]
         with pytest.raises(Exception):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+
+# =============================================================================
+# Test MultiNodeAgenticMatrixEntry
+# =============================================================================
+
+class TestMultiNodeAgenticMatrixEntry:
+    """Tests for MultiNodeAgenticMatrixEntry model."""
+
+    def test_valid_entry(self, valid_multinode_agentic_matrix_entry):
+        """Valid multinode agentic entry should pass validation."""
+        entry = MultiNodeAgenticMatrixEntry(**valid_multinode_agentic_matrix_entry)
+        assert entry.scenario_type == "agentic-coding"
+        assert entry.users == 16
+        assert entry.conc == [16]
+        assert entry.prefill.num_worker == 5
+
+    def test_requires_conc_as_list(self, valid_multinode_agentic_matrix_entry):
+        """Multinode agentic entries pass conc-list shape to the reusable workflow."""
+        valid_multinode_agentic_matrix_entry["conc"] = 16
+        with pytest.raises(Exception):
+            MultiNodeAgenticMatrixEntry(**valid_multinode_agentic_matrix_entry)
 
 
 # =============================================================================
@@ -559,6 +652,67 @@ class TestMultiNodeSearchSpaceEntry:
 
 
 # =============================================================================
+# Test AgenticCodingSearchSpaceEntry
+# =============================================================================
+
+class TestAgenticCodingSearchSpaceEntry:
+    """Tests for agentic coding search space topology validation."""
+
+    def test_valid_multinode_topology(self):
+        """Agentic search space can target multinode via prefill/decode."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "prefill": {
+                "num-worker": 5,
+                "tp": 4,
+                "ep": 4,
+                "dp-attn": True,
+            },
+            "decode": {
+                "num-worker": 1,
+                "tp": 8,
+                "ep": 8,
+                "dp-attn": True,
+            },
+            "conc-list": [16],
+        })
+        assert entry.prefill.num_worker == 5
+        assert entry.decode.tp == 8
+
+    def test_rejects_mixed_single_and_multinode_topology(self):
+        """Agentic entries must not mix tp with prefill/decode."""
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 4,
+                    "ep": 4,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 8,
+                    "dp-attn": False,
+                },
+                "conc-list": [16],
+            })
+
+    def test_rejects_partial_multinode_topology(self):
+        """Agentic multinode entries require both prefill and decode."""
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 4,
+                    "ep": 4,
+                    "dp-attn": False,
+                },
+                "conc-list": [16],
+            })
+
+
+# =============================================================================
 # Test SeqLenConfig models
 # =============================================================================
 
@@ -639,6 +793,12 @@ class TestMasterConfigEntries:
         assert config.model_prefix == "dsr1"
         assert config.runner == "gb200"
         assert config.disagg is True
+
+    def test_multinode_agentic_master_config(self, valid_multinode_agentic_master_config):
+        """Valid multinode master config can contain an agentic coding scenario."""
+        config = MultiNodeMasterConfigEntry(**valid_multinode_agentic_master_config)
+        assert config.scenarios.agentic_coding is not None
+        assert config.scenarios.fixed_seq_len is None
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):
         """Single node config must have multinode=False."""

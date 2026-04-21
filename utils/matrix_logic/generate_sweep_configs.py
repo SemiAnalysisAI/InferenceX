@@ -382,16 +382,18 @@ def generate_full_sweep(args, all_config_data, runner_data):
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
 
         for agentic_config in agentic_configs:
-            if is_multinode:
-                continue  # agentic-coding not yet supported for multinode
-
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
             duration = agentic_config.get(Fields.DURATION.value, 1800)
 
             for bmk in bmk_space:
-                tp = bmk[Fields.TP.value]
-                ep = bmk.get(Fields.EP.value)
-                dp_attn = bmk.get(Fields.DP_ATTN.value)
+                if is_multinode:
+                    prefill = bmk[Fields.PREFILL.value]
+                    decode = bmk[Fields.DECODE.value]
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                else:
+                    tp = bmk[Fields.TP.value]
+                    ep = bmk.get(Fields.EP.value)
+                    dp_attn = bmk.get(Fields.DP_ATTN.value)
                 cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
                 offload_mode = "on" if cpu_offloading else "off"
 
@@ -424,22 +426,44 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                 for users in conc_values:
                     for runner_value in runners_for_entry:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner_value,
-                            Fields.TP.value: tp,
-                            Fields.EP.value: ep if ep is not None else 1,
-                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
-                            Fields.USERS.value: users,
-                            Fields.OFFLOAD_MODE.value: offload_mode,
-                            Fields.DURATION.value: duration,
-                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
-                            Fields.SCENARIO_TYPE.value: "agentic-coding",
-                        }
+                        if is_multinode:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.PREFILL.value: prefill,
+                                Fields.DECODE.value: decode,
+                                Fields.USERS.value: users,
+                                Fields.CONC.value: [users],
+                                Fields.DURATION.value: duration,
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_users{users}"
+                                ),
+                                Fields.DISAGG.value: disagg,
+                                Fields.SCENARIO_TYPE.value: "agentic-coding",
+                            }
+                        else:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.TP.value: tp,
+                                Fields.EP.value: ep if ep is not None else 1,
+                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.USERS.value: users,
+                                Fields.OFFLOAD_MODE.value: offload_mode,
+                                Fields.DURATION.value: duration,
+                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                                Fields.SCENARIO_TYPE.value: "agentic-coding",
+                            }
 
                         validate_agentic_matrix_entry(entry)
                         matrix_values.append(entry)
@@ -750,15 +774,17 @@ def generate_test_config_sweep(args, all_config_data):
         # ---- Agentic-coding scenarios ----
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
         for agentic_config in agentic_configs:
-            if is_multinode:
-                continue
-
             duration = agentic_config.get(Fields.DURATION.value, 1800)
 
             for bmk in agentic_config[Fields.SEARCH_SPACE.value]:
-                tp = bmk[Fields.TP.value]
-                ep = bmk.get(Fields.EP.value)
-                dp_attn = bmk.get(Fields.DP_ATTN.value)
+                if is_multinode:
+                    prefill = bmk[Fields.PREFILL.value]
+                    decode = bmk[Fields.DECODE.value]
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                else:
+                    tp = bmk[Fields.TP.value]
+                    ep = bmk.get(Fields.EP.value)
+                    dp_attn = bmk.get(Fields.DP_ATTN.value)
                 cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
                 offload_mode = "on" if cpu_offloading else "off"
 
@@ -784,22 +810,44 @@ def generate_test_config_sweep(args, all_config_data):
                     continue
 
                 for users in conc_values:
-                    entry = {
-                        Fields.IMAGE.value: image,
-                        Fields.MODEL.value: model,
-                        Fields.MODEL_PREFIX.value: model_code,
-                        Fields.PRECISION.value: precision,
-                        Fields.FRAMEWORK.value: framework,
-                        Fields.RUNNER.value: runner,
-                        Fields.TP.value: tp,
-                        Fields.EP.value: ep if ep is not None else 1,
-                        Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
-                        Fields.USERS.value: users,
-                        Fields.OFFLOAD_MODE.value: offload_mode,
-                        Fields.DURATION.value: duration,
-                        Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
-                        Fields.SCENARIO_TYPE.value: "agentic-coding",
-                    }
+                    if is_multinode:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.PREFILL.value: prefill,
+                            Fields.DECODE.value: decode,
+                            Fields.USERS.value: users,
+                            Fields.CONC.value: [users],
+                            Fields.DURATION.value: duration,
+                            Fields.EXP_NAME.value: (
+                                f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
+                                f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_users{users}"
+                            ),
+                            Fields.DISAGG.value: disagg,
+                            Fields.SCENARIO_TYPE.value: "agentic-coding",
+                        }
+                    else:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner,
+                            Fields.TP.value: tp,
+                            Fields.EP.value: ep if ep is not None else 1,
+                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                            Fields.USERS.value: users,
+                            Fields.OFFLOAD_MODE.value: offload_mode,
+                            Fields.DURATION.value: duration,
+                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                            Fields.SCENARIO_TYPE.value: "agentic-coding",
+                        }
                     matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values

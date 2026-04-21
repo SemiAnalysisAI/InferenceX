@@ -163,7 +163,10 @@ def main():
 
     for result in all_benchmark_results:
         if result.get("scenario-type") == "agentic-coding":
-            final_results["single_node"]["agentic"].append(result)
+            if result.get("prefill") is not None:
+                final_results["multi_node"]["agentic"].append(result)
+            else:
+                final_results["single_node"]["agentic"].append(result)
         elif "prefill" in result and result["prefill"] is not None:
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["multi_node"][seq_len_str].append(result)

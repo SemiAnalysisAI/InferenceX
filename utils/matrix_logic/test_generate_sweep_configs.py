@@ -7,6 +7,7 @@ from generate_sweep_configs import (
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
+    generate_test_config_sweep,
     generate_runner_model_sweep_config,
     mark_eval_entries,
     apply_node_type_defaults,
@@ -92,6 +93,46 @@ def sample_multinode_config():
                             },
                         }
                     ]
+                }
+            ]}
+        }
+    }
+
+
+@pytest.fixture
+def sample_multinode_agentic_config():
+    """Multinode config with an agentic trace replay scenario."""
+    return {
+        "dsr1-fp4-gb200-dynamo-trt": {
+            "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3",
+            "model": "deepseek-r1-fp4",
+            "model-prefix": "dsr1",
+            "precision": "fp4",
+            "framework": "dynamo-trt",
+            "runner": "gb200",
+            "multinode": True,
+            "disagg": True,
+            "scenarios": {"agentic-coding": [
+                {
+                    "duration": 900,
+                    "search-space": [
+                        {
+                            "spec-decoding": "none",
+                            "conc-list": [8, 16],
+                            "prefill": {
+                                "num-worker": 5,
+                                "tp": 4,
+                                "ep": 4,
+                                "dp-attn": True,
+                            },
+                            "decode": {
+                                "num-worker": 1,
+                                "tp": 8,
+                                "ep": 8,
+                                "dp-attn": True,
+                            },
+                        }
+                    ],
                 }
             ]}
         }
@@ -799,6 +840,48 @@ class TestGenerateFullSweepMultiNode:
         runners = [entry["runner"] for entry in result]
         assert "h200-cw_0" in runners
         assert "h200-cw_1" in runners
+
+    def test_multinode_agentic_generation(self, sample_multinode_agentic_config, sample_runner_config, full_sweep_args_multi_node):
+        """Multinode agentic scenarios should generate one entry per users value."""
+        result = generate_full_sweep(
+            full_sweep_args_multi_node,
+            sample_multinode_agentic_config,
+            sample_runner_config
+        )
+        assert len(result) == 2
+        assert [entry["users"] for entry in result] == [8, 16]
+
+    def test_multinode_agentic_entry_structure(self, sample_multinode_agentic_config, sample_runner_config, full_sweep_args_multi_node):
+        """Multinode agentic entries should match benchmark-multinode-tmpl inputs."""
+        result = generate_full_sweep(
+            full_sweep_args_multi_node,
+            sample_multinode_agentic_config,
+            sample_runner_config
+        )
+        entry = result[0]
+        assert entry["scenario-type"] == "agentic-coding"
+        assert entry["conc"] == [8]
+        assert entry["prefill"]["num-worker"] == 5
+        assert entry["decode"]["tp"] == 8
+        assert entry["duration"] == 900
+        assert entry["exp-name"] == "dsr1_p5x4_d1x8_users8"
+        assert entry["disagg"] is True
+
+    def test_multinode_agentic_test_config_generation(self, sample_multinode_agentic_config):
+        """test-config should also generate multinode agentic entries for changelog sweeps."""
+        args = argparse.Namespace()
+        args.config_keys = ["dsr1-fp4-gb200-dynamo-trt"]
+        args.conc = [16]
+        args.seq_lens = None
+        args.scenario_type = ["agentic-coding"]
+
+        result = generate_test_config_sweep(args, sample_multinode_agentic_config)
+
+        assert len(result) == 1
+        assert result[0]["scenario-type"] == "agentic-coding"
+        assert result[0]["users"] == 16
+        assert result[0]["conc"] == [16]
+        assert "prefill" in result[0]
 
 
 # =============================================================================
@@ -1884,5 +1967,3 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-
-
