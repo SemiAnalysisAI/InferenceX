@@ -16,7 +16,11 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-MAX_MODEL_LEN=${MAX_MODEL_LEN:-131072}
+# Agentic matrix entries don't set max-model-len, so the workflow passes 0.
+# ${:-DEFAULT} only fires on unset/empty, so handle 0 explicitly.
+if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+    MAX_MODEL_LEN=131072
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
