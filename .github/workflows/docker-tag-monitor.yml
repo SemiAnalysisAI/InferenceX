@@ -148,7 +148,7 @@ jobs:
           cat "$BODY_FILE"
 
       - name: Create issue for updates
-        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -168,7 +168,7 @@ jobs:
           fi
 
       - name: Dry run output
-        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run == 'true'
+        if: steps.check.outputs.has_updates == 'true' && inputs.dry_run == true
         run: |
           echo "## Dry Run - Updates Found"
           cat "${{ steps.check.outputs.body_file }}"
