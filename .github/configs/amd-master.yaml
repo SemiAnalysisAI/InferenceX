@@ -580,6 +580,10 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
+    agentic-coding:
+    - search-space:
+      - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
 
 gptoss-fp4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -605,6 +609,10 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 8 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
+    agentic-coding:
+    - search-space:
+      - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 8, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
 
 gptoss-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0

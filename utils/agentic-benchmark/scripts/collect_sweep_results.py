@@ -154,7 +154,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
     #   agentic_{model}_tp{N}_users{M}_offload{mode}_{extra...}
     import re
     name = exp_dir.name
-    match = re.search(r'tp(\d+)_users(\d+)_offload(on|off|noprefix)', name)
+    match = re.search(r'tp(\d+)_users(\d+)_offload(on|off)', name)
     if not match:
         print(f"Warning: cannot parse experiment name '{exp_dir.name}', skipping")
         return None

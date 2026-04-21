@@ -73,7 +73,7 @@ on:
         type: string
         default: 'fixed-seq-len'
       offload-mode:
-        description: "CPU offload mode for agentic scenarios (on/off/noprefix)"
+        description: "CPU offload mode for agentic scenarios (on/off)"
         required: false
         type: string
         default: 'off'

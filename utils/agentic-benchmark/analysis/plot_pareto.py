@@ -2,7 +2,7 @@
 import re
 """
 Plot Pareto frontiers for prefix caching modes.
-Modes: on (prefix + offload), off (prefix only), noprefix (no prefix caching)
+Modes: on (prefix + offload), off (prefix only)
 Pareto frontier: throughput vs latency trade-off.
 
 Usage:
@@ -19,7 +19,7 @@ from pathlib import Path
 
 def _parse_experiment_name(name):
     """Parse tp, users/bs, offload from experiment directory name."""
-    match = re.search(r'tp(\d+).*?(?:users|bs)(\d+).*?offload(on|off|noprefix)', name)
+    match = re.search(r'tp(\d+).*?(?:users|bs)(\d+).*?offload(on|off)', name)
     if not match:
         return None, None, None
     return int(match.group(1)), int(match.group(2)), match.group(3)
@@ -351,7 +351,7 @@ def generate_pareto_only_figure(df: pd.DataFrame, results_dir: Path):
 
     # Get available modes and create subsets
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     # Create figure with columns for each mode
@@ -429,7 +429,7 @@ def generate_pareto_only_figure_p50(df: pd.DataFrame, results_dir: Path):
     df["interactivity"] = 1000.0 / df["p50_tpot_ms"]
 
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     num_cols = len(available_modes)
@@ -502,12 +502,10 @@ def generate_pareto_overlay_figure_p50(df: pd.DataFrame, results_dir: Path):
     mode_styles = {
         "on": ("-", "black", "black", (5, 8), "normal"),
         "off": ("--", "none", "gray", (5, -12), "italic"),
-        "noprefix": (":", "red", "red", (5, -25), "oblique"),
     }
     mode_labels = {
         "on": "Prefix+Offload",
         "off": "Prefix Only",
-        "noprefix": "No Prefix",
     }
 
     fig, axes = plt.subplots(4, 1, figsize=(10, 18))
@@ -526,7 +524,7 @@ def generate_pareto_overlay_figure_p50(df: pd.DataFrame, results_dir: Path):
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
         ax = axes[row]
 
-        for mode in ["on", "off", "noprefix"]:
+        for mode in ["on", "off"]:
             if mode not in available_modes:
                 continue
 
@@ -578,7 +576,7 @@ def generate_pareto_only_figure_p90(df: pd.DataFrame, results_dir: Path):
     df["interactivity_p90"] = 1000.0 / df["p90_tpot_ms"]
 
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     num_cols = len(available_modes)
@@ -651,12 +649,10 @@ def generate_pareto_overlay_figure_p90(df: pd.DataFrame, results_dir: Path):
     mode_styles = {
         "on": ("-", "black", "black", (5, 8), "normal"),
         "off": ("--", "none", "gray", (5, -12), "italic"),
-        "noprefix": (":", "red", "red", (5, -25), "oblique"),
     }
     mode_labels = {
         "on": "Prefix+Offload",
         "off": "Prefix Only",
-        "noprefix": "No Prefix",
     }
 
     fig, axes = plt.subplots(4, 1, figsize=(10, 18))
@@ -675,7 +671,7 @@ def generate_pareto_overlay_figure_p90(df: pd.DataFrame, results_dir: Path):
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
         ax = axes[row]
 
-        for mode in ["on", "off", "noprefix"]:
+        for mode in ["on", "off"]:
             if mode not in available_modes:
                 continue
 
@@ -729,7 +725,7 @@ def generate_pareto_only_figure_p99(df: pd.DataFrame, results_dir: Path):
 
     # Get available modes and create subsets
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     # Create figure with columns for each mode
@@ -813,12 +809,10 @@ def generate_pareto_overlay_figure_p99(df: pd.DataFrame, results_dir: Path):
     mode_styles = {
         "on": ("-", "black", "black", (5, 8), "normal"),
         "off": ("--", "none", "gray", (5, -12), "italic"),
-        "noprefix": (":", "red", "red", (5, -25), "oblique"),
     }
     mode_labels = {
         "on": "Prefix+Offload",
         "off": "Prefix Only",
-        "noprefix": "No Prefix",
     }
 
     # Create 4x1 figure
@@ -840,7 +834,7 @@ def generate_pareto_overlay_figure_p99(df: pd.DataFrame, results_dir: Path):
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
         ax = axes[row]
 
-        for mode in ["on", "off", "noprefix"]:
+        for mode in ["on", "off"]:
             if mode not in available_modes:
                 continue
 
@@ -892,7 +886,7 @@ def generate_pareto_only_figure_p999(df: pd.DataFrame, results_dir: Path):
     df["interactivity_p999"] = 1000.0 / df["p999_tpot_ms"]
 
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     num_cols = len(available_modes)
@@ -965,12 +959,10 @@ def generate_pareto_overlay_figure_p999(df: pd.DataFrame, results_dir: Path):
     mode_styles = {
         "on": ("-", "black", "black", (5, 8), "normal"),
         "off": ("--", "none", "gray", (5, -12), "italic"),
-        "noprefix": (":", "red", "red", (5, -25), "oblique"),
     }
     mode_labels = {
         "on": "Prefix+Offload",
         "off": "Prefix Only",
-        "noprefix": "No Prefix",
     }
 
     fig, axes = plt.subplots(4, 1, figsize=(10, 18))
@@ -989,7 +981,7 @@ def generate_pareto_overlay_figure_p999(df: pd.DataFrame, results_dir: Path):
     for row, x_col, y_col, title, x_label, y_label, maximize_x in plot_configs:
         ax = axes[row]
 
-        for mode in ["on", "off", "noprefix"]:
+        for mode in ["on", "off"]:
             if mode not in available_modes:
                 continue
 
@@ -1063,9 +1055,8 @@ def generate_combined_pareto_figure(df: pd.DataFrame, results_dir: Path,
     mode_edge = {
         "on":       {"edgecolors": "black",  "linewidths": 1.8},
         "off":      {"edgecolors": "gray",   "linewidths": 1.2},
-        "noprefix": {"edgecolors": "#cc0000", "linewidths": 1.2},
     }
-    mode_short = {"on": "P+O", "off": "P", "noprefix": "NP"}
+    mode_short = {"on": "P+O", "off": "P"}
 
     metrics_configs = [
         (0, f"{pct}_ttft_ms",     "input_tps_per_gpu", "TTFT",          f"{pct_label} TTFT (ms)",                       "Input Throughput/GPU (tok/s)", False),
@@ -1155,12 +1146,10 @@ def generate_pareto_overlay_figure(df: pd.DataFrame, results_dir: Path):
     mode_styles = {
         "on": ("-", "black", "black", (5, 8), "normal"),       # Prefix + Offload
         "off": ("--", "none", "gray", (5, -12), "italic"),     # Prefix only
-        "noprefix": (":", "red", "red", (5, -25), "oblique"),  # No prefix caching
     }
     mode_labels = {
         "on": "Prefix+Offload",
         "off": "Prefix Only",
-        "noprefix": "No Prefix",
     }
 
     # Create 4x1 figure
@@ -1183,7 +1172,7 @@ def generate_pareto_overlay_figure(df: pd.DataFrame, results_dir: Path):
         ax = axes[row]
 
         # Plot all available modes
-        for mode in ["on", "off", "noprefix"]:
+        for mode in ["on", "off"]:
             if mode not in available_modes:
                 continue
 
@@ -1254,7 +1243,7 @@ def main(results_dir: Path):
 
     # Get available modes and create subsets
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
     df_subsets = {mode: df[df["offload"] == mode] for mode in available_modes}
 
     # Create figure with columns for each mode
@@ -1354,7 +1343,7 @@ def generate_cache_hit_rate_figure(df: pd.DataFrame, results_dir: Path):
 
     # Get available modes
     available_modes = sorted(df["offload"].unique())
-    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only", "noprefix": "No Prefix"}
+    mode_titles = {"on": "Prefix+Offload", "off": "Prefix Only"}
 
     # Create 2x3 figure (GPU hit rate row, CPU hit rate row, columns for each mode)
     num_cols = len(available_modes)
