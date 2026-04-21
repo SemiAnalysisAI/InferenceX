@@ -275,7 +275,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
