@@ -34,6 +34,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 cat > "$RESULT_DIR/config.yaml" << EOF
+async-scheduling: true
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
 max-model-len: $MAX_MODEL_LEN
