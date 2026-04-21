@@ -879,7 +879,11 @@ start_agentic_metrics_collector() {
     export PYTHONPATH="$AGENTIC_DIR:${PYTHONPATH:-}"
 
     echo "Starting server metrics collector..."
-    python3 -m bench.run_metrics_collector \
+    # -u forces unbuffered stdout. Without it, Python block-buffers stdout
+    # when backgrounded (not a tty), so the collector's startup log lines
+    # sit in the buffer for the entire benchmark and only flush on exit —
+    # misleadingly making it look like the collector started late.
+    python3 -u -m bench.run_metrics_collector \
         --url "http://localhost:$port" \
         --output-prefix "$result_dir/metrics" \
         --pid-file "$result_dir/metrics_collector.pid" &
