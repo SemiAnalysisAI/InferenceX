@@ -4260,7 +4260,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
 
     agentic-coding:
-    - duration: 300
+    # - duration: 300
       search-space:
       - spec-decoding: "none"
         conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
