@@ -1696,3 +1696,9 @@
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1068
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
