@@ -160,8 +160,6 @@ jobs:
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
-            # Verify eval scores meet per-benchmark minimum thresholds
-            python3 utils/evals/validate_scores.py
           else
             FOUND_RESULT_FILE=
             for i in {1..10}; do
@@ -219,6 +217,10 @@ jobs:
             results*.json
             sample*.jsonl
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+
+      - name: Verify eval scores
+        if: ${{ (success() || failure()) && inputs.eval-only }}
+        run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
