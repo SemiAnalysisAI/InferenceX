@@ -94,18 +94,44 @@ def compute_qps_stats(rows):
 
 
 def compute_latency_stats(rows):
+    """Emit the same keys fixed-seq-len emits (mean/median/std/p90/p99/p99.9
+    for ttft, tpot, intvty, itl, e2el) so downstream consumers can treat
+    both scenarios identically.
+
+    - ttft: time to first token (s) — direct from trace replay
+    - e2el: end-to-end request latency (s) — what trace replay calls ttlt
+    - itl:  inter-token latency (s) — direct from trace replay
+    - tpot: time per output token (s) — same measure as itl; aliased for
+            fixed-seq-len compatibility
+    - intvty: interactivity (1/tpot) — tokens/s per-request decode rate
+    """
     ttfts = [float(r['ttft']) for r in rows if r.get('success') == 'True' and float(r['ttft']) > 0]
-    ttlts = [float(r['ttlt']) for r in rows if r.get('success') == 'True' and float(r['ttlt']) > 0]
+    e2els = [float(r['ttlt']) for r in rows if r.get('success') == 'True' and float(r['ttlt']) > 0]
     itls = [float(r['itl']) for r in rows if r.get('success') == 'True' and float(r['itl']) > 0]
 
+    def stats_for(prefix, values):
+        if not values:
+            return {}
+        out = {
+            f"mean_{prefix}": statistics.mean(values),
+            f"median_{prefix}": statistics.median(values),
+            f"p90_{prefix}": percentile(values, 90),
+            f"p99_{prefix}": percentile(values, 99),
+            f"p99.9_{prefix}": percentile(values, 99.9),
+        }
+        out[f"std_{prefix}"] = statistics.pstdev(values) if len(values) > 1 else 0.0
+        return out
+
     result = {}
-    for name, values in [("ttft", ttfts), ("ttlt", ttlts), ("itl", itls)]:
-        if values:
-            result[f"mean_{name}"] = statistics.mean(values)
-            result[f"median_{name}"] = statistics.median(values)
-            result[f"p90_{name}"] = percentile(values, 90)
-            result[f"p99_{name}"] = percentile(values, 99)
-            result[f"p99.9_{name}"] = percentile(values, 99.9)
+    result.update(stats_for("ttft", ttfts))
+    result.update(stats_for("e2el", e2els))
+    result.update(stats_for("itl", itls))
+    # tpot = itl (agentic has no speculative-decoding distinction)
+    result.update(stats_for("tpot", itls))
+    # intvty = 1 / tpot (tokens/second per-request decode rate)
+    if itls:
+        intvtys = [1.0 / v for v in itls if v > 0]
+        result.update(stats_for("intvty", intvtys))
     return result
 
 
@@ -250,9 +276,13 @@ def main():
         ep = max(prefill_ep, decode_ep)
         dp_attention = "true" if env_bool('PREFILL_DP_ATTN') or env_bool('DECODE_DP_ATTN') else "false"
 
+    users = int(os.environ.get('USERS', '0'))
     agg = {
         "hw": os.environ.get('RUNNER_TYPE', ''),
-        "users": int(os.environ.get('USERS', '0')),
+        # conc mirrors fixed-seq-len's field; users is the historical agentic
+        # name. Keep both so consumers can use either.
+        "conc": users,
+        "users": users,
         "image": os.environ.get('IMAGE', ''),
         "model": os.environ.get('MODEL', ''),
         "infmax_model_prefix": os.environ.get('MODEL_PREFIX', ''),
