@@ -73,19 +73,11 @@ else
   EP=" "
 fi
 
-# Eagle3 speculative config. Single-quoted JSON passed as one arg so spaces/braces
-# survive bash word-splitting when expanded into the vllm invocation below.
 SPEC_CONFIG="{\"model\":\"${SPEC_DRAFT_MODEL}\",\"method\":\"eagle3\",\"num_speculative_tokens\":${SPEC_NUM_TOKENS},\"draft_tensor_parallel_size\":${SPEC_DRAFT_TP}}"
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# NOTE: --block-size is intentionally omitted (unlike the non-spec kimik2.5_fp4_mi355x.sh
-# which sets --block-size=1). The target MLA path (ROCM_AITER_MLA) accepts block_size=1,
-# but the Eagle3 draft is a Llama model using standard attention and no ROCm standard-
-# attention backend (ROCM_ATTN, ROCM_AITER_FA, ROCM_AITER_UNIFIED_ATTN, TRITON_ATTN)
-# supports block_size=1. Letting vLLM pick the default matches the proven
-# tmp_scripts/start_server.sh recipe that reproduced 764.1 +/- 35.7 tok/s/gpu.
 set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
@@ -113,6 +105,7 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
+    --use-chat-template \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
