@@ -241,7 +241,7 @@ jobs:
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
-        if: ${{ always() && inputs.eval-only }}
+        if: ${{ (success() || failure()) && inputs.eval-only }}
         run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
