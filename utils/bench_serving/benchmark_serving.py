@@ -493,9 +493,11 @@ async def benchmark(
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
         warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else contextlib.nullcontext()
+        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
         async def warmup_limited_req_fn():
+            if warmup_semaphore is None:
+                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
                 return await request_func(request_func_input=test_input, pbar=warmup_pbar)
 
@@ -542,10 +544,6 @@ async def benchmark(
 
     pbar = None if disable_tqdm else tqdm(total=len(input_requests))
 
-    # This can be used once the minimum Python version is 3.10 or higher,
-    # and it will simplify the code in limited_request_func.
-    #    semaphore = (asyncio.Semaphore(max_concurrency)
-    #                 if max_concurrency else contextlib.nullcontext())
     semaphore = (asyncio.Semaphore(max_concurrency)
                  if max_concurrency else None)
 

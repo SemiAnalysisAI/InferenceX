@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Shared benchmarking utilities for InferenceMAX
+# Shared benchmarking utilities for InferenceX
 
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
