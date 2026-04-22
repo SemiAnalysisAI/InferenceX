@@ -928,7 +928,9 @@ build_replay_cmd() {
     if [ "${DEBUG_TRACE:-false}" = "true" ]; then
         REPLAY_CMD+=" --debug-trace"
     fi
-    # REPLAY_CMD+=" --no-max-tokens"
+    if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
+        REPLAY_CMD+=" --no-max-tokens"
+    fi
 }
 
 stop_agentic_metrics_collector() {
