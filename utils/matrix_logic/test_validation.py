@@ -275,7 +275,7 @@ class TestSingleNodeMatrixEntry:
 
     def test_spec_decoding_values(self, valid_single_node_matrix_entry):
         """Spec decoding should accept valid literal values."""
-        for value in ["mtp", "draft_model", "none"]:
+        for value in ["mtp", "draft_model", "eagle3", "none"]:
             valid_single_node_matrix_entry["spec-decoding"] = value
             entry = SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
             assert entry.spec_decoding == value
