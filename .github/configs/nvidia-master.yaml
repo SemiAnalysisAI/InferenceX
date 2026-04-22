@@ -3664,6 +3664,10 @@ gptoss-fp4-h100-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
+      - { tp: 1, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 1, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 2, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 2, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 4, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
@@ -3877,6 +3881,10 @@ gptoss-fp4-h200-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
+      - { tp: 1, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 1, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 2, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 2, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 4, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 4, cpu-offloading: false, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, cpu-offloading: true, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
