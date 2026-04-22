@@ -90,6 +90,7 @@ def compute_qps_stats(rows):
         "p90_qps": percentile(qps_values, 90),
         "p99_qps": percentile(qps_values, 99),
         "p99.9_qps": percentile(qps_values, 99.9),
+        "std_qps": statistics.pstdev(qps_values) if len(qps_values) > 1 else 0.0,
     }
 
 
@@ -147,6 +148,8 @@ def compute_workload_stats(rows):
             result[f"median_{name}"] = statistics.median(values)
             result[f"p90_{name}"] = percentile(values, 90)
             result[f"p99_{name}"] = percentile(values, 99)
+            result[f"p99.9_{name}"] = percentile(values, 99.9)
+            result[f"std_{name}"] = statistics.pstdev(values) if len(values) > 1 else 0.0
     return result
 
 
