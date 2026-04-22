@@ -170,7 +170,7 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 1
           ref: ${{ inputs.ref || github.ref }}
-          clean: false
+          clean: true
 
       - name: Cleanup stale eval outputs (pre-run)
         if: ${{ inputs.run-eval || inputs.eval-only }}
