@@ -3560,21 +3560,20 @@ minimaxm2.5-fp4-b200-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 1, conc-start: 4, conc-end: 4 }
-    - { tp: 2, conc-start: 4, conc-end: 512 }
-    - { tp: 2, ep: 2, conc-start: 128, conc-end: 256 }
-    - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
-    - { tp: 4, ep: 4, conc-start: 32, conc-end: 128 }
-    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 1, conc-start: 4, conc-end: 16 }
+    - { tp: 2, conc-start: 16, conc-end: 16 }
+    - { tp: 2, ep: 2, conc-start: 128, conc-end: 128 }
+    - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 1024 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+    - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
+    - { tp: 8, conc-start: 4, conc-end: 8 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 32 }
-    - { tp: 1, conc-start: 256, conc-end: 512 }
-    - { tp: 2, conc-start: 4, conc-end: 512 }
+    - { tp: 1, conc-start: 256, conc-end: 256 }
     - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
-    - { tp: 4, conc-start: 4, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 8 }
     - { tp: 8, conc-start: 4, conc-end: 4 }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
