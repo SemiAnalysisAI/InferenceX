@@ -171,6 +171,7 @@ jobs:
           fetch-depth: 1
           ref: ${{ inputs.ref || github.ref }}
           clean: true
+          submodules: true
 
       - name: Cleanup stale eval outputs (pre-run)
         if: ${{ inputs.run-eval || inputs.eval-only }}
