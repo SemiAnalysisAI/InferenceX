@@ -1,0 +1,31 @@
+# Minimal config for validating NVIDIA/srt-slurm#41 end-to-end on GB200.
+# Referenced explicitly via --config-files on a one-off workflow_dispatch;
+# NOT picked up by normal sweeps (they run against nvidia-master.yaml).
+# Mirrors the cheapest entry from dsr1-fp8-gb200-dynamo-trt in nvidia-master.yaml.
+dsr1-fp8-gb200-dynamo-trt:
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: gb200
+  precision: fp8
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - conc-list: [63]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml"
+      decode:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: false
