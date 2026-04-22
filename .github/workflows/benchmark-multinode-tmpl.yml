@@ -193,7 +193,7 @@ jobs:
             fi
           fi
 
-      - name: Process results
+      - name: Process result
         if: ${{ !inputs.eval-only }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
@@ -214,12 +214,20 @@ jobs:
             fi
           done
 
-      - name: Upload results
+      - name: Upload result
         if: ${{ !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: multinode_server_logs_${{ env.RESULT_FILENAME }}
+          path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
 
       - name: Upload eval results (if any)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
@@ -230,10 +238,10 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
-          if-no-files-found: ignore
+          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
-        if: ${{ inputs.eval-only }}
+        if: ${{ (success() || failure()) && inputs.eval-only }}
         run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
@@ -242,14 +250,6 @@ jobs:
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f sample*.jsonl || true
-
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: multinode_server_logs_${{ env.RESULT_FILENAME }}
-          path: multinode_server_logs.tar.gz
-          if-no-files-found: ignore
 
       - name: Slurm cleanup (post-run)
         if: always()
