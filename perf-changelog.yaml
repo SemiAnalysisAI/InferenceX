@@ -1690,3 +1690,9 @@
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, update search space concurrency ranges"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1107
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1068
