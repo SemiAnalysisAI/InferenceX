@@ -1702,3 +1702,12 @@
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-eagle3
+  description:
+    - "Add Kimi-K2.5 FP4 vLLM Eagle3 speculative decoding config for MI355X"
+    - "Image: vllm/vllm-openai-rocm:nightly-4eafc729285e459a5fc96efd6f7b313b155cad48"
+    - "Model: amd/Kimi-K2.5-MXFP4"
+    - "Draft model: lightseekorg/kimi-k2.5-eagle3 (num_speculative_tokens=7, draft_tp=1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1116
