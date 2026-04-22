@@ -95,6 +95,16 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      srt-slurm-repo:
+        description: "Override srt-slurm clone URL (leave empty to use launcher default)"
+        required: false
+        type: string
+        default: ""
+      srt-slurm-ref:
+        description: "Override srt-slurm git ref (branch/sha; leave empty to use launcher default)"
+        required: false
+        type: string
+        default: ""
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -125,6 +135,11 @@ env:
   DECODE_TP: ${{ inputs.decode-tp }}
   DECODE_EP: ${{ inputs.decode-ep }}
   DECODE_DP_ATTN: ${{ inputs.decode-dp-attn }}
+
+  # Optional override for which srt-slurm repo/ref the launcher clones.
+  # Leave empty to use the launcher's built-in defaults per framework.
+  SRT_SLURM_REPO: ${{ inputs.srt-slurm-repo }}
+  SRT_SLURM_REF: ${{ inputs.srt-slurm-ref }}
 
 permissions:
   contents: read
