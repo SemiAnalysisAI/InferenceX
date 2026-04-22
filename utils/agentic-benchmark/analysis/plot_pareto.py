@@ -137,13 +137,21 @@ def load_experiment_data(exp_dir: Path) -> dict | None:
     """Load and aggregate metrics from an experiment directory."""
     client_metrics_file = exp_dir / "metrics_client_metrics.csv"
     server_metrics_file = exp_dir / "metrics_server_metrics.csv"
-    status_file = exp_dir / "status.txt"
 
-    # Check if experiment completed successfully
-    if not status_file.exists():
-        return None
-    status = status_file.read_text().strip()
-    if status != "SUCCESS":
+    # An experiment is considered SUCCESS iff its trace_replay/detailed_results.csv
+    # has at least one successful row. (No more status.txt gate.)
+    trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
+    if trace_replay_csv.exists():
+        try:
+            import csv as _csv
+            import sys as _sys
+            _csv.field_size_limit(_sys.maxsize)
+            with open(trace_replay_csv) as _f:
+                if not any(r.get('success') == 'True' for r in _csv.DictReader(_f)):
+                    return None
+        except Exception:
+            return None
+    else:
         return None
 
     # Check for aiperf summary CSV (preferred)
