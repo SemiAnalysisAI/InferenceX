@@ -31,11 +31,6 @@ SPEC_DRAFT_TP="${SPEC_DRAFT_TP:-1}"
 hf download "$MODEL"
 hf download "$SPEC_DRAFT_MODEL"
 
-# Install amd-quark for MXFP4 quantization support
-# need to manually install due to ROCm vLLM bug
-# https://github.com/vllm-project/vllm/issues/35633
-pip install amd-quark
-
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
