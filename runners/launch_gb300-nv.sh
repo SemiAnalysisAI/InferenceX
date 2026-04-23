@@ -186,6 +186,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+mkdir -p "$LOGS_DIR"
 
 # Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
