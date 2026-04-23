@@ -184,6 +184,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     users: int
     conc: List[int]
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    no_max_tokens: bool = Field(default=False, alias=Fields.NO_MAX_TOKENS.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)

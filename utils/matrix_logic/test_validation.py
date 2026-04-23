@@ -118,6 +118,7 @@ def valid_multinode_agentic_matrix_entry():
         "users": 16,
         "conc": [16],
         "duration": 1800,
+        "no-max-tokens": False,
         "exp-name": "dsr1_p5x4_d1x8_users16",
         "disagg": True,
         "scenario-type": "agentic-coding",
@@ -425,12 +426,19 @@ class TestMultiNodeAgenticMatrixEntry:
         assert entry.users == 16
         assert entry.conc == [16]
         assert entry.prefill.num_worker == 5
+        assert entry.no_max_tokens is False
 
     def test_requires_conc_as_list(self, valid_multinode_agentic_matrix_entry):
         """Multinode agentic entries pass conc-list shape to the reusable workflow."""
         valid_multinode_agentic_matrix_entry["conc"] = 16
         with pytest.raises(Exception):
             MultiNodeAgenticMatrixEntry(**valid_multinode_agentic_matrix_entry)
+
+    def test_allows_no_max_tokens(self, valid_multinode_agentic_matrix_entry):
+        """Multinode agentic entries can pass no-max-tokens through workflows."""
+        valid_multinode_agentic_matrix_entry["no-max-tokens"] = True
+        entry = MultiNodeAgenticMatrixEntry(**valid_multinode_agentic_matrix_entry)
+        assert entry.no_max_tokens is True
 
 
 # =============================================================================
