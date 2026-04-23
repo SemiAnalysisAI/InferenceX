@@ -63,8 +63,30 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+select_squash_dir() {
+    local candidates=(
+        "${SQUASH_DIR:-}"
+        "/data/squash"
+        "/data/home/sa-shared/squash"
+        "/home/sa-shared/squash"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if [[ -n "$candidate" ]] && mkdir -p "$candidate" 2>/dev/null && [[ -w "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    echo "ERROR: No writable shared squash directory found" >&2
+    printf 'Checked:\n' >&2
+    printf '  - %s\n' "${candidates[@]}" >&2
+    return 1
+}
+
+SQUASH_DIR=$(select_squash_dir) || exit 1
+SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 cleanup_broken_squash_symlink() {
     local squash_file="$1"
@@ -80,8 +102,29 @@ cleanup_broken_squash_symlink() {
 cleanup_broken_squash_symlink "$SQUASH_FILE"
 cleanup_broken_squash_symlink "$NGINX_SQUASH_FILE"
 
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+import_container() {
+    local image="$1"
+    local squash_file="$2"
+
+    if [[ -f "$squash_file" ]] && unsquashfs -l "$squash_file" >/dev/null 2>&1; then
+        echo "Using existing squash image: $squash_file"
+        return 0
+    fi
+
+    echo "Importing $image to $squash_file"
+    rm -f "$squash_file"
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" --exclusive --time=180 \
+        bash -lc "mkdir -p '$(dirname "$squash_file")' && enroot import -o '$squash_file' 'docker://$image' && test -f '$squash_file' && unsquashfs -l '$squash_file' >/dev/null"
+
+    if [[ ! -f "$squash_file" ]]; then
+        echo "ERROR: Container image path does not exist after import: $squash_file" >&2
+        ls -la "$(dirname "$squash_file")" >&2 || true
+        exit 1
+    fi
+}
+
+import_container "$IMAGE" "$SQUASH_FILE"
+import_container "$NGINX_IMAGE" "$NGINX_SQUASH_FILE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
