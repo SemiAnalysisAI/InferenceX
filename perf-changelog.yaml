@@ -1717,3 +1717,10 @@
     - "Trigger H100 multinode evals after NVSHEMM fixes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
   evals-only: true
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
