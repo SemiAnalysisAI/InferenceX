@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 results_dir = Path(sys.argv[1])
-exp_name = sys.argv[2]
+exp_name = Path(sys.argv[2]).name
 
 agg_results = []
 for result_path in results_dir.rglob(f'*.json'):
