@@ -53,17 +53,22 @@ def _mn_entry(conc_list, isl=1024, osl=1024):
 
 
 class TestTrimConcSingleNode:
-    def test_ascending_series_keeps_last(self):
+    def test_ascending_series_keeps_max(self):
         entries = [_sn_entry(c) for c in [4, 8, 16, 32, 64]]
         result = trim_conc(entries)
         assert [e["conc"] for e in result] == [64]
 
-    def test_descending_series_keeps_last(self):
+    def test_descending_series_keeps_max(self):
         entries = [_sn_entry(c) for c in [32, 16, 8, 4, 2]]
         result = trim_conc(entries)
-        assert [e["conc"] for e in result] == [2]
+        assert [e["conc"] for e in result] == [32]
 
-    def test_two_point_series_keeps_last(self):
+    def test_unordered_series_keeps_max(self):
+        entries = [_sn_entry(c) for c in [16, 4, 32, 8, 64]]
+        result = trim_conc(entries)
+        assert [e["conc"] for e in result] == [64]
+
+    def test_two_point_series_keeps_max(self):
         entries = [_sn_entry(4), _sn_entry(64)]
         result = trim_conc(entries)
         assert [e["conc"] for e in result] == [64]
@@ -114,18 +119,23 @@ class TestTrimConcSingleNode:
 
 
 class TestTrimConcMultiNode:
-    def test_ascending_list_keeps_last(self):
+    def test_ascending_list_keeps_max(self):
         entry = _mn_entry([500, 1000, 2000, 4000])
         result = trim_conc([entry])
         assert len(result) == 1
         assert result[0]["conc"] == [4000]
 
-    def test_descending_list_keeps_last(self):
+    def test_descending_list_keeps_max(self):
         entry = _mn_entry([4000, 2000, 1000, 500])
         result = trim_conc([entry])
-        assert result[0]["conc"] == [500]
+        assert result[0]["conc"] == [4000]
 
-    def test_two_point_list_keeps_last(self):
+    def test_unordered_list_keeps_max(self):
+        entry = _mn_entry([1000, 4000, 500, 2000])
+        result = trim_conc([entry])
+        assert result[0]["conc"] == [4000]
+
+    def test_two_point_list_keeps_max(self):
         entry = _mn_entry([500, 4000])
         result = trim_conc([entry])
         assert result[0]["conc"] == [4000]

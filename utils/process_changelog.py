@@ -42,21 +42,22 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
 
 
 def trim_conc(entries: list[dict]) -> list[dict]:
-    """Trim each parallelism config's concurrency sweep to its final point.
+    """Trim each parallelism config's concurrency sweep to its highest point.
 
     Non-full-sweep PRs only need a single concurrency point per parallelism
     config to validate a change runs end-to-end, so the shared cluster stays
     clear. Push-to-main and ``full-sweep-enabled`` PRs skip this reduction.
 
-    The retained value is ``conc[-1]`` — the last configured concurrency,
-    which honors the source ordering of the ``conc-list`` / ``conc-start``
-    range (ascending lists collapse to their max, descending lists to their
-    min).
+    The retained value is the maximum configured concurrency — independent of
+    the source ordering of ``conc-list`` / ``conc-start``.
 
-    - Single-node entries have scalar ``conc``; group by every other field
-      and keep only the final entry per group.
-    - Multi-node entries carry ``conc`` as a list and are trimmed in place
-      to ``[conc[-1]]``.
+    Input comes from ``json.loads(subprocess.stdout)`` so ``conc`` is always
+    ``int`` (single-node) or ``list`` (multi-node); other single-node fields
+    are hashable scalars.
+
+    - Single-node entries: group by every other field and keep only the entry
+      with the highest ``conc`` per group.
+    - Multi-node entries: trim the ``conc`` list in place to ``[max(conc)]``.
     """
     groups: dict[tuple, list[int]] = {}
     out: list[dict] = []
@@ -65,7 +66,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
         if entry.get("prefill") is not None:
             conc = entry.get("conc")
             if isinstance(conc, list) and len(conc) > 1:
-                entry = {**entry, "conc": [conc[-1]]}
+                entry = {**entry, "conc": [max(conc)]}
             out.append(entry)
             continue
 
@@ -76,7 +77,8 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     drop: set[int] = set()
     for idxs in groups.values():
         if len(idxs) > 1:
-            drop.update(idxs[:-1])
+            keep = max(idxs, key=lambda i: out[i]["conc"])
+            drop.update(i for i in idxs if i != keep)
     return [e for i, e in enumerate(out) if i not in drop]
 
 
