@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Shared benchmarking utilities for InferenceMAX
+# Shared benchmarking utilities for InferenceX
 
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
@@ -657,7 +657,7 @@ compute_eval_context_length() {
 # Call directly (not in a subshell) so the export persists.
 # Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
 setup_eval_context() {
-    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 256))")
     export EVAL_MAX_MODEL_LEN
 }
 

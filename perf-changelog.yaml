@@ -1,4 +1,18 @@
 - config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after dist-timeout and health-check timeout fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Add GLM5.1 MXFP4 (FP4) MI355X SGLang Support" 
+    - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1098
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
@@ -1275,6 +1289,16 @@
     - "Upgrade vLLM image to v0.19.0"
     - "Enable FP8 KV cache + AITER FA for minimaxm2.5-fp8-mi355x-vllm"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1003
+  
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Add MiniMax M2.5 MXFP4 vLLM benchmark for MI355X"
+    - "Model: amd/MiniMax-M2.5-MXFP4 with --trust-remote-code and --block-size=32"
+    - "Image: vllm/vllm-openai-rocm:v0.19.1"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "Tp=1, TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
 
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
@@ -1472,6 +1496,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1054
 
 - config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 FP4 (NVFP4) B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 FP4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1056
+
+- config-keys:
     - gptoss-fp4-mi300x-vllm
   description:
     - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
@@ -1634,7 +1666,54 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
 
 - config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Extend GPT-OSS FP4 TP=8 search to conc=1"
+    - "low-latency endpoint for users prioritizing interactive single-user use cases (chat, copilot, agentic)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1092
+
+- config-keys:
     - kimik2.5-fp4-b200-vllm
   description:
     - "Add kv-cache-dtype fp8, max-cudagraph-capture-size 2048, max-num-batched-tokens, and stream-interval 20 to server launch args"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1047
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add H200 multinode evals-only runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
+  evals-only: true
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1106
+
+- config-keys:
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, update search space concurrency ranges"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1107
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1068
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after NVSHEMM fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
+  evals-only: true
