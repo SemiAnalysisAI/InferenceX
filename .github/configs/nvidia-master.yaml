@@ -5723,7 +5723,7 @@ dsr1-fp4-gb300-dynamo-trt:
           num-worker: 1
           tp: 8
           ep: 8
-          dp-attn: false
+          dp-attn: true
 
 dsr1-fp4-gb300-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
@@ -6289,7 +6289,7 @@ dsr1-fp8-gb300-dynamo-trt:
           num-worker: 1
           tp: 8
           ep: 8
-          dp-attn: false
+          dp-attn: true
 
 gptoss-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
