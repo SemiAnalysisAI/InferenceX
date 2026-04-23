@@ -141,6 +141,11 @@ EOF
     # last-wins rather than an error.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     printf '\nhealth_check:\n  max_attempts: 270\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"
+    # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
+    # to 1800s so slow container/enroot starts on secondary nodes don't blow up
+    # init_world_group before all 16 ranks connect. Insert one key after each
+    # 6-space-indented `watchdog-timeout:` line (prefill + decode blocks).
+    sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
