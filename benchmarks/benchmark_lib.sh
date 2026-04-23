@@ -897,6 +897,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --max-concurrent-requests 0"
     REPLAY_CMD+=" --advance-min $advance_min"
     REPLAY_CMD+=" --advance-max $advance_max"
+    REPLAY_CMD+=" --warmup-enabled"
     REPLAY_CMD+=" --seed 42"
     REPLAY_CMD+=" --no-color"
     if [ "${IGNORE_EOS:-false}" = "true" ]; then
