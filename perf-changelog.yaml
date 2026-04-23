@@ -1717,3 +1717,10 @@
     - "Trigger H100 multinode evals after NVSHEMM fixes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
   evals-only: true
+
+- config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Update SGLang image from glm5-hopper to v0.5.10.post1-cu130"
+    - "Add --enable-flashinfer-allreduce-fusion to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1033
