@@ -279,13 +279,11 @@ qwen3.5-fp8-mi355x-atom-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 2, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 2, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
