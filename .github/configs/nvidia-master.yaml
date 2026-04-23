@@ -4352,6 +4352,25 @@ dsr1-fp8-gb200-dynamo-trt:
   multinode: true
   disagg: true
   scenarios:
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [1, 2, 4, 8, 16, 32]
+        no-max-tokens: false
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/agentic/ctx1_gen1_dep8_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/trtllm/gb200-fp8/agentic/ctx1_gen1_dep8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
     fixed-seq-len:
     # 1k1k MTP configs
     - isl: 1024
