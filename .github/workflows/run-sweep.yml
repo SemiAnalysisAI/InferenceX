@@ -55,6 +55,15 @@ jobs:
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
         steps:
+            - name: Reject conflicting sweep labels
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              run: |
+                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to max(conc) per parallelism config."
+                  exit 1
+
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
@@ -65,8 +74,7 @@ jobs:
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
-                        !contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+                        contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
                       }}
               run: |
                   pip install pydantic
