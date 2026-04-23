@@ -4402,9 +4402,9 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "none"
         conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
         prefill:
-          num-worker: 10
-          tp: 4
-          ep: 4
+          num-worker: 5
+          tp: 8
+          ep: 8
           dp-attn: true
           additional-settings:
           # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml
