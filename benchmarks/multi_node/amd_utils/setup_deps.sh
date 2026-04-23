@@ -875,11 +875,11 @@ except Exception as e:
 # Run installers
 # =============================================================================
 
-install_ucx
-install_rixl
-install_etcd
-install_libionic
-install_mori
+# install_ucx
+# install_rixl
+# install_etcd
+# install_libionic
+# install_mori
 install_amd_quark
 install_mori_proxy_deps
 patch_mori_fp8_compat
