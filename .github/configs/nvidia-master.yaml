@@ -4994,6 +4994,25 @@ dsr1-fp8-gb300-dynamo-sglang:
           ep: 24
           dp-attn: true
 
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/tp4_1p1d_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/tp4_1p1d_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8-cu130"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
