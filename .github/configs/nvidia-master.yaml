@@ -3826,6 +3826,25 @@ dsr1-fp8-h100-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/h100/agentic/h100-fp8-1p1d-tp16-128k-agentic.yaml
+          - "CONFIG_FILE=recipes/h100/agentic/h100-fp8-1p1d-tp16-128k-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 1
+          dp-attn: false
+
 gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc11
   model: openai/gpt-oss-120b
