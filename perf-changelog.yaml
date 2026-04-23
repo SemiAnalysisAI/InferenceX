@@ -1,4 +1,11 @@
 - config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after dist-timeout and health-check timeout fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
     - glm5.1-fp4-mi355x-sglang
   description:
     - "Add GLM5.1 MXFP4 (FP4) MI355X SGLang Support" 
