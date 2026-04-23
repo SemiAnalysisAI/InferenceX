@@ -41,18 +41,22 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     return "\n".join(added_lines)
 
 
-def reduce_conc_to_endpoints(entries: list[dict]) -> list[dict]:
-    """Collapse benchmark entries to their configured concurrency endpoints.
+def trim_conc(entries: list[dict]) -> list[dict]:
+    """Trim each parallelism config's concurrency sweep to its final point.
 
-    Standard-tier sweeps only need the first and last concurrency point per
-    parallelism config so they run fast on shared clusters; push-to-main and
-    ``full-sweep-enabled`` PRs skip this reduction and keep the full sweep.
+    Non-full-sweep PRs only need a single concurrency point per parallelism
+    config to validate a change runs end-to-end, so the shared cluster stays
+    clear. Push-to-main and ``full-sweep-enabled`` PRs skip this reduction.
 
-    - Single-node entries have scalar ``conc``; group by every other field and
-      keep only the first and last encountered entries per group. This preserves
-      ascending/descending ``conc-list`` ordering from the source config.
-    - Multi-node entries carry ``conc`` as a list and are trimmed in place to
-      ``[conc[0], conc[-1]]``.
+    The retained value is ``conc[-1]`` — the last configured concurrency,
+    which honors the source ordering of the ``conc-list`` / ``conc-start``
+    range (ascending lists collapse to their max, descending lists to their
+    min).
+
+    - Single-node entries have scalar ``conc``; group by every other field
+      and keep only the final entry per group.
+    - Multi-node entries carry ``conc`` as a list and are trimmed in place
+      to ``[conc[-1]]``.
     """
     groups: dict[tuple, list[int]] = {}
     out: list[dict] = []
@@ -61,7 +65,7 @@ def reduce_conc_to_endpoints(entries: list[dict]) -> list[dict]:
         if entry.get("prefill") is not None:
             conc = entry.get("conc")
             if isinstance(conc, list) and len(conc) > 1:
-                entry = {**entry, "conc": [conc[0], conc[-1]]}
+                entry = {**entry, "conc": [conc[-1]]}
             out.append(entry)
             continue
 
@@ -71,8 +75,8 @@ def reduce_conc_to_endpoints(entries: list[dict]) -> list[dict]:
 
     drop: set[int] = set()
     for idxs in groups.values():
-        if len(idxs) > 2:
-            drop.update(idxs[1:-1])
+        if len(idxs) > 1:
+            drop.update(idxs[:-1])
     return [e for i, e in enumerate(out) if i not in drop]
 
 
@@ -101,7 +105,7 @@ def main():
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
-    parser.add_argument("--standard", action="store_true")
+    parser.add_argument("--trim-conc", action="store_true")
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -193,8 +197,8 @@ def main():
                 raise
             all_eval_results.extend(json.loads(eval_result.stdout))
 
-    if args.standard:
-        all_benchmark_results = reduce_conc_to_endpoints(all_benchmark_results)
+    if args.trim_conc:
+        all_benchmark_results = trim_conc(all_benchmark_results)
 
     for result in all_benchmark_results:
         seq_len_str = seq_len_to_str(result["isl"], result["osl"])

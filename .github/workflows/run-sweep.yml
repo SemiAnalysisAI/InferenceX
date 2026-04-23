@@ -62,7 +62,7 @@ jobs:
 
             - id: setup
               env:
-                  IS_STANDARD_SWEEP: >-
+                  TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
                         contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
@@ -85,8 +85,8 @@ jobs:
                       --base-ref "$BASE_REF"
                       --head-ref "$HEAD_REF"
                   )
-                  if [ "$IS_STANDARD_SWEEP" = "true" ]; then
-                      CMD+=(--standard)
+                  if [ "$TRIM_CONC" = "true" ]; then
+                      CMD+=(--trim-conc)
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
