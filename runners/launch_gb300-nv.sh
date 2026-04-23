@@ -25,8 +25,8 @@ resolve_model_path() {
             echo "  - $candidate" >&2
         done
         echo "Common model directories:" >&2
-        ls -la /raid/shared/models /mnt/lustre01/models /home/sa-shared/models /data/home/sa-shared/models 2>&1 || true
-        exit 1
+        ls -la /data/models /raid/shared/models /mnt/lustre01/models /home/sa-shared/models /data/home/sa-shared/models >&2 || true
+        return 1
     fi
 
     echo "$selected"
@@ -34,19 +34,27 @@ resolve_model_path() {
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=$(resolve_model_path \
+    MODEL_PATH=$(resolve_model_path \
+        /data/models/dsr1-fp4 \
+        /data/models/deepseek-r1-0528-fp4-v2 \
+        /data/models/DeepSeek-R1-0528-NVFP4-v2 \
         /raid/shared/models/deepseek-r1-0528-fp4-v2 \
         /mnt/lustre01/models/deepseek-r1-0528-fp4-v2 \
         /home/sa-shared/models/deepseek-r1-0528-fp4-v2 \
-        /data/home/sa-shared/models/deepseek-r1-0528-fp4-v2)
+        /data/home/sa-shared/models/deepseek-r1-0528-fp4-v2) || exit 1
+    export MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=$(resolve_model_path \
+    MODEL_PATH=$(resolve_model_path \
+        /data/models/dsr1-fp8 \
+        /data/models/deepseek-r1-0528 \
+        /data/models/DeepSeek-R1-0528 \
         /raid/shared/models/deepseek-r1-0528 \
         /mnt/lustre01/models/deepseek-r1-0528 \
         /home/sa-shared/models/deepseek-r1-0528 \
-        /data/home/sa-shared/models/deepseek-r1-0528)
+        /data/home/sa-shared/models/deepseek-r1-0528) || exit 1
+    export MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
