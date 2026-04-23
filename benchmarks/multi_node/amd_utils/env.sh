@@ -9,7 +9,7 @@
 #               Set by runner or auto-detected from hostname.
 set -x
 
-ENGINE="${ENGINE:-sglang}"
+ENGINE="${ENGINE:-sglang-disagg}"
 export PYTHONDONTWRITEBYTECODE=1
 
 # =============================================================================
@@ -43,7 +43,7 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 # Engine-specific environment
 # =============================================================================
 
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     # vLLM/Nixl-specific environment
     # =========================================================================
