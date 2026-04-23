@@ -1714,5 +1714,6 @@
     - dsr1-fp8-h100-dynamo-trt
     - dsr1-fp8-h100-dynamo-sglang
   description:
-    - "Trigger H100 multinode evals after dist-timeout and health-check timeout fixes"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1119
+    - "Trigger H100 multinode evals after NVSHEMM fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
+  evals-only: true
