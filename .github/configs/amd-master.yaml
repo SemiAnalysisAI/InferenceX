@@ -1246,16 +1246,16 @@ dsr1-fp4-mi355x-sglang-disagg-exp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=0"
 
-    # 3*DEP4 + 1*DEP8
+    # 2*DEP8 + 1*DEP8
     - spec-decoding: "none"
       conc-list: [ 512, 1024, 2048 ]
       prefill:
-        num-worker: 3
-        tp: 4
-        ep: 4
+        num-worker: 2
+        tp: 8
+        ep: 8
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=3"
+        - "PREFILL_NODES=2"
       decode:
         num-worker: 1
         tp: 8
@@ -1299,16 +1299,16 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-exp:
         - "DECODE_NODES=1"
         - "DECODE_MTP_SIZE=1"
 
-    # 3*DEP4 + 1*DEP8
+    # 2*DEP8 + 1*DEP8
     - spec-decoding: "mtp"
       conc-list: [ 512, 1024, 2048 ]
       prefill:
-        num-worker: 3
-        tp: 4
-        ep: 4
+        num-worker: 2
+        tp: 8
+        ep: 8
         dp-attn: true
         additional-settings:
-        - "PREFILL_NODES=3"
+        - "PREFILL_NODES=2"
       decode:
         num-worker: 1
         tp: 8

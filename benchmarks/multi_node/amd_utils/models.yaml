@@ -226,7 +226,7 @@ DeepSeek-R1-0528-MXFP4:
 DeepSeek-R1-0528-MXFP4-v2:
   base_flags: "--decode-log-interval 100 --log-level info --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-draft-model-path SGLang/DeepSeek-R1-NextN --speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-attention-mode decode "
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head --stream-interval 100 --tokenizer-worker-num 32 --num-continuous-decode-steps=4 "
+  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head --stream-interval 100 --tokenizer-worker-num 32 --num-continuous-decode-steps=4  --scheduler-recv-interval=4 "
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
