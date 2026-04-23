@@ -384,6 +384,25 @@ dsr1-fp4-b200-dynamo-trt:
           ep: 8
           dp-attn: true
 
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/b200-fp4/agentic/ctx1_gen1_tep8_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/trtllm/b200-fp4/agentic/ctx1_gen1_tep8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
 dsr1-fp8-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: deepseek-ai/DeepSeek-R1-0528
@@ -833,6 +852,25 @@ dsr1-fp8-b200-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
+
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/b200-fp8/agentic/ctx1_gen1_tp8_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/trtllm/b200-fp8/agentic/ctx1_gen1_tp8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
 
 
 dsr1-fp4-b300-dynamo-trt:
