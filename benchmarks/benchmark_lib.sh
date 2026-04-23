@@ -878,26 +878,6 @@ install_agentic_deps() {
     pip install --upgrade "datasets>=4.7.0"
 }
 
-start_agentic_metrics_collector() {
-    local result_dir="$1"
-    local port="${2:-$PORT}"
-
-    export PYTHONPATH="$AGENTIC_DIR:${PYTHONPATH:-}"
-
-    echo "Starting server metrics collector..."
-    # -u forces unbuffered stdout. Without it, Python block-buffers stdout
-    # when backgrounded (not a tty), so the collector's startup log lines
-    # sit in the buffer for the entire benchmark and only flush on exit —
-    # misleadingly making it look like the collector started late.
-    python3 -u -m bench.run_metrics_collector \
-        --url "http://localhost:$port" \
-        --output-prefix "$result_dir/metrics" \
-        --pid-file "$result_dir/metrics_collector.pid" &
-    METRICS_PID=$!
-    echo "Metrics collector PID: $METRICS_PID"
-    sleep 2
-}
-
 build_replay_cmd() {
     local result_dir="$1"
     local duration="${DURATION:-1800}"
@@ -931,40 +911,7 @@ build_replay_cmd() {
     if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
         REPLAY_CMD+=" --no-max-tokens"
     fi
-}
-
-stop_agentic_metrics_collector() {
-    echo "Stopping metrics collector..."
-    if [ -n "${METRICS_PID:-}" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
-        kill -TERM "$METRICS_PID" 2>/dev/null || true
-        wait "$METRICS_PID" 2>/dev/null || true
-    fi
-}
-
-trim_idle_metrics() {
-    local result_dir="$1"
-    python3 -c "
-import csv, sys
-f = '$result_dir/metrics_server_metrics.csv'
-try:
-    with open(f) as fh:
-        reader = csv.DictReader(fh)
-        header = reader.fieldnames
-        rows = list(reader)
-    first = next((i for i, r in enumerate(rows) if float(r.get('num_requests_running', 0)) > 0 or float(r.get('prompt_tokens_total', 0)) > 0), 0)
-    if first > 0:
-        trimmed = rows[first:]
-        t0 = float(trimmed[0]['timestamp_sec'])
-        for r in trimmed:
-            r['relative_time_sec'] = f'{float(r[\"timestamp_sec\"]) - t0:.3f}'
-        with open(f, 'w', newline='') as fh:
-            w = csv.DictWriter(fh, fieldnames=header)
-            w.writeheader()
-            w.writerows(trimmed)
-        print(f'Trimmed {first} idle rows from metrics CSV')
-except Exception as e:
-    print(f'Warning: could not trim metrics CSV: {e}', file=sys.stderr)
-" 2>&1 || true
+    REPLAY_CMD+=" --metrics-output-prefix $result_dir/metrics"
 }
 
 write_agentic_result_json() {

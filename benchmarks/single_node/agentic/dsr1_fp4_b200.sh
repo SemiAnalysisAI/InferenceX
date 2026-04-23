@@ -65,7 +65,6 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 # ---- Run benchmark ----------------------------------------------------------
-start_agentic_metrics_collector "$RESULT_DIR"
 build_replay_cmd "$RESULT_DIR"
 
 echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
@@ -79,6 +78,3 @@ write_agentic_result_json "$RESULT_DIR"
 # ---- Post-processing --------------------------------------------------------
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
     "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
-
-stop_agentic_metrics_collector
-trim_idle_metrics "$RESULT_DIR"
