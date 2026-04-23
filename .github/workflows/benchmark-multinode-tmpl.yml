@@ -175,7 +175,7 @@ jobs:
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 1
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
 
