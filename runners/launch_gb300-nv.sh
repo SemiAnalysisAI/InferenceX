@@ -116,11 +116,24 @@ import_container() {
     srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" --exclusive --time=180 \
         bash -lc "mkdir -p '$(dirname "$squash_file")' && enroot import -o '$squash_file' 'docker://$image' && test -f '$squash_file' && unsquashfs -l '$squash_file' >/dev/null"
 
+    # /data/squash can lag briefly after enroot writes from the import node.
+    for _ in {1..30}; do
+        if [[ -f "$squash_file" ]] && unsquashfs -l "$squash_file" >/dev/null 2>&1; then
+            echo "Imported squash image is visible: $squash_file"
+            return 0
+        fi
+        sleep 2
+    done
+
     if [[ ! -f "$squash_file" ]]; then
         echo "ERROR: Container image path does not exist after import: $squash_file" >&2
         ls -la "$(dirname "$squash_file")" >&2 || true
         exit 1
     fi
+
+    echo "ERROR: Container image exists but failed unsquashfs validation: $squash_file" >&2
+    ls -la "$squash_file" >&2 || true
+    exit 1
 }
 
 import_container "$IMAGE" "$SQUASH_FILE"
