@@ -868,14 +868,19 @@ resolve_trace_source() {
 }
 
 install_agentic_deps() {
-    pip install --quiet urllib3 requests 2>/dev/null || true
-    pip install -q -r "$AGENTIC_DIR/requirements.txt"
-    pip install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
+    local pip_install=(python3 -m pip install)
+    if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
+        pip_install+=(--break-system-packages)
+    fi
+
+    "${pip_install[@]}" --quiet urllib3 requests 2>/dev/null || true
+    "${pip_install[@]}" -q -r "$AGENTIC_DIR/requirements.txt"
+    "${pip_install[@]}" -q -r "$TRACE_REPLAY_DIR/requirements.txt"
     # Force-upgrade datasets: containers often ship an older version without
     # the `Json` feature type used by the HF traces dataset. `Json` was added
     # in datasets 4.7.0 (March 2025). Unpinned installs won't upgrade an
     # already-present package.
-    pip install --upgrade "datasets>=4.7.0"
+    "${pip_install[@]}" --upgrade "datasets>=4.7.0"
 }
 
 build_replay_cmd() {
