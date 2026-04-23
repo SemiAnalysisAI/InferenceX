@@ -8,7 +8,7 @@
 #SBATCH --time=24:00:00
 # --output and --error are set by submit.sh via BENCHMARK_LOGS_DIR
 
-ENGINE="${ENGINE:-sglang}"
+ENGINE="${ENGINE:-sglang-disagg}"
 
 echo "=== Job Start Time ==="
 echo "UTC Time: $(TZ=UTC date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -23,7 +23,7 @@ echo ""
 
 # Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_vllm.yaml"
 else
     MODELS_YAML="$(pwd)/models.yaml"
@@ -111,7 +111,7 @@ if [[ -z "$MODEL_DIR" ]]; then
 fi
 export MODEL_DIR
 
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
     DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
         found && /^[^ ]/{exit}
@@ -278,6 +278,7 @@ export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
 export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
+export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
 
 # Eval-related env vars (threaded from submit.sh)
@@ -366,7 +367,7 @@ DOCKER_ENV_COMMON=(
 )
 
 # Engine-specific env vars
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
         -e VLLM_WS_PATH=${WS_PATH}
         -e MODEL_PATH=$DOCKER_MODEL_PATH
@@ -402,28 +403,29 @@ set -euo pipefail
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
 # Pre-clean (idempotent)
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$_DCMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$_DCMD stop || true
+\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
 
 # Start vLLM external router container on node 0
-if [[ \"$ENGINE\" == \"vllm\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-    \$DOCKER_CMD run -d \\
-        --name \"$ROUTER_CONT_NAME\" \\
-        --network host \\
-        \"$VLLM_ROUTER_IMAGE\" \\
-        vllm-router \\
-            --vllm-pd-disaggregation \\
-            --vllm-discovery-address \"0.0.0.0:${PROXY_PING_PORT}\" \\
-            --port \"${ROUTER_PORT}\" \\
-            --host 0.0.0.0 \\
-            --policy consistent_hash \\
-            --prefill-policy consistent_hash \\
-            --decode-policy consistent_hash \\
-            --log-level info
+    \$DOCKER_CMD run -d \
+        --name \"$ROUTER_CONT_NAME\" \
+        --network host \
+        -v /tmp:/run_logs \
+        \"$VLLM_ROUTER_IMAGE\" \
+        bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
+            --vllm-pd-disaggregation \
+            --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
+            --port ${ROUTER_PORT} \
+            --host 0.0.0.0 \
+            --policy consistent_hash \
+            --prefill-policy consistent_hash \
+            --decode-policy consistent_hash \
+            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
-exec \$DOCKER_CMD run --rm \
+exec \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -470,11 +472,13 @@ if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
 fi
 "
 
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '$DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '$DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
 
-# Clean up vLLM external router container on node 0
-if [[ "$ENGINE" == "vllm" && "$ROUTER_TYPE" == "vllm-router" ]]; then
-    srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
-        '"$DOCKER_CMD"' rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
-    '
+    # Clean up vLLM external router container on node 0
+    if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
+        srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
+            '"$DOCKER_CMD"' rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
+        '
+    fi
 fi

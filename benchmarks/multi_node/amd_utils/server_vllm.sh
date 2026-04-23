@@ -199,29 +199,29 @@ python3 $WS_PATH/sync.py barrier \
 # ETCD Server Setup
 # =============================================================================
 
-echo "Proceeding to start etcd server on $host_name"
-bash ${WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
-etcd_pid=$!
+# echo "Proceeding to start etcd server on $host_name"
+# bash ${WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
+# etcd_pid=$!
 
-echo "Waiting at etcd server barrier on $host_name"
-python3 $WS_PATH/sync.py barrier \
-    --node-ips ${IPADDRS} \
-    --node-ports 2379 \
-    --wait-for-all-ports \
-    --timeout 300
+# echo "Waiting at etcd server barrier on $host_name"
+# python3 $WS_PATH/sync.py barrier \
+#     --node-ips ${IPADDRS} \
+#     --node-ports 2379 \
+#     --wait-for-all-ports \
+#     --timeout 300
 
-echo "All etcd servers are up : $host_name"
-sleep 3
+# echo "All etcd servers are up : $host_name"
+# sleep 3
 
-echo "etcd endpoint health=================="
-etcdctl endpoint health 2>&1 || /usr/local/bin/etcd/etcdctl endpoint health 2>&1 || true
-echo "======================================"
+# echo "etcd endpoint health=================="
+# etcdctl endpoint health 2>&1 || /usr/local/bin/etcd/etcdctl endpoint health 2>&1 || true
+# echo "======================================"
 
-python3 $WS_PATH/sync.py barrier \
-    --node-ips ${IPADDRS} \
-    --node-ports 2379 \
-    --wait-for-all-ports \
-    --timeout 300
+# python3 $WS_PATH/sync.py barrier \
+#     --node-ips ${IPADDRS} \
+#     --node-ports 2379 \
+#     --wait-for-all-ports \
+#     --timeout 300
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -343,7 +343,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
         eval "$HEALTH_BARRIER_CMD"
-        echo "MoRI-IO proxy is ready for benchmarking"
+        echo "${ROUTER_TYPE} is ready for benchmarking"
     fi
 
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
@@ -490,9 +490,9 @@ else
     [[ "$DRY_RUN" -eq 0 ]] && kill $decode_pid 2>/dev/null || true
 fi
 
-echo "Killing the etcd server"
-kill $etcd_pid 2>/dev/null || true
-pkill -f etcd 2>/dev/null || true
+# echo "Killing the etcd server"
+# kill $etcd_pid 2>/dev/null || true
+# pkill -f etcd 2>/dev/null || true
 
 echo "Script completed successfully"
 exit 0

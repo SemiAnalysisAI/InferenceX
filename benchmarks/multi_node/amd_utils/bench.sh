@@ -11,7 +11,7 @@
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
 
-ENGINE="${ENGINE:-sglang}"
+ENGINE="${ENGINE:-sglang-disagg}"
 
 n_prefill=$1
 n_decode=$2
@@ -67,7 +67,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     # Engine-specific extra flags
     extra_flags=""
-    if [[ "$ENGINE" == "vllm" ]]; then
+    if [[ "$ENGINE" == "vllm-disagg" ]]; then
         extra_flags="--trust-remote-code"
     else
         if [ "$IS_MTP" = "true" ]; then
@@ -92,7 +92,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "-----------------------------------------"
 
     # vLLM: cooldown between rounds for idle KV block reaper
-    if [[ "$ENGINE" == "vllm" ]]; then
+    if [[ "$ENGINE" == "vllm-disagg" ]]; then
         echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
         sleep 10
     fi

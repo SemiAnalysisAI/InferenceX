@@ -100,7 +100,7 @@ export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export PROFILER_ARGS=$profiler_args
 
 # Engine-specific xP/yD semantics and TP exports
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300}
     export VLLM_MORIIO_CONNECTOR_READ_MODE=${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
 fi
