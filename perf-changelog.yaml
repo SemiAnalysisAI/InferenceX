@@ -1709,3 +1709,10 @@
   description:
     - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after dist-timeout and health-check timeout fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1119
