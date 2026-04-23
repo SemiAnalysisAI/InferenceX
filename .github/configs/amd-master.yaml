@@ -277,6 +277,26 @@ glm5-fp8-mi355x-atom:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 256 }
 
+glm5.1-fp4-mi355x-sglang:
+  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  model: amd/GLM-5.1-MXFP4
+  model-prefix: glm5.1
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+
 glm5.1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: amd/GLM-5.1-MXFP4
