@@ -1,4 +1,34 @@
 - config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after dist-timeout and health-check timeout fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Add GLM5.1 MXFP4 (FP4) MI355X SGLang Support" 
+    - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1098
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 GB200 disaggregated TRT-LLM benchmarks via Dynamo (14 STP configs)"
+    - "New framework: dynamo-trt (Dynamo frontend + TensorRT-LLM backend)"
+    - "Container: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "Runner script updated to support kimik2.5 model prefix with dynamo-trt framework"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1026
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image from 'lmsysorg/sglang:v0.5.10-rocm720-mi35x' to 'rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413'"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1041
+
+- config-keys:
     - kimik2.5-int4-mi300x-vllm
   description:
     - "Add Kimi K2.5 INT4 single-node MI300X vLLM benchmark (TP8)"
@@ -1259,6 +1289,16 @@
     - "Upgrade vLLM image to v0.19.0"
     - "Enable FP8 KV cache + AITER FA for minimaxm2.5-fp8-mi355x-vllm"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1003
+  
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Add MiniMax M2.5 MXFP4 vLLM benchmark for MI355X"
+    - "Model: amd/MiniMax-M2.5-MXFP4 with --trust-remote-code and --block-size=32"
+    - "Image: vllm/vllm-openai-rocm:v0.19.1"
+    - "Environment: VLLM_ROCM_USE_AITER=1"
+    - "Tp=1, TP=2 and TP=4, concurrency 4-64 for 1k1k, 1k8k, and 8k1k sequence lengths"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/827
 
 - config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
@@ -1309,6 +1349,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/820
 
 - config-keys:
+    - qwen3.5-bf16-mi300x-sglang
+    - qwen3.5-bf16-mi325x-sglang
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI300X and  MI325X to achieve better performance"
+    - "Use lmsysorg/sglang:v0.5.10-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1063
+
+- config-keys:
     - glm5-fp4-b200-sglang
   description:
     - "Update GLM-5 NVFP4 B200 SGLang benchmark script with optimized launch parameters"
@@ -1344,10 +1394,329 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1022
   
 - config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Upgrade GLM5 FP8 MI355X SGLang image to v0.5.10rc0-rocm720-mi35x-20260413"
+    - "Set --kv-cache-dtype fp8_e4m3 and --disable-radix-cache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1023
+
+- config-keys:
     - qwen3.5-fp8-h200-sglang-mtp
   description:
     - "Enable SGLANG_ENABLE_SPEC_V2=1 for Qwen3.5 FP8 H200 SGLang MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1017
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang
+  description:
+    - "Update cli args of Qwen3.5 FP8 and BF16 SGLang benchmarks for MI355X to achieve better performance"
+    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415 for BF16 benchmark"
+    - "Use lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414 for FP8 benchmark"
+    - "Image includes upstream SGLang PRs: https://github.com/sgl-project/sglang/pull/21188, https://github.com/sgl-project/sglang/pull/21421, https://github.com/sgl-project/sglang/pull/20736"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1036
+
+- config-keys:
+    - glm5-fp4-b200-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260328-a27651d5 to v0.5.10.post1-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1031
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "EAGLE speculative decoding with MTP, TP=4, concurrency 4-256 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1035
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "TP=4, concurrency 4-256 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1048
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+  description:
+    - "Add DeepSeek-R1-0528 FP4 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP4 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1049
+
+- config-keys:
+    - dsr1-fp8-b300-sglang
+  description:
+    - "Add DeepSeek-R1-0528 FP8 B300 SGLang benchmark (non-MTP)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP8 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1050
+
+- config-keys:
+    - glm5-fp8-b300-sglang
+  description:
+    - "Add GLM-5 FP8 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5.1 does not have a B300-specific recipe, so this reuses the existing GLM5 FP8 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1051
+
+- config-keys:
+    - glm5-fp4-b300-sglang
+  description:
+    - "Add GLM-5 FP4 (NVFP4) B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5 does not have a B300-specific recipe, so this reuses the existing GLM-5 FP4 B200 SGLang recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1058
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-R1-0528 FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "EAGLE speculative decoding with MTP, TP=8, concurrency 4-512 for 1k1k and 8k1k"
+    - "At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 does not have a B300-specific recipe, so this reuses the existing DSR1 FP8 B200 SGLang MTP recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1059
+
+- config-keys:
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Add MiniMax-M2.5 FP4 (NVFP4) B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html does not have a B300-specific recipe, so this reuses the existing MiniMax-M2.5 FP4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1055
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html does not have a B300-specific recipe, so this reuses the existing MiniMax-M2.5 FP8 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1054
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 FP4 (NVFP4) B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.0-cu130"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 FP4 B200 vLLM recipe as-is"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1056
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Expand GPT-OSS 120B FP4 MI300X TP=1 concurrency from 64 to 256 for 1k1k"
+    - "Higher concurrency improves MoE weight amortization: 8552 total TPS at conc=256 vs 4016 at conc=64 (2.1x)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1053
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-trt
+    - dsr1-fp8-b200-dynamo-trt
+    - dsr1-fp4-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b300-dynamo-trt
+    - dsr1-fp8-b300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Add multi-node lm-eval accuracy runs"
+    - "Eval picks the config with highest max eligible concurrency per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) group on 8k1k"
+    - "Eval concurrency set to the median eligible conc (>= MIN_EVAL_CONC=16) of the selected config to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1000
+  evals-only: true
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Follows the SGLang cookbook recipe at https://cookbook.sglang.io/autoregressive/Qwen/Qwen3.5 as of 2026-04-17"
+    - "Mirrors the B200 FP4 recipe with mem-fraction-static lowered to 0.8 and an extra TP2/EP2 search-space entry"
+    - "Configs: 1k1k and 8k1k, TP4/EP1 conc 4-128 + TP2/EP2 conc 4-128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-bf16-b300-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the B200 BF16 recipe with an extra TP4/EP1 search-space entry alongside the existing TP8/EP1 sweep"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-64 + TP4/EP1 conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B200 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the qwen3.5-bf16-b200-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-64 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-bf16-b300-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the qwen3.5-bf16-b300-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-64 + TP4/EP1 conc 4-64, spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Mirrors the qwen3.5-fp4-b300-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP4/EP1 conc 4-128 + TP2/EP2 conc 4-128, spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp8-b300-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 B300 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: zai-org/GLM-5-FP8"
+    - "Mirrors the glm5-fp8-b300-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-bf16-mi355x-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B BF16 MI355X SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+    - "Model: Qwen/Qwen3.5-397B-A17B"
+    - "Mirrors the qwen3.5-bf16-mi355x-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp8-b200-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 B200 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448"
+    - "Model: zai-org/GLM-5-FP8"
+    - "Mirrors the glm5-fp8-b200-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP=8/EP=1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp4-b300-sglang-mtp
+  description:
+    - "Add GLM-5 NVFP4 B300 SGLang MTP benchmark (draft)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/GLM-5-NVFP4"
+    - "Follows the glm5-fp8-b300-sglang launch recipe as requested, plus EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-4 + TP4/EP1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414"
+    - "Model: Qwen/Qwen3.5-397B-A17B-FP8"
+    - "Mirrors the qwen3.5-fp8-mi355x-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k (TP8/EP1, TP8/EP8, TP2/EP2) and 8k1k (TP2/EP2, TP4/EP1) with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 MI355X SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413"
+    - "Model: zai-org/GLM-5-FP8"
+    - "Mirrors the glm5-fp8-mi355x-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP=8 conc 4-64 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B200 SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "Mirrors the qwen3.5-fp4-b200-sglang non-MTP recipe and adds EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Configs: 1k1k and 8k1k, TP=4/EP=1 conc 4-128 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - glm5-fp4-b200-sglang-mtp
+  description:
+    - "Add GLM-5 NVFP4 B200 SGLang MTP benchmark (draft)"
+    - "Image: lmsysorg/sglang:v0.5.10.post1-cu130"
+    - "Model: nvidia/GLM-5-NVFP4"
+    - "Follows the glm5-fp8-b200-sglang launch recipe as requested, plus EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Configs: 1k1k and 8k1k, TP8/EP1 conc 4-4 + TP4/EP1 conc 4-256 with spec-decoding=mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Extend GPT-OSS FP4 TP=8 search to conc=1"
+    - "low-latency endpoint for users prioritizing interactive single-user use cases (chat, copilot, agentic)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1092
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Add kv-cache-dtype fp8, max-cudagraph-capture-size 2048, max-num-batched-tokens, and stream-interval 20 to server launch args"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1047
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+  description:
+    - "Add H200 multinode evals-only runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1094
+  evals-only: true
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1106
+
+- config-keys:
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, update search space concurrency ranges"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1107
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high, remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1068
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-vllm
+  description:
+    - "Add VLLM_FLOAT32_MATMUL_PRECISION=high"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1069
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+  description:
+    - "Trigger H100 multinode evals after NVSHEMM fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
+  evals-only: true
 
 - config-keys:
     - glm5-fp8-h200-sglang
