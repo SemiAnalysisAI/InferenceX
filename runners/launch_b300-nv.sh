@@ -37,9 +37,9 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR" || exit 1
-git checkout sa-submission-q2-2026
+git checkout cam/sa-submission-q2-2026
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
