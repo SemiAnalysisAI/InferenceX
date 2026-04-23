@@ -181,8 +181,6 @@ cat > srtslurm.yaml <<EOF
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
-sbatch_directives:
-  exclude: "${SLURM_EXCLUDED_NODELIST}"
 
 # Resource defaults
 gpus_per_node: 4
@@ -220,7 +218,20 @@ if [[ -z "$CONFIG_FILE" ]]; then
 fi
 
 # Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+if [[ -n "$SLURM_EXCLUDED_NODELIST" ]]; then
+    if grep -q "^sbatch_directives:" "$CONFIG_PATH"; then
+        if grep -q "^  exclude:" "$CONFIG_PATH"; then
+            sed -i "s/^  exclude:.*/  exclude: \"${SLURM_EXCLUDED_NODELIST}\"/" "$CONFIG_PATH"
+        else
+            sed -i "/^sbatch_directives:/a\\  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
+        fi
+    else
+        sed -i "/^name:.*/a sbatch_directives:\\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
+    fi
+fi
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
