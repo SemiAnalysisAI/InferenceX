@@ -4411,8 +4411,8 @@ dsr1-fp4-gb200-dynamo-trt:
           - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
           dp-attn: true
 
 
