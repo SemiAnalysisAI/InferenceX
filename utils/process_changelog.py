@@ -41,6 +41,41 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     return "\n".join(added_lines)
 
 
+def reduce_conc_to_endpoints(entries: list[dict]) -> list[dict]:
+    """Collapse benchmark entries to their configured concurrency endpoints.
+
+    Standard-tier sweeps only need the first and last concurrency point per
+    parallelism config so they run fast on shared clusters; push-to-main and
+    ``full-sweep-enabled`` PRs skip this reduction and keep the full sweep.
+
+    - Single-node entries have scalar ``conc``; group by every other field and
+      keep only the first and last encountered entries per group. This preserves
+      ascending/descending ``conc-list`` ordering from the source config.
+    - Multi-node entries carry ``conc`` as a list and are trimmed in place to
+      ``[conc[0], conc[-1]]``.
+    """
+    groups: dict[tuple, list[int]] = {}
+    out: list[dict] = []
+
+    for entry in entries:
+        if entry.get("prefill") is not None:
+            conc = entry.get("conc")
+            if isinstance(conc, list) and len(conc) > 1:
+                entry = {**entry, "conc": [conc[0], conc[-1]]}
+            out.append(entry)
+            continue
+
+        key = tuple(sorted((k, v) for k, v in entry.items() if k != "conc"))
+        groups.setdefault(key, []).append(len(out))
+        out.append(entry)
+
+    drop: set[int] = set()
+    for idxs in groups.values():
+        if len(idxs) > 2:
+            drop.update(idxs[1:-1])
+    return [e for i, e in enumerate(out) if i not in drop]
+
+
 def get_config_keys_from_master(
     config_keys: list[str], master_config: dict
 ) -> list[str]:
@@ -66,6 +101,7 @@ def main():
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
+    parser.add_argument("--standard", action="store_true")
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -156,6 +192,9 @@ def main():
                 print(e.stderr)
                 raise
             all_eval_results.extend(json.loads(eval_result.stdout))
+
+    if args.standard:
+        all_benchmark_results = reduce_conc_to_endpoints(all_benchmark_results)
 
     for result in all_benchmark_results:
         seq_len_str = seq_len_to_str(result["isl"], result["osl"])
