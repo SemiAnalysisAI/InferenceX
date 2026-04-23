@@ -37,8 +37,9 @@ InferenceX is an open-source, automated benchmarking system that continuously tr
 │   ├── workflows/           # GitHub Actions CI/CD
 │   │   ├── run-sweep.yml    # Main performance sweep
 │   │   ├── e2e-tests.yml    # End-to-end testing
-│   │   ├── benchmark-tmpl.yml  # Benchmark job template
-│   │   └── collect-evals.yml   # Eval results collection
+│   │   ├── benchmark-tmpl.yml           # Single-node benchmark job template
+│   │   ├── benchmark-multinode-tmpl.yml # Multi-node benchmark job template
+│   │   └── collect-evals.yml            # Eval results collection
 │   └── configs/             # Master configuration files
 │       ├── nvidia-master.yaml
 │       ├── amd-master.yaml
@@ -156,12 +157,14 @@ When working with benchmark configurations, use these valid values:
 - Kebab-case for field names: `model-prefix`, `conc-start`, `dp-attn`
 - Master configs define all benchmark configurations
 - `perf-changelog.yaml` triggers which configs to benchmark
+  - **The file is read in chronological order: oldest at the top, newest at the bottom. New entries MUST be appended to the END of the file — never insert in the middle or prepend.**
 
 ### Bash
 
 - Source shared utilities: `source benchmark_lib.sh`
 - Functions: `check_env_vars()`, `wait_for_server_ready()`, `run_benchmark_serving()`, `run_eval()`, `append_lm_eval_summary()`
 - Parameters passed via environment variables
+- **MTP scripts MUST pass `--use-chat-template` to `run_benchmark_serving` — no exceptions.** EAGLE-style speculative decoding is trained against chat-formatted inputs, so benchmarking against raw prompts silently regresses acceptance rate and produces misleading numbers. This applies to every `*_mtp.sh` script regardless of model, precision, or runner.
 
 ### Git
 
@@ -185,7 +188,7 @@ When working with benchmark configurations, use these valid values:
 
 ### Registering Recipes from srtslurm
 
-For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/ishandhanani/srt-slurm) repository. To stage these recipes in InferenceX:
+For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes are stored in the external [srtslurm](https://github.com/NVIDIA/srt-slurm) repository. To stage these recipes in InferenceX:
 
 **1. Locate source recipes in srtslurm:**
 ```bash
@@ -299,14 +302,28 @@ Evals run optional accuracy checks to ensure model outputs aren't degraded by in
 
 ### When Evals Run
 
-Evals are **off by default** (`RUN_EVAL=false`). When enabled, they run at two concurrency levels per configuration group:
+Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mode). The `EVAL_ONLY` flag skips throughput benchmarking and only runs lm-eval.
 
-- **Highest concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
-- **Lower-median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
+**Single-node** eval selection:
+- All TPs at **highest concurrency** and **median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
+- Only on `8k1k` sequence length
+
+**Multi-node** eval selection:
+- Entry with **highest max eligible concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
+- Only `8k1k` sequence length
+- Eval runs at `eval-conc`, the upper median concurrency from the selected config
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
 
-**Note**: Evals only run on `8k1k` sequence length.
+**Workflow separation**: Eval jobs are independent from benchmark jobs:
+- `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
+- `e2e-tests.yml`: `test-sweep-evals` and `test-sweep-multi-node-evals`
+- Both use their respective benchmark templates with `eval-only: true`
+- `collect-evals` depends only on eval jobs, not benchmark jobs
+
+**Multi-node eval infrastructure**:
+- AMD (MI355X): `server.sh` skips `bench.sh` when `EVAL_ONLY=true`, runs lm-eval directly
+- NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200): srt-slurm invokes its `lm-eval` runner from `do_sweep.py` as a post/eval-only step using `INFMAX_WORKSPACE`
 
 ### Eval Framework: lm-eval
 
@@ -336,22 +353,32 @@ All benchmark scripts in `benchmarks/` follow one of two flows:
 
 ```bash
 # Combined mode (benchmark + eval):
-# 1. Start server
+# 1. Start server (with --context-length expansion if EVAL_ONLY=true)
 # 2. wait_for_server_ready
-# 3. run_benchmark_serving (throughput)
-# 4. Conditionally run evals:
+# 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
+# 4. Run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
-    append_lm_eval_summary
+    append_lm_eval_summary  # Writes meta_env.json and moves artifacts
 fi
 
 # Eval-only mode (EVAL_ONLY=true):
-# 1. Compute expanded context via compute_eval_context_length
-# 2. Start server with expanded context (--context-length or --max-model-len)
+# 1. Compute eval context via compute_eval_context_length
+# 2. Start server with that context (--context-length or --max-model-len)
 # 3. wait_for_server_ready
 # 4. run_benchmark_serving returns immediately (skipped)
 # 5. run_eval + append_lm_eval_summary
 ```
+
+**Multi-node AMD** (`benchmarks/multi_node/amd_utils/server.sh`):
+- Skips `bench.sh` when `EVAL_ONLY=true`
+- Runs lm-eval via `run_eval` against the router on port 30000
+- Copies eval artifacts to `/run_logs/slurm_job-*/eval_results/`
+
+**Multi-node NVIDIA Slurm** (GB200, GB300, B200, B300, H100, H200 via srt-slurm):
+- Uses the srt-slurm `lm-eval` runner as a post/eval-only step from `do_sweep.py`
+- Mounts the InferenceX checkout from `INFMAX_WORKSPACE` at `/infmax-workspace`
+- `lm-eval` runner sources `benchmark_lib.sh` from `/infmax-workspace`
 
 ### Key Eval Functions in `benchmarks/benchmark_lib.sh`
 
@@ -362,7 +389,7 @@ fi
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
-| `compute_eval_context_length` | Computes eval context length (5x benchmark context, capped at model native max) |
+| `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Eval Results Collection
