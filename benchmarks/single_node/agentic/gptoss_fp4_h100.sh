@@ -9,7 +9,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP USERS OFFLOAD_MODE TOTAL_CPU_DRAM_GB RESULT_DIR
+check_env_vars MODEL TP USERS OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR
 
 PORT=${PORT:-8888}
 DURATION=${DURATION:-1800}
@@ -44,10 +44,18 @@ max-model-len: $MAX_MODEL_LEN
 EOF
 
 OFFLOAD_ARGS=""
-if [ "$OFFLOAD_MODE" = "on" ]; then
-    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-    OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --no-disable-hybrid-kv-cache-manager"
-fi
+case "$OFFLOADING" in
+    none)
+        ;;
+    cpu)
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --no-disable-hybrid-kv-cache-manager"
+        ;;
+    *)
+        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
+        exit 1
+        ;;
+esac
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="9.0"

@@ -6,9 +6,9 @@ output directory and produces an agg_*.json file matching the naming convention
 of fixed-seq-len results.
 
 Expected env vars:
-    RESULT_FILENAME - base name for output file (e.g., dsr1_tp4_users8_offloadon_...)
+    RESULT_FILENAME - base name for output file (e.g., dsr1_tp4_users8_offloadcpu_...)
     MODEL, MODEL_PREFIX, FRAMEWORK, PRECISION, TP, EP_SIZE, DP_ATTENTION
-    USERS, OFFLOAD_MODE, RUNNER_TYPE
+    USERS, OFFLOADING, RUNNER_TYPE
 """
 
 import csv
@@ -298,7 +298,7 @@ def main():
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,
-        "offload_mode": os.environ.get('OFFLOAD_MODE', 'off'),
+        "offloading": os.environ.get('OFFLOADING', 'none'),
         "num_requests_total": len(rows),
         "num_requests_successful": len(successful),
     }

@@ -394,8 +394,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
-                offload_mode = "on" if cpu_offloading else "off"
+                offloading = bmk.get(Fields.OFFLOADING.value, "none")
                 no_max_tokens = bmk.get(Fields.NO_MAX_TOKENS.value, False)
 
                 # Get concurrency values
@@ -461,10 +460,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.USERS.value: users,
-                                Fields.OFFLOAD_MODE.value: offload_mode,
+                                Fields.OFFLOADING.value: offloading,
                                 Fields.DURATION.value: duration,
                                 Fields.NO_MAX_TOKENS.value: no_max_tokens,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offloading}",
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
 
@@ -788,8 +787,7 @@ def generate_test_config_sweep(args, all_config_data):
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                cpu_offloading = bmk.get(Fields.CPU_OFFLOADING.value, False)
-                offload_mode = "on" if cpu_offloading else "off"
+                offloading = bmk.get(Fields.OFFLOADING.value, "none")
                 no_max_tokens = bmk.get(Fields.NO_MAX_TOKENS.value, False)
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -848,10 +846,10 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.EP.value: ep if ep is not None else 1,
                             Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                             Fields.USERS.value: users,
-                            Fields.OFFLOAD_MODE.value: offload_mode,
+                            Fields.OFFLOADING.value: offloading,
                             Fields.DURATION.value: duration,
                             Fields.NO_MAX_TOKENS.value: no_max_tokens,
-                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offload_mode}",
+                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_users{users}_offload{offloading}",
                             Fields.SCENARIO_TYPE.value: "agentic-coding",
                         }
                     matrix_values.append(validate_agentic_matrix_entry(entry))

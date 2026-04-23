@@ -9,7 +9,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP USERS OFFLOAD_MODE TOTAL_CPU_DRAM_GB RESULT_DIR
+check_env_vars MODEL TP USERS OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR
 
 PORT=${PORT:-8888}
 DURATION=${DURATION:-1800}
@@ -55,9 +55,17 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
-if [ "$OFFLOAD_MODE" = "on" ]; then
-    OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
-fi
+case "$OFFLOADING" in
+    none)
+        ;;
+    cpu)
+        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
+        ;;
+    *)
+        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
+        exit 1
+        ;;
+esac
 
 echo "Starting vllm server..."
 

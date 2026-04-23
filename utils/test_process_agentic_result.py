@@ -60,7 +60,7 @@ def test_single_node_agentic_result(tmp_path):
         "TP": "8",
         "EP_SIZE": "1",
         "DP_ATTENTION": "false",
-        "OFFLOAD_MODE": "off",
+        "OFFLOADING": "none",
     })
     assert result.returncode == 0, result.stderr
 
