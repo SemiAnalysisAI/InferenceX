@@ -857,6 +857,25 @@ INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
 TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
+agentic_pip_install() {
+    local pip_install=(python3 -m pip install)
+    if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
+        pip_install+=(--break-system-packages)
+    fi
+
+    "${pip_install[@]}" "$@"
+}
+
+ensure_hf_cli() {
+    if command -v hf >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Some lean runtime images used by multinode SGLang include Python but not
+    # the Hugging Face CLI. Install just the hub CLI before prefetching traces.
+    agentic_pip_install --quiet "huggingface_hub[cli]>=0.25.0"
+}
+
 resolve_trace_source() {
     local dataset="semianalysisai/cc-traces-weka-042026"
     TRACE_SOURCE_FLAG="--hf-dataset $dataset"
@@ -864,23 +883,19 @@ resolve_trace_source() {
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
     # for model weights) so datasets.load_dataset() reads from cache on
     # subsequent runs instead of re-downloading every job.
+    ensure_hf_cli
     hf download --repo-type dataset "$dataset"
 }
 
 install_agentic_deps() {
-    local pip_install=(python3 -m pip install)
-    if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
-        pip_install+=(--break-system-packages)
-    fi
-
-    "${pip_install[@]}" --quiet urllib3 requests 2>/dev/null || true
-    "${pip_install[@]}" -q -r "$AGENTIC_DIR/requirements.txt"
-    "${pip_install[@]}" -q -r "$TRACE_REPLAY_DIR/requirements.txt"
+    agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
+    agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
+    agentic_pip_install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
     # Force-upgrade datasets: containers often ship an older version without
     # the `Json` feature type used by the HF traces dataset. `Json` was added
     # in datasets 4.7.0 (March 2025). Unpinned installs won't upgrade an
     # already-present package.
-    "${pip_install[@]}" --upgrade "datasets>=4.7.0"
+    agentic_pip_install --upgrade "datasets>=4.7.0"
 }
 
 build_replay_cmd() {
