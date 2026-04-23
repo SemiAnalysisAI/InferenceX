@@ -6,6 +6,7 @@ set -x
 
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
+export SLURM_EXCLUDED_NODELIST="${SLURM_EXCLUDED_NODELIST:-im-gb300-r01-c011}"
 export ENROOT_ROOTFS_WRITABLE=1
 
 export MODEL_PATH=$MODEL
@@ -180,6 +181,8 @@ cat > srtslurm.yaml <<EOF
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
+sbatch_directives:
+  exclude: "${SLURM_EXCLUDED_NODELIST}"
 
 # Resource defaults
 gpus_per_node: 4
