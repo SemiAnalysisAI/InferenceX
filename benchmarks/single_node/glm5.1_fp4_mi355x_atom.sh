@@ -48,7 +48,6 @@ python3 -m atom.entrypoints.openai_server \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --max-num-seqs $CONC \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --default-chat-template-kwargs '{"enable_thinking": false}' \
     --trust-remote-code \
