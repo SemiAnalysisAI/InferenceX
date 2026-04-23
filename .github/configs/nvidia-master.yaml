@@ -1290,7 +1290,7 @@ dsr1-fp4-b300-dynamo-trt:
     - duration: 300
       search-space:
       - spec-decoding: "none"
-        conc-list: [1]
+        conc-list: [1, 2, 4, 8, 16, 32]
         no-max-tokens: false
         prefill:
           num-worker: 1
@@ -1713,7 +1713,7 @@ dsr1-fp8-b300-dynamo-trt:
     - duration: 300
       search-space:
       - spec-decoding: "none"
-        conc-list: [1]
+        conc-list: [1, 2, 4, 8, 16, 32]
         no-max-tokens: false
         prefill:
           num-worker: 1
