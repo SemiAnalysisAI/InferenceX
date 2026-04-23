@@ -42,6 +42,7 @@ python3 -m sglang.launch_server \
   --mem-fraction-static 0.85 \
   --served-model-name glm-5-fp8 \
   --trust-remote-code \
+  --enable-flashinfer-allreduce-fusion \
   $EVAL_CONTEXT_ARGS > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!

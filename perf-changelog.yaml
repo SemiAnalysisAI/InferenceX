@@ -1353,4 +1353,5 @@
     - glm5-fp8-h200-sglang
   description:
     - "Update SGLang image from glm5-hopper to v0.5.10.post1-cu130"
+    - "Add --enable-flashinfer-allreduce-fusion to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1033
