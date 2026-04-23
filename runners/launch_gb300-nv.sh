@@ -4,7 +4,7 @@
 
 set -x
 
-export SLURM_PARTITION="batch"
+export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
