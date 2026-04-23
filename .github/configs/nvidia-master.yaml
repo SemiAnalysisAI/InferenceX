@@ -6730,6 +6730,24 @@ dsr1-fp4-b200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
+    agentic-coding:
+    - duration: 300
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [1, 2, 4, 8, 16, 32]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/b200-fp4/agentic/minttft-ctx1_pp4_gen1_tp8_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/b200-fp4/agentic/minttft-ctx1_pp4_gen1_tp8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
 
 dsr1-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
