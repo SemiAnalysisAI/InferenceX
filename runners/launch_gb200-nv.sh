@@ -143,9 +143,8 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
 else
-    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout cam/sa-submission-q2-2026
 fi
 
 echo "Installing srtctl..."
