@@ -116,22 +116,13 @@ jobs:
 
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == mi325x-amd* || "${{ runner.name }}" == mi300x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-cw* || "${{ runner.name }}" == h200-cw* || "${{ runner.name }}" == b200-nb* || "${{ runner.name }}" == h200-nb* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
-              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-              scancel --name="${{ runner.name }}" || true
-              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-                squeue --name="${{ runner.name }}"
-                sleep 5
-              done
-            else
-              echo "[Slurm] Cleaning up jobs for user: $USER ..."
-              scancel -u "$USER" || true
-              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
-                squeue -u "$USER"
-                sleep 5
-              done
-            fi
-          fi 
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
+          fi
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -139,6 +130,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
           clean: false
+
+      - name: Cleanup stale eval outputs (pre-run)
+        if: ${{ inputs.run-eval || inputs.eval-only }}
+        run: |
+          rm -f meta_env.json || true
+          rm -f results*.json || true
+          rm -f sample*.jsonl || true
 
       - name: Launch job script
         env:
@@ -162,8 +160,6 @@ jobs:
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
-            # Verify eval scores meet per-benchmark minimum thresholds
-            python3 utils/evals/validate_scores.py
           else
             FOUND_RESULT_FILE=
             for i in {1..10}; do
@@ -190,14 +186,14 @@ jobs:
 
       - name: Upload result
         if: ${{ !inputs.eval-only }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload server logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
           path: server.log
@@ -205,7 +201,7 @@ jobs:
 
       - name: Upload GPU metrics
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
           path: gpu_metrics.csv
@@ -213,7 +209,7 @@ jobs:
 
       - name: Upload eval results (if any)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
           path: |
@@ -221,6 +217,10 @@ jobs:
             results*.json
             sample*.jsonl
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+
+      - name: Verify eval scores
+        if: ${{ (success() || failure()) && inputs.eval-only }}
+        run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
