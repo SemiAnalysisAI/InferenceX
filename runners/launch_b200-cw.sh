@@ -46,7 +46,10 @@ else
             enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
         fi
     "
-    CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
+    # Squash file lives on the allocated worker node's /tmp, which is not
+    # visible from the host, so realpath on the host would return empty.
+    # Pass the path as-is; srun resolves it inside the job.
+    CONTAINER_IMAGE=$SQUASH_FILE
 fi
 
 srun --jobid=$JOB_ID \
@@ -57,5 +60,4 @@ srun --jobid=$JOB_ID \
 --no-container-entrypoint --export=ALL \
 bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 
-rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID
