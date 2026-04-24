@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -x
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -15,11 +16,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# GLM-5 requires transformers with glm_moe_dsa model type support.
-# However, the Image rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219 doesn't provide this support.
-python3 -m pip install -U --no-cache-dir \
-  "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
-
 hf download "$MODEL"
 
 # ROCm / SGLang performance tuning for MI355X
@@ -30,6 +26,7 @@ export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+CONTEXT_LENGTH=$((ISL + OSL + 32))
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -45,9 +42,11 @@ python3 -m sglang.launch_server \
     --port $PORT \
     --tensor-parallel-size $TP \
     --trust-remote-code \
+    --cuda-graph-max-bs $CONC \
+    --context-length $CONTEXT_LENGTH \
+    --mem-fraction-static 0.85 \
     --tool-call-parser glm47 \
     --reasoning-parser glm45 \
-    --mem-fraction-static 0.85 \
     --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
     --nsa-prefill-backend tilelang \
     --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
@@ -56,6 +55,7 @@ python3 -m sglang.launch_server \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
     --speculative-num-draft-tokens 4 \
+    --tokenizer-worker-num $((TP*2)) \
     --disable-radix-cache> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -73,8 +73,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
