@@ -46,11 +46,24 @@ fi
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tp $TP \
---moe-runner-backend flashinfer_mxfp4 \
---mem-fraction-static 0.82 \
---disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 \
+SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1 \
+SGLANG_OPT_USE_TOPK_V2=1 \
+SGLANG_JIT_DEEPGEMM_PRECOMPILE=0 \
+sglang serve \
+  --trust-remote-code \
+  --model-path $MODEL \
+  --tp 8 \
+  --moe-runner-backend flashinfer_mxfp4 \
+  --speculative-algo EAGLE \
+  --speculative-num-steps 3 \
+  --speculative-eagle-topk 1 \
+  --speculative-num-draft-tokens 4 \
+  --chunked-prefill-size 4096 \
+  --disable-flashinfer-autotune \
+  --mem-fraction-static 0.82 \
+  --host 0.0.0.0 \
+  --port $PORT > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
