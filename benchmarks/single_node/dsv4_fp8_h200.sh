@@ -52,7 +52,11 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --enable-expert-parallel \
 --data-parallel-size $TP \
 $MAX_MODEL_LEN_ARG \
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+--gpu-memory-utilization 0.95 \
+--max-num-seqs 512 \
+--max-num-batched-tokens 512 \
+--no-enable-flashinfer-autotune \
+--compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
