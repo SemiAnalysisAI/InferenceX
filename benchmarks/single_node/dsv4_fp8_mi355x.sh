@@ -22,24 +22,22 @@ python3 -m pip install --no-cache-dir \
 
 hf download "$MODEL"
 
-# Workaround: DeepseekV4Config declares rope_theta as float but config.json has int (10000).
-# huggingface_hub strict dataclass validation rejects this. Use python to patch safely.
-python3 -c "
-import json, os
-from huggingface_hub import scan_cache_dir
-for repo in scan_cache_dir().repos:
-    if 'DeepSeek-V4' not in repo.repo_id:
-        continue
-    for rev in repo.revisions:
-        cfg_path = os.path.join(rev.snapshot_path, 'config.json')
-        if not os.path.exists(cfg_path):
-            continue
-        cfg = json.load(open(cfg_path))
-        if isinstance(cfg.get('rope_theta'), int):
-            cfg['rope_theta'] = float(cfg['rope_theta'])
-            json.dump(cfg, open(cfg_path, 'w'), indent=2)
-            print(f'Patched rope_theta in {cfg_path}')
-"
+# Workaround: DeepseekV4Config declares rope_theta: float but config.json has int (10000).
+# Strict dataclass validation rejects int for float. Widen the type annotation in the
+# installed source so the validator accepts both int and float.
+python3 << 'PYEOF'
+from transformers.models.deepseek_v4 import configuration_deepseek_v4 as m
+path = m.__file__
+with open(path) as f:
+    src = f.read()
+if "rope_theta: float" in src and "Union" not in src.split("rope_theta")[0].split("\n")[-1]:
+    src = src.replace("rope_theta: float", "rope_theta: Union[int, float]", 1)
+    if "from typing import" in src and "Union" not in src.split("from typing import")[1].split("\n")[0]:
+        src = src.replace("from typing import ", "from typing import Union, ", 1)
+    with open(path, "w") as f:
+        f.write(src)
+    print(f"Patched rope_theta type in {path}")
+PYEOF
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
