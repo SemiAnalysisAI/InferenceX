@@ -2452,12 +2452,12 @@ dsv4-fp8-h200-vllm:
 # pareto sweep. The single-node schema has no explicit data-parallel-size
 # field, so dp-attn=true is used as the existing vLLM script switch for DP4
 # layouts on 4 allocated GPUs.
-dsv4-fp8-b300-vllm:
+dsv4-fp4-b300-vllm:
   image: vllm/vllm-openai:deepseekv4-cu129
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
-  precision: fp8
+  precision: fp4
   framework: vllm
   multinode: false
   seq-len-configs:

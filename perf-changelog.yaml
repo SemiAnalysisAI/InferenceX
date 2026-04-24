@@ -1768,7 +1768,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
 
 - config-keys:
-    - dsv4-fp8-b300-vllm
+    - dsv4-fp4-b300-vllm
   description:
     - "Add DeepSeek-V4-Pro single-node B300 vLLM aggregate benchmark"
     - "Image: vllm/vllm-openai:deepseekv4-cu129"
