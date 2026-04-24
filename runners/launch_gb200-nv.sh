@@ -152,6 +152,13 @@ if [[ $FRAMEWORK == "sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/YAMY1234/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout da535e87338cfac0388fc301f9c87b7bc5e669a6
+    # The upstream recipes hardcode slurm.partition to NVIDIA's internal
+    # partition names (gb200 / gb300). Rewrite to our partition so sbatch
+    # doesn't fail with "invalid partition specified".
+    find recipes/gb200-fp4 recipes/gb300-fp4 -type f -name "*.yaml" -exec \
+        sed -i "s/^  partition: gb200$/  partition: ${SLURM_PARTITION}/" {} +
+    find recipes/gb200-fp4 recipes/gb300-fp4 -type f -name "*.yaml" -exec \
+        sed -i "s/^  partition: gb300$/  partition: ${SLURM_PARTITION}/" {} +
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
