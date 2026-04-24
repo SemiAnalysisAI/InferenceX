@@ -1,13 +1,16 @@
-name: "dsv4-vllm-disagg-gb200-5p1d-dep4-dep8"
+name: "dsv4-vllm-disagg-gb200-7p1d-dep8-dep16"
 
-# Adapted from NVIDIA/srt-slurm PR #67 (deepseek-v4-pro/8k1k/disagg-gb200-7p1d-dep8-dep16).
-# Changes:
-#   * 5p1d-dep4-dep8 topology instead of 7p1d-dep8-dep16
-#   * dynamo source-install pinned to the vllm.inputs.data fix commit (v1.0.2
-#     on PyPI still imports from vllm.inputs.data, which the vLLM in
-#     vllm/vllm-openai:deepseekv4-cu130 no longer exposes)
-#   * DYN_CUSTOM_JINJA_TEMPLATE points at a derived-from-encoding_dsv4 template
-#     since DSV4 ships no Jinja chat_template
+# Mirrors NVIDIA/srt-slurm PR #67 except for our local name and one extra
+# benchmark flag: use_chat_template=false. The HF tokenizer for
+# deepseek-ai/DeepSeek-V4-Pro ships no chat_template, so sa-bench's
+# --use-chat-template path calls tokenizer.apply_chat_template() and raises
+# ValueError. Throughput benchmarking uses /v1/completions with random tokens
+# anyway — no chat template needed.
+#
+# The dynamo hash (6a159fed, 2026-04-23) pins to the commit that adds a
+# native Rust DeepSeekV4Formatter in lib/llm/src/preprocessor/prompt/
+# deepseek_v4.rs. Dynamo's frontend auto-detects DSV4 by model name and
+# uses this native formatter — no custom Jinja template required.
 
 model:
   path: "deepseek-v4-pro"
@@ -15,7 +18,7 @@ model:
   precision: "fp4"
 
 dynamo:
-  hash: d5803cbe71c0035a725652373a175f01942c4a33
+  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
   install: true
 
 setup_script: vllm-container-deps.sh
@@ -23,12 +26,12 @@ setup_script: vllm-container-deps.sh
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 5
-  decode_nodes: 2
-  prefill_workers: 5
+  prefill_nodes: 14
+  decode_nodes: 4
+  prefill_workers: 7
   decode_workers: 1
-  gpus_per_prefill: 4
-  gpus_per_decode: 8
+  gpus_per_prefill: 8
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -45,7 +48,6 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
-    DYN_CUSTOM_JINJA_TEMPLATE: "/infmax-workspace/srt-slurm-recipes/vllm/deepseek-v4/dsv4-chat-template.jinja"
 
   decode_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -54,7 +56,6 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
-    DYN_CUSTOM_JINJA_TEMPLATE: "/infmax-workspace/srt-slurm-recipes/vllm/deepseek-v4/dsv4-chat-template.jinja"
 
   vllm_config:
     prefill:
@@ -63,7 +64,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 4
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
@@ -72,6 +73,7 @@ backend:
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
       block-size: 256
       gpu-memory-utilization: 0.88
       no-disable-hybrid-kv-cache-manager: true
@@ -83,7 +85,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       max-model-len: auto
@@ -103,12 +105,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "2048"
+  concurrencies: "4096"
   req_rate: "inf"
-  # DSV4's HF tokenizer ships no chat_template (README: "This release does not
-  # include a Jinja-format chat template"). sa-bench's --use-chat-template
-  # path calls tokenizer.apply_chat_template() directly on the HF tokenizer,
-  # which raises ValueError. Send raw random tokens via /v1/completions
-  # instead — correct for throughput benchmarking and matches sa-bench's
-  # warmup path that already succeeded in prior runs.
   use_chat_template: false

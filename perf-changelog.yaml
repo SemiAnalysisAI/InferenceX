@@ -1,10 +1,10 @@
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm
   description:
-    - "Add DeepSeek V4 Flash FP4 GB200 disaggregated vLLM benchmarks via Dynamo (8k1k, 5p1d)"
+    - "Add DeepSeek V4 Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (8k1k, 7p1d-dep8-dep16)"
     - "Container: vllm/vllm-openai:deepseekv4-cu130"
-    - "Recipes stored in srt-slurm-recipes/ and copied into srt-slurm checkout at runtime"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+    - "Mirrors NVIDIA/srt-slurm PR #67; recipes stored in srt-slurm-recipes/ and copied into srt-slurm checkout at runtime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
 
 - config-keys:
     - dsr1-fp8-h100-dynamo-trt
