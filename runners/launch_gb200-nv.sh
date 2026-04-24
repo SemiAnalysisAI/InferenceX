@@ -44,8 +44,9 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         # Model path alias matches NVIDIA srt-slurm PR #71 recipes
-        # (`model.path: "deepseekv4-fp4"`).
-        export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Pro"
+        # (`model.path: "deepseekv4-fp4"`). Weights live on compute-node
+        # local NVMe (/mnt/numa1) for fast startup — no Lustre contention.
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
         export SRT_SLURM_MODEL_PREFIX="deepseekv4-fp4"
     else
         echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
@@ -58,44 +59,6 @@ fi
 # Set up environment variables for SLURM
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
-
-# ---- DSV4 weight pre-stage to compute-node-local NVMe ----
-# DSV4-Pro (~850 GB FP4+FP8 weights) loads too slowly from Lustre: 14 prefill
-# workers contending for the same OSTs stretches the load past srtctl's
-# health-check deadline. Stage once onto /mnt/numa0 (14T local NVMe RAID per
-# compute node) via srun across all 18 batch-partition nodes before launching
-# srtctl. Subsequent runs hit the local copy and skip the rsync via the
-# .stage-complete marker.
-if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    LUSTRE_SRC="$MODEL_PATH"
-    STAGED_MODEL_PATH="/mnt/numa0/cache/deepseekv4-fp4"
-    STAGE_MARKER="$STAGED_MODEL_PATH/.stage-complete"
-    # Total node count == prefill_nodes + decode_nodes from the recipe (7p1d-dep8-dep16 = 14+4)
-    STAGE_NODES=18
-
-    echo "Pre-staging DSV4 weights $LUSTRE_SRC -> $STAGED_MODEL_PATH on $STAGE_NODES nodes..."
-    if srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
-            --nodes="$STAGE_NODES" --ntasks-per-node=1 \
-            --time=40:00 --job-name=dsv4-prestage --exclusive \
-            bash -c '
-                set -e
-                host=$(hostname)
-                if [ -f "'"$STAGE_MARKER"'" ]; then
-                    echo "[$host] already staged, skipping"
-                    exit 0
-                fi
-                mkdir -p "'"$STAGED_MODEL_PATH"'"
-                echo "[$host] rsync start: $(date -u +%H:%M:%S)"
-                time rsync -a --whole-file --info=stats2 "'"$LUSTRE_SRC"'/" "'"$STAGED_MODEL_PATH"'/"
-                touch "'"$STAGE_MARKER"'"
-                echo "[$host] rsync done:  $(date -u +%H:%M:%S)"
-            '; then
-        echo "Pre-stage complete; pointing MODEL_PATH at local copy"
-        export MODEL_PATH="$STAGED_MODEL_PATH"
-    else
-        echo "WARNING: pre-stage failed (srun exit $?); falling back to Lustre MODEL_PATH=$LUSTRE_SRC"
-    fi
-fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
