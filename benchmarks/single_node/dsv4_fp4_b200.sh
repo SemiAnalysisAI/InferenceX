@@ -40,6 +40,40 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
+# Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+# (spec-decoding flags dropped for the baseline):
+#   - low-latency    (CONC <= 32):        TP-only, chunked-prefill, disable autotune
+#   - balanced       (32 < CONC <= 128):  + DP-attn, max-running-requests=128
+#   - max-throughput (CONC > 128):        + DP-attn, max-running-requests=256
+DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+if [[ $CONC -le 32 ]]; then
+    RECIPE=low-latency
+    RECIPE_FLAGS=(
+        --moe-runner-backend flashinfer_mxfp4
+        --chunked-prefill-size 4096
+        --disable-flashinfer-autotune
+    )
+elif [[ $CONC -le 128 ]]; then
+    RECIPE=balanced
+    RECIPE_FLAGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --cuda-graph-max-bs 64
+        --max-running-requests 128
+        --deepep-config "$DEEPEP_CONFIG"
+    )
+else
+    RECIPE=max-throughput
+    RECIPE_FLAGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --cuda-graph-max-bs 64
+        --max-running-requests 256
+        --deepep-config "$DEEPEP_CONFIG"
+    )
+fi
+echo "Recipe: $RECIPE (CONC=$CONC)"
+
 set -x
 PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL \
@@ -47,11 +81,10 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --moe-runner-backend flashinfer_mxfp4 \
+    --moe-a2a-backend deepep \
     --mem-fraction-static 0.82 \
-    --chunked-prefill-size 4096 \
-    --disable-flashinfer-autotune \
-    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --disable-radix-cache \
+    "${RECIPE_FLAGS[@]}" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
