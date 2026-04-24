@@ -218,6 +218,15 @@ install_mori() {
     touch $(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")/.mori_commit_${MORI_TARGET_COMMIT}
     _SETUP_INSTALLED+=("MoRI@$MORI_TARGET_COMMIT")
 }
+assert_mori_installed() {
+    if ! python3 -c "import mori" 2>/dev/null; then
+        echo "[SETUP] ERROR: MoRI build failed"; exit 1
+    fi
+    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
+        echo "[SETUP] MoRI-IO proxy Python deps not installed"
+        exit 1
+    fi
+}
 
 # ---------------------------------------------------------------------------
 # 6b. amd-quark (MXFP4 quantization support for Kimi-K2.5-MXFP4 and similar)
@@ -945,13 +954,14 @@ except Exception as e:
 # Run installers
 # =============================================================================
 
-install_ucx
-install_rixl
-install_etcd
-install_libionic
-install_mori
+# install_ucx
+# install_rixl
+# install_etcd
+# install_libionic
+# install_mori
+# install_mori_proxy_deps
+assert_mori_installed
 install_amd_quark
-install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
