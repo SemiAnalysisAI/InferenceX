@@ -266,10 +266,7 @@ else
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file
-    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
     srun --jobid=$JOB_ID bash -c "
-        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
-        mkdir -p \$ENROOT_CACHE_PATH
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
