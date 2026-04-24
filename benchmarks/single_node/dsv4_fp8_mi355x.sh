@@ -25,14 +25,20 @@ hf download "$MODEL"
 # Workaround: DeepseekV4Config declares rope_theta as float but config.json has int (10000).
 # huggingface_hub strict dataclass validation rejects this. Use python to patch safely.
 python3 -c "
-import json, glob, os
-cache = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface')) + '/hub'
-for f in glob.glob(cache + '/models--*DeepSeek-V4*/**/config.json', recursive=True):
-    cfg = json.load(open(f))
-    if isinstance(cfg.get('rope_theta'), int):
-        cfg['rope_theta'] = float(cfg['rope_theta'])
-        json.dump(cfg, open(f, 'w'), indent=2)
-        print(f'Patched rope_theta in {f}')
+import json, os
+from huggingface_hub import scan_cache_dir
+for repo in scan_cache_dir().repos:
+    if 'DeepSeek-V4' not in repo.repo_id:
+        continue
+    for rev in repo.revisions:
+        cfg_path = os.path.join(rev.snapshot_path, 'config.json')
+        if not os.path.exists(cfg_path):
+            continue
+        cfg = json.load(open(cfg_path))
+        if isinstance(cfg.get('rope_theta'), int):
+            cfg['rope_theta'] = float(cfg['rope_theta'])
+            json.dump(cfg, open(cfg_path, 'w'), indent=2)
+            print(f'Patched rope_theta in {cfg_path}')
 "
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
