@@ -1713,15 +1713,31 @@ dsv4-fp4-b200-sglang-mtp:
   precision: fp4
   framework: sglang
   multinode: false
+  # Mirrors the dsv4-fp4-b200-sglang baseline split (low-latency / balanced /
+  # max-throughput selected inside benchmarks/single_node/dsv4_fp4_b200_mtp.sh
+  # by CONC) so result filenames (ep=, dpa=) reflect the recipe. EAGLE/MTP is
+  # tuned per recipe in the script per
+  # https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+  # (max-throughput omits MTP since the verify cost exceeds savings at saturation).
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 1024, spec-decoding: "mtp" }
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: "mtp" }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: "mtp" }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: "mtp" }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: "mtp" }
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: "mtp" }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: "mtp" }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: "mtp" }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
