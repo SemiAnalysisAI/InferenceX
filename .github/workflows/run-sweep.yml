@@ -18,6 +18,7 @@ on:
             - ready_for_review
             - synchronize
             - labeled
+            - unlabeled
         paths:
             - "perf-changelog.yaml"
 
@@ -40,17 +41,42 @@ jobs:
     setup:
         runs-on: ubuntu-latest
         if: >-
-            (github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'sweep-enabled')) ||
-            (github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[skip-sweep]'))
+            (
+              github.event_name == 'pull_request' &&
+              !github.event.pull_request.draft &&
+              (
+                contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              )
+            ) ||
+            (
+              github.event_name != 'pull_request' &&
+              !contains(github.event.head_commit.message, '[skip-sweep]')
+            )
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
         steps:
+            - name: Reject conflicting sweep labels
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              run: |
+                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to max(conc) per parallelism config."
+                  exit 1
+
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   fetch-depth: 0
 
             - id: setup
+              env:
+                  TRIM_CONC: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
+                      }}
               run: |
                   pip install pydantic
 
@@ -62,12 +88,19 @@ jobs:
                       HEAD_REF="${{ github.event.after }}"
                   fi
 
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/process_changelog.py \
-                      --changelog-file ${GITHUB_WORKSPACE}/perf-changelog.yaml \
-                      --base-ref "$BASE_REF" \
-                      --head-ref "$HEAD_REF")
+                  CMD=(
+                      python3 "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --base-ref "$BASE_REF"
+                      --head-ref "$HEAD_REF"
+                  )
+                  if [ "$TRIM_CONC" = "true" ]; then
+                      CMD+=(--trim-conc)
+                  fi
 
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON=$("${CMD[@]}")
+
+                  echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
     sweep-multi-node-1k1k:
         needs: setup
@@ -237,7 +270,17 @@ jobs:
                 sweep-multi-node-8k1k,
                 setup,
             ]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: >-
+            ${{
+              always() &&
+              needs.setup.result == 'success' &&
+              (
+                needs.sweep-single-node-1k1k.result != 'skipped' ||
+                needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-1k1k.result != 'skipped' ||
+                needs.sweep-multi-node-8k1k.result != 'skipped'
+              )
+            }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
@@ -251,7 +294,7 @@ jobs:
 
     upload-changelog-metadata:
         needs: [setup, collect-results]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata

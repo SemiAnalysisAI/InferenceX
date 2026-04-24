@@ -195,9 +195,6 @@ else
     srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
-        if [[ \"$FRAMEWORK\" == \"atom\" ]]; then
-            rm -f \"$SQUASH_FILE\"
-        fi
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
             echo 'Squash file already exists and is valid, skipping import'
         else
