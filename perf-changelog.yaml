@@ -1755,7 +1755,7 @@
     - "VLLM_ENGINE_READY_TIMEOUT_S=3600 to accommodate large weight loading"
     - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1130
-  
+
 - config-keys:
     - dsv4-fp4-b300-sglang
   description:
@@ -1766,3 +1766,14 @@
     - "Prefix caching disabled, no speculative decoding"
     - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
+
+- config-keys:
+    - dsv4-fp8-b300-vllm
+  description:
+    - "Add DeepSeek-V4-Pro single-node B300 vLLM aggregate benchmark"
+    - "Image: vllm/vllm-openai:deepseekv4-cu129"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "Uses the submitted B300 pareto schedule for both 1k1k and 8k1k, excluding conc 1: TP8 at conc 4/128, TP4 at conc 4/8/16/32/64/128, DP4 at conc 256/512"
+    - "Launch args match the provided vllm serve command, including FP4 indexer cache, FULL_AND_PIECEWISE cudagraph config, and max-num-batched-tokens 2048"
+    - "1k1k uses --max-model-len 4096; 8k1k uses the workflow-provided benchmark context length"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
