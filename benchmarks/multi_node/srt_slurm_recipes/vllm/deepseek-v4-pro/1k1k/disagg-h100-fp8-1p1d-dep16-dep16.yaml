@@ -74,13 +74,14 @@ backend:
     PYTHONUNBUFFERED: "1"
 
   vllm_config:
+    # Tokenizer mode, tool-call parser, reasoning parser, and
+    # enable-auto-tool-choice are OpenAI API-server flags; Dynamo is the
+    # frontend in this disagg setup and handles tool/reasoning parsing
+    # itself. The vLLM workers are engine-only processes and their argparse
+    # rejects those flags (matches kimi-k2.5 recipe which omits them too).
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      reasoning-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
       trust-remote-code: true
       kv-cache-dtype: "fp8"
       block-size: 256
@@ -103,10 +104,6 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      reasoning-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
       trust-remote-code: true
       kv-cache-dtype: "fp8"
       block-size: 256

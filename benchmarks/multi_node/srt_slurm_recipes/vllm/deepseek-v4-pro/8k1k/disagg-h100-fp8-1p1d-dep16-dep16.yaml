@@ -65,13 +65,12 @@ backend:
     PYTHONUNBUFFERED: "1"
 
   vllm_config:
+    # API-server flags (tokenizer-mode, tool-call-parser, reasoning-parser,
+    # enable-auto-tool-choice) are handled by Dynamo frontend, not the
+    # vLLM engine workers. See 1k1k recipe for rationale.
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      reasoning-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
       trust-remote-code: true
       kv-cache-dtype: "fp8"
       block-size: 256
@@ -94,10 +93,6 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      reasoning-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
       trust-remote-code: true
       kv-cache-dtype: "fp8"
       block-size: 256
