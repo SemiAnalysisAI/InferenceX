@@ -35,6 +35,7 @@ start_gpu_monitor
 # runs with EP + DP=8 (no --tensor-parallel-size flag). TP from the search
 # space is used only for GPU allocation by the runner and as the DP size.
 set -x
+VLLM_ENGINE_READY_TIMEOUT_S=3600 \
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
