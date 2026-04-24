@@ -17,7 +17,8 @@ fi
 
 # DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
 python3 -m pip install -U --no-cache-dir \
-  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
+  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4" \
+  huggingface_hub
 
 hf download "$MODEL"
 
