@@ -16,19 +16,24 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 # DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
-python3 -m pip install -U --no-cache-dir \
-  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4" \
-  huggingface_hub
+# Pin huggingface_hub to avoid typer incompatibility with container's typer version
+python3 -m pip install --no-cache-dir \
+  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
 
 hf download "$MODEL"
 
 # Workaround: DeepseekV4Config declares rope_theta as float but config.json has int (10000).
-# huggingface_hub strict dataclass validation rejects this. Patch to float in-place.
-HF_CACHE_DIR=$(python3 -c "from huggingface_hub import scan_cache_dir; [print(r.repo_path) for r in scan_cache_dir().repos if '${MODEL##*/}' in r.repo_id]" 2>/dev/null | head -1)
-if [ -n "$HF_CACHE_DIR" ]; then
-    find "$HF_CACHE_DIR" -name config.json -exec \
-        sed -i 's/"rope_theta": 10000\b/"rope_theta": 10000.0/g' {} +
-fi
+# huggingface_hub strict dataclass validation rejects this. Use python to patch safely.
+python3 -c "
+import json, glob, os
+cache = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface')) + '/hub'
+for f in glob.glob(cache + '/models--*DeepSeek-V4*/**/config.json', recursive=True):
+    cfg = json.load(open(f))
+    if isinstance(cfg.get('rope_theta'), int):
+        cfg['rope_theta'] = float(cfg['rope_theta'])
+        json.dump(cfg, open(f, 'w'), indent=2)
+        print(f'Patched rope_theta in {f}')
+"
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
