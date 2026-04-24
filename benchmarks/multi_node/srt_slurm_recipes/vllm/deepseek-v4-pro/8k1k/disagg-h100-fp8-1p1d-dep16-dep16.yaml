@@ -126,3 +126,6 @@ benchmark:
   osl: 1024
   concurrencies: "4x8x16x32x64"
   req_rate: "inf"
+  # See 1k1k recipe rationale — DSV4-Pro tokenizer has no chat_template;
+  # the server handles formatting via --tokenizer-mode deepseek_v4.
+  use_chat_template: false

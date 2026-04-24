@@ -147,3 +147,8 @@ benchmark:
   osl: 1024
   concurrencies: "4x8x16x32x64x128"
   req_rate: "inf"
+  # DSV4-Pro's HF tokenizer ships with no chat_template attribute. The
+  # server uses --tokenizer-mode deepseek_v4 to handle templating itself,
+  # but sa-bench's local apply_chat_template path raises ValueError.
+  # Send raw prompts; the server handles formatting.
+  use_chat_template: false
