@@ -1748,7 +1748,7 @@ dsr1-fp4-b200-sglang:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
     agentic-coding:
-    - duration: 1800
+    - duration: 600
       search-space:
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
