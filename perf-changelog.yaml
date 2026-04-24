@@ -1,4 +1,14 @@
 - config-keys:
+    - dsv4-fp4-gb200-sglang
+  description:
+    - "Add DeepSeek-V4-Pro SGLang aggregated GB200 benchmarks (1k/1k, TP=8, 2 nodes)"
+    - "Recipes from YAMY1234/srt-slurm-nv:dsv4-pro-recipes (NVIDIA srt-slurm PR #69)"
+    - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell"
+    - "Two recipes: agg-2n-low-latency (EAGLE 3/4 spec decoding) for conc 1-64, agg-2n-nomtp for conc 128-1024"
+    - "Runner script clones the YAMY1234 fork pinned at commit da535e87 instead of NVIDIA/srt-slurm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
     - dsr1-fp8-h100-dynamo-trt
     - dsr1-fp8-h100-dynamo-sglang
   description:

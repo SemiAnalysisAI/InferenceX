@@ -7428,3 +7428,53 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         tp: 16
         ep: 16
         dp-attn: true
+
+# DeepSeek-V4-Pro on GB200, SGLang aggregated (TP=8 across 2 nodes).
+# Recipes live in YAMY1234/srt-slurm-nv:dsv4-pro-recipes (NVIDIA srt-slurm
+# PR #69), derived from the official SGLang DeepSeek-V4 cookbook.
+# `framework: sglang` (no Dynamo frontend) tells the runner to clone that
+# fork instead of NVIDIA/srt-slurm and to use the recipe directly.
+dsv4-fp4-gb200-sglang:
+  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: sglang
+  multinode: true
+  disagg: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Low-latency: TP=8 + EAGLE 3/4 speculative decoding (smaller batches,
+    # better TPOT). Recipe targets the low-conc end of the curve.
+    - conc-list: [1, 2, 4, 8, 16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/pull/69/files#diff-recipes/gb200-fp4/1k1k-dsv4/agg-2n-low-latency.yaml
+        - "CONFIG_FILE=recipes/gb200-fp4/1k1k-dsv4/agg-2n-low-latency.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # Throughput: TP=8 with no MTP (matches cookbook's "throughput" tier).
+    - conc-list: [128, 256, 512, 1024]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/pull/69/files#diff-recipes/gb200-fp4/1k1k-dsv4/agg-2n-nomtp.yaml
+        - "CONFIG_FILE=recipes/gb200-fp4/1k1k-dsv4/agg-2n-nomtp.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false

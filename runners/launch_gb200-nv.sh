@@ -46,6 +46,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4"
         exit 1
     fi
+elif [[ $FRAMEWORK == "sglang" ]]; then
+    # Direct SGLang aggregated serving (no Dynamo frontend), used by recipes
+    # in YAMY1234/srt-slurm-nv:dsv4-pro-recipes (NVIDIA srt-slurm PR #69).
+    if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Pro"
+        export SRT_SLURM_MODEL_PREFIX="dsv4-pro"
+    else
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for sglang: dsv4/fp4"
+        exit 1
+    fi
 else
     export MODEL_PATH=$MODEL
 fi
@@ -134,7 +144,15 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+if [[ $FRAMEWORK == "sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # YAMY1234's fork of NVIDIA/srt-slurm, branch dsv4-pro-recipes
+    # (https://github.com/NVIDIA/srt-slurm/pull/69) — adds DeepSeek-V4-Pro
+    # SGLang aggregated recipes for GB200 / GB300 derived from the SGLang
+    # DeepSeek-V4 cookbook. Pinned to the PR head commit for reproducibility.
+    git clone https://github.com/YAMY1234/srt-slurm-nv.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout da535e87338cfac0388fc301f9c87b7bc5e669a6
+elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
@@ -187,6 +205,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dsv4-grace-blackwell: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 EOF
