@@ -2409,6 +2409,27 @@ dsr1-fp8-b200-trt-mtp:
     # TP8 for all points
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
+# DeepSeek-V4-Pro recipe from https://vllm.ai/blog/deepseek-v4
+# Runs on 8xB200 with DP=8 + expert parallelism (TP=1 per replica),
+# FP8 KV cache, block size 256, and FP4 indexer cache.
+dsv4-fp4-b200-vllm:
+  image: vllm/vllm-openai:deepseekv4-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 1024 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 512 }
+
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu130
   model: deepseek-ai/DeepSeek-R1-0528

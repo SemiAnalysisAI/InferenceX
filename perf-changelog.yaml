@@ -1735,7 +1735,7 @@
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
   
-- config-keys:  
+- config-keys:
     - glm5.1-fp4-mi355x-atom
   description:
     - "Add GLM-5.1 MXFP4 single-node MI355X ATOM benchmark"
@@ -1812,3 +1812,17 @@
     - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
     - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro vLLM B200 benchmark per https://vllm.ai/blog/deepseek-v4"
+    - "Image: vllm/vllm-openai:deepseekv4-cu130"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "8xB200 recipe: DP=8 + expert parallelism (TP=1/replica), FP8 KV cache, block size 256, FP4 indexer cache"
+    - "Flags: --trust-remote-code, --kv-cache-dtype fp8, --block-size 256, --enable-expert-parallel,"
+    - "  --data-parallel-size 8, --compilation-config cudagraph_mode=FULL_AND_PIECEWISE custom_ops=all,"
+    - "  --attention_config.use_fp4_indexer_cache=True, --tokenizer-mode deepseek_v4,"
+    - "  --tool-call-parser deepseek_v4, --enable-auto-tool-choice, --reasoning-parser deepseek_v4"
+    - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
