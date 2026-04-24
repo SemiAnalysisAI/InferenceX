@@ -1,17 +1,11 @@
-name: "dsv4-vllm-disagg-gb200-1p1d-dep8-dep16"
+name: "dsv4-vllm-disagg-gb200-1p4d-dep8-dep8"
 
-# 1k/1k mid-to-high throughput topology. Extrapolated from
-# kimi-k2.5/1k1k/disagg-gb200-1p1d-dep4-dep16.yaml adjusted for DSV4-Pro's
-# DP>=8 minimum.  Single prefill worker feeding a wide DP=16 decode handles
-# conc 256-4096 cleanly for 1k prompts (prefill throughput per rank is high
-# enough at this prompt length; see kimi precedent).
-#
-# Differences from our 8k1k 7p1d-dep8-dep16:
-#   * prefill_workers: 1 (vs 7) — 1k prompts don't need 14 prefill nodes
-#   * max-model-len: 3072 instead of auto
-#   * prefill max-num-seqs: 16 (fills 16384-token budget at 1k per seq)
-#   * decode max-num-seqs: 512 instead of 256 (shorter KV, more parallelism)
-#   * max-cudagraph-capture-size / max-num-batched-tokens (decode): 512
+# Interactivity-focused topology: 1 prefill worker + 4 separate decode
+# workers, each at DP=8. Targets conc 4-128 where TTFT/TPOT matter more
+# than aggregate throughput. Same per-worker vllm_config as the NVIDIA
+# 7p1d reference (PR #67); only resources, decode capacity (max-num-seqs
+# / cudagraph capture / batched-tokens), and benchmark concurrencies
+# differ.
 
 model:
   path: "deepseek-v4-pro"
@@ -24,16 +18,9 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
-# Also set slurm.time_limit explicitly (above srtslurm.yaml's 6h default) so
-# a slow first-time Lustre load + cudagraph capture can't get cut off by the
-# SLURM wall clock.
 slurm:
   time_limit: "8:00:00"
 
-# Bumped from the 1800s default to 4 hours. DSV4-Pro weights load slowly from
-# Lustre with multiple workers contending for the same OSTs — previous 1k/1k
-# run hit the default 1800s. Make this *very* generous since the cost of an
-# over-long deadline is just sitting idle, not wasted compute.
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -42,11 +29,11 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 2
-  decode_nodes: 4
+  decode_nodes: 8
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 4
   gpus_per_prefill: 8
-  gpus_per_decode: 16
+  gpus_per_decode: 8
 
 frontend:
   type: dynamo
@@ -83,8 +70,8 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 3072
-      max-num-seqs: 16
+      max-model-len: auto
+      max-num-seqs: 2
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
@@ -100,13 +87,13 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 16
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 3072
-      max-num-seqs: 512
-      max-cudagraph-capture-size: 512
-      max-num-batched-tokens: 512
+      max-model-len: auto
+      max-num-seqs: 32
+      max-cudagraph-capture-size: 32
+      max-num-batched-tokens: 32
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -118,8 +105,8 @@ backend:
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
-  concurrencies: "256x512x1024x2048x3072x4096"
+  concurrencies: "4x8x16x32x128"
   req_rate: "inf"
   use_chat_template: false

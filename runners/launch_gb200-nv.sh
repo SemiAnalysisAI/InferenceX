@@ -43,11 +43,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Model path alias matches NVIDIA srt-slurm PR #71 recipes
-        # (`model.path: "deepseekv4-fp4"`). Weights live on compute-node
-        # local NVMe (/mnt/numa1) for fast startup — no Lustre contention.
+        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
+        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
+        # model.path alias in our DSV4 recipes.
         export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
-        export SRT_SLURM_MODEL_PREFIX="deepseekv4-fp4"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
         echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
         exit 1
@@ -141,47 +141,10 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    # alec-flowers/srt-slurm, branch aflowers/dsv4-pr67-pr68
-    # (https://github.com/NVIDIA/srt-slurm/pull/71) — supersedes PR #67 with
-    # 4 GB200 DSV4-Pro vLLM disagg recipes (1p1d, 3p1d-dep8, 3p1d-dep16,
-    # 6p1d-dep16), NUMA binding, new env vars, and explicit tokenizer-mode.
-    # Pinned to PR #71 head for reproducibility.
-    git clone https://github.com/alec-flowers/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout d60e3f1c7921721e52af01afaab59a70a1631106
-    # Copy our hand-rolled 1k/1k recipes (no upstream equivalent for vLLM
-    # disagg at 1k/1k yet). 8k/1k recipes come from the upstream clone.
+    git checkout sa-submission-q2-2026
     cp -r "$GITHUB_WORKSPACE/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    # PR #71's 8k/1k recipes include CPU/DRAM expert offload (offload-*
-    # knobs + a companion vllm_numa_bind_hash_fix.py patch). Strip the
-    # offload lines and inject our health_check + slurm.time_limit
-    # overrides so the recipes run without offload and with a generous
-    # cold-cache Lustre load budget.
-    python3 - <<'PY'
-from pathlib import Path
-for p in Path("recipes/vllm/deepseek-v4-pro/8k1k").glob("disagg-gb200-*.yaml"):
-    text = p.read_text()
-    # Drop offload-* knobs and the commented `# offload-params:` line.
-    kept = []
-    for line in text.splitlines():
-        stripped = line.lstrip()
-        if stripped.startswith("offload-") or stripped.startswith("# offload-params:"):
-            continue
-        kept.append(line)
-    text = "\n".join(kept) + ("\n" if text.endswith("\n") else "")
-    # Inject slurm.time_limit and health_check overrides after setup_script.
-    marker = "setup_script: vllm-container-deps.sh\n"
-    if marker in text and "health_check:" not in text:
-        text = text.replace(
-            marker,
-            marker
-            + "\nslurm:\n  time_limit: \"8:00:00\"\n"
-            + "\nhealth_check:\n  max_attempts: 1440\n  interval_seconds: 10\n",
-            1,
-        )
-    p.write_text(text)
-    print(f"patched {p}")
-PY
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
