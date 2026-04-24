@@ -1744,11 +1744,11 @@ dsv4-fp4-b300-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 1024 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 512 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2

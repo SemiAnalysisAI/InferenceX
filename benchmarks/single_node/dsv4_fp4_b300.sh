@@ -27,6 +27,10 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# DeepSeek-V4-Pro weights are large and engine startup on B300 can exceed
+# the default 600s. Give it 20 minutes to load.
+export VLLM_ENGINE_READY_TIMEOUT_S=1200
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
