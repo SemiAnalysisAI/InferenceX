@@ -1,16 +1,11 @@
-name: "dsv4-vllm-disagg-gb200-7p1d-dep8-dep16"
+name: "dsv4-vllm-disagg-gb200-1p4d-dep8-dep8"
 
-# Mirrors NVIDIA/srt-slurm PR #67 except for our local name and one extra
-# benchmark flag: use_chat_template=false. The HF tokenizer for
-# deepseek-ai/DeepSeek-V4-Pro ships no chat_template, so sa-bench's
-# --use-chat-template path calls tokenizer.apply_chat_template() and raises
-# ValueError. Throughput benchmarking uses /v1/completions with random tokens
-# anyway — no chat template needed.
-#
-# The dynamo hash (6a159fed, 2026-04-23) pins to the commit that adds a
-# native Rust DeepSeekV4Formatter in lib/llm/src/preprocessor/prompt/
-# deepseek_v4.rs. Dynamo's frontend auto-detects DSV4 by model name and
-# uses this native formatter — no custom Jinja template required.
+# Interactivity-focused topology: 1 prefill worker + 4 separate decode
+# workers, each at DP=8. Targets conc 4-128 where TTFT/TPOT matter more
+# than aggregate throughput. Same per-worker vllm_config as the NVIDIA
+# 7p1d reference (PR #67); only resources, decode capacity (max-num-seqs
+# / cudagraph capture / batched-tokens), and benchmark concurrencies
+# differ.
 
 model:
   path: "deepseek-v4-pro"
@@ -23,10 +18,6 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
-# Bump health-check from the 1800s default to 2 hours. DSV4-Pro (~850 GB
-# FP4+FP8 weights) loads off Lustre slowly on a cold cache — observed
-# ~33 min for 64 safetensor shards with 14 prefill workers contending for
-# the same OSTs. 1800s isn't enough; 7200s gives headroom.
 health_check:
   max_attempts: 720
   interval_seconds: 10
@@ -34,12 +25,12 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 14
-  decode_nodes: 4
-  prefill_workers: 7
-  decode_workers: 1
+  prefill_nodes: 2
+  decode_nodes: 8
+  prefill_workers: 1
+  decode_workers: 4
   gpus_per_prefill: 8
-  gpus_per_decode: 16
+  gpus_per_decode: 8
 
 frontend:
   type: dynamo
@@ -93,13 +84,13 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 16
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       max-model-len: auto
-      max-num-seqs: 256
-      max-cudagraph-capture-size: 256
-      max-num-batched-tokens: 256
+      max-num-seqs: 32
+      max-cudagraph-capture-size: 32
+      max-num-batched-tokens: 32
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -113,6 +104,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "2048x4096"
+  concurrencies: "4x8x16x32x128"
   req_rate: "inf"
   use_chat_template: false

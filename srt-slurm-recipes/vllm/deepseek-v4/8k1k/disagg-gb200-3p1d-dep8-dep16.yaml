@@ -1,16 +1,11 @@
-name: "dsv4-vllm-disagg-gb200-7p1d-dep8-dep16"
+name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep16"
 
-# Mirrors NVIDIA/srt-slurm PR #67 except for our local name and one extra
-# benchmark flag: use_chat_template=false. The HF tokenizer for
-# deepseek-ai/DeepSeek-V4-Pro ships no chat_template, so sa-bench's
-# --use-chat-template path calls tokenizer.apply_chat_template() and raises
-# ValueError. Throughput benchmarking uses /v1/completions with random tokens
-# anyway — no chat template needed.
-#
-# The dynamo hash (6a159fed, 2026-04-23) pins to the commit that adds a
-# native Rust DeepSeekV4Formatter in lib/llm/src/preprocessor/prompt/
-# deepseek_v4.rs. Dynamo's frontend auto-detects DSV4 by model name and
-# uses this native formatter — no custom Jinja template required.
+# Mid-concurrency topology: 3 prefill workers (DP=8) feeding a single
+# wide decode (DP=16). Targets conc 512-1024 where a single big decode
+# batches efficiently. Same per-worker vllm_config as the NVIDIA 7p1d
+# reference (PR #67); only resources, prefill_workers count, and
+# benchmark concurrencies differ. Decode capacity matches 7p1d
+# (max-num-seqs=256) since the decode topology itself is identical.
 
 model:
   path: "deepseek-v4-pro"
@@ -23,10 +18,6 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
-# Bump health-check from the 1800s default to 2 hours. DSV4-Pro (~850 GB
-# FP4+FP8 weights) loads off Lustre slowly on a cold cache — observed
-# ~33 min for 64 safetensor shards with 14 prefill workers contending for
-# the same OSTs. 1800s isn't enough; 7200s gives headroom.
 health_check:
   max_attempts: 720
   interval_seconds: 10
@@ -34,9 +25,9 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 14
+  prefill_nodes: 6
   decode_nodes: 4
-  prefill_workers: 7
+  prefill_workers: 3
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 16
@@ -113,6 +104,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "2048x4096"
+  concurrencies: "512x1024"
   req_rate: "inf"
   use_chat_template: false
