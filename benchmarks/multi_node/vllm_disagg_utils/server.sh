@@ -281,9 +281,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     setup_vllm_env
 
-    # Start vllm-router FIRST — workers register via ZMQ on startup
-    #echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
+    echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
     PROXY_CMD="/app/vllm-router \
         --vllm-pd-disaggregation \
         --kv-connector moriio \
@@ -382,8 +381,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
         sleep 2
         # Fallback: ensure no orphaned processes keep ports open
-        pkill -f "moriio_proxy" 2>/dev/null || true
-        # pkill -f "vllm-router" 2>/dev/null || true
+        pkill -f "vllm-router" 2>/dev/null || true
         pkill -f "vllm serve" 2>/dev/null || true
     fi
 
