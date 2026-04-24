@@ -35,7 +35,7 @@ fi
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
+sglang serve --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
 --tp $TP \
 --moe-runner-backend flashinfer_mxfp4 \
 --mem-fraction-static 0.82 \
