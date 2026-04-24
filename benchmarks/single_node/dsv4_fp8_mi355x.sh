@@ -34,6 +34,17 @@ if "rope_theta: float" in src and "Union[int, float]" not in src:
     print(f"Patched rope_theta type in {path}")
 PYEOF
 
+# Remove any config.json corrupted by prior runs (sed mangled cached copies).
+python3 << PYEOF
+import glob, json, os
+for f in glob.glob("/mnt/hf_hub_cache/models--*DeepSeek-V4*/**/config.json", recursive=True):
+    try:
+        json.load(open(f))
+    except Exception:
+        os.remove(f)
+        print(f"Removed corrupted {f}")
+PYEOF
+
 # hf CLI breaks after huggingface_hub upgrade (typer incompatibility in container);
 # use Python API directly instead.
 python3 -c "from huggingface_hub import snapshot_download; snapshot_download('$MODEL')"
