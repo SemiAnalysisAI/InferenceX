@@ -143,71 +143,6 @@ install_libionic() {
     _SETUP_INSTALLED+=("libionic1")
 }
 
-# ---------------------------------------------------------------------------
-# 5. MoRI-IO proxy deps (Python packages for the MoRI-IO-aware proxy server)
-#    The proxy replaces vllm-router: it handles both HTTP routing AND the
-#    MoRI-IO ZMQ registration/request-enrichment protocol.
-#    Only needed on NODE_RANK=0 (proxy node).
-# ---------------------------------------------------------------------------
-install_mori_proxy_deps() {
-    if python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
-        echo "[SETUP] MoRI-IO proxy Python deps already present"
-        return 0
-    fi
-
-    echo "[SETUP] Installing MoRI-IO proxy Python deps..."
-    # v0.18.0 ships aiohttp, pyzmq, blinker(distutils); only quart and msgpack
-    # are missing.  --ignore-installed blinker avoids pip's distutils uninstall
-    # error when quart pulls a newer blinker version.
-    pip install --quiet --ignore-installed blinker
-    pip install --quiet quart msgpack
-
-    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
-        echo "[SETUP] ERROR: MoRI-IO proxy deps install failed"; exit 1
-    fi
-    _SETUP_INSTALLED+=("mori-proxy-deps")
-}
-
-# ---------------------------------------------------------------------------
-# 6. MoRI (Modular RDMA Interface — EP dispatch/combine kernels for MoE)
-#    Required for --all2all-backend mori (Expert Parallelism via RDMA).
-#    GPU kernels are JIT-compiled on first use; no hipcc needed at install.
-#
-#    v0.18.0 ships MoRI 0.1.dev185+g2d02c6a98, but it STILL has the PCI
-#    topology bug (TopoSystemPci::Load assertion failure on Broadcom
-#    PEX890xx switches).  Always rebuild from our target commit b645fc8
-#    which includes the dsp2dev subordinate-range fix.
-# ---------------------------------------------------------------------------
-install_mori() {
-    local MORI_TARGET_COMMIT="b645fc8"
-    local MORI_MARKER="/usr/local/lib/python3.*/dist-packages/.mori_commit_${MORI_TARGET_COMMIT}"
-
-    if ls $MORI_MARKER &>/dev/null; then
-        echo "[SETUP] MoRI @ $MORI_TARGET_COMMIT already installed (marker found)"
-        return 0
-    fi
-
-    echo "[SETUP] Installing MoRI build dependencies..."
-    apt-get update -q -y && apt-get install -q -y \
-        libopenmpi-dev openmpi-bin libpci-dev \
-        && rm -rf /var/lib/apt/lists/*
-
-    echo "[SETUP] Building MoRI from source (ROCm/mori @ $MORI_TARGET_COMMIT)..."
-    echo "[SETUP]   (overriding image-provided version to fix PCI topology bug)"
-    (
-        set -e
-        git_clone_retry https://github.com/ROCm/mori.git /opt/mori && cd /opt/mori
-        git checkout "$MORI_TARGET_COMMIT"
-        pip install --quiet --force-reinstall .
-    )
-    rm -rf /opt/mori
-
-    if ! python3 -c "import mori" 2>/dev/null; then
-        echo "[SETUP] ERROR: MoRI build failed"; exit 1
-    fi
-    touch $(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")/.mori_commit_${MORI_TARGET_COMMIT}
-    _SETUP_INSTALLED+=("MoRI@$MORI_TARGET_COMMIT")
-}
 assert_mori_installed() {
     if ! python3 -c "import mori" 2>/dev/null; then
         echo "[SETUP] ERROR: MoRI build failed"; exit 1
@@ -908,12 +843,10 @@ except Exception as e:
 # Run installers
 # =============================================================================
 
-# install_ucx
-# install_rixl
-# install_etcd
-# install_libionic
-# install_mori
-# install_mori_proxy_deps
+install_ucx
+install_rixl
+install_etcd
+install_libionic
 assert_mori_installed
 install_amd_quark
 patch_mori_fp8_compat
