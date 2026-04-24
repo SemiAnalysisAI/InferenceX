@@ -16,8 +16,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 # DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
-# --no-deps prevents upgrading huggingface_hub which breaks the hf CLI (typer incompatibility)
-python3 -m pip install --no-cache-dir --no-deps \
+python3 -m pip install --no-cache-dir \
   "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
 
 # Patch rope_theta type: config.json has int but the dataclass declares float.
@@ -36,7 +35,9 @@ if "rope_theta: float" in src and "Union[int, float]" not in src:
     print(f"Patched rope_theta type in {path}")
 PYEOF
 
-hf download "$MODEL"
+# hf CLI breaks after huggingface_hub upgrade (typer incompatibility in container);
+# use Python API directly instead.
+python3 -c "from huggingface_hub import snapshot_download; snapshot_download('$MODEL')"
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
