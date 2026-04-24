@@ -21,11 +21,6 @@ nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 
-# The deepseek-v4-blackwell image bakes CUDA_VISIBLE_DEVICES=4,5,6,7 into its ENV,
-# which masks half of the 8 GPUs Slurm allocates us. Clear it so TP=8 can bind to
-# all ranks.
-unset CUDA_VISIBLE_DEVICES
-
 # TODO(Cam): the lmsysorg/sglang:deepseek-v4-blackwell image installs sglang
 # editable at /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
 # The runner mounts our repo at a non-/workspace path for this image so the editable
@@ -46,11 +41,17 @@ fi
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tp $TP \
---moe-runner-backend flashinfer_mxfp4 \
---mem-fraction-static 0.82 \
---disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 sglang serve \
+    --model-path $MODEL \
+    --host 0.0.0.0 \
+    --port $PORT \
+    --trust-remote-code \
+    --tp $TP \
+    --moe-runner-backend flashinfer_mxfp4 \
+    --mem-fraction-static 0.82 \
+    --chunked-prefill-size 4096 \
+    --disable-flashinfer-autotune \
+    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
