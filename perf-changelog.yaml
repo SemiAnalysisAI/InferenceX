@@ -1733,3 +1733,14 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
+
+- config-keys:
+    - dsv4-fp8-b300-sglang
+  description:
+    - "Add DeepSeek-V4-Flash FP8 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:deepseek-v4-blackwell (with SGLANG_DSV4_FP4_EXPERTS=0 to swap experts to FP8)"
+    - "Model: sgl-project/DeepSeek-V4-Flash-FP8"
+    - "Reuses the H200 Flash Max-Throughput recipe from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4 on B300; Pro-FP8 checkpoint is still pending upload in the cookbook"
+    - "DP + DeepEP, prefix caching disabled, no speculative decoding"
+    - "TP=4/EP=4/dp-attn=true, concurrency 4-1024 for 1k1k and 4-512 for 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
