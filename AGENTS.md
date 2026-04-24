@@ -112,7 +112,7 @@ When working with benchmark configurations, use these valid values:
 
 **Models (model-prefix)**:
 - `dsr1` - DeepSeek-R1-0528
-- `dsv4pro` - DeepSeek-V4-Pro
+- `dsv4` - DeepSeek-V4-Pro
 - `gptoss` - GPT-OSS-120B
 
 **Precisions**:

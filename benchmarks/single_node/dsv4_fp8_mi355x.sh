@@ -88,7 +88,7 @@ python3 -m sglang.launch_server \
     --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
-    --mem-fraction-static 0.90 \
+    --mem-fraction-static 0.95 \
     --max-total-tokens $((CONC * (ISL + OSL) + 200)) \
     --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 

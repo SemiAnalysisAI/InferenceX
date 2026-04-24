@@ -1747,7 +1747,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1130
 
 - config-keys:
-    - dsv4pro-fp8-mi355x-sglang
+    - dsv4-fp8-mi355x-sglang
   description:
     - "Add DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
     - "Image: rocm/sgl-dev:deepseek-v4-mi35x (from sgl-project/sglang#23608)"
