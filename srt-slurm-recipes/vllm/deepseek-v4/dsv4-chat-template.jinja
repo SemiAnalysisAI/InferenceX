@@ -1,0 +1,32 @@
+{#- Minimal DeepSeek-V4 chat template.
+
+DSV4 does not ship a Jinja chat_template; HuggingFace provides only the
+Python `encoding_dsv4` helper. Dynamo's frontend still requires a
+chat_template at startup (PromptFormatter.from_mdc), so we register this
+file via --custom-jinja-template.
+
+This template is a best-effort DeepSeek-style formatter: delimiters
+mirror DeepSeek-V3 (<|User|>, <|Assistant|>, <|end_of_sentence|>) and it
+renders `reasoning_content` wrapped in <think>...</think> so Dynamo's
+`template_handles_reasoning` detection fires (avoids double-injection).
+
+sa-bench throughput runs use /v1/completions (raw prompts), so this
+template is not exercised during benchmarking. If eval or chat-style
+workloads are added later, replace this with a validated template
+derived from deepseek-ai/DeepSeek-V4-*/encoding_dsv4.py. -#}
+{%- for message in messages -%}
+  {%- if message['role'] == 'system' -%}
+    {{ message['content'] }}
+  {%- elif message['role'] == 'user' -%}
+    <|User|>{{ message['content'] }}
+  {%- elif message['role'] == 'assistant' -%}
+    <|Assistant|>
+    {%- if message.get('reasoning_content') -%}
+      <think>{{ message['reasoning_content'] }}</think>
+    {%- endif -%}
+    {{ message['content'] }}<|end_of_sentence|>
+  {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+<|Assistant|>
+{%- endif -%}

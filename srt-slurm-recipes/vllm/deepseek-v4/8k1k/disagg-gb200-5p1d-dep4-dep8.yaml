@@ -44,6 +44,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    DYN_CUSTOM_JINJA_TEMPLATE: "/infmax-workspace/srt-slurm-recipes/vllm/deepseek-v4/dsv4-chat-template.jinja"
 
   decode_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -52,6 +53,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    DYN_CUSTOM_JINJA_TEMPLATE: "/infmax-workspace/srt-slurm-recipes/vllm/deepseek-v4/dsv4-chat-template.jinja"
 
   vllm_config:
     prefill:
