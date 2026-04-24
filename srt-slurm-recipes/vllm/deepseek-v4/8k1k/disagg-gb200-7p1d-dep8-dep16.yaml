@@ -23,6 +23,14 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Bump health-check from the 1800s default to 2 hours. DSV4-Pro (~850 GB
+# FP4+FP8 weights) loads off Lustre slowly on a cold cache — observed
+# ~33 min for 64 safetensor shards with 14 prefill workers contending for
+# the same OSTs. 1800s isn't enough; 7200s gives headroom.
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
