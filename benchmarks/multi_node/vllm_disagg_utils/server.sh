@@ -185,15 +185,15 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # Container Synchronization
 # =============================================================================
 
-echo "Waiting at the container creation barrier on $host_name"
-python3 $VLLM_WS_PATH/sync.py barrier \
-    --local-ip ${host_ip} \
-    --local-port 5000 \
-    --enable-port \
-    --node-ips ${IPADDRS} \
-    --node-ports 5000 \
-    --wait-for-all-ports \
-    --timeout 600
+# echo "Waiting at the container creation barrier on $host_name"
+# python3 $VLLM_WS_PATH/sync.py barrier \
+#     --local-ip ${host_ip} \
+#     --local-port 5000 \
+#     --enable-port \
+#     --node-ips ${IPADDRS} \
+#     --node-ports 5000 \
+#     --wait-for-all-ports \
+#     --timeout 600
 
 # =============================================================================
 # ETCD Server Setup
@@ -282,7 +282,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     setup_vllm_env
 
     # Start vllm-router FIRST — workers register via ZMQ on startup
-    echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    #echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    # PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
+    #     python3 $VLLM_WS_PATH/moriio_proxy.py"
     PROXY_CMD="/app/vllm-router \
         --vllm-pd-disaggregation \
         --vllm-discovery-address 0.0.0.0:$PROXY_PING_PORT \
@@ -290,7 +293,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --host 0.0.0.0 \
         --policy consistent_hash \
         --prefill-policy consistent_hash \
-        --decode-policy consistent_hash"
+        --decode-policy consistent_hash"    
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PROXY_CMD"
@@ -380,7 +383,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
         sleep 2
         # Fallback: ensure no orphaned processes keep ports open
-        pkill -f "vllm-router" 2>/dev/null || true
+        pkill -f "moriio_proxy" 2>/dev/null || true
+        # pkill -f "vllm-router" 2>/dev/null || true
         pkill -f "vllm serve" 2>/dev/null || true
     fi
 

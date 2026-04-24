@@ -17,6 +17,10 @@ export GPUS_PER_NODE=8
 export NODE_RANK=0
 export DRY_RUN=0
 
+export BENCH_INPUT_LEN=1024
+export BENCH_OUTPUT_LEN=1024
+export BENCH_MAX_CONCURRENCY="32x64x128x256x512"
+
 # Repo root (3 levels up from this script's directory)
 export DI_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # Mount point inside the container (must match VLLM_WS_PATH computation below)
