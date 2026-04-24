@@ -33,7 +33,11 @@ export DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
 export SLURM_JOB_ID=1
 mkdir -p "/tmp/slurm_job-${SLURM_JOB_ID}"
 
+CONTAINER_NAME="vllm-disagg-prefill"
+docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
 docker run --rm \
+    --name "$CONTAINER_NAME" \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
