@@ -259,7 +259,11 @@ else
         export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        FRAMEWORK_SUFFIX="_${FRAMEWORK}"
+    else
+        FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    fi
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
