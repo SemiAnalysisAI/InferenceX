@@ -87,7 +87,8 @@ python3 -m sglang.launch_server \
     --disable-shared-experts-fusion \
     --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
-    --reasoning-parser deepseek-v4 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --reasoning-parser deepseek-v4 \
+    --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
