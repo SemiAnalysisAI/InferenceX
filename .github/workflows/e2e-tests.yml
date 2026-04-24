@@ -16,6 +16,16 @@ on:
                 description: "Ref (branch/sha) to checkout for generating configs"
                 required: false
                 type: string
+            srt-slurm-repo:
+                description: "Override srt-slurm clone URL (leave empty to use launcher default)"
+                required: false
+                type: string
+                default: ""
+            srt-slurm-ref:
+                description: "Override srt-slurm git ref (branch/sha; leave empty to use launcher default)"
+                required: false
+                type: string
+                default: ""
     workflow_call:
         inputs:
             generate-cli-command:
@@ -30,6 +40,16 @@ on:
                 description: "Ref (branch/sha) to checkout for generating configs"
                 required: false
                 type: string
+            srt-slurm-repo:
+                description: "Override srt-slurm clone URL (leave empty to use launcher default)"
+                required: false
+                type: string
+                default: ""
+            srt-slurm-ref:
+                description: "Override srt-slurm git ref (branch/sha; leave empty to use launcher default)"
+                required: false
+                type: string
+                default: ""
 
 jobs:
     get-jobs:
@@ -102,6 +122,8 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: false
             ref: ${{ inputs.ref }}
+            srt-slurm-repo: ${{ inputs.srt-slurm-repo }}
+            srt-slurm-ref: ${{ inputs.srt-slurm-ref }}
 
     test-sweep-multi-node-evals:
         needs: get-jobs
@@ -143,6 +165,8 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config.eval-conc }}
             ref: ${{ inputs.ref }}
+            srt-slurm-repo: ${{ inputs.srt-slurm-repo }}
+            srt-slurm-ref: ${{ inputs.srt-slurm-ref }}
 
     test-sweep-single-node:
         needs: get-jobs

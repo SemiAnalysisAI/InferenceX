@@ -134,19 +134,26 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
+# Allow SRT_SLURM_REPO / SRT_SLURM_REF to override the default clone source
+# (useful for testing WIP branches like the generalized lm-eval-main).
 if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    DEFAULT_SRT_REPO="https://github.com/NVIDIA/srt-slurm.git"
+    DEFAULT_SRT_REF="sa-submission-q2-2026"
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    DEFAULT_SRT_REPO="https://github.com/NVIDIA/srt-slurm.git"
+    DEFAULT_SRT_REF="sa-submission-q2-2026"
 else
-    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q1-2026
+    DEFAULT_SRT_REPO="https://github.com/ishandhanani/srt-slurm.git"
+    DEFAULT_SRT_REF="sa-submission-q1-2026"
 fi
+
+SRT_SLURM_REPO="${SRT_SLURM_REPO:-$DEFAULT_SRT_REPO}"
+SRT_SLURM_REF="${SRT_SLURM_REF:-$DEFAULT_SRT_REF}"
+
+echo "Cloning ${SRT_SLURM_REPO} @ ${SRT_SLURM_REF}"
+git clone "$SRT_SLURM_REPO" "$SRT_REPO_DIR"
+cd "$SRT_REPO_DIR"
+git checkout "$SRT_SLURM_REF"
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -197,7 +204,10 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=aarch64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Export eval-related env vars for srt-slurm post-benchmark eval.
+# LM_EVAL_WORKSPACE is what the generalized srt-slurm reads; INFMAX_WORKSPACE
+# is kept for compatibility with older srt-slurm branches (sa-submission-*).
+export LM_EVAL_WORKSPACE="$GITHUB_WORKSPACE"
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."

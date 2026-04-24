@@ -1,0 +1,34 @@
+# Minimal config for validating NVIDIA/srt-slurm#41 end-to-end on GB200.
+# Referenced explicitly via --config-files on a one-off workflow_dispatch;
+# NOT picked up by normal sweeps (they run against nvidia-master.yaml).
+# Uses dsr1-fp4-dynamo-trt, which the launcher maps to
+# /mnt/lustre01/models/deepseek-r1-0528-fp4-v2/ (present on both the GH
+# runner and compute nodes, so preflight passes). Smallest 8k1k trtllm
+# recipe at 1P+8D (no zip_override, nginx-sqsh alias matches launcher).
+dsr1-fp4-gb200-dynamo-trt:
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - conc-list: [24]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        # https://github.com/NVIDIA/srt-slurm/blob/main/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
+        - "CONFIG_FILE=recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 8
+        dp-attn: false
