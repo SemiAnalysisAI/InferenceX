@@ -1669,6 +1669,24 @@ dsr1-fp4-b200-sglang:
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
 
+dsv4-fp4-b200-sglang:
+  image: lmsysorg/sglang:deepseek-v4-blackwell
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 32 }
+
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
