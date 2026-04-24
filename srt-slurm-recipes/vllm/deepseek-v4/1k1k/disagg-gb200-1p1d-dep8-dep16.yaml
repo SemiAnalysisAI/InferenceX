@@ -14,7 +14,7 @@ name: "dsv4-vllm-disagg-gb200-1p1d-dep8-dep16"
 #   * max-cudagraph-capture-size / max-num-batched-tokens (decode): 512
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseekv4-fp4"
   container: "vllm/vllm-openai:deepseekv4-cu130"
   precision: "fp4"
 

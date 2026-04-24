@@ -7497,58 +7497,67 @@ dsv4-fp4-gb200-dynamo-vllm:
         tp: 16
         ep: 16
         dp-attn: true
-  # ---------------------------------------------------------------------
-  # 8k/1k block — TEMPORARILY DISABLED to avoid re-running under the
-  # sweep-enabled gate while we collect 1k/1k data. Re-enable by
-  # uncommenting (remove the leading "# " on every line of the block
-  # below). The conc-lists already have 4/16/32 stripped — add them back
-  # together with the 1k/1k 1p4d block if you want the full sweep again.
-  # ---------------------------------------------------------------------
-  # - isl: 8192
-  #   osl: 1024
-  #   search-space:
-  #   # Interactivity: 1 prefill (DP=8) + 4 separate decodes (DP=8 each).
-  #   # 10 nodes total. Low TTFT/TPOT focus.
-  #   # NOTE: conc-list was [4, 8, 16, 32, 128]; 4/16/32 dropped.
-  #   - conc-list: [8, 128]
-  #     prefill:
-  #       num-worker: 1
-  #       tp: 8
-  #       ep: 8
-  #       dp-attn: true
-  #       additional-settings:
-  #       - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-1p4d-dep8-dep8.yaml"
-  #     decode:
-  #       num-worker: 4
-  #       tp: 8
-  #       ep: 8
-  #       dp-attn: true
-  #   # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
-  #   - conc-list: [512, 1024]
-  #     prefill:
-  #       num-worker: 3
-  #       tp: 8
-  #       ep: 8
-  #       dp-attn: true
-  #       additional-settings:
-  #       - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
-  #     decode:
-  #       num-worker: 1
-  #       tp: 16
-  #       ep: 16
-  #       dp-attn: true
-  #   # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
-  #   # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
-  #   - conc-list: [2048, 4096]
-  #     prefill:
-  #       num-worker: 7
-  #       tp: 8
-  #       ep: 8
-  #       dp-attn: true
-  #       additional-settings:
-  #       - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-7p1d-dep8-dep16.yaml"
-  #     decode:
-  #       num-worker: 1
-  #       tp: 16
-  #       ep: 16
-  #       dp-attn: true
+  # 8k/1k — four topologies from NVIDIA/srt-slurm PR #71 (the alec-flowers
+  # fork is cloned instead of NVIDIA/srt-slurm and patched at runtime to
+  # strip CPU/DRAM expert offload). Each recipe runs the full conc list
+  # [4, 8, 16, 32, 64, 256, 512, 1024] (8 points) giving cross-topology
+  # coverage. Total 8k/1k points: 32.
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # 1p1d-dep8-dep8 — 1 prefill + 1 decode, each DP=8. 4 nodes.
+    - conc-list: [4, 8, 16, 32, 64, 256, 512, 1024]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-1p1d-dep8-dep8-16-c256-c512-c1024-offload.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # 3p1d-dep8-dep8 — 3 prefill + 1 decode, each DP=8. 8 nodes.
+    - conc-list: [4, 8, 16, 32, 64, 256, 512, 1024]
+      prefill:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-3p1d-dep8-dep8-32-c2048-offload.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # 3p1d-dep8-dep16 — 3 prefill (DP=8) + 1 wide decode (DP=16). 10 nodes.
+    - conc-list: [4, 8, 16, 32, 64, 256, 512, 1024]
+      prefill:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-3p1d-dep8-dep16-40-c4096-offload.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    # 6p1d-dep8-dep16 — 6 prefill (DP=8) + 1 wide decode (DP=16). 16 nodes.
+    - conc-list: [4, 8, 16, 32, 64, 256, 512, 1024]
+      prefill:
+        num-worker: 6
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-6p1d-dep8-dep16-64-c8192-offload.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
