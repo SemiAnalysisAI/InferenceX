@@ -277,6 +277,14 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
+    # Stale pyxis scratch from prior jobs with reused SLURM job IDs breaks the
+    # next container srun with
+    #   error: pyxis: mkdir: cannot create directory
+    #       '/scratch/data/user-$UID/pyxis_$JOBID.0/data': File exists
+    # If /scratch is shared across b300 nodes this cleanup works; if it's
+    # node-local it's a harmless no-op.
+    rm -rf "/scratch/data/user-$(id -u)/pyxis_${JOB_ID}."* 2>/dev/null || true
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
