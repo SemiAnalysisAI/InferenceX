@@ -1681,11 +1681,11 @@ dsv4-fp4-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 1024 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 512 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512 }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
