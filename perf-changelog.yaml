@@ -1726,3 +1726,10 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "TEST PR — verifies sweep-enabled label trim + full-sweep-enabled label + reject on both labels"
+    - "Not intended to merge. Close after CI verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pulls
