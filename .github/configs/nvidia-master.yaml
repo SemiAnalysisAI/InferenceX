@@ -1673,7 +1673,7 @@ dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:deepseek-v4-blackwell
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200
+  runner: b200-nb
   precision: fp4
   framework: sglang
   multinode: false
