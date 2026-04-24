@@ -1725,7 +1725,7 @@
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
   
-- config-keys:  
+- config-keys:
     - glm5.1-fp4-mi355x-atom
   description:
     - "Add GLM-5.1 MXFP4 single-node MI355X ATOM benchmark"
@@ -1733,3 +1733,14 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Add DeepSeek-V4-Flash FP4 B300 SGLang benchmark"
+    - "Image: lmsysorg/sglang:deepseek-v4-blackwell"
+    - "Model: deepseek-ai/DeepSeek-V4-Flash (FP4 MoE experts + FP8 attention/dense)"
+    - "Reuses the B200 Flash Low-Latency recipe from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4 on B300 until a B300-specific recipe ships"
+    - "Speculative decoding (EAGLE) and prefix caching disabled"
+    - "TP=4/EP=4, concurrency 4-128 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
