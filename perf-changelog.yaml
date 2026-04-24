@@ -1755,7 +1755,7 @@
     - "VLLM_ENGINE_READY_TIMEOUT_S=3600 to accommodate large weight loading"
     - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1130
-
+  
 - config-keys:
     - dsv4-fp4-b300-sglang
   description:
@@ -1777,17 +1777,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
 
 - config-keys:
-    - dsv4-fp4-b300-vllm
+    - dsv4-fp4fp8-b300-vllm
   description:
     - "Add DeepSeek-V4-Pro vLLM B300 benchmark per https://vllm.ai/blog/deepseek-v4"
     - "Image: vllm/vllm-openai:deepseekv4-cu130"
     - "Model: deepseek-ai/DeepSeek-V4-Pro"
     - "Recipe lists 8xB200 and 8xB300 with identical flags; this mirrors the B200 config"
-    - "EP + DP=8 (no --tensor-parallel-size), FP8 KV cache, block size 256, FP4 indexer cache"
+    - "EP + DP=8 (no --tensor-parallel-size), FP4 weights + FP8 KV cache, block size 256, FP4 indexer cache"
+    - "Precision tag fp4fp8 reflects fp4 weights with fp8 KV cache"
+    - "VLLM_ENGINE_READY_TIMEOUT_S=3600 to accommodate large weight loading"
     - "Flags: --trust-remote-code, --kv-cache-dtype fp8, --block-size 256, --no-enable-prefix-caching,"
     - "  --enable-expert-parallel, --data-parallel-size=$TP,"
     - "  --compilation-config cudagraph_mode=FULL_AND_PIECEWISE custom_ops=all,"
     - "  --attention_config.use_fp4_indexer_cache=True, --tokenizer-mode deepseek_v4,"
     - "  --tool-call-parser deepseek_v4, --enable-auto-tool-choice, --reasoning-parser deepseek_v4"
-    - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+    - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1128

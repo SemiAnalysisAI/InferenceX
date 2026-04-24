@@ -1732,12 +1732,14 @@ dsr1-fp4-b300-sglang:
 # The Pro recipe lists 8xB200 and 8xB300 with identical flags. Runs with
 # DP=8 + expert parallelism (no --tensor-parallel-size flag), FP8 KV cache,
 # block size 256, and an FP4 indexer cache.
-dsv4-fp4-b300-vllm:
+# precision is tagged fp4fp8 because the model runs fp4 weights with an
+# fp8 KV cache.
+dsv4-fp4fp8-b300-vllm:
   image: vllm/vllm-openai:deepseekv4-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
-  precision: fp4
+  precision: fp4fp8
   framework: vllm
   multinode: false
   seq-len-configs:
