@@ -27,6 +27,16 @@ resources:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
+  # --dyn-chat-processor vllm routes OpenAI pre/post-processing through vLLM's
+  # FrontendArgs, which is what recognises --tool-call-parser,
+  # --enable-auto-tool-choice, and --reasoning-parser. In a Dynamo disagg split
+  # these are server-layer concerns: the workers (dynamo.vllm) only accept
+  # AsyncEngineArgs.
+  args:
+    dyn-chat-processor: "vllm"
+    tool-call-parser: "deepseek_v4"
+    enable-auto-tool-choice: true
+    reasoning-parser: "deepseek_v4"
 
 backend:
   type: vllm
@@ -70,9 +80,6 @@ backend:
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.9
       tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
-      reasoning-parser: "deepseek_v4"
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -100,9 +107,6 @@ backend:
       stream-interval: 50
       max-cudagraph-capture-size: 512
       tokenizer-mode: "deepseek_v4"
-      tool-call-parser: "deepseek_v4"
-      enable-auto-tool-choice: true
-      reasoning-parser: "deepseek_v4"
 
 benchmark:
   type: "sa-bench"
