@@ -1733,3 +1733,20 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro vLLM H200 benchmark per https://vllm.ai/blog/deepseek-v4"
+    - "Image: vllm/vllm-openai:deepseekv4-cu129"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EP + DP=8, FP8 KV cache, block size 256, max-model-len 800000, prefix caching disabled"
+    - "H200 has no FP4 path, so --attention_config.use_fp4_indexer_cache is omitted"
+    - "VLLM_ENGINE_READY_TIMEOUT_S=1200 to accommodate large weight loading"
+    - "Flags: --trust-remote-code, --kv-cache-dtype fp8, --block-size 256, --no-enable-prefix-caching,"
+    - "  --enable-expert-parallel, --data-parallel-size=$TP, --max-model-len 800000,"
+    - "  --compilation-config cudagraph_mode=FULL_AND_PIECEWISE custom_ops=all,"
+    - "  --tokenizer-mode deepseek_v4, --tool-call-parser deepseek_v4,"
+    - "  --enable-auto-tool-choice, --reasoning-parser deepseek_v4"
+    - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
