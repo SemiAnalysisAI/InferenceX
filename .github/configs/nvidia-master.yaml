@@ -7431,7 +7431,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
 
 dsv4-fp4-gb200-dynamo-vllm:
   image: vllm/vllm-openai:deepseekv4-cu130
-  model: deepseek-ai/DeepSeek-V4-Flash
+  model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
   precision: fp4

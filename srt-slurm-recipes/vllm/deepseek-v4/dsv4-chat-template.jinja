@@ -1,32 +1,53 @@
-{#- Minimal DeepSeek-V4 chat template.
+{#- DeepSeek-V4 chat template.
 
-DSV4 does not ship a Jinja chat_template; HuggingFace provides only the
-Python `encoding_dsv4` helper. Dynamo's frontend still requires a
-chat_template at startup (PromptFormatter.from_mdc), so we register this
-file via --custom-jinja-template.
+Derived from the reference encoding_dsv4 at
+https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/tree/main/encoding
+and README.md (README Quick Start):
 
-This template is a best-effort DeepSeek-style formatter: delimiters
-mirror DeepSeek-V3 (<|User|>, <|Assistant|>, <|end_of_sentence|>) and it
-renders `reasoning_content` wrapped in <think>...</think> so Dynamo's
-`template_handles_reasoning` detection fires (avoids double-injection).
+    <｜begin▁of▁sentence｜>{system}
+    <｜User｜>{message}<｜Assistant｜><think>{reasoning}</think>{response}<｜end▁of▁sentence｜>
 
-sa-bench throughput runs use /v1/completions (raw prompts), so this
-template is not exercised during benchmarking. If eval or chat-style
-workloads are added later, replace this with a validated template
-derived from deepseek-ai/DeepSeek-V4-*/encoding_dsv4.py. -#}
-{%- for message in messages -%}
-  {%- if message['role'] == 'system' -%}
-    {{ message['content'] }}
-  {%- elif message['role'] == 'user' -%}
-    <|User|>{{ message['content'] }}
+Format rules implemented:
+  * BOS <｜begin▁of▁sentence｜> once at the start, immediately followed by
+    the system prompt inline (no role wrapper).
+  * User turn: <｜User｜>{content}
+  * Assistant turn (thinking mode — DSV4 default):
+      <｜Assistant｜><think>{reasoning_content}</think>{content}<｜end▁of▁sentence｜>
+    Assistant turn (chat mode, no reasoning):
+      <｜Assistant｜></think>{content}<｜end▁of▁sentence｜>
+    (chat mode opens an empty thinking block, per the README.)
+  * add_generation_prompt: <｜Assistant｜><think>  (thinking mode default)
+
+Tool calls and the developer / latest_reminder / quick-instruction roles
+from encoding_dsv4.py are NOT implemented here. sa-bench throughput runs
+use /v1/completions so this template is only evaluated at frontend
+startup (PromptFormatter.from_mdc); it is not invoked per-request. If
+eval via /v1/chat/completions is added, expand this template to match
+encoding_dsv4.py (DSML tool-call format, drop_thinking semantics, etc.).
+-#}
+{%- if messages and messages[0]['role'] == 'system' -%}
+  {%- set system_content = messages[0]['content'] -%}
+  {%- set loop_messages = messages[1:] -%}
+{%- else -%}
+  {%- set system_content = '' -%}
+  {%- set loop_messages = messages -%}
+{%- endif -%}
+<｜begin▁of▁sentence｜>{{ system_content }}
+{%- for message in loop_messages -%}
+  {%- if message['role'] == 'user' -%}
+<｜User｜>{{ message['content'] }}
   {%- elif message['role'] == 'assistant' -%}
-    <|Assistant|>
+<｜Assistant｜>
     {%- if message.get('reasoning_content') -%}
-      <think>{{ message['reasoning_content'] }}</think>
+<think>{{ message['reasoning_content'] }}</think>
+    {%- else -%}
+</think>
     {%- endif -%}
-    {{ message['content'] }}<|end_of_sentence|>
+{{ message['content'] }}<｜end▁of▁sentence｜>
+  {%- elif message['role'] == 'tool' -%}
+<｜User｜><tool_result>{{ message['content'] }}</tool_result>
   {%- endif -%}
 {%- endfor -%}
 {%- if add_generation_prompt -%}
-<|Assistant|>
+<｜Assistant｜><think>
 {%- endif -%}

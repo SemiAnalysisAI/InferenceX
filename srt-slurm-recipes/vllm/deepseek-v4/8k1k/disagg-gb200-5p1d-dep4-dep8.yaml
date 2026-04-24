@@ -2,14 +2,15 @@ name: "dsv4-vllm-disagg-gb200-5p1d-dep4-dep8"
 
 # Adapted from NVIDIA/srt-slurm PR #67 (deepseek-v4-pro/8k1k/disagg-gb200-7p1d-dep8-dep16).
 # Changes:
-#   * DeepSeek-V4-Flash instead of Pro (smaller model, same arch)
 #   * 5p1d-dep4-dep8 topology instead of 7p1d-dep8-dep16
 #   * dynamo source-install pinned to the vllm.inputs.data fix commit (v1.0.2
 #     on PyPI still imports from vllm.inputs.data, which the vLLM in
 #     vllm/vllm-openai:deepseekv4-cu130 no longer exposes)
+#   * DYN_CUSTOM_JINJA_TEMPLATE points at a derived-from-encoding_dsv4 template
+#     since DSV4 ships no Jinja chat_template
 
 model:
-  path: "deepseek-v4-flash"
+  path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:deepseekv4-cu130"
   precision: "fp4"
 
@@ -58,7 +59,7 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      served-model-name: "deepseek-ai/DeepSeek-V4-Flash"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -78,7 +79,7 @@ backend:
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      served-model-name: "deepseek-ai/DeepSeek-V4-Flash"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -104,3 +105,10 @@ benchmark:
   osl: 1024
   concurrencies: "2048"
   req_rate: "inf"
+  # DSV4's HF tokenizer ships no chat_template (README: "This release does not
+  # include a Jinja-format chat template"). sa-bench's --use-chat-template
+  # path calls tokenizer.apply_chat_template() directly on the HF tokenizer,
+  # which raises ValueError. Send raw random tokens via /v1/completions
+  # instead — correct for throughput benchmarking and matches sa-bench's
+  # warmup path that already succeeded in prior runs.
+  use_chat_template: false

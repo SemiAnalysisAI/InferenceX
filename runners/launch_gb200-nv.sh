@@ -43,8 +43,8 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Flash"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-flash"
+        export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Pro"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
         echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
         exit 1
