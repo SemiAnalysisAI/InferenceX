@@ -50,6 +50,7 @@ $PARALLEL_ARGS \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
+--no-enable-prefix-caching \
 --max-model-len $MAX_MODEL_LEN \
 --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
