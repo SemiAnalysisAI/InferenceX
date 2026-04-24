@@ -1,14 +1,19 @@
 name: "dsv4-vllm-disagg-gb200-5p1d-dep4-dep8"
 
+# Adapted from NVIDIA/srt-slurm PR #67 (deepseek-v4-pro/8k1k/disagg-gb200-7p1d-dep8-dep16).
+# Changes:
+#   * DeepSeek-V4-Flash instead of Pro (smaller model, same arch)
+#   * 5p1d-dep4-dep8 topology instead of 7p1d-dep8-dep16
+#   * dynamo source-install pinned to the vllm.inputs.data fix commit (v1.0.2
+#     on PyPI still imports from vllm.inputs.data, which the vLLM in
+#     vllm/vllm-openai:deepseekv4-cu130 no longer exposes)
+
 model:
   path: "deepseek-v4-flash"
   container: "vllm/vllm-openai:deepseekv4-cu130"
   precision: "fp4"
 
 dynamo:
-  # Source install pinned to the first commit that fixes the vllm.inputs restructure.
-  # v1.0.1 / v1.0.2 / v1.1.0-dev.* on PyPI still import from vllm.inputs.data, which
-  # was removed in the vLLM build inside vllm/vllm-openai:deepseekv4-cu130.
   hash: d5803cbe71c0035a725652373a175f01942c4a33
   install: true
 
@@ -27,34 +32,26 @@ resources:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-  # --dyn-chat-processor vllm routes OpenAI pre/post-processing through vLLM's
-  # FrontendArgs, which is what recognises --tool-call-parser,
-  # --enable-auto-tool-choice, and --reasoning-parser. In a Dynamo disagg split
-  # these are server-layer concerns: the workers (dynamo.vllm) only accept
-  # AsyncEngineArgs.
-  args:
-    dyn-chat-processor: "vllm"
-    tool-call-parser: "deepseek_v4"
-    enable-auto-tool-choice: true
-    reasoning-parser: "deepseek_v4"
 
 backend:
   type: vllm
   connector: null
 
   prefill_environment:
-    VLLM_USE_FLASHINFER_MOE_FP4: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
 
   decode_environment:
-    VLLM_USE_FLASHINFER_MOE_FP4: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:
     prefill:
@@ -66,20 +63,16 @@ backend:
       data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 10240
-      max-num-seqs: 64
-      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      enforce-eager: true
+      max-model-len: auto
+      max-num-seqs: 2
       max-num-batched-tokens: 16384
-      safetensors-load-strategy: "prefetch"
       trust-remote-code: true
       no-enable-prefix-caching: true
-      no-enable-chunked-prefill: true
-      attention-backend: "FLASHINFER_MLA"
       block-size: 256
-      attention-config: '{"use_trtllm_ragged_deepseek_prefill": true, "use_fp4_indexer_cache": true}'
-      all2all-backend: "flashinfer_nvlink_one_sided"
-      gpu-memory-utilization: 0.9
-      tokenizer-mode: "deepseek_v4"
+      gpu-memory-utilization: 0.88
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -90,23 +83,18 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 10240
-      max-num-seqs: 512
-      max-num-batched-tokens: 10240
-      safetensors-load-strategy: "prefetch"
+      max-model-len: auto
+      max-num-seqs: 256
+      max-cudagraph-capture-size: 256
+      max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-prefix-caching: true
-      no-enable-chunked-prefill: true
-      async-scheduling: true
-      attention-backend: "FLASHINFER_MLA"
       block-size: 256
-      attention-config: '{"use_fp4_indexer_cache": true}'
-      all2all-backend: "flashinfer_nvlink_one_sided"
-      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
-      max-cudagraph-capture-size: 512
-      tokenizer-mode: "deepseek_v4"
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
 
 benchmark:
   type: "sa-bench"
