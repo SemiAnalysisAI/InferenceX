@@ -18,8 +18,11 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+slurm:
+  time_limit: "8:00:00"
+
 health_check:
-  max_attempts: 720
+  max_attempts: 1440
   interval_seconds: 10
 
 resources:

@@ -23,8 +23,18 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Also set slurm.time_limit explicitly (above srtslurm.yaml's 6h default) so
+# a slow first-time Lustre load + cudagraph capture can't get cut off by the
+# SLURM wall clock.
+slurm:
+  time_limit: "8:00:00"
+
+# Bumped from the 1800s default to 4 hours. DSV4-Pro weights load slowly from
+# Lustre with multiple workers contending for the same OSTs — previous 1k/1k
+# run hit the default 1800s. Make this *very* generous since the cost of an
+# over-long deadline is just sitting idle, not wasted compute.
 health_check:
-  max_attempts: 720
+  max_attempts: 1440
   interval_seconds: 10
 
 resources:
