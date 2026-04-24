@@ -355,12 +355,12 @@ glm5-fp8-mi355x-sglang-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
     - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
     - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
 
 glm5-fp8-mi355x-atom:
