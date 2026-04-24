@@ -30,7 +30,15 @@ nvidia-smi
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
 
-SERVER_LOG=/workspace/server.log
+# The deepseek-v4-blackwell image bakes CUDA_VISIBLE_DEVICES=4,5,6,7 into its ENV,
+# which masks half of the 8 GPUs Slurm allocates us. Clear it so TP=8 can bind to
+# all ranks.
+unset CUDA_VISIBLE_DEVICES
+
+# The runner mounts this repo at a non-/workspace path for the deepseek-v4-blackwell
+# image (it installs sglang editable under /workspace/sglang, which our bind-mount
+# would hide), so write artefacts relative to $PWD instead of a hard-coded /workspace.
+SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
 echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
@@ -75,7 +83,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir "$PWD/"
 
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
