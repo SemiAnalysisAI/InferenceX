@@ -15,43 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
-python3 -m pip install --no-cache-dir \
-  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
-
-# Relax strict int/float validation: DeepseekV4Config uses huggingface_hub's
-# @strict dataclass, which rejects ints where floats are declared (e.g. config.json
-# has rope_theta=10000, compress_rope_theta=160000). Rewrite all `: float =` field
-# annotations to `: Union[int, float] =` so the validator accepts both.
-python3 << 'PYEOF'
-import re
-from transformers.models.deepseek_v4 import configuration_deepseek_v4 as m
-path = m.__file__
-with open(path) as f:
-    src = f.read()
-new_src, n = re.subn(r'(\b\w+\s*:\s*)float(\s*=)', r'\1Union[int, float]\2', src)
-if n and "Union" not in src.split("\n\n", 1)[0]:
-    new_src = "from typing import Union\n" + new_src
-if n:
-    with open(path, "w") as f:
-        f.write(new_src)
-    print(f"Patched {n} float field(s) in {path}")
-PYEOF
-
-# Remove any config.json corrupted by prior runs (sed mangled cached copies).
-python3 << PYEOF
-import glob, json, os
-for f in glob.glob("/mnt/hf_hub_cache/models--*DeepSeek-V4*/**/config.json", recursive=True):
-    try:
-        json.load(open(f))
-    except Exception:
-        os.remove(f)
-        print(f"Removed corrupted {f}")
-PYEOF
-
-# hf CLI breaks after huggingface_hub upgrade (typer incompatibility in container);
-# use Python API directly instead.
-python3 -c "from huggingface_hub import snapshot_download; snapshot_download('$MODEL')"
+hf download "$MODEL"
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
