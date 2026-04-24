@@ -269,7 +269,7 @@ else
     # so the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install
     # and breaks `import sglang`. Mount these images at /ix instead; drop the
     # conditional once the image stops installing editable under /workspace.
-    if [[ "$IMAGE" == *deepseek-v4-blackwell* || "$IMAGE" == *deepseek-v4-bw-ultra* || "$IMAGE" == *sglang-b300* ]]; then
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* || "$IMAGE" == *deepseek-v4-bw-ultra* || "$IMAGE" == *deepseek-v4-b300* || "$IMAGE" == *sglang-b300* ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
