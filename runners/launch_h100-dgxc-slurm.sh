@@ -178,11 +178,21 @@ EOF
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
+    # Defensive: pre-create the logs subdir so Slurm's #SBATCH --output=...
+    # /%j/logs/sweep_%j.log can open the target file even on NFS mounts
+    # where the compute-node Slurm stepd lacks permission to mkdir -p.
+    mkdir -p "$LOGS_DIR" 2>/dev/null || true
+
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
+            scontrol show job "$JOB_ID" | tee "outputs/$JOB_ID/scontrol_show_job.txt" 2>/dev/null
+            # Preserve sbatch_script.sh, config.yaml, metadata, and any partial
+            # log so the failure can be diagnosed from the CI artifact.
+            if [ -d "outputs/$JOB_ID" ]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "outputs/$JOB_ID" .
+            fi
             exit 1
         fi
         echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
