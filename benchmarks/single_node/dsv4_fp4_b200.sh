@@ -23,9 +23,11 @@ export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 
 # TODO(Cam): sloppy workaround -- the lmsysorg/sglang:deepseek-v4-blackwell image
 # installs sglang editable at /workspace/sglang/python, which the runner's
-# $GITHUB_WORKSPACE:/workspace/ bind-mount masks. Reinstalling from PyPI drops any
-# custom patches baked into the image's local sglang source. Revert once lmsys
-# ships an image that installs sglang outside /workspace (or non-editable).
+# $GITHUB_WORKSPACE:/workspace/ bind-mount masks. Uninstall the broken editable
+# link, then reinstall from PyPI (drops any custom patches baked into the
+# image's local sglang source). Revert once lmsys ships an image that installs
+# sglang outside /workspace (or non-editable).
+pip uninstall -y sglang 2>/dev/null || true
 pip install --no-deps --quiet sglang
 
 SERVER_LOG=/workspace/server.log
