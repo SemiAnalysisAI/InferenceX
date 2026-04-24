@@ -1,4 +1,13 @@
 - config-keys:
+    - dsv4-fp4-b200-sglang
+  description:
+    - "Add DeepSeek-V4-Flash single-node B200 SGLang benchmark (TP4, FP4 MoE + FP8 dense)"
+    - "Container: lmsysorg/sglang:deepseek-v4-blackwell"
+    - "Recipe from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Prefix caching and speculative decoding disabled for baseline numbers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
     - dsr1-fp8-h100-dynamo-trt
     - dsr1-fp8-h100-dynamo-sglang
   description:
