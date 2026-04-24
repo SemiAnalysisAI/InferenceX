@@ -50,8 +50,16 @@ backend:
   type: vllm
   connector: nixl
 
+  # VLLM_USE_NCCL_SYMM_MEM routes expert-parallel all2all through NCCL
+  # symmetric memory instead of NVSHMEM IPC sockets. The DSV4 cu129 vLLM
+  # wheel's NVSHMEM fails IPC bootstrap on our H100 nodes (mem_heap.cpp
+  # "Fatal IPC Failure" right after weight load). NCCL_CUMEM_ENABLE is
+  # the companion flag. Matches PR 1129 GB200 (where deepep's NVSHMEM has
+  # the same issue).
   prefill_environment:
     VLLM_USE_DEEP_GEMM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -63,6 +71,8 @@ backend:
 
   decode_environment:
     VLLM_USE_DEEP_GEMM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
     VLLM_MOE_DP_CHUNK_SIZE: "192"
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
@@ -87,7 +97,6 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      all2all-backend: "deepep_high_throughput"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
       data-parallel-size: 16
@@ -109,7 +118,6 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      all2all-backend: "deepep_low_latency"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
       data-parallel-size: 16
