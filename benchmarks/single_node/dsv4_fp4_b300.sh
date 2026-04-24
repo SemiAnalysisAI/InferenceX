@@ -23,7 +23,11 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+# The B300 runner overrides MODEL to a pre-staged /data/models path, so skip
+# `hf download`. Only fetch when MODEL looks like a HF repo ID.
+if [[ "$MODEL" != /* ]]; then
+    hf download "$MODEL"
+fi
 
 nvidia-smi
 
