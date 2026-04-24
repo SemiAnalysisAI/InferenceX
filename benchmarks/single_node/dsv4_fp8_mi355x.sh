@@ -16,21 +16,18 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 # DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
-# Pin huggingface_hub to avoid typer incompatibility with container's typer version
-python3 -m pip install --no-cache-dir \
+# --no-deps prevents upgrading huggingface_hub which breaks the hf CLI (typer incompatibility)
+python3 -m pip install --no-cache-dir --no-deps \
   "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
 
-hf download "$MODEL"
-
-# Workaround: DeepseekV4Config declares rope_theta: float but config.json has int (10000).
-# Strict dataclass validation rejects int for float. Widen the type annotation in the
-# installed source so the validator accepts both int and float.
+# Patch rope_theta type: config.json has int but the dataclass declares float.
+# Must happen before any transformers import that triggers strict validation.
 python3 << 'PYEOF'
 from transformers.models.deepseek_v4 import configuration_deepseek_v4 as m
 path = m.__file__
 with open(path) as f:
     src = f.read()
-if "rope_theta: float" in src and "Union" not in src.split("rope_theta")[0].split("\n")[-1]:
+if "rope_theta: float" in src and "Union[int, float]" not in src:
     src = src.replace("rope_theta: float", "rope_theta: Union[int, float]", 1)
     if "from typing import" in src and "Union" not in src.split("from typing import")[1].split("\n")[0]:
         src = src.replace("from typing import ", "from typing import Union, ", 1)
@@ -38,6 +35,8 @@ if "rope_theta: float" in src and "Union" not in src.split("rope_theta")[0].spli
         f.write(src)
     print(f"Patched rope_theta type in {path}")
 PYEOF
+
+hf download "$MODEL"
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
