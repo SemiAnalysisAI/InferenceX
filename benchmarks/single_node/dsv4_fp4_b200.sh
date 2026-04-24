@@ -46,22 +46,30 @@ fi
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
-PYTHONNOUSERSITE=1 \
 SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1 \
 SGLANG_OPT_USE_TOPK_V2=1 \
+SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1 \
+SGLANG_OPT_USE_FAST_MASK_EP=1 \
+SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1 \
+SGLANG_OPT_FIX_HASH_MEGA_MOE=1 \
+SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=256 \
+SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256 \
 SGLANG_JIT_DEEPGEMM_PRECOMPILE=0 \
 sglang serve \
   --trust-remote-code \
-  --model-path $MODEL \
+  --model-path deepseek-ai/DeepSeek-V4-Pro \
   --tp 8 \
-  --moe-runner-backend flashinfer_mxfp4 \
+  --dp 8 \
+  --enable-dp-attention \
+  --moe-a2a-backend deepep \
   --speculative-algo EAGLE \
-  --speculative-num-steps 3 \
+  --speculative-num-steps 1 \
   --speculative-eagle-topk 1 \
-  --speculative-num-draft-tokens 4 \
-  --chunked-prefill-size 4096 \
-  --disable-flashinfer-autotune \
+  --speculative-num-draft-tokens 2 \
   --mem-fraction-static 0.82 \
+  --cuda-graph-max-bs 64 \
+  --max-running-requests 128 \
+  --deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}' \
   --host 0.0.0.0 \
   --port $PORT > $SERVER_LOG 2>&1 &
 
