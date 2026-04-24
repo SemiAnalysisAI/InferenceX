@@ -83,12 +83,12 @@ python3 -m sglang.launch_server \
     --attention-backend compressed \
     --max-running-request 256 \
     --page-size 256 \
-    --chunked-prefill-size 8192 \
+    --chunked-prefill-size 4096 \
     --disable-shared-experts-fusion \
     --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
-    --mem-fraction-static 0.95 \
+    --mem-fraction-static 0.88 \
     --max-total-tokens $((CONC * (ISL + OSL) + 200)) \
     --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
