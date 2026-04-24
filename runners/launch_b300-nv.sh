@@ -254,22 +254,28 @@ else
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
+    # Import the squash file on the host (outside SLURM) rather than inside an
+    # srun step. Running two srun steps (one import, one benchmark) in the same
+    # allocation trips a pyxis namespace collision on this cluster:
+    #   error: pyxis: mkdir: cannot create directory
+    #       '/scratch/data/user-$UID/pyxis_$JOBID.1/data': File exists
+    # Collapsing to a single srun (the benchmark) avoids it entirely. flock
+    # serializes concurrent imports of the same squash by parallel GH jobs.
+    (
+        exec 9>"$LOCK_FILE"
+        flock -w 600 9 || { echo "Failed to acquire lock for $SQUASH_FILE" >&2; exit 1; }
+        if unsquashfs -l "$SQUASH_FILE" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import"
+        else
+            rm -f "$SQUASH_FILE"
+            enroot import -o "$SQUASH_FILE" "docker://$IMAGE"
+        fi
+    )
+
     # Pin to one of the known-good B300 nodes; others have hardware/network
     # issues that cause benchmarks to hang or fail to start.
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
-
-    # Use flock to serialize concurrent imports to the same squash file
-    srun --jobid=$JOB_ID bash -c "
-        exec 9>\"$LOCK_FILE\"
-        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
-        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
-            echo 'Squash file already exists and is valid, skipping import'
-        else
-            rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
-        fi
-    "
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
