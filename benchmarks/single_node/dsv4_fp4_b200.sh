@@ -21,6 +21,11 @@ nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 
+# The deepseek-v4-blackwell image bakes CUDA_VISIBLE_DEVICES=4,5,6,7 into its ENV,
+# which masks half of the 8 GPUs Slurm allocates us. Clear it so TP=8 can bind to
+# all ranks.
+unset CUDA_VISIBLE_DEVICES
+
 # TODO(Cam): the lmsysorg/sglang:deepseek-v4-blackwell image installs sglang
 # editable at /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
 # The runner mounts our repo at a non-/workspace path for this image so the editable
