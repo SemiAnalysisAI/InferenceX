@@ -270,7 +270,17 @@ jobs:
                 sweep-multi-node-8k1k,
                 setup,
             ]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: >-
+            ${{
+              always() &&
+              needs.setup.result == 'success' &&
+              (
+                needs.sweep-single-node-1k1k.result != 'skipped' ||
+                needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-1k1k.result != 'skipped' ||
+                needs.sweep-multi-node-8k1k.result != 'skipped'
+              )
+            }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
@@ -284,7 +294,7 @@ jobs:
 
     upload-changelog-metadata:
         needs: [setup, collect-results]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
