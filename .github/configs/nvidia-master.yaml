@@ -1677,15 +1677,33 @@ dsv4-fp4-b200-sglang:
   precision: fp4
   framework: sglang
   multinode: false
+  # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+  # are selected inside benchmarks/single_node/dsv4_fp4_b200.sh by CONC:
+  #   low-latency    (CONC <= 32):       TP-only
+  #   balanced       (32 < CONC <= 128): + DP-attn
+  #   max-throughput (CONC > 128):       + DP-attn
+  # Split so result filenames (ep=, dpa=) accurately reflect the recipe.
+  # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
+  # while low-latency leaves ep_size at the default of 1.
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 1024 }
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512 }
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
