@@ -5,8 +5,6 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    EP_SIZE \
-    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -25,17 +23,6 @@ hf download "$MODEL"
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# Per https://vllm.ai/blog/deepseek-v4 the DeepSeek-V4-Pro recipe on 8xB200
-# runs with DP=8 + expert parallelism (TP=1 per replica). dp-attn: true in
-# the search space routes here.
-if [ "${DP_ATTENTION}" = "true" ]; then
-  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
-elif [ "$EP_SIZE" -gt 1 ]; then
-  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
-else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP"
-fi
-
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
@@ -44,13 +31,17 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+# Per https://vllm.ai/blog/deepseek-v4 the DeepSeek-V4-Pro recipe on 8xB200
+# runs with EP + DP=8 (no --tensor-parallel-size flag). TP from the search
+# space is used only for GPU allocation by the runner and as the DP size.
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
-$PARALLEL_ARGS \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
 --no-enable-prefix-caching \
+--enable-expert-parallel \
+--data-parallel-size $TP \
 --max-model-len $MAX_MODEL_LEN \
 --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
