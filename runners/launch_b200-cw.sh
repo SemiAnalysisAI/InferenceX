@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunners/hf-hub-cache"
+export HF_HUB_CACHE_MOUNT="/tmp/gharunner/hf-hub-cache"
 export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
@@ -8,7 +8,7 @@ FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="b200"
-SQUASH_FILE="/mnt/vast/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/tmp/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
