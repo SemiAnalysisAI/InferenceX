@@ -55,18 +55,21 @@ backend:
       enable-expert-parallel: true
       max-model-len: 10240
       max-num-seqs: 64
-      enforce-eager: true
-      compilation-config: '{"custom_ops":["+quant_fp8","+rms_norm","+rotary_embedding"],"pass_config":{"fuse_attn_quant":true,"fuse_allreduce_rms":true}}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
       max-num-batched-tokens: 16384
       safetensors-load-strategy: "prefetch"
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-chunked-prefill: true
       attention-backend: "FLASHINFER_MLA"
-      block-size: 64
-      attention-config: '{"use_trtllm_ragged_deepseek_prefill": true}'
+      block-size: 256
+      attention-config: '{"use_trtllm_ragged_deepseek_prefill": true, "use_fp4_indexer_cache": true}'
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.9
+      tokenizer-mode: "deepseek_v4"
+      tool-call-parser: "deepseek_v4"
+      enable-auto-tool-choice: true
+      reasoning-parser: "deepseek_v4"
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -86,12 +89,17 @@ backend:
       no-enable-chunked-prefill: true
       async-scheduling: true
       attention-backend: "FLASHINFER_MLA"
-      block-size: 64
+      block-size: 256
+      attention-config: '{"use_fp4_indexer_cache": true}'
       all2all-backend: "flashinfer_nvlink_one_sided"
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","custom_ops":["+quant_fp8","+rms_norm","+rotary_embedding"],"pass_config":{"fuse_attn_quant":true,"fuse_allreduce_rms":true}}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
       max-cudagraph-capture-size: 512
+      tokenizer-mode: "deepseek_v4"
+      tool-call-parser: "deepseek_v4"
+      enable-auto-tool-choice: true
+      reasoning-parser: "deepseek_v4"
 
 benchmark:
   type: "sa-bench"
