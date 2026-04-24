@@ -91,7 +91,9 @@ backend:
       max-model-len: 16384
       max-num-seqs: 512
       max-num-batched-tokens: 512
-      gpu-memory-utilization: 0.95
+      # See 1k1k recipe for the rationale; H100 80GB needs ~6 GiB headroom
+      # for DSV4's sparse attention indexer.
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
 
@@ -111,7 +113,9 @@ backend:
       max-model-len: 16384
       max-num-seqs: 512
       max-num-batched-tokens: 512
-      gpu-memory-utilization: 0.95
+      # See 1k1k recipe for the rationale; H100 80GB needs ~6 GiB headroom
+      # for DSV4's sparse attention indexer.
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
