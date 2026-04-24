@@ -1,12 +1,4 @@
 - config-keys:
-<<<<<<< dsv4-fp4-gb200-dynamo-vllm-disagg
-    - dsv4-fp4-gb200-dynamo-vllm
-  description:
-    - "Add DeepSeek V4 Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (8k1k, 7p1d-dep8-dep16)"
-    - "Container: vllm/vllm-openai:deepseekv4-cu130"
-    - "Mirrors NVIDIA/srt-slurm PR #67; recipes stored in srt-slurm-recipes/ and copied into srt-slurm checkout at runtime"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
-=======
     - dsv4-fp4-b200-sglang
   description:
     - "Add DeepSeek-V4-Pro single-node B200 SGLang benchmark (TP8, EP8, dp-attention)"
@@ -15,7 +7,6 @@
     - "Parallelism and sweep conc ranges match the dsv4-fp4-b200-vllm config"
     - "Prefix caching and speculative decoding disabled for baseline numbers"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1131
->>>>>>> main
 
 - config-keys:
     - dsr1-fp8-h100-dynamo-trt
@@ -1775,3 +1766,11 @@
     - "Prefix caching disabled, no speculative decoding"
     - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add DeepSeek V4 Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (8k1k, 7p1d-dep8-dep16)"
+    - "Container: vllm/vllm-openai:deepseekv4-cu130"
+    - "Mirrors NVIDIA/srt-slurm PR #67; recipes stored in srt-slurm-recipes/ and copied into srt-slurm checkout at runtime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
