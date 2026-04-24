@@ -13,7 +13,7 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 set -x
 
-JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:h200:$TP --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
@@ -44,7 +44,7 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}${SCRIPT_SUFFIX:-}.sh
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID

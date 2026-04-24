@@ -61,7 +61,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME%.sh}${SCRIPT_SUFFIX:-}.sh")
 
     # Wait for job to complete
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
@@ -186,7 +186,7 @@ else
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -219,7 +219,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}${SCRIPT_SUFFIX:-}.sh
 
     scancel $JOB_ID
 

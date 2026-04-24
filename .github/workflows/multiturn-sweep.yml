@@ -1,0 +1,261 @@
+name: Multi-Turn Benchmark Sweep
+run-name: "${{ inputs.run_name || format('Multi-Turn Sweep - tp={0} users={1} offload={2}', inputs.tp_values, inputs.user_values, inputs.offload_values) }}"
+
+on:
+  # push:
+  #   branches:
+  #     - experimental/multi-turn-benchmark
+  #   paths:
+  #     - .github/workflows/multiturn-sweep.yml
+  workflow_dispatch:
+    inputs:
+      run_name:
+        description: 'Custom run name (optional)'
+        required: false
+        default: ''
+        type: string
+      tp_values:
+        description: 'TP sizes (JSON array)'
+        required: true
+        default: '[1, 2, 4, 8]'
+        type: string
+      user_values:
+        description: 'Concurrent user counts (JSON array). Ignored if config_file is set.'
+        required: false
+        default: '[8, 16, 32, 64, 128, 256, 512, 1024, 2048]'
+        type: string
+      offload_values:
+        description: 'Offload modes (JSON array: on/off/noprefix). Ignored if config_file is set.'
+        required: false
+        default: '["on", "off", "noprefix"]'
+        type: string
+      config_file:
+        description: 'YAML config with per-TP sweep settings (e.g. .github/configs/multiturn-agentic-trace.yaml). Overrides tp/user/offload values.'
+        required: false
+        default: ''
+        type: string
+      config_key:
+        description: 'Top-level key in config_file to use (e.g. h200-fp8-llama70b, b200-fp4-dsr1). Required if config_file has multiple entries.'
+        required: false
+        default: ''
+        type: string
+      duration:
+        description: 'Benchmark duration in seconds (optional, runs to completion if omitted)'
+        required: false
+        default: ''
+        type: string
+      request_rate:
+        description: 'Request rate per client (Poisson, req/s). 0 = no delay.'
+        required: false
+        default: '0'
+        type: string
+      total_cpu_dram_gb:
+        description: 'Total CPU DRAM for KV offload (GB)'
+        required: true
+        default: '100'
+        type: string
+      image:
+        description: 'Container image'
+        required: true
+        default: 'vllm/vllm-openai:v0.18.0'
+        type: string
+      model:
+        description: 'Model name'
+        required: true
+        default: 'nvidia/Llama-3.3-70B-Instruct-FP4'
+        type: string
+      precision:
+        description: 'Model precision (fp4, fp8, etc.) — used to select benchmark script'
+        required: false
+        default: 'fp4'
+        type: string
+      script_suffix:
+        description: 'Suffix for benchmark script (e.g. "_lmcache" → multiturn_fp4_b200_lmcache.sh)'
+        required: false
+        default: ''
+        type: string
+      runner:
+        description: 'Runner label (e.g. b200, h200-dgxc-slurm)'
+        required: false
+        default: 'b200'
+        type: string
+      ep:
+        description: 'Expert parallelism size (for MoE models, default 0 = disabled)'
+        required: false
+        default: '0'
+        type: string
+      ref:
+        description: 'Git ref (branch/sha) to checkout'
+        required: false
+        type: string
+      ignore_eos:
+        description: 'Ignore EOS token and force exact output_tokens from trace (true/false)'
+        required: false
+        default: 'false'
+        type: string
+      hash_block_mode:
+        description: 'Build each request prompt deterministically from hash_ids, bypassing pullback/growth (true/false). Use for neon/interleaved-subagent traces.'
+        required: false
+        default: 'false'
+        type: string
+      trace_dir:
+        description: 'Override trace directory (e.g. traces, traces_neon). Relative to kv-cache-tester dir.'
+        required: false
+        default: ''
+        type: string
+      debug_trace:
+        description: 'Store full request/response text for every API call to debug_trace.jsonl (true/false)'
+        required: false
+        default: 'false'
+        type: string
+      no_max_tokens:
+        description: 'Don''t enforce max_tokens from trace; let model generate freely until EOS (true/false). Use for reasoning models like DeepSeek R1.'
+        required: false
+        default: 'false'
+        type: string
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Generate matrix from config file or CLI inputs
+  # ---------------------------------------------------------------------------
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ inputs.config_file != '' }}
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.ref }}
+          sparse-checkout: ${{ inputs.config_file }}
+
+      - id: gen
+        run: |
+          pip install -q pyyaml
+          python3 << 'PYEOF'
+          import json, os, sys
+
+          config_file = "${{ inputs.config_file }}".strip()
+
+          if config_file:
+              import yaml
+              with open(config_file) as f:
+                  full_config = yaml.safe_load(f)
+
+              config_key = "${{ inputs.config_key }}".strip()
+
+              # If config_key specified, use that section; otherwise auto-detect
+              if config_key and config_key in full_config:
+                  config = full_config[config_key]
+              elif config_key:
+                  print(f"ERROR: config_key '{config_key}' not found. Available: {list(full_config.keys())}")
+                  sys.exit(1)
+              elif len(full_config) == 1:
+                  config = next(iter(full_config.values()))
+              else:
+                  # Check if top-level keys look like tp entries (tp2, tp4, etc.)
+                  if all(k.startswith("tp") for k in full_config):
+                      config = full_config
+                  else:
+                      print(f"ERROR: Multiple entries in config, specify --config_key. Available: {list(full_config.keys())}")
+                      sys.exit(1)
+
+              includes = []
+              for key, settings in config.items():
+                  tp = int(key.replace("tp", ""))
+                  users = settings.get("users", [])
+                  offloads = settings.get("offload", ["on", "off"])
+                  ep = settings.get("ep", 0)
+                  for u in users:
+                      for o in offloads:
+                          entry = {"tp": tp, "users": u, "offload": o}
+                          if ep > 0:
+                              entry["ep"] = ep
+                          includes.append(entry)
+          else:
+              tp_values = json.loads('${{ inputs.tp_values }}')
+              user_values = json.loads('${{ inputs.user_values }}')
+              offload_values = json.loads('${{ inputs.offload_values }}')
+              includes = []
+              for tp in tp_values:
+                  for u in user_values:
+                      for o in offload_values:
+                          includes.append({"tp": tp, "users": u, "offload": o})
+
+          matrix = {"include": includes}
+          print(f"Generated {len(includes)} matrix entries")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          PYEOF
+
+  # ---------------------------------------------------------------------------
+  # Matrix benchmark jobs — each cell calls the multiturn template
+  # ---------------------------------------------------------------------------
+  sweep:
+    needs: generate-matrix
+    uses: ./.github/workflows/benchmark-multiturn-tmpl.yml
+    name: sweep /
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    secrets: inherit
+    with:
+      runner: ${{ inputs.runner }}
+      image: ${{ inputs.image }}
+      model: ${{ inputs.model }}
+      precision: ${{ inputs.precision }}
+      exp-name: "multiturn_tp${{ matrix.tp }}_users${{ matrix.users }}_offload${{ matrix.offload }}"
+      tp: "${{ matrix.tp }}"
+      users: "${{ matrix.users }}"
+      offload-mode: ${{ matrix.offload }}
+      duration: ${{ inputs.duration }}
+      request-rate: ${{ inputs.request_rate }}
+      total-cpu-dram-gb: ${{ inputs.total_cpu_dram_gb }}
+      script-suffix: ${{ inputs.script_suffix }}
+      ep: "${{ matrix.ep || inputs.ep }}"
+      ref: ${{ inputs.ref }}
+      ignore-eos: ${{ inputs.ignore_eos }}
+      hash-block-mode: ${{ inputs.hash_block_mode }}
+      trace-dir: ${{ inputs.trace_dir }}
+      debug-trace: ${{ inputs.debug_trace }}
+      no-max-tokens: ${{ inputs.no_max_tokens }}
+
+  # ---------------------------------------------------------------------------
+  # Collect & aggregate results
+  # ---------------------------------------------------------------------------
+  collect:
+    runs-on: ubuntu-latest
+    needs: sweep
+    if: always()
+    name: Collect results
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas matplotlib numpy
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'multiturn_*'
+          path: results/
+
+      - name: Run aggregation
+        run: |
+          python experimental/multiturn/vllm_benchmark/scripts/collect_sweep_results.py results/ aggregated/
+
+      - name: Upload aggregated results
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: multiturn_aggregated
+          path: aggregated/
