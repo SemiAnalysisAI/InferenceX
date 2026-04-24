@@ -284,10 +284,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Start vllm-router FIRST — workers register via ZMQ on startup
     #echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
     echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    # PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
-    #     python3 $VLLM_WS_PATH/moriio_proxy.py"
     PROXY_CMD="/app/vllm-router \
         --vllm-pd-disaggregation \
+        --kv-connector moriio \
         --vllm-discovery-address 0.0.0.0:$PROXY_PING_PORT \
         --port $ROUTER_PORT \
         --host 0.0.0.0 \
