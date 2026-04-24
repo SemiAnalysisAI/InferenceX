@@ -21,7 +21,14 @@ nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 
-SERVER_LOG="$PWD/server.log"
+# TODO(Cam): sloppy workaround -- the lmsysorg/sglang:deepseek-v4-blackwell image
+# installs sglang editable at /workspace/sglang/python, which the runner's
+# $GITHUB_WORKSPACE:/workspace/ bind-mount masks. Reinstalling from PyPI drops any
+# custom patches baked into the image's local sglang source. Revert once lmsys
+# ships an image that installs sglang outside /workspace (or non-editable).
+pip install --no-deps --quiet sglang
+
+SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
@@ -32,7 +39,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
 
-start_gpu_monitor --output "$PWD/gpu_metrics.csv"
+start_gpu_monitor
 
 set -x
 sglang serve --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
@@ -57,7 +64,7 @@ run_benchmark_serving \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir "$PWD/"
+    --result-dir /workspace/
 
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
