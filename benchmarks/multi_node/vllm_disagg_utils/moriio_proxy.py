@@ -29,9 +29,8 @@ from quart import Quart, make_response, request
 logger = logging.getLogger("moriio_proxy")
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
-handler.setFormatter(
-    logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-)
+handler.setFormatter(logging.Formatter(
+    "%(asctime)s %(levelname)s [%(name)s] %(message)s"))
 logger.addHandler(handler)
 
 prefill_instances: list[dict] = []
@@ -52,15 +51,10 @@ def _append_whole_dict_unique(target_list, data_dict):
         existed_filtered = {k: v for k, v in existed.items() if k != "index"}
         if existed_filtered == new_filtered:
             return False
-    logger.info(
-        "Registered instance: role=%s addr=%s hs_port=%s notify=%s dp=%s tp=%s",
-        data_dict.get("role"),
-        data_dict.get("request_address"),
-        data_dict.get("handshake_port"),
-        data_dict.get("notify_port"),
-        data_dict.get("dp_size"),
-        data_dict.get("tp_size"),
-    )
+    logger.info("Registered instance: role=%s addr=%s hs_port=%s notify=%s dp=%s tp=%s",
+                data_dict.get("role"), data_dict.get("request_address"),
+                data_dict.get("handshake_port"), data_dict.get("notify_port"),
+                data_dict.get("dp_size"), data_dict.get("tp_size"))
     target_list.append(data_dict)
     transfer_mode = data_dict.get("transfer_mode", "unknown")
     global TRANSFER_TYPE
@@ -162,7 +156,9 @@ async def send_request_to_prefill(
             if response.status == 200:
                 return await response.json()
             else:
-                raise RuntimeError(f"Prefill response status={response.status}")
+                raise RuntimeError(
+                    f"Prefill response status={response.status}"
+                )
 
 
 async def start_decode_request(endpoint, req_data, request_id):
@@ -184,8 +180,7 @@ async def stream_decode_response(session, response, request_id):
             while True:
                 try:
                     chunk_bytes = await asyncio.wait_for(
-                        chunk_iter.__anext__(),
-                        timeout=STREAM_IDLE_TIMEOUT,
+                        chunk_iter.__anext__(), timeout=STREAM_IDLE_TIMEOUT,
                     )
                     yield chunk_bytes
                 except StopAsyncIteration:
@@ -193,12 +188,13 @@ async def stream_decode_response(session, response, request_id):
                 except asyncio.TimeoutError:
                     logger.error(
                         "Decode stream %s idle for %ds, aborting",
-                        request_id,
-                        STREAM_IDLE_TIMEOUT,
+                        request_id, STREAM_IDLE_TIMEOUT,
                     )
                     break
         else:
-            raise RuntimeError(f"Decode response status={response.status}")
+            raise RuntimeError(
+                f"Decode response status={response.status}"
+            )
     finally:
         await response.release()
         await session.close()
@@ -210,10 +206,7 @@ async def health_check():
         p_count = len(prefill_instances)
         d_count = len(decode_instances)
     return await make_response(
-        (
-            {"status": "ok", "prefill_instances": p_count, "decode_instances": d_count},
-            200,
-        )
+        ({"status": "ok", "prefill_instances": p_count, "decode_instances": d_count}, 200)
     )
 
 
@@ -246,9 +239,7 @@ async def handle_request():
 
         selected_prefill_dp_rank = None
         if prefill_instance_endpoint["dp_size"] > 1:
-            selected_prefill_dp_rank = (
-                request_nums % prefill_instance_endpoint["dp_size"]
-            )
+            selected_prefill_dp_rank = request_nums % prefill_instance_endpoint["dp_size"]
 
         dip, dport = extract_ip_port_fast(decode_instance_endpoint["request_address"])
 
