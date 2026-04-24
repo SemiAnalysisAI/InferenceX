@@ -1745,3 +1745,17 @@
     - "VLLM_ENGINE_READY_TIMEOUT_S=3600 to accommodate large weight loading"
     - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1130
+
+- config-keys:
+    - dsv4-fp8-h100-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H100 multinode disagg benchmark via dynamo-vllm"
+    - "2 prefill nodes + 2 decode nodes (32 H100s total, DP16/EP16 per side)"
+    - "Image: vllm/vllm-openai:deepseekv4-cu129"
+    - "Engine flags match H200 single-node recipe (deepseek_v4 tokenizer/parsers, FP8 KV cache, block size 256, prefix caching disabled)"
+    - "max-model-len 16384 (H100 80GB KV headroom; H200's 800k does not fit across 2 decode nodes)"
+    - "VLLM_MOE_DP_CHUNK_SIZE=192 and deepep_{high_throughput,low_latency} all2all backends tuned for H100 80GB"
+    - "NixlConnector P<->D KV transfer, dynamo 1.0.1"
+    - "srt-slurm recipes bundled locally at benchmarks/multi_node/srt_slurm_recipes/ until upstreamed"
+    - "Configs: 1k1k conc 4-128, 8k1k conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

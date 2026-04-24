@@ -29,8 +29,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsv4-fp8"
+            export SERVED_MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
+            export SRT_SLURM_MODEL_PREFIX="dsv4-fp8"
+        else
+            echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
@@ -44,6 +53,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+
+    # Overlay any in-repo srt-slurm recipes onto the clone. Kept here until
+    # the upstream PR lands; cp -r merges directories on GNU cp.
+    LOCAL_RECIPES_DIR="$GITHUB_WORKSPACE/benchmarks/multi_node/srt_slurm_recipes"
+    if [ -d "$LOCAL_RECIPES_DIR" ]; then
+        echo "Overlaying local srt-slurm recipes from $LOCAL_RECIPES_DIR"
+        cp -r "$LOCAL_RECIPES_DIR"/* recipes/
+    fi
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -78,6 +95,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        # vLLM container mapping - IMAGE is a Docker Hub reference (no registry prefix swap)
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
     fi
 
     export ISL="$ISL"
@@ -105,6 +126,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
