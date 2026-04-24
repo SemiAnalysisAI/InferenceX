@@ -61,15 +61,17 @@ fi
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---trust-remote-code \
---tensor-parallel-size=$TP --ep-size $EP_SIZE $DP_ATTN_ARGS \
---moe-a2a-backend deepep \
---deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}' \
---mem-fraction-static 0.82 \
---cuda-graph-max-bs 64 \
---max-running-requests 256 \
---disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+PYTHONNOUSERSITE=1 sglang serve \
+    --model-path $MODEL \
+    --host 0.0.0.0 \
+    --port $PORT \
+    --trust-remote-code \
+    --tp $TP \
+    --moe-runner-backend flashinfer_mxfp4 \
+    --mem-fraction-static 0.82 \
+    --chunked-prefill-size 4096 \
+    --disable-flashinfer-autotune \
+    --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
