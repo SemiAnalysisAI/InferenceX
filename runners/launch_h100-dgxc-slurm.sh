@@ -34,6 +34,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             export MODEL_PATH="/mnt/nfs/lustre/models/dsv4-fp8"
             export SERVED_MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
             export SRT_SLURM_MODEL_PREFIX="dsv4-fp8"
+            # NVIDIA/srt-slurm@sa-submission-q2-2026 installs ai-dynamo 1.0.1,
+            # which imports vllm.inputs.data.TokensPrompt — a path the DSV4
+            # vLLM wheel has removed. Switch to alec-flowers' fork (head of
+            # https://github.com/NVIDIA/srt-slurm/pull/71) which supports
+            # dynamo.hash pinning so the recipe can pick a dynamo commit
+            # compatible with the DSV4 vllm.inputs layout. Matches PR #1129
+            # on GB200.
+            export SRT_SLURM_REPO_URL="https://github.com/alec-flowers/srt-slurm.git"
+            export SRT_SLURM_REF="d60e3f1c7921721e52af01afaab59a70a1631106"
         else
             echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
             exit 1
@@ -50,9 +59,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone "${SRT_SLURM_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}" "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    git checkout "${SRT_SLURM_REF:-sa-submission-q2-2026}"
 
     # Overlay any in-repo srt-slurm recipes onto the clone. Kept here until
     # the upstream PR lands; cp -r merges directories on GNU cp.

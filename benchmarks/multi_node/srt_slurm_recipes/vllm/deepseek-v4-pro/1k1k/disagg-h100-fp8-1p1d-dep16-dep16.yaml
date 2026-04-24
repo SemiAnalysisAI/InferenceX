@@ -23,8 +23,11 @@ model:
   container: "vllm/vllm-openai:deepseekv4-cu129"
   precision: "fp8"
 
+# Pin ai-dynamo to a commit whose vllm.inputs imports match the DSV4 vLLM
+# wheel. Requires the alec-flowers/srt-slurm fork (NVIDIA/srt-slurm#71),
+# which extends the dynamo config to accept `hash` as well as `version`.
 dynamo:
-  version: 1.0.1
+  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
   install: true
 
 setup_script: vllm-container-deps.sh
@@ -52,6 +55,8 @@ backend:
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_SERVER_DEV_MODE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
     NVIDIA_GDRCOPY: "enabled"
     GLOO_SOCKET_IFNAME: "eth0"
     PYTHONUNBUFFERED: "1"
@@ -62,12 +67,15 @@ backend:
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_SERVER_DEV_MODE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
     NVIDIA_GDRCOPY: "enabled"
     GLOO_SOCKET_IFNAME: "eth0"
     PYTHONUNBUFFERED: "1"
 
   vllm_config:
     prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       tokenizer-mode: "deepseek_v4"
       tool-call-parser: "deepseek_v4"
@@ -79,19 +87,21 @@ backend:
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       all2all-backend: "deepep_high_throughput"
-      data-parallel-hybrid-lb: true
       tensor-parallel-size: 1
+      pipeline-parallel-size: 1
       data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 512
       max-num-batched-tokens: 512
       gpu-memory-utilization: 0.95
-      async-scheduling: true
-      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
 
     decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       tokenizer-mode: "deepseek_v4"
       tool-call-parser: "deepseek_v4"
@@ -103,8 +113,8 @@ backend:
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       all2all-backend: "deepep_low_latency"
-      data-parallel-hybrid-lb: true
       tensor-parallel-size: 1
+      pipeline-parallel-size: 1
       data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
@@ -112,7 +122,8 @@ backend:
       max-num-seqs: 512
       max-num-batched-tokens: 512
       gpu-memory-utilization: 0.95
-      async-scheduling: true
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
       compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
 
 benchmark:
