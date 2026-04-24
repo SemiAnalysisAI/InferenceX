@@ -10,7 +10,7 @@ dsr1-fp4-mi355x-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
@@ -484,12 +484,12 @@ kimik2.5-fp4-mi355x-vllm:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -569,13 +569,13 @@ minimaxm2.5-fp4-mi355x-vllm:
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 32 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 32 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
@@ -590,12 +590,12 @@ minimaxm2.5-fp8-mi300x-vllm:
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
@@ -631,14 +631,14 @@ gptoss-fp4-mi300x-vllm:
     search-space:
     - { tp: 1, conc-start: 64, conc-end: 256 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 1, conc-end: 16 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 1, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
@@ -655,7 +655,7 @@ gptoss-fp4-mi325x-vllm:
     search-space:
     - { tp: 1, conc-start: 4, conc-end: 64 }
     - { tp: 2, conc-start: 4, conc-end: 64 }
-    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
     - { tp: 8, conc-start: 4, conc-end: 64 }
   - isl: 8192
     osl: 1024
