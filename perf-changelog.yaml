@@ -1758,4 +1758,4 @@
     - "NixlConnector P<->D KV transfer, dynamo 1.0.1"
     - "srt-slurm recipes bundled locally at benchmarks/multi_node/srt_slurm_recipes/ until upstreamed"
     - "Configs: 1k1k conc 4-128, 8k1k conc 4-64"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1142
