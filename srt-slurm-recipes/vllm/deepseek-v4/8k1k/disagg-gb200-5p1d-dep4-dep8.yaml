@@ -6,7 +6,10 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: 1.0.1
+  # Source install pinned to the first commit that fixes the vllm.inputs restructure.
+  # v1.0.1 / v1.0.2 / v1.1.0-dev.* on PyPI still import from vllm.inputs.data, which
+  # was removed in the vLLM build inside vllm/vllm-openai:deepseekv4-cu130.
+  hash: d5803cbe71c0035a725652373a175f01942c4a33
   install: true
 
 setup_script: vllm-container-deps.sh
