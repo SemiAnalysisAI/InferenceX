@@ -920,17 +920,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --warmup-enabled"
     REPLAY_CMD+=" --seed 42"
     REPLAY_CMD+=" --no-color"
-    if [ "${IGNORE_EOS:-false}" = "true" ]; then
-        REPLAY_CMD+=" --ignore-eos"
-    fi
     if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
         REPLAY_CMD+=" --hash-block-mode"
     fi
     if [ "${DEBUG_TRACE:-false}" = "true" ]; then
         REPLAY_CMD+=" --debug-trace"
-    fi
-    if [ "${NO_MAX_TOKENS:-false}" = "true" ]; then
-        REPLAY_CMD+=" --no-max-tokens"
     fi
     REPLAY_CMD+=" --metrics-output-prefix $result_dir/metrics"
 }

@@ -52,7 +52,6 @@ class Fields(Enum):
     # Agentic coding fields
     OFFLOADING = 'offloading'
     DURATION = 'duration'
-    NO_MAX_TOKENS = 'no-max-tokens'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -160,7 +159,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     users: int
     offloading: Literal["none", "cpu", "ssd"] = Field(alias=Fields.OFFLOADING.value)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
-    no_max_tokens: bool = Field(default=False, alias=Fields.NO_MAX_TOKENS.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
 
@@ -183,7 +181,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     users: int
     conc: List[int]
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
-    no_max_tokens: bool = Field(default=False, alias=Fields.NO_MAX_TOKENS.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -344,7 +341,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
     offloading: Literal["none", "cpu", "ssd"] = Field(default="none", alias=Fields.OFFLOADING.value)
-    no_max_tokens: bool = Field(default=False, alias=Fields.NO_MAX_TOKENS.value)
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)

@@ -182,9 +182,8 @@ jobs:
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.users }}
-            offload-mode: ${{ matrix.config.offload-mode }}
+            offloading: ${{ matrix.config.offloading }}
             duration: ${{ matrix.config.duration }}
-            no-max-tokens: ${{ matrix.config.no-max-tokens }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
@@ -229,7 +228,6 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             users: ${{ matrix.config.users }}
             duration: ${{ matrix.config.duration }}
-            no-max-tokens: ${{ matrix.config.no-max-tokens }}
             run-eval: false
             scenario-type: agentic-coding
 

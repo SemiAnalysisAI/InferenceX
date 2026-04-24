@@ -87,12 +87,6 @@ on:
         required: false
         type: string
         default: '1800'
-      no-max-tokens:
-        description: "Pass --no-max-tokens to trace replayer (let model generate freely until EOS; needed for reasoning models like DSR1)"
-        required: false
-        type: boolean
-        default: false
-
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -120,7 +114,6 @@ env:
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
-  NO_MAX_TOKENS: ${{ inputs.no-max-tokens }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
