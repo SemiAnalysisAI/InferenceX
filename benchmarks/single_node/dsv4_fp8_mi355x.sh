@@ -15,6 +15,10 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+# DSv4 requires transformers with deepseek_v4 model type support (huggingface/transformers#45616)
+python3 -m pip install -U --no-cache-dir \
+  "git+https://github.com/ArthurZucker/transformers.git@add-deepseek-v4"
+
 hf download "$MODEL"
 
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
