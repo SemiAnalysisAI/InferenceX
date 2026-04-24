@@ -1832,6 +1832,34 @@ dsr1-fp8-b300-sglang:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
+# NOTE: Low-latency fallback (TP=8, EP=1, no DP-attn, no DeepEP) while
+# the DeepEP FP8 weight-postprocess path is broken for DeepSeek-V4-Pro
+# on B300. Re-introduce balanced/max-throughput rows once fixed upstream.
+dsv4-fp4-b300-sglang:
+  image: lmsysorg/sglang:deepseek-v4-b300
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  # TODO(Cam): low-latency recipe only (TP-only, no DP-attn, no DeepEP)
+  # while the DeepEP FP8 weight-postprocess path is broken for this
+  # checkpoint on B300 (RuntimeError: Recipe must be a list/tuple of 3
+  # integers. raised from sglang.srt.layers.quantization.fp8
+  # .process_weights_after_loading_block_quant). Full concurrency sweep
+  # retained; revert to the recipe-per-CONC split on chore/dsv4-sgl-b300
+  # once sglang can load the checkpoint under --moe-a2a-backend deepep.
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 1024 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 512 }
+
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
   model: Qwen/Qwen3.5-397B-A17B
