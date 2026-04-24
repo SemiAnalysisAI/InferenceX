@@ -1735,10 +1735,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
 
 - config-keys:
-    - dsv4-fp8-mi355x-sglang
+    - dsv4pro-fp8-mi355x-sglang
   description:
-    - "Add DeepSeek-V4-Flash FP8 MI355X SGLang benchmark"
-    - "Image: lmsysorg/sglang:deepseek-v4-mi350 (custom build from sgl-project/sglang#23608)"
-    - "Model: sgl-project/DeepSeek-V4-Flash-FP8"
+    - "Add DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
+    - "Image: rocm/sgl-dev:deepseek-v4-mi35x (from sgl-project/sglang#23608)"
+    - "Model: sgl-project/DeepSeek-V4-Pro-FP8"
     - "Uses compressed attention backend, DP attention, TP=4/DP=4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
