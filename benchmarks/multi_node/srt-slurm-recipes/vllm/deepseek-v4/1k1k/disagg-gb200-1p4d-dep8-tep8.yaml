@@ -1,11 +1,22 @@
-name: "dsv4-vllm-disagg-gb200-1p4d-dep8-dep8"
+name: "dsv4-vllm-disagg-gb200-1p4d-dep8-tep8"
 
-# Interactivity-focused topology: 1 prefill worker + 4 separate decode
-# workers, each at DP=8. Targets conc 4-128 where TTFT/TPOT matter more
-# than aggregate throughput. Same per-worker vllm_config as the NVIDIA
-# 7p1d reference (PR #67); only resources, decode capacity (max-num-seqs
-# / cudagraph capture / batched-tokens), and benchmark concurrencies
-# differ.
+# 1k/1k TEP variant for low concurrency (4-128).
+#
+# Decode workers use tensor parallelism (TP=8) within each worker instead
+# of data parallelism. Each rank holds 1/8 of attention/embedding (sharded)
+# plus 1/8 of experts (EP) — vs the dep8 variant where each rank holds the
+# full attention replica plus 1/8 of experts. TEP frees ~80-160 GB per rank
+# of weight memory at the cost of an inter-rank TP all-reduce on every
+# attention layer. At low conc (where attention all-reduce overhead is a
+# smaller fraction of step time), this can be a net win on TTFT/TPOT.
+#
+# Topology: 1 prefill (DP=8) + 4 decode (TP=8 each). 10 nodes. Same node
+# count as 1p4d-dep8-dep8, different memory split.
+#
+# Extrapolated from kimi-k2.5/1k1k/disagg-gb200-1p4d-dep4-tep4.yaml — the
+# only vLLM disagg TEP precedent on GB200 in upstream srt-slurm. Scaled
+# from kimi's TP=4 to TP=8 because DSV4-Pro is too large to TP-shard at 4.
+# No upstream NVIDIA reference for DSV4-Pro TEP yet.
 
 model:
   path: "deepseek-v4-pro"
@@ -70,8 +81,8 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: auto
-      max-num-seqs: 2
+      max-model-len: 3072
+      max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
@@ -85,15 +96,17 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      # TP=8 across 8 GPUs (one node per worker). No data-parallel-size.
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: auto
-      max-num-seqs: 32
-      max-cudagraph-capture-size: 32
-      max-num-batched-tokens: 32
+      max-model-len: 3072
+      # 4 decode workers x 128 = 512 total simultaneous slots, well above
+      # max conc=128 in this entry. KV is TP=8-sharded so per-rank KV is
+      # 1/8 the dep8 case; we can afford the larger max-num-seqs.
+      max-num-seqs: 128
+      max-cudagraph-capture-size: 128
+      max-num-batched-tokens: 128
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -105,8 +118,8 @@ backend:
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
-  concurrencies: "4x8x32x64"
+  concurrencies: "8x64x128"
   req_rate: "inf"
   use_chat_template: false

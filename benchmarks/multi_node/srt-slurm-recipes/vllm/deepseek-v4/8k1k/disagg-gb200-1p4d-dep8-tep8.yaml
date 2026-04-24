@@ -1,11 +1,19 @@
-name: "dsv4-vllm-disagg-gb200-1p4d-dep8-dep8"
+name: "dsv4-vllm-disagg-gb200-1p4d-dep8-tep8"
 
-# Interactivity-focused topology: 1 prefill worker + 4 separate decode
-# workers, each at DP=8. Targets conc 4-128 where TTFT/TPOT matter more
-# than aggregate throughput. Same per-worker vllm_config as the NVIDIA
-# 7p1d reference (PR #67); only resources, decode capacity (max-num-seqs
-# / cudagraph capture / batched-tokens), and benchmark concurrencies
-# differ.
+# 8k/1k TEP variant for low concurrency (4-128).
+#
+# See ../1k1k/disagg-gb200-1p4d-dep8-tep8.yaml for the rationale (TP=8
+# decode workers shed attention-layer memory pressure vs the dep8 sibling
+# at the cost of TP all-reduce latency).
+#
+# Differences from the 1k/1k version:
+#   * max-model-len: auto (matches NVIDIA PR #67-style 8k/1k recipes)
+#   * prefill max-num-seqs: 2 (NVIDIA's value — 8k inputs fill the 16384
+#     max-num-batched-tokens budget at 2 prefills/batch)
+#   * decode max-num-seqs: 64 (KV is 8x larger per request than 1k/1k;
+#     even with TP=8 sharding, conservative max-num-seqs vs the 128 in
+#     the 1k/1k sibling. 4 workers x 64 = 256 simultaneous, plenty for
+#     the conc=128 max in this entry.)
 
 model:
   path: "deepseek-v4-pro"
@@ -85,15 +93,14 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      # TP=8 across 8 GPUs (one node per worker). No data-parallel-size.
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       max-model-len: auto
-      max-num-seqs: 32
-      max-cudagraph-capture-size: 32
-      max-num-batched-tokens: 32
+      max-num-seqs: 64
+      max-cudagraph-capture-size: 64
+      max-num-batched-tokens: 64
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -107,6 +114,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "4x8x32x64"
+  concurrencies: "8x128"
   req_rate: "inf"
   use_chat_template: false
