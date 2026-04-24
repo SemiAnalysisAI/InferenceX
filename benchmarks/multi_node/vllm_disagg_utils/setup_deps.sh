@@ -890,65 +890,6 @@ except Exception as e:
     _SETUP_INSTALLED+=("minimax-m2-wideep-mori")
 }
 
-# ---------------------------------------------------------------------------
-# 12. Patch MoRIIO set_backend_type: disable RDMA-level notifications
-#     RdmaBackendConfig(enable_notification=True) causes ibv_post_send to
-#     post a SEND WR per transfer for RDMA-level signaling. At C128+ this
-#     exhausts the QP send queue (ENOMEM), which poisons the TransferStatus
-#     to ERR_RDMA_OP before the data WR completes. The subsequent SUCCESS
-#     CQE is then silently dropped by the error guard in Update(), leaving
-#     the status permanently at ERR_RDMA_OP. _pop_done_transfers only checks
-#     Succeeded(), so the request hangs in WAITING_FOR_REMOTE_KVS forever.
-#     vLLM does not use PopInboundTransferStatus anywhere, so the RDMA
-#     notification path is unused — disabling it is safe.
-# ---------------------------------------------------------------------------
-patch_moriio_disable_rdma_notifications() {
-    python3 -c '
-import sys
-
-try:
-    import vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine as me
-    f = me.__file__
-    src = open(f).read()
-
-    if "[PATCHED] disable RDMA notifications" in src:
-        print("[SETUP] RDMA notification disable patch already applied")
-        sys.exit(0)
-
-    old = """        rdma_cfg = RdmaBackendConfig(
-            qp_per_transfer,
-            post_batch_size,
-            num_worker_threads,
-            poll_mode,
-        )"""
-
-    new = """        rdma_cfg = RdmaBackendConfig(
-            qp_per_transfer,
-            post_batch_size,
-            num_worker_threads,
-            poll_mode,
-            False,  # [PATCHED] disable RDMA notifications — vLLM uses ZMQ
-                    # for completion signaling and never calls
-                    # PopInboundTransferStatus. With enable_notification=True,
-                    # the per-transfer SEND WR exhausts the QP send queue at
-                    # high concurrency (ENOMEM), permanently poisoning
-                    # TransferStatus and causing WAITING_FOR_REMOTE_KVS hangs.
-        )"""
-
-    if old not in src:
-        print("[SETUP] WARN: RdmaBackendConfig pattern not found, skipping")
-        sys.exit(1)
-
-    open(f, "w").write(src.replace(old, new, 1))
-    print("[SETUP] Patched: RDMA notifications disabled (enable_notification=False)")
-
-except Exception as e:
-    print(f"[SETUP] WARN patch_moriio_disable_rdma_notifications: {e}", file=sys.stderr)
-'
-    _SETUP_INSTALLED+=("MoRIIO-disable-rdma-notifications")
-}
-
-
 
 # =============================================================================
 # Run installers
@@ -967,7 +908,6 @@ patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
 patch_moriio_load_kv_timeout
 patch_scheduler_read_mode_fix
-patch_moriio_disable_rdma_notifications
 patch_prefill_idle_kv_reaper
 patch_minimax_m2_wideep_mori
 
