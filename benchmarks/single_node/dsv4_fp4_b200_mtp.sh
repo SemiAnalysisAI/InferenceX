@@ -21,6 +21,8 @@ nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 export SGLANG_ENABLE_SPEC_V2=1
+export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+export SGLANG_OPT_USE_TOPK_V2=1
 
 # TODO(Cam): the lmsysorg/sglang:deepseek-v4-blackwell image installs sglang
 # editable at /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
