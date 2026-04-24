@@ -21,7 +21,6 @@ fi
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
---container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER} \
 --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --no-container-mount-home \
 --container-remap-root \
