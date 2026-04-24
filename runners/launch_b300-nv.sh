@@ -263,12 +263,13 @@ else
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
-    # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang), so
-    # the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install and
-    # breaks `import sglang`. Mount this one image at /ix instead; drop the
+    # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell (and its B300-recompiled
+    # fork cquil/sglang-deepseek-v4-bw-ultra) installs sglang editable at
+    # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang),
+    # so the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install
+    # and breaks `import sglang`. Mount these images at /ix instead; drop the
     # conditional once the image stops installing editable under /workspace.
-    if [[ "$IMAGE" == *deepseek-v4-blackwell* ]]; then
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* || "$IMAGE" == *deepseek-v4-bw-ultra* ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
