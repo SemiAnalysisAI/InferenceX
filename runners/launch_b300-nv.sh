@@ -248,14 +248,8 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
 
-    HF_HUB_CACHE_MOUNT="/scratch/models"
-    # Qwen3.5-397B-A17B-FP8 is pre-staged under /scratch/models on the B300 cluster,
-    # so point MODEL at the local copy. Other models fall through and use `hf download`
-    # against the mounted cache from their benchmark script.
-    if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
-        export MODEL="/scratch/models/${MODEL#*/}"
-    fi
-    SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    HF_HUB_CACHE_MOUNT="/data/home/sa-shared/gharunners/hf-hub-cache"
+    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
@@ -279,7 +273,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
