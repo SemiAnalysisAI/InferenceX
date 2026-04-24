@@ -1733,3 +1733,9 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
+
+- config-keys:  
+    - glm5-fp4-mi355x-atom
+  description:
+    - ""
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
