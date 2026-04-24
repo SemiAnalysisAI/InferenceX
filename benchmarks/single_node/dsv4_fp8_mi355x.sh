@@ -28,8 +28,7 @@ with open(path) as f:
     src = f.read()
 if "rope_theta: float" in src and "Union[int, float]" not in src:
     src = src.replace("rope_theta: float", "rope_theta: Union[int, float]", 1)
-    if "from typing import" in src and "Union" not in src.split("from typing import")[1].split("\n")[0]:
-        src = src.replace("from typing import ", "from typing import Union, ", 1)
+    src = "from typing import Union\n" + src
     with open(path, "w") as f:
         f.write(src)
     print(f"Patched rope_theta type in {path}")
