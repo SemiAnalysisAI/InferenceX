@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# only ships a B200 recipe for Blackwell. This script reuses the B200 Flash
-# FP4 Low-Latency recipe as-is on B300 until a B300-specific recipe ships.
-# Speculative decoding (EAGLE) and prefix caching are disabled per request.
+# only ships a B200 recipe for Blackwell. This script reuses the B200
+# DeepSeek-V4-Pro Max-Throughput recipe (DP=8 + DeepEP, no MTP) as-is on
+# B300 until a B300-specific recipe ships. Parallelism and concurrency
+# ranges mirror dsv4-fp4-b200-vllm. Prefix caching is disabled.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -15,7 +16,8 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE
+    EP_SIZE \
+    DP_ATTENTION
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -26,11 +28,17 @@ hf download "$MODEL"
 nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
+export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-echo "TP: $TP, EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+
+DP_ATTN_ARGS=""
+if [ "$DP_ATTENTION" = "true" ]; then
+    DP_ATTN_ARGS="--data-parallel-size $TP --enable-dp-attention"
+fi
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -43,10 +51,12 @@ start_gpu_monitor
 set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP --ep-size $EP_SIZE \
---moe-runner-backend flashinfer_mxfp4 \
---chunked-prefill-size 4096 \
---disable-flashinfer-autotune \
+--tensor-parallel-size=$TP --ep-size $EP_SIZE $DP_ATTN_ARGS \
+--moe-a2a-backend deepep \
+--deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}' \
+--mem-fraction-static 0.82 \
+--cuda-graph-max-bs 64 \
+--max-running-requests 256 \
 --disable-radix-cache $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

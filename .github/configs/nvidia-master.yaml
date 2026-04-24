@@ -1798,11 +1798,12 @@ dsr1-fp8-b300-sglang:
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
 # lists B200 (not B300) as the Blackwell target. This config reuses the
-# B200 Flash FP4 Low-Latency recipe on B300 until a B300-specific recipe
-# ships. Speculative decoding (EAGLE) and prefix caching are disabled.
+# B200 Pro FP4 Max-Throughput recipe (DP=8 + DeepEP, no MTP) on B300
+# until a B300-specific recipe ships. Prefix caching is disabled.
+# Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
 dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:deepseek-v4-blackwell
-  model: deepseek-ai/DeepSeek-V4-Flash
+  model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
   precision: fp4
@@ -1812,11 +1813,11 @@ dsv4-fp4-b300-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 512 }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
