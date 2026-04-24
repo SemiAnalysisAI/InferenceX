@@ -17,6 +17,28 @@ fi
 
 hf download "$MODEL"
 
+# Transformers in the container doesn't recognize the `deepseek_v4` model_type.
+# PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
+# by writing a patched config to /tmp, but in practice isn't catching the error
+# in this image. Patch the cached config.json directly instead: set model_type
+# to `deepseek_v3` so AutoConfig.from_pretrained succeeds, and keep
+# architectures=['DeepseekV4ForCausalLM'] so SGLang dispatches to its native
+# DSv4 model class (python/sglang/srt/models/deepseek_v4.py).
+python3 << PYEOF
+import json
+from huggingface_hub import hf_hub_download
+path = hf_hub_download(repo_id="$MODEL", filename="config.json")
+with open(path) as f:
+    config = json.load(f)
+if config.get("model_type") == "deepseek_v4":
+    config["model_type"] = "deepseek_v3"
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
+    print(f"Patched {path}: model_type deepseek_v4 -> deepseek_v3")
+else:
+    print(f"No patch needed: model_type is {config.get('model_type')!r}")
+PYEOF
+
 # DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
