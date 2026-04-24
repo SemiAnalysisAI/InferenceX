@@ -1724,3 +1724,19 @@
     - "Trigger H100 multinode evals after NVSHEMM fixes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1120
   evals-only: true
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
+  
+- config-keys:  
+    - glm5.1-fp4-mi355x-atom
+  description:
+    - "Add GLM-5.1 MXFP4 single-node MI355X ATOM benchmark"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --max-num-seqs and --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1043
