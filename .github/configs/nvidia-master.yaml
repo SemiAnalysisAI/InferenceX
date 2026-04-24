@@ -4997,20 +4997,116 @@ dsr1-fp8-gb200-dynamo-sglang:
     - duration: 300
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_tp4_1p1d"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/tp8_1p1d_128k_agentic.yaml
-          - "CONFIG_FILE=recipes/gb200-fp8/agentic/tp8_1p1d_128k_agentic.yaml"
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:base"
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_1p1d"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_2p_dep32_1d"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_3p_dep48_1d"
+        decode:
+          num-worker: 1
+          tp: 48
+          ep: 48
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_5p_dep32_1d"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 6
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb200-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_6p_dep24_1d"
+        decode:
+          num-worker: 1
+          tp: 24
+          ep: 24
+          dp-attn: true
 
 dsr1-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
@@ -5129,20 +5225,100 @@ dsr1-fp8-gb300-dynamo-sglang:
     - duration: 300
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/tp4_1p1d_128k_agentic.yaml
-          - "CONFIG_FILE=recipes/gb300-fp8/agentic/tp4_1p1d_128k_agentic.yaml"
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:base"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:override_tp4_1p4d"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_1p1d"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_2p_dep32_1d"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_5p_dep32_1d"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 6
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml
+          - "CONFIG_FILE=recipes/gb300-fp8/agentic/sweep_128k_agentic.yaml:override_dep8_6p_dep24_1d"
+        decode:
+          num-worker: 1
+          tp: 24
+          ep: 24
+          dp-attn: true
 
 dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8-cu130"
