@@ -1779,7 +1779,8 @@
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm
   description:
-    - "Add DeepSeek V4 Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (8k1k, 7p1d-dep8-dep16)"
-    - "Container: vllm/vllm-openai:deepseekv4-cu130"
-    - "Mirrors NVIDIA/srt-slurm PR #67; recipes stored in srt-slurm-recipes/ and copied into srt-slurm checkout at runtime"
+    - "Add DeepSeek-V4-Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (1k/1k sweep; 8k/1k currently commented out)"
+    - "Container: vllm/vllm-openai:deepseekv4-cu130; model from /mnt/numa1/models/deepseek-v4-pro/ (compute-node-local NVMe)"
+    - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
+    - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
