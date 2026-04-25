@@ -1794,3 +1794,12 @@
     - "DSv4-Pro on MI355X exceeded the 3h cap (STEP CANCELLED DUE TO TIME LIMIT) due to ~30min MoE JIT compile plus slow torch-fallback kernels (SGLANG_HACK_FLASHMLA_BACKEND=torch et al.) from sgl-project/sglang#23608"
     - "300 minutes matches the GH Actions outer timeout-minutes cap in benchmark-tmpl.yml"
     - "Retriggering dsv4-fp8-mi355x-sglang"
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Bump MI355X SLURM allocation from --time=180 to --time=300 in runners/launch_mi355x-amds.sh"
+    - "DSv4-Pro on MI355X exceeded the 3h cap (STEP CANCELLED DUE TO TIME LIMIT) due to ~30min MoE JIT compile plus slow torch-fallback kernels (SGLANG_HACK_FLASHMLA_BACKEND=torch et al.) from sgl-project/sglang#23608"
+    - "300 minutes matches the GH Actions outer timeout-minutes cap in benchmark-tmpl.yml"
+    - "Retriggering dsv4-fp8-mi355x-sglang"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1148
