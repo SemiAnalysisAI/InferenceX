@@ -103,6 +103,14 @@ backend:
       gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
+      # CPU/DRAM expert offload — required for fit. Without these the prefill
+      # rank reports `Available KV cache memory: -16 GiB` and the engine
+      # refuses to start. Numa-bind from upstream is still off because our
+      # NVIDIA/srt-slurm@sa-submission-q2-2026 clone doesn't ship the
+      # vllm_numa_bind_hash_fix.py patch.
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
 
     decode:

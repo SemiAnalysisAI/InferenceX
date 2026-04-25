@@ -11,10 +11,10 @@ name: "dsv4-vllm-disagg-gb200-1p1d-dep8-tep8"
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
 #     our launch script's SRT_SLURM_MODEL_PREFIX.
-#   * CPU/DRAM offload knobs (offload-group-size / -num-in-group /
-#     -prefetch-step / # offload-params) and numa-bind dropped — our
-#     clone is NVIDIA/srt-slurm@sa-submission-q2-2026 which doesn't ship
-#     the vllm_numa_bind_hash_fix.py patch.
+#   * numa-bind dropped — our clone is NVIDIA/srt-slurm@sa-submission-q2-2026
+#     which doesn't ship the vllm_numa_bind_hash_fix.py patch. CPU/DRAM
+#     expert offload (offload-group-size/-num-in-group/-prefetch-step) is
+#     KEPT — it's load-bearing here, see the comment in vllm_config.prefill.
 #   * benchmark.use_chat_template: true -> false; benchmark.tokenizer_mode
 #     dropped. Both require PR #68 sa-bench tokenizer support that our
 #     pinned srtctl version doesn't have. The recipe-level
@@ -116,6 +116,14 @@ backend:
       gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
+      # CPU/DRAM expert offload — required for fit. Without these the prefill
+      # rank reports `Available KV cache memory: -16 GiB` and the engine
+      # refuses to start. Numa-bind from upstream is still off because our
+      # NVIDIA/srt-slurm@sa-submission-q2-2026 clone doesn't ship the
+      # vllm_numa_bind_hash_fix.py patch.
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
 
     decode:
