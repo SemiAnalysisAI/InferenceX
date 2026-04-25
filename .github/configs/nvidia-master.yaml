@@ -1669,6 +1669,42 @@ dsr1-fp4-b200-sglang:
     - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
 
+dsv4-fp4-b200-sglang:
+  image: lmsysorg/sglang:deepseek-v4-blackwell
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: sglang
+  multinode: false
+  # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+  # are selected inside benchmarks/single_node/dsv4_fp4_b200.sh by CONC:
+  #   low-latency    (CONC <= 32):       TP-only
+  #   balanced       (32 < CONC <= 128): + DP-attn
+  #   max-throughput (CONC > 128):       + DP-attn
+  # Split so result filenames (ep=, dpa=) accurately reflect the recipe.
+  # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
+  # while low-latency leaves ep_size at the default of 1.
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
+
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
@@ -2413,6 +2449,34 @@ dsv4-fp8-h200-vllm:
     osl: 1024
     search-space:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
+
+# DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
+# pareto sweep. The single-node schema has no explicit data-parallel-size
+# field, so dp-attn=true is used as the existing vLLM script switch for DP4
+# layouts on 4 allocated GPUs.
+dsv4-fp4-b300-vllm:
+  image: vllm/vllm-openai:deepseekv4-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 128, conc-end: 128 }
+    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 128, conc-end: 128 }
+    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
@@ -7474,6 +7538,118 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         additional-settings:
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/vllm/kimi-k2.5/8k1k/disagg-gb200-6p1d-dep4-dep16.yaml
         - "CONFIG_FILE=recipes/vllm/kimi-k2.5/8k1k/disagg-gb200-6p1d-dep4-dep16.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+
+dsv4-fp4-gb200-dynamo-vllm:
+  image: vllm/vllm-openai:deepseekv4-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  # 1k/1k — extrapolated from kimi-k2.5 1k/1k topologies, scaled to DSV4-Pro's
+  # DP>=8 constraint. No upstream NVIDIA reference for DSV4-Pro vLLM disagg
+  # at this seq-len yet (PR #67 only publishes 8k/1k).
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
+    # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch
+    # 1p1d-dep8-tep8.yaml (offload + numa-bind stripped — see recipe header).
+    - conc-list: [1, 4, 8, 16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
+    # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
+    - conc-list: [128, 256, 1024, 2048, 4096]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-dep16.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    # High throughput: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes.
+    # The 4096 overlap with the 1p1d block gives a crossover point. 8192
+    # would saturate 1p1d's prefill, so this topology takes over there.
+    - conc-list: [4096, 8192]
+      prefill:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
+    # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch.
+    - conc-list: [1, 4, 8, 16, 32, 64]
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 1
+        dp-attn: false
+    # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
+    - conc-list: [512, 1024]
+      prefill:
+        num-worker: 3
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
+    # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
+    - conc-list: [4096, 8192]
+      prefill:
+        num-worker: 7
+        tp: 8
+        ep: 8
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-7p1d-dep8-dep16.yaml"
       decode:
         num-worker: 1
         tp: 16

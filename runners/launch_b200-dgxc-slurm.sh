@@ -255,6 +255,17 @@ else
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
+    # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
+    # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang), so
+    # the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install and
+    # breaks `import sglang`. Mount this one image at /ix instead; drop the
+    # conditional once the image stops installing editable under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
+
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
@@ -275,9 +286,9 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 fi

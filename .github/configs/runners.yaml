@@ -50,6 +50,8 @@ h200-multinode:
 - 'h200-dgxc-slurm_12'
 - 'h200-dgxc-slurm_13'
 b200:
+- 'b200-cw_00'
+- 'b200-cw_01'
 - 'b200-nb_0'
 - 'b200-nb_1'
 - 'b200-dgxc-slurm_0'
