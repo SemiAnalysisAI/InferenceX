@@ -66,8 +66,15 @@ if [ ! -f "$DYNAMO_DONE_MARKER" ]; then
     # wins, the loser cleans up. Same-directory rename() is atomic on
     # NFS (unlike flock).
     TEMP_BUILD=$(mktemp -d "$DYNAMO_CACHE_ROOT/$DYNAMO_HASH.tmp.XXXXXX")
+    # --mem=0: claim full node memory. Default cgroup is much smaller and
+    # the moxcms / dynamo-llm rustc invocations OOM-killed the previous
+    # attempt. CARGO_BUILD_JOBS=8 caps parallelism so peak rustc memory
+    # stays bounded even on a 72-core Grace node, and `-C debuginfo=0`
+    # cuts per-process memory further (default debuginfo=2 from cargo
+    # is what makes the link phase memory-hungry).
     srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT \
-         --nodes=1 --ntasks=1 --time=00:45:00 --job-name="${RUNNER_NAME}-prebuild" \
+         --nodes=1 --ntasks=1 --mem=0 --time=00:45:00 \
+         --job-name="${RUNNER_NAME}-prebuild" \
          --container-image="$SQUASH_FILE" \
          --no-container-entrypoint --no-container-mount-home \
          --container-mounts="$DYNAMO_CACHE_ROOT:$DYNAMO_CACHE_ROOT" \
@@ -89,7 +96,8 @@ if [ ! -f "$DYNAMO_DONE_MARKER" ]; then
             cd dynamo
             git checkout $DYNAMO_HASH
             cd lib/bindings/python/
-            export RUSTFLAGS='-C target-cpu=native --cfg tokio_unstable'
+            export CARGO_BUILD_JOBS=8
+            export RUSTFLAGS='-C target-cpu=native -C debuginfo=0 --cfg tokio_unstable'
             maturin build -o '$TEMP_BUILD'
             cd /tmp/dynamo_build/dynamo
             tar czf '$TEMP_BUILD/dynamo-source.tar.gz' \
