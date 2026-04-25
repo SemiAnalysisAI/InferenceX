@@ -1819,3 +1819,13 @@
     - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
+
+- config-keys:
+    - dsv4-fp8-h100-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H100 multinode disagg benchmark via dynamo-vllm"
+    - "2 prefill nodes + 2 decode nodes (32 H100s total, DP16/EP16 per side)"
+    - "Image: vllm/vllm-openai:deepseekv4-cu129"
+    - "Engine flags match H200 single-node recipe (deepseek_v4 tokenizer/parsers, FP8 KV cache, block size 256, prefix caching disabled)"
+    - "max-model-len 16384 (H100 80GB KV headroom; H200's 800k does not fit across 2 decode nodes)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1142

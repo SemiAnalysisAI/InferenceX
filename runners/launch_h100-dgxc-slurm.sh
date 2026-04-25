@@ -29,8 +29,29 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/mnt/nfs/lustre/models/dsv4-fp8"
+            export SERVED_MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
+            export SRT_SLURM_MODEL_PREFIX="dsv4-fp8"
+            # NVIDIA/srt-slurm@sa-submission-q2-2026 installs ai-dynamo 1.0.1,
+            # which imports vllm.inputs.data.TokensPrompt — a path the DSV4
+            # vLLM wheel has removed. Switch to alec-flowers' fork (head of
+            # https://github.com/NVIDIA/srt-slurm/pull/71) which supports
+            # dynamo.hash pinning so the recipe can pick a dynamo commit
+            # compatible with the DSV4 vllm.inputs layout. Matches PR #1129
+            # on GB200.
+            export SRT_SLURM_REPO_URL="https://github.com/alec-flowers/srt-slurm.git"
+            export SRT_SLURM_REF="d60e3f1c7921721e52af01afaab59a70a1631106"
+        else
+            echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
+        # Verify the weights are staged and log their size (catches partial
+        # downloads / wrong revisions before we burn 8 min on weight load).
+        du -sh "$MODEL_PATH" 2>/dev/null || echo "WARNING: could not stat $MODEL_PATH"
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
@@ -41,9 +62,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone "${SRT_SLURM_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}" "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    git checkout "${SRT_SLURM_REF:-sa-submission-q2-2026}"
+
+    # Overlay any in-repo srt-slurm recipes onto the clone. Kept here until
+    # the upstream PR lands; cp -r merges directories on GNU cp.
+    LOCAL_RECIPES_DIR="$GITHUB_WORKSPACE/benchmarks/multi_node/srt_slurm_recipes"
+    if [ -d "$LOCAL_RECIPES_DIR" ]; then
+        echo "Overlaying local srt-slurm recipes from $LOCAL_RECIPES_DIR"
+        cp -r "$LOCAL_RECIPES_DIR"/* recipes/
+    fi
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -78,6 +107,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        # vLLM container mapping - IMAGE is a Docker Hub reference (no registry prefix swap)
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
     fi
 
     export ISL="$ISL"
@@ -105,6 +138,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
@@ -156,11 +190,21 @@ EOF
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
+    # Defensive: pre-create the logs subdir so Slurm's #SBATCH --output=...
+    # /%j/logs/sweep_%j.log can open the target file even on NFS mounts
+    # where the compute-node Slurm stepd lacks permission to mkdir -p.
+    mkdir -p "$LOGS_DIR" 2>/dev/null || true
+
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
+            scontrol show job "$JOB_ID" | tee "outputs/$JOB_ID/scontrol_show_job.txt" 2>/dev/null
+            # Preserve sbatch_script.sh, config.yaml, metadata, and any partial
+            # log so the failure can be diagnosed from the CI artifact.
+            if [ -d "outputs/$JOB_ID" ]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "outputs/$JOB_ID" .
+            fi
             exit 1
         fi
         echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."

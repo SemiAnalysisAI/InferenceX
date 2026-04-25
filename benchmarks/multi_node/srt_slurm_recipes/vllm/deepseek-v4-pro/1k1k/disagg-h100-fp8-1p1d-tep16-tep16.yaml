@@ -1,0 +1,183 @@
+# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, cross-node TP=16)
+#
+# DSV4-Pro FP8 weights are 74.99 GiB per DP rank — DP=16/EP=16 (one process
+# per GPU) leaves only ~4 GiB headroom on H100 80GB and sparse_attn_indexer
+# OOMs during profile_run (run 24923521075 hit this on every prefill and
+# decode worker simultaneously). Switching to cross-node TP=16 shards
+# dense+expert weights 16-way → ~5 GiB/GPU, plenty of headroom.
+#
+# Layout:
+# - 1 prefill endpoint × TP=16 across 2 nodes (16 GPUs)
+# - 1 decode endpoint  × TP=16 across 2 nodes (16 GPUs)
+# - Total: 32 GPUs across 4 nodes (fills h100-multinode pool)
+#
+# How the cross-node launch works:
+# - srt-slurm's standard TP mode (no data-parallel-size) starts one srun
+#   per node, each process gets all 8 local GPUs.
+# - Leader (node_rank=0): full Dynamo + vLLM with `--master-addr <leader_ip>
+#   --nnodes 2 --node-rank 0 --tensor-parallel-size 16`. MultiprocExecutor
+#   spawns 8 local workers, then waits for the 8 remote workers.
+# - Secondary (node_rank=1): adds `--headless` (srt-slurm vllm.py:386-388),
+#   which routes through dynamo's run_dynamo_headless → vLLM's run_headless →
+#   MultiprocExecutor(monitor_workers=False) joining the leader's PG over
+#   torch.distributed (master_addr / master_port). NCCL backs the TP
+#   all-reduce; on h100-multinode that flows over IB (no NVLink between
+#   nodes), so per-layer TP comms is the dominant latency cost — accepted
+#   as the only way to fit DSV4-Pro on 80 GB H100.
+
+name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-tep16-tep16"
+
+model:
+  path: "dsv4-fp8"
+  container: "vllm/vllm-openai:deepseekv4-cu129"
+  precision: "fp8"
+
+# Pin ai-dynamo to a commit whose vllm.inputs imports match the DSV4 vLLM
+# wheel AND that exposes --headless via run_dynamo_headless (see
+# components/src/dynamo/vllm/main.py:80). Requires the alec-flowers/srt-slurm
+# fork (NVIDIA/srt-slurm#71), which extends the dynamo config to accept
+# `hash` as well as `version`.
+dynamo:
+  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
+  install: true
+
+setup_script: vllm-container-deps.sh
+
+# Bumped from the srt-slurm 6h default. Cross-node TP=16 over IB plus
+# cudagraph capture extends post-load init noticeably; cold-cache Lustre
+# weight load alone took 24 min in run 24923521075.
+slurm:
+  time_limit: "8:00:00"
+
+# Bumped from the 1800s (180 attempts) default to 4 hours. Run 24923521075
+# observed full weight load taking ~1450s with three concurrent matrix
+# jobs starving the same Lustre OSTs. Cross-node TP setup + indexer
+# warm-up adds more on top. Match the GB200 dsv4 recipes; the cost of an
+# over-long deadline is sitting idle, not wasted compute.
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 16
+  gpus_per_decode: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: nixl
+
+  # VLLM_USE_NCCL_SYMM_MEM routes expert-parallel all2all through NCCL
+  # symmetric memory instead of NVSHMEM IPC sockets. The DSV4 cu129 vLLM
+  # wheel's NVSHMEM fails IPC bootstrap on our H100 nodes (mem_heap.cpp
+  # "Fatal IPC Failure" right after weight load). NCCL_CUMEM_ENABLE is
+  # the companion flag.
+  #
+  # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True reduces fragmentation
+  # in the tight headroom — even with TP=16 sharding the model 16-way, a
+  # contiguous 512 MiB indexer scratch can still fail under fragmented
+  # 80 GB caches. The OOM error message itself recommends this exact flag.
+  prefill_environment:
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_SERVER_DEV_MODE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    GLOO_SOCKET_IFNAME: "eth0"
+    PYTHONUNBUFFERED: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+  decode_environment:
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_SERVER_DEV_MODE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    GLOO_SOCKET_IFNAME: "eth0"
+    PYTHONUNBUFFERED: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+  vllm_config:
+    # tensor-parallel-size: 16 across 2 nodes (each srt-slurm srun process
+    # gets 8 local GPUs; vLLM forms a 16-rank PG via the master_addr
+    # handshake). data-parallel-size is intentionally absent — its presence
+    # would push srt-slurm into the per-GPU process layout, which is what
+    # broke the previous TEP=16 attempt with "World size (16) > available
+    # GPUs (1) in this node".
+    #
+    # enable-expert-parallel keeps experts sharded EP=16 along the same
+    # 16 ranks (each rank holds 1/16 of the routed experts). Communication
+    # is dominated by per-layer TP all-reduce + EP all-to-all, both over
+    # IB.
+    #
+    # enforce-eager on both sides for the first cross-node attempt: cudagraph
+    # capture across nodes is fragile (FULL_DECODE_ONLY graphs include the
+    # cross-node TP all-reduce) and the previous run's 1.48 GiB private-pool
+    # accumulation already burned the headroom. Drop graphs to ship; revisit
+    # for decode performance once the server is observed healthy.
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      kv-cache-dtype: "fp8"
+      block-size: 256
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      tensor-parallel-size: 16
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-num-batched-tokens: 512
+      # With TP=16 the per-rank model footprint drops from ~75 GiB to
+      # ~5 GiB, so we can match the H200 single-node 0.95 utilization.
+      gpu-memory-utilization: 0.95
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      kv-cache-dtype: "fp8"
+      block-size: 256
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      tensor-parallel-size: 16
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-num-batched-tokens: 512
+      gpu-memory-utilization: 0.95
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "4x8x16x32x64x128"
+  req_rate: "inf"
+  # DSV4-Pro's HF tokenizer ships with no chat_template attribute. The
+  # server uses --tokenizer-mode deepseek_v4 to handle templating itself,
+  # but sa-bench's local apply_chat_template path raises ValueError.
+  # Send raw prompts; the server handles formatting.
+  use_chat_template: false
