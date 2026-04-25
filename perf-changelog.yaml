@@ -1766,3 +1766,12 @@
     - "Prefix caching disabled, no speculative decoding"
     - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Day 0 DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
+    - "Image: rocm/sgl-dev:deepseek-v4-mi35x (from sgl-project/sglang#23608)"
+    - "Model: sgl-project/DeepSeek-V4-Pro-FP8"
+    - "https://github.com/sgl-project/sglang/pull/23608#issuecomment-4311952977"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
