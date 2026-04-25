@@ -1,4 +1,14 @@
 - config-keys:
+    - dsv4-fp4-b200-sglang
+  description:
+    - "Add DeepSeek-V4-Pro single-node B200 SGLang benchmark (TP8, EP8, dp-attention)"
+    - "Container: lmsysorg/sglang:deepseek-v4-blackwell"
+    - "Recipe from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Parallelism and sweep conc ranges match the dsv4-fp4-b200-vllm config"
+    - "Prefix caching and speculative decoding disabled for baseline numbers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1131
+
+- config-keys:
     - dsr1-fp8-h100-dynamo-trt
     - dsr1-fp8-h100-dynamo-sglang
   description:
@@ -1742,3 +1752,72 @@
     - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
+  
+- config-keys:
+    - dsv4-fp8-h200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro vLLM H200 benchmark per https://vllm.ai/blog/deepseek-v4"
+    - "Image: vllm/vllm-openai:deepseekv4-cu129"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EP + DP=8, FP8 KV cache, block size 256, max-model-len 800000, prefix caching disabled"
+    - "H200 has no FP4 path, so --attention_config.use_fp4_indexer_cache is omitted"
+    - "VLLM_ENGINE_READY_TIMEOUT_S=3600 to accommodate large weight loading"
+    - "Configs: 1k1k conc 4-64, 8k1k conc 4-64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1130
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark (low-latency fallback)"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "Low-latency only (TP=8, EP=1, no DP-attn, no DeepEP) — DeepEP FP8 weight-postprocess path is broken for this checkpoint on B300"
+    - "Prefix caching disabled, no speculative decoding"
+    - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Day 0 DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
+    - "Image: rocm/sgl-dev:deepseek-v4-mi35x (from sgl-project/sglang#23608)"
+    - "Model: sgl-project/DeepSeek-V4-Pro-FP8"
+    - "https://github.com/sgl-project/sglang/pull/23608#issuecomment-4311952977"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - "Add DeepSeek-V4-Pro single-node B300 vLLM aggregate benchmark"
+    - "Image: vllm/vllm-openai:deepseekv4-cu130"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "Uses the submitted B300 pareto schedule for both 1k1k and 8k1k, excluding conc 1: TP8 at conc 4/128, TP4 at conc 4/8/16/32/64/128, DP4 at conc 256/512"
+    - "Launch args match the provided vllm serve command, including FP4 indexer cache, FULL_AND_PIECEWISE cudagraph config, and max-num-batched-tokens 2048"
+    - "1k1k uses --max-model-len 4096; 8k1k uses the workflow-provided benchmark context length"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1144
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Bump MI355X SLURM allocation from --time=180 to --time=300 in runners/launch_mi355x-amds.sh"
+    - "DSv4-Pro on MI355X exceeded the 3h cap (STEP CANCELLED DUE TO TIME LIMIT) due to ~30min MoE JIT compile plus slow torch-fallback kernels (SGLANG_HACK_FLASHMLA_BACKEND=torch et al.) from sgl-project/sglang#23608"
+    - "300 minutes matches the GH Actions outer timeout-minutes cap in benchmark-tmpl.yml"
+    - "Retriggering dsv4-fp8-mi355x-sglang"
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Bump MI355X SLURM allocation from --time=180 to --time=300 in runners/launch_mi355x-amds.sh"
+    - "DSv4-Pro on MI355X exceeded the 3h cap (STEP CANCELLED DUE TO TIME LIMIT) due to ~30min MoE JIT compile plus slow torch-fallback kernels (SGLANG_HACK_FLASHMLA_BACKEND=torch et al.) from sgl-project/sglang#23608"
+    - "300 minutes matches the GH Actions outer timeout-minutes cap in benchmark-tmpl.yml"
+    - "Retriggering dsv4-fp8-mi355x-sglang"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1148
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (1k/1k sweep; 8k/1k currently commented out)"
+    - "Container: vllm/vllm-openai:deepseekv4-cu130; model from /mnt/numa1/models/deepseek-v4-pro/ (compute-node-local NVMe)"
+    - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
+    - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
