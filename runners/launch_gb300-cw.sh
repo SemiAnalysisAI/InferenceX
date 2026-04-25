@@ -66,8 +66,31 @@ mkdir -p recipes/vllm/deepseek-v4
 cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 
 echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
+# CRITICAL — uv install location.
+# Runner pod is x86 but compute nodes are aarch64, and /mnt/home is shared
+# NFS across both. srtctl's slurm template (job_script_minimal.j2) does
+# `if ! command -v uv` and skips its own ARM64 install when uv is already
+# on PATH; on compute nodes $HOME/.local/bin is on PATH by default, so a
+# stray x86 binary at $HOME/.local/bin/uv from this runner shadows the
+# template's install and crashes the orchestrator with
+# `cannot execute binary file: Exec format error`. Install to a
+# runner-pod-local /tmp path (tmpfs, not NFS) and scrub any stale x86
+# uv left in the shared path by prior runs.
+rm -f "$HOME/.local/bin/uv" "$HOME/.local/bin/uvx"
+export XDG_BIN_HOME="/tmp/uv-runner-${RUNNER_NAME:-default}/bin"
+mkdir -p "$XDG_BIN_HOME"
+curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+export PATH="$XDG_BIN_HOME:$PATH"
+
+# Sanity: confirm the install landed where we expect, not in $HOME/.local/bin.
+if [ ! -x "$XDG_BIN_HOME/uv" ]; then
+    echo "ERROR: uv not at $XDG_BIN_HOME/uv after install — install script may not honor XDG_BIN_HOME on this version. Aborting before x86 uv leaks onto NFS." >&2
+    exit 1
+fi
+if [ -e "$HOME/.local/bin/uv" ]; then
+    echo "ERROR: uv install leaked to shared $HOME/.local/bin/uv. Remove it and re-run." >&2
+    exit 1
+fi
 
 uv venv
 source .venv/bin/activate
