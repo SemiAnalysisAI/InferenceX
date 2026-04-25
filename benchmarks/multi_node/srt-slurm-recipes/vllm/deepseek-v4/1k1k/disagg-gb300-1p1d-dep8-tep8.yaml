@@ -3,8 +3,10 @@ name: "dsv4-vllm-disagg-gb300-1p1d-dep8-tep8"
 # GB300 mirror of disagg-gb200-1p1d-dep8-tep8.yaml. Same tuning — GB300 has
 # more HBM (288 GB vs 184 GB on GB200) so the offload knobs are still
 # present but headroom is larger; can be revisited if we want to push
-# max-num-seqs. Cluster: gb300-cw (CoreWeave, 2x 18-node racks). Each
-# job is rack-pinned via srtctl's auto `#SBATCH --segment={total_nodes}`.
+# max-num-seqs. Cluster: gb300-cw (CoreWeave, 2x 18-node racks). Job is
+# rack-pinned via the explicit sbatch_directives.segment below (cw's
+# srtslurm.yaml turns off srtctl's auto-segment so each recipe owns its
+# segment value alongside the topology it derives from).
 #
 # Topology: 1 prefill (DP=8) + 1 decode (TP=8). 4 nodes total. Targets
 # very low concurrency (1-64).

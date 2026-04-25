@@ -1,8 +1,9 @@
 name: "dsv4-vllm-disagg-gb300-3p1d-dep8-dep16"
 
 # GB300 mirror of disagg-gb200-3p1d-dep8-dep16.yaml. Same tuning. Cluster:
-# gb300-cw (2x 18-node racks); 10-node job rack-pins via srtctl's auto
-# `#SBATCH --segment={total_nodes}`.
+# gb300-cw (2x 18-node racks); 10-node job rack-pins via the explicit
+# sbatch_directives.segment="10" below (cw's srtslurm.yaml turns off
+# srtctl's auto-segment so each recipe owns its segment value).
 #
 # Mid-concurrency 8k/1k topology: 3 prefill workers (DP=8) feeding a single
 # wide decode (DP=16). Targets conc 512-1024 where a single big decode

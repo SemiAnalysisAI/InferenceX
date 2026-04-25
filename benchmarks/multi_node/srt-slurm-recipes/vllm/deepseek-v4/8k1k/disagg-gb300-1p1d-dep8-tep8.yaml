@@ -2,8 +2,9 @@ name: "dsv4-vllm-disagg-gb300-1p1d-dep8-tep8"
 
 # GB300 mirror of disagg-gb200-1p1d-dep8-tep8.yaml (which itself mirrored
 # NVIDIA aflowers/gb200-dsv4-recipes branch). Same tuning. Cluster:
-# gb300-cw (2x 18-node racks); 4-node job rack-pins via srtctl's auto
-# `#SBATCH --segment={total_nodes}`.
+# gb300-cw (2x 18-node racks); 4-node job rack-pins via the explicit
+# sbatch_directives.segment="4" below (cw's srtslurm.yaml turns off
+# srtctl's auto-segment so each recipe owns its segment value).
 #
 # Topology: 1 prefill (DP=8) + 1 decode (TP=8). 4 nodes total. Targets
 # very low concurrency (1-64) where TEP-style decode (TP-sharded

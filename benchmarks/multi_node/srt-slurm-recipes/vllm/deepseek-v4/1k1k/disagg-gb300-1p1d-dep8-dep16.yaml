@@ -2,8 +2,9 @@ name: "dsv4-vllm-disagg-gb300-1p1d-dep8-dep16"
 
 # GB300 mirror of disagg-gb200-1p1d-dep8-dep16.yaml. Same tuning at FP4
 # (288 GB HBM/GPU on GB300 vs 184 GB on GB200 — extra headroom for KV).
-# Cluster: gb300-cw (2x 18-node racks); each job pins to one rack via
-# srtctl's auto `#SBATCH --segment={total_nodes}` (here 6 nodes).
+# Cluster: gb300-cw (2x 18-node racks); job pins to one rack via the
+# explicit sbatch_directives.segment="6" below (cw's srtslurm.yaml turns
+# off srtctl's auto-segment so each recipe owns its segment value).
 #
 # 1k/1k mid-to-high throughput topology. Single prefill worker feeding a
 # wide DP=16 decode handles conc 256-4096 cleanly for 1k prompts.
