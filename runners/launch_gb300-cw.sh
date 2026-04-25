@@ -19,8 +19,10 @@ else
 fi
 
 # CoreWeave cluster has a single `all` partition; no separate batch queue.
+# Account `cw-sup` is what `sacctmgr show assoc user=$USER` returns on this
+# cluster — `benchmark` (inherited from gb200-nv) does not exist here.
 export SLURM_PARTITION="all"
-export SLURM_ACCOUNT="benchmark"
+export SLURM_ACCOUNT="cw-sup"
 
 NGINX_IMAGE="nginx:1.27.4"
 
