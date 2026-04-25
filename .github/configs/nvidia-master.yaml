@@ -1873,6 +1873,42 @@ dsv4-fp4-b300-sglang:
     # max-throughput
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
+dsv4-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-b300
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  # Mirrors dsv4-fp4-b300-sglang. Three recipes from
+  # https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+  # selected inside benchmarks/single_node/dsv4_fp4_b300_mtp.sh by CONC.
+  # EAGLE / MTP added on low-latency (steps=3, draft=4) and balanced
+  # (steps=1, draft=2); the cookbook says max-throughput keeps MTP off
+  # because the verify step costs more than it saves at saturation, so
+  # the max-throughput rows are spec-decoding=mtp only for result-label
+  # consistency with this config.
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # low-latency
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    # balanced
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
+    # max-throughput
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
   model: Qwen/Qwen3.5-397B-A17B
