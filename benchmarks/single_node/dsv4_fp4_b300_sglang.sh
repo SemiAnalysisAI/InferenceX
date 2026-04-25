@@ -25,11 +25,6 @@ nvidia-smi
 
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 
-# The deepseek-v4 sglang images (lmsysorg/sglang:deepseek-v4-blackwell and its
-# B300 forks) bake CUDA_VISIBLE_DEVICES=4,5,6,7 into their ENV, which masks half
-# of the 8 GPUs Slurm allocates us. Clear it so TP=8 can bind to all ranks.
-unset CUDA_VISIBLE_DEVICES
-
 # TODO(Cam): the deepseek-v4 sglang images install sglang editable at
 # /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
 # The runner mounts our repo at a non-/workspace path for these images so the
@@ -59,35 +54,71 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 
 if [[ $CONC -le 32 ]]; then
     RECIPE=low-latency
+    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
+    # common optimizations
+    export SGLANG_OPT_USE_JIT_NORM=1
+    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
+    export SGLANG_OPT_USE_TOPK_V2=1
+    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
     RECIPE_FLAGS=(
         --moe-runner-backend flashinfer_mxfp4
-        --chunked-prefill-size 4096
+        --chunked-prefill-size 8192
         --disable-flashinfer-autotune
-        --mem-fraction-static 0.82
+        --mem-fraction-static 0.90
+        --max-running-requests 32
+        --swa-full-tokens-ratio 0.1
     )
 elif [[ $CONC -le 128 ]]; then
     RECIPE=balanced
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
+    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
+    # common optimizations
+    export SGLANG_OPT_USE_JIT_NORM=1
+    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
+    export SGLANG_OPT_USE_TOPK_V2=1
+    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+    # MoE EP related flags
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     RECIPE_FLAGS=(
         --dp-size "$TP"
         --enable-dp-attention
         --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
-        --mem-fraction-static 0.82
-        --cuda-graph-max-bs 64
+        --mem-fraction-static 0.83
         --max-running-requests 128
+        --chunked-prefill-size 32768
+        --swa-full-tokens-ratio 0.1
     )
 else
     RECIPE=max-throughput
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
+    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
+    # common optimizations
+    export SGLANG_OPT_USE_JIT_NORM=1
+    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
+    export SGLANG_OPT_USE_TOPK_V2=1
+    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+    # MoE EP related flags
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     RECIPE_FLAGS=(
         --dp-size "$TP"
         --enable-dp-attention
         --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
-        --mem-fraction-static 0.82
-        --cuda-graph-max-bs 64
-        --max-running-requests 256
+        --mem-fraction-static 0.90
+        --max-running-requests 512
+        --chunked-prefill-size 32768
+        --swa-full-tokens-ratio 0.1
     )
 fi
 echo "Recipe: $RECIPE (CONC=$CONC)"
