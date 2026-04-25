@@ -1785,7 +1785,7 @@
     - "Uses the submitted B300 pareto schedule for both 1k1k and 8k1k, excluding conc 1: TP8 at conc 4/128, TP4 at conc 4/8/16/32/64/128, DP4 at conc 256/512"
     - "Launch args match the provided vllm serve command, including FP4 indexer cache, FULL_AND_PIECEWISE cudagraph config, and max-num-batched-tokens 2048"
     - "1k1k uses --max-model-len 4096; 8k1k uses the workflow-provided benchmark context length"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1144
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/114:
 
 - config-keys:
     - dsv4-fp8-mi355x-sglang
@@ -1812,6 +1812,13 @@
     - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
     - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
+  
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-vllm
