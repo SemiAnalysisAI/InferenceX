@@ -45,6 +45,77 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
+# Pre-build dynamo wheel ONCE on a single compute node, BEFORE submitting
+# the main sbatch. The DP+EP path inside sbatch spawns one container per
+# GPU (~60 ranks for the 18-node 7p1d topology), and trying to coordinate
+# a one-time build across that many containers via filesystem locks is
+# unreliable on /mnt/vast (NFS) — flock silently no-ops, mkdir caches
+# negatively, etc. Building once here on a dedicated single-node srun
+# eliminates all per-rank coordination: every worker just pip-installs
+# from the cache (~30 s) and the timing across ranks stays tight.
+DYNAMO_HASH="6a159fedd8e4a1563aa647c31f622aedbf254b5b"
+DYNAMO_CACHE_ROOT="/mnt/vast/dynamo_cache"
+DYNAMO_CACHE_DIR="$DYNAMO_CACHE_ROOT/$DYNAMO_HASH"
+DYNAMO_DONE_MARKER="$DYNAMO_CACHE_DIR/.done"
+mkdir -p "$DYNAMO_CACHE_ROOT"
+
+if [ ! -f "$DYNAMO_DONE_MARKER" ]; then
+    echo "[dynamo-prebuild] cold cache, building wheel + source archive on a single compute node..."
+    # Build into a unique temp dir, then atomically mv into place. Two
+    # concurrent runners may both build; the first to finish the rename
+    # wins, the loser cleans up. Same-directory rename() is atomic on
+    # NFS (unlike flock).
+    TEMP_BUILD=$(mktemp -d "$DYNAMO_CACHE_ROOT/$DYNAMO_HASH.tmp.XXXXXX")
+    srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT \
+         --nodes=1 --ntasks=1 --time=00:45:00 --job-name="${RUNNER_NAME}-prebuild" \
+         --container-image="$SQUASH_FILE" \
+         --no-container-entrypoint --no-container-mount-home \
+         --container-mounts="$DYNAMO_CACHE_ROOT:$DYNAMO_CACHE_ROOT" \
+         bash -c "
+            set -e
+            apt-get update -qq
+            apt-get install -y -qq git curl libclang-dev protobuf-compiler >/dev/null 2>&1
+            if ! command -v cargo &>/dev/null; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              . \$HOME/.cargo/env
+            fi
+            if ! command -v maturin &>/dev/null; then
+              pip install --break-system-packages maturin
+            fi
+            rm -rf /tmp/dynamo_build
+            mkdir -p /tmp/dynamo_build
+            cd /tmp/dynamo_build
+            git clone https://github.com/ai-dynamo/dynamo.git
+            cd dynamo
+            git checkout $DYNAMO_HASH
+            cd lib/bindings/python/
+            export RUSTFLAGS='-C target-cpu=native --cfg tokio_unstable'
+            maturin build -o '$TEMP_BUILD'
+            cd /tmp/dynamo_build/dynamo
+            tar czf '$TEMP_BUILD/dynamo-source.tar.gz' \
+                --exclude='lib/bindings/python/target' \
+                --exclude='.git' \
+                .
+            touch '$TEMP_BUILD/.done'
+        "
+    if [ -f "$TEMP_BUILD/.done" ]; then
+        # Atomic publish. If another runner already published, mv fails
+        # and we just discard our copy.
+        if mv "$TEMP_BUILD" "$DYNAMO_CACHE_DIR" 2>/dev/null; then
+            echo "[dynamo-prebuild] published cache at $DYNAMO_CACHE_DIR"
+        else
+            echo "[dynamo-prebuild] another runner published first, discarding our copy"
+            rm -rf "$TEMP_BUILD"
+        fi
+    else
+        echo "[dynamo-prebuild] BUILD FAILED — no .done in $TEMP_BUILD" >&2
+        rm -rf "$TEMP_BUILD"
+        exit 1
+    fi
+else
+    echo "[dynamo-prebuild] cache hit at $DYNAMO_CACHE_DIR"
+fi
+
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
