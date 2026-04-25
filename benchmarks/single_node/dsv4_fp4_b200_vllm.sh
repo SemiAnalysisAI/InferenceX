@@ -42,6 +42,12 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+# DP mode uses gpu-memory-utilization=0.85 (matched from pareto sweep)
+GMU_ARGS=()
+if [ "${DP_ATTENTION}" = "true" ]; then
+    GMU_ARGS=(--gpu-memory-utilization 0.85)
+fi
+
 # DP mode: mbt=ISL; TP mode: mbt=2*ISL; floor at 2048
 if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=$(( ISL < 2048 ? 2048 : ISL ))
@@ -74,6 +80,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --block-size 256 \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
+    "${GMU_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
