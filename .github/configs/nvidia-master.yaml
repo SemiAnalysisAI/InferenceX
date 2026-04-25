@@ -7548,7 +7548,7 @@ dsv4-fp4-gb200-dynamo-vllm:
         dp-attn: false
     # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
     # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
-    - conc-list: [256, 512, 1024, 2048, 3072, 4096]
+    - conc-list: [128, 256, 1024, 2048, 4096]
       prefill:
         num-worker: 1
         tp: 8
@@ -7612,7 +7612,7 @@ dsv4-fp4-gb200-dynamo-vllm:
         dp-attn: true
     # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
     # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
-    - conc-list: [2048, 4096]
+    - conc-list: [4096, 8192]
       prefill:
         num-worker: 7
         tp: 8
