@@ -23,6 +23,16 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# See 1k1k recipe for slurm.time_limit and health_check rationale — three
+# concurrent matrix jobs starve the same Lustre OSTs and the default 1800s
+# orchestrator deadline fires before any job becomes healthy.
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
 resources:
   gpu_type: "h100"
   gpus_per_node: 8

@@ -32,6 +32,23 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Bumped from the srt-slurm 6h default. Three multinode matrix jobs (1k1k
+# bench, 8k1k bench, 8k1k eval) launch concurrently from the run-sweep
+# workflow and all read the same /mnt/nfs/lustre/models/dsv4-fp8 — combined
+# with cudagraph capture this can exceed the default wall clock.
+slurm:
+  time_limit: "8:00:00"
+
+# Bumped from the 1800s (180 attempts) default to 4 hours. Run 24922713022
+# saw shard 1/64 take 423s and shard 8/64 reach only 16 min into the load —
+# the 32 H100 workers per job × 3 concurrent matrix jobs starve the same
+# Lustre OSTs. Default 1800s deadline fired before any job became healthy.
+# Match the GB200 dsv4 recipes; over-long deadline just idles, doesn't burn
+# compute.
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
 resources:
   gpu_type: "h100"
   gpus_per_node: 8
