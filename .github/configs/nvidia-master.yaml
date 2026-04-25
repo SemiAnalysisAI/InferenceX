@@ -1833,10 +1833,9 @@ dsr1-fp8-b300-sglang:
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# lists B200 (not B300) as the Blackwell target. This config reuses the
-# B200 Pro FP4 Max-Throughput recipe (DP=8 + DeepEP, no MTP) on B300
-# until a B300-specific recipe ships. Prefix caching is disabled.
-# Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
+# lists B200 (not B300) as the Blackwell target; we reuse the B200 Pro FP4
+# recipes on B300 until a B300-specific recipe ships. Prefix caching is
+# disabled. Parallelisms mirror dsv4-fp4-b200-sglang.
 dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:deepseek-v4-b300
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1881,14 +1880,12 @@ dsv4-fp4-b300-sglang-mtp:
   precision: fp4
   framework: sglang
   multinode: false
-  # Mirrors dsv4-fp4-b300-sglang. Three recipes from
-  # https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # selected inside benchmarks/single_node/dsv4_fp4_b300_mtp.sh by CONC.
-  # EAGLE / MTP added on low-latency (steps=3, draft=4) and balanced
-  # (steps=1, draft=2); the cookbook says max-throughput keeps MTP off
-  # because the verify step costs more than it saves at saturation, so
-  # the max-throughput rows are spec-decoding=mtp only for result-label
-  # consistency with this config.
+  # Mirrors dsv4-fp4-b300-sglang's low-latency and balanced rows with EAGLE
+  # MTP enabled per https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4:
+  #   low-latency  (CONC <= 32):       EAGLE 3 steps / 4 draft tokens
+  #   balanced     (32 < CONC <= 128): EAGLE 1 step  / 2 draft tokens
+  # Max-throughput is intentionally omitted -- the cookbook says MTP off
+  # at saturation because the verify step costs more than it saves.
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -1897,8 +1894,6 @@ dsv4-fp4-b300-sglang-mtp:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-    # max-throughput
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
@@ -1906,8 +1901,6 @@ dsv4-fp4-b300-sglang-mtp:
     - { tp: 8, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-    # max-throughput
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e

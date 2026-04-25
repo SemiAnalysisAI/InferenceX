@@ -1830,7 +1830,8 @@
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang MTP benchmark"
     - "Image: lmsysorg/sglang:deepseek-v4-b300"
     - "Model: deepseek-ai/DeepSeek-V4-Pro (FP4 MoE experts + FP8 attention/dense)"
-    - "Mirrors dsv4-fp4-b300-sglang (recipe-per-CONC: low-latency / balanced / max-throughput) but with EAGLE MTP enabled per https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-    - "EAGLE 3 steps / 4 draft tokens on low-latency, 1 step / 2 draft tokens on balanced; max-throughput keeps MTP off per the cookbook (verify step costs more than it saves at saturation)"
+    - "Mirrors dsv4-fp4-b300-sglang's low-latency and balanced rows with EAGLE MTP enabled per https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "EAGLE 3 steps / 4 draft tokens on low-latency, 1 step / 2 draft tokens on balanced"
+    - "Max-throughput intentionally omitted: cookbook says MTP off at saturation because the verify step costs more than it saves"
     - "SGLANG_ENABLE_SPEC_V2=1 required for MTP; --use-chat-template passed to bench_serving"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1151

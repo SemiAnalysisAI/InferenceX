@@ -52,13 +52,13 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# (prefix-caching flag dropped for the baseline). EAGLE/MTP added per the
-# cookbook recommendations -- max-throughput keeps MTP off because at
-# saturation the verify step costs more than it saves:
-#   - low-latency    (CONC <= 32):        TP-only + EAGLE 3 steps / 4 draft tokens
-#   - balanced       (32 < CONC <= 128):  + DP-attn + EAGLE 1 step / 2 draft tokens
-#   - max-throughput (CONC > 128):        + DP-attn, NO MTP
+# Two recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+# with EAGLE / MTP enabled per the cookbook (prefix-caching dropped):
+#   - low-latency (CONC <= 32):       TP-only + EAGLE 3 steps / 4 draft tokens
+#   - balanced    (32 < CONC <= 128): + DP-attn + EAGLE 1 step / 2 draft tokens
+# Max-throughput is intentionally not handled here -- the cookbook says
+# MTP off at saturation because the verify step costs more than it saves.
+# dsv4-fp4-b300-sglang-mtp's search-space caps CONC at 128 to match.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
 if [[ $CONC -le 32 ]]; then
@@ -73,7 +73,7 @@ if [[ $CONC -le 32 ]]; then
         --speculative-eagle-topk 1
         --speculative-num-draft-tokens 4
     )
-elif [[ $CONC -le 128 ]]; then
+else
     RECIPE=balanced
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
     RECIPE_FLAGS=(
@@ -88,18 +88,6 @@ elif [[ $CONC -le 128 ]]; then
         --speculative-num-steps 1
         --speculative-eagle-topk 1
         --speculative-num-draft-tokens 2
-    )
-else
-    RECIPE=max-throughput
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
-    RECIPE_FLAGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --mem-fraction-static 0.82
-        --cuda-graph-max-bs 64
-        --max-running-requests 256
     )
 fi
 echo "Recipe: $RECIPE (CONC=$CONC)"
