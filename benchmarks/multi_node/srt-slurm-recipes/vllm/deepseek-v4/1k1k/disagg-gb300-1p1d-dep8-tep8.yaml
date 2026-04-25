@@ -54,6 +54,10 @@ backend:
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    # Cap cargo parallelism for the dynamo source build at the start
+    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
+    # can OOM the SLURM cgroup before vLLM ever starts.
+    CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -72,6 +76,10 @@ backend:
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    # Cap cargo parallelism for the dynamo source build at the start
+    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
+    # can OOM the SLURM cgroup before vLLM ever starts.
+    CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
