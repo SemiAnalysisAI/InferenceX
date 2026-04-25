@@ -20,6 +20,12 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Pin all 4 nodes to the same rack on cw (2x 18-node racks). Without this
+# the prefill (DP=8) and decode (TP=8) workers can land on different
+# racks and pay the cross-rack hop on every NIXL KV transfer.
+sbatch_directives:
+  segment: "4"
+
 slurm:
   time_limit: "8:00:00"
 

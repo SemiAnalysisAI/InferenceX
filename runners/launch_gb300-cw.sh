@@ -129,10 +129,11 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
-# srt-slurm default is True; spelled out here so it's obvious that every
-# recipe submitted from this runner will get `#SBATCH --segment={total_nodes}`,
-# which is required to keep each job within one of cr's two 18-node racks.
-use_segment_sbatch_directive: true
+# Auto-emission of `#SBATCH --segment={total_nodes}` is turned off here
+# because each gb300 recipe sets its own `sbatch_directives: { segment: N }`.
+# Auto + per-recipe would emit two `#SBATCH --segment=` lines; explicit-only
+# keeps the directive in the recipe where the topology lives.
+use_segment_sbatch_directive: false
 EOF
 
 echo "Generated srtslurm.yaml:"

@@ -22,6 +22,10 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Pin all 10 nodes to the same rack on cw.
+sbatch_directives:
+  segment: "10"
+
 slurm:
   time_limit: "8:00:00"
 

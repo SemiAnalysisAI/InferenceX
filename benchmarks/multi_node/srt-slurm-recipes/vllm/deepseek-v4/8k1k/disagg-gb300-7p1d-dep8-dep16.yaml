@@ -22,6 +22,12 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Pin all 18 nodes to a single rack on cw — exactly fills one rack.
+# Bumping prefill_workers beyond 7 would push past the rack size and
+# force cross-rack allocation; re-check this if topology changes.
+sbatch_directives:
+  segment: "18"
+
 slurm:
   time_limit: "8:00:00"
 
