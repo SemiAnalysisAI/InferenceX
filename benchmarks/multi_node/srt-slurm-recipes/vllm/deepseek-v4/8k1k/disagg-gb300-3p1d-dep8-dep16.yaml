@@ -73,8 +73,10 @@ backend:
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    # cw-specific debug + disable NVLink-only paths that don't apply
+    # cross-node on this cluster.
+    NCCL_DEBUG: "INFO"
     VLLM_SERVER_DEV_MODE: "1"
 
   decode_environment:
@@ -85,8 +87,10 @@ backend:
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    # cw-specific debug + disable NVLink-only paths that don't apply
+    # cross-node on this cluster.
+    NCCL_DEBUG: "INFO"
     VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:

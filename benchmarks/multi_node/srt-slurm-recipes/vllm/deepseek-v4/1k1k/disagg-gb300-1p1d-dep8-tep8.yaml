@@ -75,8 +75,10 @@ backend:
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    # cw-specific debug + disable NVLink-only paths that don't apply
+    # cross-node on this cluster.
+    NCCL_DEBUG: "INFO"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
@@ -86,7 +88,6 @@ backend:
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_P2P_LEVEL: NVL
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -97,8 +98,10 @@ backend:
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    # cw-specific debug + disable NVLink-only paths that don't apply
+    # cross-node on this cluster.
+    NCCL_DEBUG: "INFO"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
@@ -106,7 +109,6 @@ backend:
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_P2P_LEVEL: NVL
 
   vllm_config:
     prefill:
