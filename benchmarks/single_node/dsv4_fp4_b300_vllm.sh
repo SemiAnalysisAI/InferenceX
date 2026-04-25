@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
-# pareto sweep. The matrix uses dp-attn=true as the existing switch to flip a
-# 4-GPU run from TP4 to DP4. Expert parallel is always enabled to match the
-# provided vllm serve command exactly.
+# pareto sweep. TP mode (dp-attn=false) runs without expert parallel; DP mode
+# (dp-attn=true) enables expert parallel (EP_SIZE=TP value = DP size).
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -38,6 +37,11 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
 # DP mode: mbt=ISL; TP mode: mbt=2*ISL; floor at 2048
 if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=$(( ISL < 2048 ? 2048 : ISL ))
@@ -69,7 +73,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --trust-remote-code \
     --block-size 256 \
     --no-enable-prefix-caching \
-    --enable-expert-parallel \
+    "${EP_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
