@@ -1786,3 +1786,11 @@
     - "Launch args match the provided vllm serve command, including FP4 indexer cache, FULL_AND_PIECEWISE cudagraph config, and max-num-batched-tokens 2048"
     - "1k1k uses --max-model-len 4096; 8k1k uses the workflow-provided benchmark context length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1144
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Bump MI355X SLURM allocation from --time=180 to --time=300 in runners/launch_mi355x-amds.sh"
+    - "DSv4-Pro on MI355X exceeded the 3h cap (STEP CANCELLED DUE TO TIME LIMIT) due to ~30min MoE JIT compile plus slow torch-fallback kernels (SGLANG_HACK_FLASHMLA_BACKEND=torch et al.) from sgl-project/sglang#23608"
+    - "300 minutes matches the GH Actions outer timeout-minutes cap in benchmark-tmpl.yml"
+    - "Retriggering dsv4-fp8-mi355x-sglang"
