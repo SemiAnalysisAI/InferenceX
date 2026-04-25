@@ -14,11 +14,11 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-# No `dynamo:` block — see ./disagg-gb200-1p1d-dep8-tep8.yaml for the
-# rationale. srtctl uses the dynamo build baked into the
-# lmsysorg/sglang:deepseek-v4-grace-blackwell image; pip-installing
-# dynamo 0.8.1 on top breaks startup with `AttributeError: module
-# 'sglang' has no attribute 'Engine'`.
+# `install: false` — see ./disagg-gb200-1p1d-dep8-tep8.yaml for the
+# rationale (srtctl defaults to installing dynamo 0.8.0, but that
+# breaks against the deepseek-v4-grace-blackwell sglang fork).
+dynamo:
+  install: false
 
 slurm:
   time_limit: "8:00:00"
