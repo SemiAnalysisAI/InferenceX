@@ -13,11 +13,10 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-# `install: false` — see ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for
-# the rationale (srtctl defaults to installing dynamo 0.8.0, but that
-# breaks against the deepseek-v4-grace-blackwell sglang fork).
+# See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the dynamo pin rationale.
 dynamo:
-  install: false
+  hash: 21f135f5edf40e12e6ff5db2b462d862a6d6ab9b
+  install: true
 
 slurm:
   time_limit: "8:00:00"

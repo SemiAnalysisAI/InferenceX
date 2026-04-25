@@ -19,15 +19,18 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-# `install: false` is required: srtctl's DynamoConfig defaults to
-# install=True (pip installs dynamo 0.8.0 from PyPI). dynamo's
-# `dynamo.sglang.health_check` module imports `sgl.Engine` at top
-# level, which the lmsysorg/sglang:deepseek-v4-grace-blackwell image's
-# sglang fork does not expose — re-installing dynamo breaks startup
-# with `AttributeError: module 'sglang' has no attribute 'Engine'`.
-# Use whatever dynamo build is already baked into the container.
+# Pin dynamo to the v1.2.0-sglang-deepseek-v4-dev.1 tag. The PyPI
+# 0.8.0/0.8.1 releases (srtctl's default) reference `sgl.Engine` in
+# `dynamo.sglang.health_check` *eagerly* (no `from __future__ import
+# annotations`), and the lmsysorg/sglang:deepseek-v4-grace-blackwell
+# image's sglang fork does not expose `sgl.Engine`, so they crash at
+# import with `AttributeError: module 'sglang' has no attribute
+# 'Engine'`. The DSV4-targeted tag adds `from __future__ import
+# annotations` (commit cdb7218a, ai-dynamo PR #7255), making the
+# annotation lazy so the module imports cleanly.
 dynamo:
-  install: false
+  hash: 21f135f5edf40e12e6ff5db2b462d862a6d6ab9b
+  install: true
 
 slurm:
   time_limit: "8:00:00"
