@@ -80,7 +80,6 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     NCCL_DEBUG: "INFO"
     NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
-    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   decode_environment:
@@ -93,7 +92,6 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     NCCL_DEBUG: "INFO"
     NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
-    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:

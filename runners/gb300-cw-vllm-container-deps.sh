@@ -41,3 +41,72 @@ cd /tmp/dynamo_build/dynamo
 pip install --break-system-packages -e .
 
 echo "Dynamo installed from prebuilt cache ($DYNAMO_HASH)"
+
+# --- vLLM patches ---
+
+# 1. Bump HANDSHAKE_TIMEOUT_MINS 5 → 30.
+#    vLLM v1's DPAsyncMPClient waits HANDSHAKE_TIMEOUT_MINS for the
+#    front-end to respond. With 8 DP ranks loading DSV4-Pro (~850 GB)
+#    from VAST NFS concurrently, rank 0 can take >5 min. The constant
+#    has no env-var override; patch it in-place.
+VLLM_CORE_PY="/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core.py"
+if [ -f "$VLLM_CORE_PY" ] && grep -q "^HANDSHAKE_TIMEOUT_MINS = 5$" "$VLLM_CORE_PY"; then
+    sed -i 's/^HANDSHAKE_TIMEOUT_MINS = 5$/HANDSHAKE_TIMEOUT_MINS = 30/' "$VLLM_CORE_PY"
+    echo "[vllm-patch] HANDSHAKE_TIMEOUT_MINS 5 -> 30"
+fi
+
+# 2. Make DP Coordinator child failures visible.
+#    The parent only prints "DP Coordinator process failed to report ZMQ
+#    addresses during startup" — the child's real exception is swallowed.
+#    Patch the coordinator startup to log child pid, exitcode, and stderr.
+VLLM_COORD_PY="/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/coordinator.py"
+if [ -f "$VLLM_COORD_PY" ]; then
+    python3 - "$VLLM_COORD_PY" <<'PYEOF'
+import sys, re
+
+path = sys.argv[1]
+with open(path) as f:
+    src = f.read()
+
+# Only patch if we find the "failed to report ZMQ addresses" raise and
+# haven't already patched.
+marker = "# gb300-cw-patched-coordinator-logging"
+if marker in src:
+    print("[vllm-patch] coordinator already patched, skipping")
+    sys.exit(0)
+
+needle = 'raise RuntimeError(\n                "DP Coordinator process failed to report ZMQ addresses '\
+         'during startup.'
+if needle not in src:
+    # Try single-line variant
+    needle = 'raise RuntimeError("DP Coordinator process failed to report ZMQ addresses during startup.'
+
+if needle not in src:
+    print("[vllm-patch] WARNING: could not find DP Coordinator error string to patch", file=sys.stderr)
+    sys.exit(0)
+
+# Insert logging just before the raise
+log_block = f'''
+                {marker}
+                import logging as _logging
+                _log = _logging.getLogger("vllm.v1.engine.coordinator")
+                _log.error(
+                    "DP Coordinator child debug: proc=%s alive=%s exitcode=%s",
+                    getattr(self, '_coordinator_proc', 'N/A'),
+                    getattr(getattr(self, '_coordinator_proc', None), 'is_alive', lambda: 'N/A')(),
+                    getattr(getattr(self, '_coordinator_proc', None), 'exitcode', 'N/A'),
+                )
+'''
+patched = src.replace(needle, log_block + "                " + needle.lstrip())
+
+with open(path, 'w') as f:
+    f.write(patched)
+print("[vllm-patch] added DP Coordinator child debug logging")
+PYEOF
+fi
+
+# Confirm patches applied
+python3 -c "
+import vllm.v1.engine.core as c
+print('[vllm-verify] HANDSHAKE_TIMEOUT_MINS =', c.HANDSHAKE_TIMEOUT_MINS)
+" 2>/dev/null || true
