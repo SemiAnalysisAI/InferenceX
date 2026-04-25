@@ -42,8 +42,14 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
+        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
+        # model.path alias in our DSV4 recipes.
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
         exit 1
     fi
 else
@@ -134,7 +140,17 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    # Use `cp -rT` so if the upstream branch ever ships a stub
+    # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto
+    # it rather than nesting (`cp -r src dst` would create
+    # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
+    mkdir -p recipes/vllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
