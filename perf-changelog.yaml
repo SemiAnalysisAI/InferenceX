@@ -1819,4 +1819,4 @@
     - "Port the DeepSeek-V4-Pro FP4 GB200 sweep to GB300 (cluster: gb300-cr, CoreWeave; 2x 18-node racks)"
     - "Same topologies, same per-worker tuning, same container (vllm/vllm-openai:deepseekv4-cu130). Recipes duplicated as disagg-gb300-*.yaml with gpu_type: gb300; 1k/1k and 8k/1k both included"
     - "New runners group gb300-cr (gb300-cr_0/1) and launch_gb300-cr.sh: SLURM partition `all`, model staging at /mnt/vast/models/deepseek-v4-pro/, squash files at /mnt/vast/squash/. Each job rack-pins via srtctl's auto `#SBATCH --segment={total_nodes}` (max 18-node 7p1d topology fits one rack exactly)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1150
