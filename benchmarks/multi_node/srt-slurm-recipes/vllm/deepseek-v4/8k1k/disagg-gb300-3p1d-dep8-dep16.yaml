@@ -19,7 +19,10 @@ model:
 
 dynamo:
   hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
-  install: true
+  # Install handled by our custom vllm-container-deps.sh, which builds
+  # the dynamo wheel ONCE on /mnt/vast and lets every rank pip-install
+  # from cache. See runners/gb300-cw-vllm-container-deps.sh.
+  install: false
 
 setup_script: vllm-container-deps.sh
 

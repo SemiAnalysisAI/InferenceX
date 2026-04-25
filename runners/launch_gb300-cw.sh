@@ -75,6 +75,12 @@ git checkout sa-submission-q2-2026
 mkdir -p recipes/vllm/deepseek-v4
 cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 
+# Replace the upstream stub setup script with our flock-cached dynamo
+# installer. See runners/gb300-cw-vllm-container-deps.sh for why. Used
+# together with `dynamo.install: false` in the gb300 recipes.
+cp "$GITHUB_WORKSPACE/runners/gb300-cw-vllm-container-deps.sh" configs/vllm-container-deps.sh
+chmod +x configs/vllm-container-deps.sh
+
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
 # Runner pod is x86 but compute nodes are aarch64, and /mnt/home is shared
