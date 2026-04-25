@@ -1,26 +1,29 @@
-# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, TEP variant)
+# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, low-conc DEP)
 #
-# Sister recipe to disagg-h100-fp8-1p1d-dep16-dep16.yaml. Same 2P+2D footprint
-# (4 nodes total) but each worker uses tensor parallel across all 16 GPUs
-# instead of data parallel.
+# Sister recipe to disagg-h100-fp8-1p1d-dep16-dep16.yaml. Same topology
+# (tp=1, dp=16, ep=16, dp-attn=true) and same 4-node footprint, but
+# tuned for low concurrency (4-32):
 #
-# - DEP variant (high conc): tp=1, dp=16, ep=16. 16 independent attention
-#   paths across the 16 GPUs, sharded experts. Maximises batching capacity.
-# - TEP variant (this file, low conc): tp=16, dp=1, ep=16. One replica
-#   spread across all 16 GPUs, with experts also sharded across the same
-#   ranks. All 16 GPUs cooperate on a single forward pass — gives lower
-#   latency at small batch sizes since each request gets all the compute.
+#   - max-num-seqs: 64 (vs 512). Engine never queues more than ~conc
+#     sequences at conc<=32, so the larger budget just wastes cudagraph
+#     capture memory.
+#   - max-num-batched-tokens: 256 (vs 512). Smaller prefill chunks =
+#     lower TTFT for sparse traffic. Throughput penalty is irrelevant
+#     at low conc.
+#   - enforce-eager: true on decode (vs cudagraph). Cudagraph capture
+#     reserves ~1-2 GiB per worker and adds ~30s warmup. At low conc
+#     the per-token kernel-launch overhead is dominated by network
+#     round-trips anyway, so eager mode is a fine tradeoff.
 #
-# Cross-node TP=16 routes attention all-reduce + MoE all2all across the IB
-# fabric. That's expensive per-token but only meaningful at high
-# concurrency; at conc 4-32 the latency win from more compute-per-request
-# beats the IB overhead.
+# Originally targeted as a TEP variant (tp=16) but Dynamo's vLLM workers
+# spawn one process per GPU and vLLM rejects world_size=16 with only 1
+# local GPU per process. Cross-node TP would need
+# --distributed-executor-backend=ray which Dynamo doesn't coordinate.
+# So we keep DEP topology and differentiate by batch tuning instead.
 #
-# Same DSV4 startup workarounds as the DEP recipe (alec-flowers fork
-# pinning ai-dynamo to 6a159fe, NCCL_SYMM_MEM, no all2all-backend, drop
-# API-server flags, gpu-memory-utilization 0.85 for indexer headroom).
+# All other DSV4 startup workarounds match the high-conc DEP recipe.
 
-name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-tep16-tep16"
+name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-dep16-dep16-eager"
 
 model:
   path: "dsv4-fp8"
@@ -68,6 +71,7 @@ backend:
     VLLM_USE_DEEP_GEMM: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    VLLM_MOE_DP_CHUNK_SIZE: "192"
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -86,16 +90,15 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 16
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
       max-model-len: 16384
-      # TEP serves smaller batches; cap max-num-seqs so cudagraph capture
-      # doesn't waste memory on shapes we won't hit at conc <= 32.
       max-num-seqs: 64
-      max-num-batched-tokens: 512
+      max-num-batched-tokens: 256
       gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
@@ -108,17 +111,18 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 16
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 64
-      max-num-batched-tokens: 512
+      max-num-batched-tokens: 256
       gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
 
 benchmark:
   type: "sa-bench"

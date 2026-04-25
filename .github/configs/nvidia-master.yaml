@@ -2464,34 +2464,37 @@ dsv4-fp8-h100-dynamo-vllm:
   disagg: true
   # Two recipes per ISL/OSL, both 1P+1D over the full 4-node h100-multinode
   # pool (DSV4-Pro weights need >=2 nodes per side, so we cannot fit more
-  # workers). They differ in how each worker's 16 GPUs are organised:
-  #   - TEP (tp:16,ep:16,dp-attn:false): one replica spread across all 16
-  #     GPUs, experts sharded. Better latency at low conc — every request
-  #     gets the full compute. Cross-node TP is expensive per token but
-  #     wins when batch is small.
-  #   - DEP (tp:1,ep:16,dp-attn:true): 16 independent attention paths,
-  #     experts sharded. Higher batching capacity, better at high conc.
-  # Pattern follows dsr1-fp8-h100-dynamo-sglang's TEP/DEP split.
+  # workers). Cross-node TP=16 (TEP) was attempted but the Dynamo+vLLM
+  # stack only supports one process per GPU, and vLLM's argparse rejects
+  # world_size=16 with only 1 local GPU. Both recipes therefore share the
+  # DEP topology (tp=1, dp=16, ep=16, dp-attn=true) and differ in batch
+  # tuning:
+  #   - DEP-eager (low conc): max-num-seqs=64, max-num-batched-tokens=256,
+  #     enforce-eager=true on decode (no cudagraph). Smaller memory and
+  #     faster warmup; trades decode kernel-launch overhead that doesn't
+  #     matter at conc<=32.
+  #   - DEP (high conc): max-num-seqs=512, max-num-batched-tokens=512,
+  #     decode cudagraph enabled. Higher batch throughput.
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # TEP — low conc (latency-bound)
+    # DEP-eager — low conc (smaller batch, no decode cudagraph)
     - conc-list: [4, 8, 16, 32]
       prefill:
         num-worker: 1
-        tp: 16
+        tp: 1
         ep: 16
-        dp-attn: false
+        dp-attn: true
         additional-settings:
-        # benchmarks/multi_node/srt_slurm_recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml
-        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml"
+        # benchmarks/multi_node/srt_slurm_recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-dep16-dep16-eager.yaml
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-dep16-dep16-eager.yaml"
       decode:
         num-worker: 1
-        tp: 16
+        tp: 1
         ep: 16
-        dp-attn: false
-    # DEP — high conc (throughput-bound)
+        dp-attn: true
+    # DEP — high conc (throughput-bound, decode cudagraph)
     - conc-list: [64, 128, 256]
       prefill:
         num-worker: 1
@@ -2509,22 +2512,22 @@ dsv4-fp8-h100-dynamo-vllm:
   - isl: 8192
     osl: 1024
     search-space:
-    # TEP — low conc (latency-bound)
+    # DEP-eager — low conc (smaller batch, no decode cudagraph)
     - conc-list: [4, 8, 16]
       prefill:
         num-worker: 1
-        tp: 16
+        tp: 1
         ep: 16
-        dp-attn: false
+        dp-attn: true
         additional-settings:
-        # benchmarks/multi_node/srt_slurm_recipes/vllm/deepseek-v4-pro/8k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml
-        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml"
+        # benchmarks/multi_node/srt_slurm_recipes/vllm/deepseek-v4-pro/8k1k/disagg-h100-fp8-1p1d-dep16-dep16-eager.yaml
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4-pro/8k1k/disagg-h100-fp8-1p1d-dep16-dep16-eager.yaml"
       decode:
         num-worker: 1
-        tp: 16
+        tp: 1
         ep: 16
-        dp-attn: false
-    # DEP — high conc (throughput-bound)
+        dp-attn: true
+    # DEP — high conc (throughput-bound, decode cudagraph)
     - conc-list: [32, 64, 128]
       prefill:
         num-worker: 1

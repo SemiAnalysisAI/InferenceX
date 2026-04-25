@@ -1,10 +1,9 @@
-# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, TEP variant) — 8k/1k
+# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, low-conc DEP) — 8k/1k
 #
-# See 1k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml for the full DEP-vs-TEP
-# rationale and the DSV4 startup workarounds. This file just changes the
-# benchmark block to ISL=8192 and trims the conc list.
+# See 1k1k/disagg-h100-fp8-1p1d-dep16-dep16-eager.yaml for full rationale.
+# Same low-conc-tuned DEP variant; only the benchmark block differs.
 
-name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-tep16-tep16-8k1k"
+name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-dep16-dep16-eager-8k1k"
 
 model:
   path: "dsv4-fp8"
@@ -52,6 +51,7 @@ backend:
     VLLM_USE_DEEP_GEMM: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    VLLM_MOE_DP_CHUNK_SIZE: "192"
     VLLM_SKIP_P2P_CHECK: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -70,14 +70,15 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 16
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 64
-      max-num-batched-tokens: 512
+      max-num-batched-tokens: 256
       gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
@@ -90,17 +91,18 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 16
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 64
-      max-num-batched-tokens: 512
+      max-num-batched-tokens: 256
       gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
 
 benchmark:
   type: "sa-bench"
