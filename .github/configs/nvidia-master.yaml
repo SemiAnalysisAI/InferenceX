@@ -2448,6 +2448,34 @@ dsv4-fp8-h200-vllm:
     search-space:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
 
+# DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
+# pareto sweep. The single-node schema has no explicit data-parallel-size
+# field, so dp-attn=true is used as the existing vLLM script switch for DP4
+# layouts on 4 allocated GPUs.
+dsv4-fp4-b300-vllm:
+  image: vllm/vllm-openai:deepseekv4-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 128, conc-end: 128 }
+    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 4 }
+    - { tp: 4, conc-start: 4, conc-end: 128 }
+    - { tp: 8, conc-start: 128, conc-end: 128 }
+    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
+
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
   model: Qwen/Qwen3.5-397B-A17B-FP8

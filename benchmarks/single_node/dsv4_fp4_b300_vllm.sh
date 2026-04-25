@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
-# Per https://vllm.ai/blog/deepseek-v4 the DeepSeek-V4-Pro recipe lists
-# 8xB200 and 8xB300 with identical flags, so this script mirrors
-# dsv4_fp4_b200.sh.
+# DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
+# pareto sweep. The matrix uses dp-attn=true as the existing switch to flip a
+# 4-GPU run from TP4 to DP4. Expert parallel is always enabled to match the
+# provided vllm serve command exactly.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
     TP \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -22,56 +24,54 @@ fi
 
 nvidia-smi
 
+hf download "$MODEL"
+
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-# DeepSeek-V4-Pro weights are large and engine startup on B300 can exceed
-# the default 600s. Give it an hour to load.
+# DeepSeek-V4-Pro weights are large; engine startup can exceed the default
+# 600s. Give it an hour to load.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 
-# Monkey-patch: bypass persistent_topk unconditionally. It raises "k out of
-# range" during CUDA graph capture when the dummy batch has rows with
-# seq_lens[i] < k (=2048 for DSV4). An attn_metadata.max_seq_len-based gate is
-# not strict enough because dummy batches can have max >= k while individual
-# rows have seq_lens[i] = 1. Fall back to top_k_per_row_decode everywhere so
-# 1k/1k capture completes; 8k/1k already worked without the patch but we trade
-# a small decode-time perf cost there to keep the script single-branch.
-INDEXER_PY=/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/sparse_attn_indexer.py
-echo "[monkey-patch] patching $INDEXER_PY"
-sed -i 's/if current_platform.is_cuda() and topk_tokens in (512, 1024, 2048)[^:]*:/if False:  # monkey-patched: bypass persistent_topk (k out of range)/' "$INDEXER_PY"
-if ! grep -Fq 'if False:  # monkey-patched: bypass persistent_topk' "$INDEXER_PY"; then
-    echo "[monkey-patch] FAILED: expected marker not found in $INDEXER_PY" >&2
-    echo "[monkey-patch] current line around persistent_topk dispatch:" >&2
-    grep -n 'topk_tokens in\|persistent_topk' "$INDEXER_PY" >&2 || true
-    exit 1
+BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
+    BENCHMARK_MAX_MODEL_LEN=4096
 fi
-echo "[monkey-patch] applied: $(grep -n 'if False:  # monkey-patched' $INDEXER_PY)"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN
+    SERVE_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+else
+    SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
+fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# Per the recipe, run with EP + DP=8 (no --tensor-parallel-size flag). TP
-# from the search space is used only for GPU allocation by the runner and
-# as the DP size.
 set -x
-vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---trust-remote-code \
---kv-cache-dtype fp8 \
---block-size 256 \
---no-enable-prefix-caching \
---enable-expert-parallel \
---data-parallel-size $TP \
---max-model-len $MAX_MODEL_LEN \
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
---tokenizer-mode deepseek_v4 \
---tool-call-parser deepseek_v4 \
---enable-auto-tool-choice \
---reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
+vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
+    "${PARALLEL_ARGS[@]}" \
+    --pipeline-parallel-size 1 \
+    --kv-cache-dtype fp8 \
+    --trust-remote-code \
+    --block-size 256 \
+    --no-enable-prefix-caching \
+    --enable-expert-parallel \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+    --attention_config.use_fp4_indexer_cache True \
+    --tokenizer-mode deepseek_v4 \
+    --tool-call-parser deepseek_v4 \
+    --enable-auto-tool-choice \
+    --reasoning-parser deepseek_v4 \
+    --max-cudagraph-capture-size 2048 \
+    --max-model-len "$SERVE_MAX_MODEL_LEN" \
+    --max-num-batched-tokens 2048 > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
