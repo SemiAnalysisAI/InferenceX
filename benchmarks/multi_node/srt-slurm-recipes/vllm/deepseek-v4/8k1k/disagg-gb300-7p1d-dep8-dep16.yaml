@@ -1,17 +1,11 @@
 name: "dsv4-vllm-disagg-gb300-7p1d-dep8-dep16"
 
-# GB300 mirror of disagg-gb200-7p1d-dep8-dep16.yaml (which itself mirrored
-# NVIDIA/srt-slurm PR #67). Same tuning. Cluster: gb300-cw (2x 18-node
-# racks). 18-node job exactly fills one rack; the explicit
-# sbatch_directives.segment="18" below keeps it rack-local — the only
-# one of our topologies that requires this exact rack size, so make
-# sure not to bump prefill_workers beyond 7 without re-checking
-# segment fit. (cw's srtslurm.yaml turns off srtctl's auto-segment, so
-# segment is recipe-driven rather than total_nodes-driven.)
+# GB300 mirror of disagg-gb200-7p1d-dep8-dep16.yaml (NVIDIA/srt-slurm
+# PR #67). Cluster: gb300-cw (2x 18-node NVL72 racks). 18-node job
+# fills one rack; segment="18" keeps it rack-local.
 #
-# The dynamo hash (6a159fed) pins to the commit that adds a native Rust
-# DeepSeekV4Formatter. Dynamo's frontend auto-detects DSV4 by model name
-# and uses this native formatter — no custom Jinja template required.
+# NVL72 GB300 HAS multi-node NVLink (MNNVL) — NCCL_MNNVL_ENABLE=1 and
+# NCCL_P2P_LEVEL are set to match the working gb200 reference.
 
 model:
   path: "deepseek-v4-pro"
@@ -69,31 +63,29 @@ backend:
   connector: null
 
   prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Cap cargo parallelism for the dynamo source build at the start
-    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
-    # can OOM the SLURM cgroup before vLLM ever starts.
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    # cw-specific debug + disable NVLink-only paths that don't apply
-    # cross-node on this cluster.
     NCCL_DEBUG: "INFO"
+    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
+    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Cap cargo parallelism for the dynamo source build at the start
-    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
-    # can OOM the SLURM cgroup before vLLM ever starts.
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    # cw-specific debug + disable NVLink-only paths that don't apply
-    # cross-node on this cluster.
     NCCL_DEBUG: "INFO"
+    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
+    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:

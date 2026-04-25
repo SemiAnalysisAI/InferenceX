@@ -66,31 +66,29 @@ backend:
   connector: null
 
   prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Cap cargo parallelism for the dynamo source build at the start
-    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
-    # can OOM the SLURM cgroup before vLLM ever starts.
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    # cw-specific debug + disable NVLink-only paths that don't apply
-    # cross-node on this cluster.
     NCCL_DEBUG: "INFO"
+    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
+    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Cap cargo parallelism for the dynamo source build at the start
-    # of each worker. Default is nproc, which on Grace ARM (~72 cores)
-    # can OOM the SLURM cgroup before vLLM ever starts.
     CARGO_BUILD_JOBS: "4"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    # cw-specific debug + disable NVLink-only paths that don't apply
-    # cross-node on this cluster.
     NCCL_DEBUG: "INFO"
+    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
+    NCCL_DEBUG_FILE: "/tmp/nccl-debug.%h.%p.log"
     VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:
