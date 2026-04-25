@@ -38,6 +38,13 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 
+# DP mode: mbt=ISL; TP mode: mbt=2*ISL; floor at 2048
+if [ "${DP_ATTENTION}" = "true" ]; then
+    MAX_NUM_BATCHED_TOKENS=$(( ISL < 2048 ? 2048 : ISL ))
+else
+    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 < 2048 ? 2048 : ISL * 2 ))
+fi
+
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
     BENCHMARK_MAX_MODEL_LEN=4096
@@ -71,7 +78,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --reasoning-parser deepseek_v4 \
     --max-cudagraph-capture-size 2048 \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
-    --max-num-batched-tokens 2048 > "$SERVER_LOG" 2>&1 &
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
