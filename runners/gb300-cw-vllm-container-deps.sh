@@ -55,53 +55,86 @@ if [ -f "$VLLM_CORE_PY" ] && grep -q "^HANDSHAKE_TIMEOUT_MINS = 5$" "$VLLM_CORE_
     echo "[vllm-patch] HANDSHAKE_TIMEOUT_MINS 5 -> 30"
 fi
 
-# 2. Make DP Coordinator child failures visible.
-#    The parent only prints "DP Coordinator process failed to report ZMQ
-#    addresses during startup" — the child's real exception is swallowed.
-#    Patch the coordinator startup to log child pid, exitcode, and stderr.
+# 2. Make DP Coordinator child failures visible + increase ZMQ address
+#    wait from 30s to 300s.
+#
+#    _wait_for_zmq_addrs uses multiprocessing.connection.wait with
+#    timeout=30 (seconds). The child coordinator process must report
+#    ZMQ addresses within that window or the parent raises
+#    "DP Coordinator process failed to report ZMQ addresses during
+#    startup." — with no child stderr/exitcode.
+#
+#    The actual source (from vllm/v1/engine/coordinator.py):
+#      ready = multiprocessing.connection.wait(
+#          [zmq_addr_pipe, self.proc.sentinel], timeout=30)
+#      if not ready:
+#          raise RuntimeError(
+#              "DP Coordinator process failed to report ZMQ addresses "
+#              "during startup.")
+#
+#    We patch: (a) bump timeout=30 to timeout=300, and (b) log child
+#    proc state before the raise so we can see if it crashed or is slow.
 VLLM_COORD_PY="/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/coordinator.py"
 if [ -f "$VLLM_COORD_PY" ]; then
     python3 - "$VLLM_COORD_PY" <<'PYEOF'
-import sys, re
+import sys
 
 path = sys.argv[1]
 with open(path) as f:
     src = f.read()
 
-# Only patch if we find the "failed to report ZMQ addresses" raise and
-# haven't already patched.
-marker = "# gb300-cw-patched-coordinator-logging"
+marker = "# gb300-cw-coordinator-patched"
 if marker in src:
     print("[vllm-patch] coordinator already patched, skipping")
     sys.exit(0)
 
-needle = 'raise RuntimeError(\n                "DP Coordinator process failed to report ZMQ addresses '\
-         'during startup.'
-if needle not in src:
-    # Try single-line variant
-    needle = 'raise RuntimeError("DP Coordinator process failed to report ZMQ addresses during startup.'
+patched = src
+changed = False
 
-if needle not in src:
-    print("[vllm-patch] WARNING: could not find DP Coordinator error string to patch", file=sys.stderr)
-    sys.exit(0)
+# (a) Bump the 30s ZMQ address wait to 300s.
+old_wait = "[zmq_addr_pipe, self.proc.sentinel], timeout=30"
+new_wait = "[zmq_addr_pipe, self.proc.sentinel], timeout=300"
+if old_wait in patched:
+    patched = patched.replace(old_wait, new_wait)
+    changed = True
+    print("[vllm-patch] coordinator ZMQ wait 30s -> 300s")
+else:
+    print("[vllm-patch] WARNING: could not find ZMQ wait timeout=30 to patch")
 
-# Insert logging just before the raise
-log_block = f'''
-                {marker}
-                import logging as _logging
-                _log = _logging.getLogger("vllm.v1.engine.coordinator")
-                _log.error(
-                    "DP Coordinator child debug: proc=%s alive=%s exitcode=%s",
-                    getattr(self, '_coordinator_proc', 'N/A'),
-                    getattr(getattr(self, '_coordinator_proc', None), 'is_alive', lambda: 'N/A')(),
-                    getattr(getattr(self, '_coordinator_proc', None), 'exitcode', 'N/A'),
-                )
-'''
-patched = src.replace(needle, log_block + "                " + needle.lstrip())
+# (b) Insert child-process debug logging before the "not ready" raise.
+# Match the exact raise block from the source.
+old_raise = (
+    '            if not ready:\n'
+    '                raise RuntimeError(\n'
+    '                    "DP Coordinator process failed to report ZMQ addresses "\n'
+    '                    "during startup."'
+)
+new_raise = (
+    '            if not ready:\n'
+    '                ' + marker + '\n'
+    '                import logging as _log_mod\n'
+    '                _clog = _log_mod.getLogger("vllm.v1.engine.coordinator")\n'
+    '                _clog.error(\n'
+    '                    "DP Coordinator child debug: pid=%s alive=%s exitcode=%s",\n'
+    '                    self.proc.pid, self.proc.is_alive(), self.proc.exitcode,\n'
+    '                )\n'
+    '                raise RuntimeError(\n'
+    '                    "DP Coordinator process failed to report ZMQ addresses "\n'
+    '                    "during startup. Child pid=%s alive=%s exitcode=%s"\n'
+    '                    % (self.proc.pid, self.proc.is_alive(), self.proc.exitcode)'
+)
+if old_raise in patched:
+    patched = patched.replace(old_raise, new_raise)
+    changed = True
+    print("[vllm-patch] added coordinator child debug logging")
+else:
+    print("[vllm-patch] WARNING: could not find coordinator raise block to patch")
 
-with open(path, 'w') as f:
-    f.write(patched)
-print("[vllm-patch] added DP Coordinator child debug logging")
+if changed:
+    with open(path, 'w') as f:
+        f.write(patched)
+else:
+    print("[vllm-patch] WARNING: no coordinator patches applied")
 PYEOF
 fi
 
