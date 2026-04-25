@@ -50,20 +50,46 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# TODO(Cam): hardcoded to the low-latency recipe at every CONC until the
-# DeepEP FP8 weight-postprocess path is fixed for this checkpoint on B300
-# (RuntimeError: Recipe must be a list/tuple of 3 integers. raised from
-# sglang.srt.layers.quantization.fp8.process_weights_after_loading_block_quant).
-# Restore the CONC-based low-latency / balanced / max-throughput dispatch
-# on chore/dsv4-sgl-b300 once sglang can load the checkpoint under
-# --moe-a2a-backend deepep.
-RECIPE=low-latency
-RECIPE_FLAGS=(
-    --moe-runner-backend flashinfer_mxfp4
-    --chunked-prefill-size 4096
-    --disable-flashinfer-autotune
-    --mem-fraction-static 0.82
-)
+# Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+# (spec-decoding / MTP and prefix-caching flags dropped for the baseline):
+#   - low-latency    (CONC <= 32):        TP-only, chunked-prefill, disable autotune
+#   - balanced       (32 < CONC <= 128):  + DP-attn, max-running-requests=128
+#   - max-throughput (CONC > 128):        + DP-attn, max-running-requests=256
+DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+
+if [[ $CONC -le 32 ]]; then
+    RECIPE=low-latency
+    RECIPE_FLAGS=(
+        --moe-runner-backend flashinfer_mxfp4
+        --chunked-prefill-size 4096
+        --disable-flashinfer-autotune
+        --mem-fraction-static 0.82
+    )
+elif [[ $CONC -le 128 ]]; then
+    RECIPE=balanced
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
+    RECIPE_FLAGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --moe-a2a-backend deepep
+        --deepep-config "$DEEPEP_CONFIG"
+        --mem-fraction-static 0.82
+        --cuda-graph-max-bs 64
+        --max-running-requests 128
+    )
+else
+    RECIPE=max-throughput
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
+    RECIPE_FLAGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --moe-a2a-backend deepep
+        --deepep-config "$DEEPEP_CONFIG"
+        --mem-fraction-static 0.82
+        --cuda-graph-max-bs 64
+        --max-running-requests 256
+    )
+fi
 echo "Recipe: $RECIPE (CONC=$CONC)"
 
 set -x
