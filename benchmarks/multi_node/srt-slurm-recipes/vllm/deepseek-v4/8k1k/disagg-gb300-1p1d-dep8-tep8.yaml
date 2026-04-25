@@ -2,7 +2,7 @@ name: "dsv4-vllm-disagg-gb300-1p1d-dep8-tep8"
 
 # GB300 mirror of disagg-gb200-1p1d-dep8-tep8.yaml (which itself mirrored
 # NVIDIA aflowers/gb200-dsv4-recipes branch). Same tuning. Cluster:
-# gb300-cr (2x 18-node racks); 4-node job rack-pins via srtctl's auto
+# gb300-cw (2x 18-node racks); 4-node job rack-pins via srtctl's auto
 # `#SBATCH --segment={total_nodes}`.
 #
 # Topology: 1 prefill (DP=8) + 1 decode (TP=8). 4 nodes total. Targets

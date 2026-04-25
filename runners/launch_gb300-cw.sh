@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-# Launches multi-node Dynamo + vLLM benchmarks on the gb300-cr (CoreWeave)
+# Launches multi-node Dynamo + vLLM benchmarks on the gb300-cw (CoreWeave)
 # cluster. Mirrors launch_gb200-nv.sh but adjusted for cr's filesystem
 # layout: /mnt/vast (10T shared VAST PVC) replaces Lustre/NUMA-local NVMe,
 # the SLURM partition is `all`, and srtctl auto-emits `--segment={total_nodes}`
@@ -11,10 +11,10 @@ set -x
 
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on the shared VAST mount; no compute-node-local NVMe on cr.
-    export MODEL_PATH="/mnt/vast/models/deepseek-v4-pro/"
+    export MODEL_PATH="/mnt/vast/models/dsv4/"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
-    echo "Unsupported model prefix/precision/framework combination on gb300-cr: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-vllm"
+    echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-vllm"
     exit 1
 fi
 
@@ -82,7 +82,7 @@ echo "Configs available at: $SRT_REPO_DIR/"
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300-CR
+# SRT SLURM Configuration for GB300-CW
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"

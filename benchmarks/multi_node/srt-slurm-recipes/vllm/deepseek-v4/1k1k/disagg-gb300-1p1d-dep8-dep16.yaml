@@ -2,7 +2,7 @@ name: "dsv4-vllm-disagg-gb300-1p1d-dep8-dep16"
 
 # GB300 mirror of disagg-gb200-1p1d-dep8-dep16.yaml. Same tuning at FP4
 # (288 GB HBM/GPU on GB300 vs 184 GB on GB200 — extra headroom for KV).
-# Cluster: gb300-cr (2x 18-node racks); each job pins to one rack via
+# Cluster: gb300-cw (2x 18-node racks); each job pins to one rack via
 # srtctl's auto `#SBATCH --segment={total_nodes}` (here 6 nodes).
 #
 # 1k/1k mid-to-high throughput topology. Single prefill worker feeding a

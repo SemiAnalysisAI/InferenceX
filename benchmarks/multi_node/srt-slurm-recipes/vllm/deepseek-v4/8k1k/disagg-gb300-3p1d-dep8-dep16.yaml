@@ -1,7 +1,7 @@
 name: "dsv4-vllm-disagg-gb300-3p1d-dep8-dep16"
 
 # GB300 mirror of disagg-gb200-3p1d-dep8-dep16.yaml. Same tuning. Cluster:
-# gb300-cr (2x 18-node racks); 10-node job rack-pins via srtctl's auto
+# gb300-cw (2x 18-node racks); 10-node job rack-pins via srtctl's auto
 # `#SBATCH --segment={total_nodes}`.
 #
 # Mid-concurrency 8k/1k topology: 3 prefill workers (DP=8) feeding a single

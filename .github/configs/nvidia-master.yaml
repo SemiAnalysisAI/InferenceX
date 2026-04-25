@@ -7658,13 +7658,13 @@ dsv4-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:deepseekv4-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300-cr
+  runner: gb300-cw
   precision: fp4
   framework: dynamo-vllm
   multinode: true
   disagg: true
   # Same topology + tuning as dsv4-fp4-gb300-dynamo-vllm's gb200 sibling, just
-  # pointed at the gb300 recipe variants. Cluster gb300-cr is 2x 18-node
+  # pointed at the gb300 recipe variants. Cluster gb300-cw is 2x 18-node
   # racks; each job is rack-pinned via srtctl's auto `#SBATCH --segment={N}`.
   seq-len-configs:
   - isl: 1024
