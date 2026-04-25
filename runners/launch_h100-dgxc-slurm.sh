@@ -47,6 +47,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+        # Verify the weights are staged and log their size (catches partial
+        # downloads / wrong revisions before we burn 8 min on weight load).
+        du -sh "$MODEL_PATH" 2>/dev/null || echo "WARNING: could not stat $MODEL_PATH"
     else
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
