@@ -24,6 +24,16 @@ fi
 export SLURM_PARTITION="all"
 export SLURM_ACCOUNT="cw-sup"
 
+# Pyxis/enroot's NVIDIA prestart hook reads these from the runtime env to
+# decide which host driver libraries (libcuda.so.1, libnvidia-*.so) to
+# mount into the container. cw doesn't set them by default — without them
+# the container has no libcuda and `import vllm._C` dies with
+# "libcuda.so.1: cannot open shared object file". SLURM's default
+# --export=ALL propagates these from this shell through sbatch+srun
+# into the enroot environment.
+export NVIDIA_VISIBLE_DEVICES=all
+export NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 NGINX_IMAGE="nginx:1.27.4"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
