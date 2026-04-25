@@ -1,11 +1,15 @@
-name: "dsv4-vllm-disagg-gb200-1p4d-dep8-dep8"
+name: "dsv4-vllm-disagg-gb200-1p1d-dep8-tep8"
 
-# Interactivity-focused topology: 1 prefill worker + 4 separate decode
-# workers, each at DP=8. Targets conc 4-128 where TTFT/TPOT matter more
-# than aggregate throughput. Same per-worker vllm_config as the NVIDIA
-# 7p1d reference (PR #67); only resources, decode capacity (max-num-seqs
-# / cudagraph capture / batched-tokens), and benchmark concurrencies
-# differ.
+# 1k/1k variant of NVIDIA's 8k/1k 1p1d-dep8-tep8 recipe (mirrored from
+# aflowers/gb200-dsv4-recipes branch). Same topology and tuning; only
+# max-model-len shrinks from 9280 (8k+1k+pad) to 3072 (1k+1k+pad). No
+# upstream NVIDIA reference for DSV4-Pro 1k/1k vLLM disagg yet.
+#
+# Topology: 1 prefill (DP=8) + 1 decode (TP=8). 4 nodes total. Targets
+# very low concurrency (1-64).
+#
+# Local deltas vs upstream 8k/1k sibling: same as the 8k/1k recipe — see
+# ../8k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the full deviation list.
 
 model:
   path: "deepseek-v4-pro"
@@ -29,9 +33,9 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 2
-  decode_nodes: 8
+  decode_nodes: 2
   prefill_workers: 1
-  decode_workers: 4
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -44,20 +48,38 @@ backend:
   connector: null
 
   prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
 
   decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
 
   vllm_config:
     prefill:
@@ -70,43 +92,45 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: auto
-      max-num-seqs: 2
-      max-num-batched-tokens: 16384
+      max-model-len: 3072
+      max-num-seqs: 16
+      max-num-batched-tokens: 32768
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.88
+      gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: auto
-      max-num-seqs: 32
-      max-cudagraph-capture-size: 32
-      max-num-batched-tokens: 32
+      max-model-len: 3072
+      max-num-seqs: 64
+      max-cudagraph-capture-size: 64
+      max-num-batched-tokens: 64
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      attention-config: '{"use_fp4_indexer_cache":true}'
+      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","pass_config":{"fuse_allreduce_rms":false}}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
-  concurrencies: "4x8x32x64"
+  concurrencies: "1x4x8x16x32x64"
   req_rate: "inf"
   use_chat_template: false
