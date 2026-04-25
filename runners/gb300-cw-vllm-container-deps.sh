@@ -41,3 +41,20 @@ cd /tmp/dynamo_build/dynamo
 pip install --break-system-packages -e .
 
 echo "Dynamo installed from prebuilt cache ($DYNAMO_HASH)"
+
+# Bump vllm's hardcoded engine-core handshake timeout from 5 min to 30 min.
+# On cw, the DSV4-Pro weights (~850 GB FP4+FP8) live on /mnt/vast NFS and
+# are read in parallel by all 8 DP ranks of the prefill worker, contending
+# for the same NFS bandwidth. Rank 0's model load takes longer than 5 min
+# under that contention, and the other DP ranks then hit
+#   RuntimeError: Did not receive response from front-end process
+#   within 5 minutes
+# in vllm/v1/engine/core.py. The 5 minutes is a module-level constant
+# (HANDSHAKE_TIMEOUT_MINS) with no env override — patch it here.
+VLLM_CORE_PY="/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core.py"
+if [ -f "$VLLM_CORE_PY" ] && grep -q "^HANDSHAKE_TIMEOUT_MINS = 5$" "$VLLM_CORE_PY"; then
+    sed -i 's/^HANDSHAKE_TIMEOUT_MINS = 5$/HANDSHAKE_TIMEOUT_MINS = 30/' "$VLLM_CORE_PY"
+    echo "[vllm-patch] bumped HANDSHAKE_TIMEOUT_MINS 5 -> 30 in $VLLM_CORE_PY"
+else
+    echo "[vllm-patch] WARNING: could not patch HANDSHAKE_TIMEOUT_MINS — vllm version may have changed the constant. Skipping; long model loads may still fail with the front-end handshake error." >&2
+fi
