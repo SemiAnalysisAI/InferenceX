@@ -65,6 +65,7 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       trust-remote-code: true
       tensor-parallel-size: 8
+      moe-dense-tp-size: 1
       moe-runner-backend: "flashinfer_mxfp4"
       chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
@@ -81,6 +82,7 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       trust-remote-code: true
       tensor-parallel-size: 16
+      moe-dense-tp-size: 1
       moe-runner-backend: "flashinfer_mxfp4"
       chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
