@@ -1768,6 +1768,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
 
 - config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Day 0 DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
+    - "Image: rocm/sgl-dev:deepseek-v4-mi35x (from sgl-project/sglang#23608)"
+    - "Model: sgl-project/DeepSeek-V4-Pro-FP8"
+    - "https://github.com/sgl-project/sglang/pull/23608#issuecomment-4311952977"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
+
+- config-keys:
     - dsv4-fp8-h100-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP8 H100 multinode disagg benchmark via dynamo-vllm"
@@ -1775,8 +1784,4 @@
     - "Image: vllm/vllm-openai:deepseekv4-cu129"
     - "Engine flags match H200 single-node recipe (deepseek_v4 tokenizer/parsers, FP8 KV cache, block size 256, prefix caching disabled)"
     - "max-model-len 16384 (H100 80GB KV headroom; H200's 800k does not fit across 2 decode nodes)"
-    - "VLLM_MOE_DP_CHUNK_SIZE=192 and deepep_{high_throughput,low_latency} all2all backends tuned for H100 80GB"
-    - "NixlConnector P<->D KV transfer, dynamo 1.0.1"
-    - "srt-slurm recipes bundled locally at benchmarks/multi_node/srt_slurm_recipes/ until upstreamed"
-    - "Configs: 1k1k conc 4-128, 8k1k conc 4-64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1142
