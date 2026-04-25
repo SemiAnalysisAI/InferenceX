@@ -31,6 +31,14 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+# Mount /mnt/vast/dynamo_cache into every worker container so each
+# rank can pip-install from the wheel that launch_gb300-cw.sh
+# pre-built there. Without this only /mnt/vast/models/<model> is
+# in scope and our setup script errors out with 'prebuilt cache
+# missing'.
+extra_mount:
+  - "/mnt/vast/dynamo_cache:/mnt/vast/dynamo_cache"
+
 # Pin all 10 nodes to the same rack on cw.
 sbatch_directives:
   segment: "10"
