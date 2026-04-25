@@ -9,6 +9,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1131
 
 - config-keys:
+    - dsv4-fp4-b200-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro single-node B200 SGLang benchmark with EAGLE / MTP speculative decoding"
+    - "Mirrors the dsv4-fp4-b200-sglang baseline recipes (low-latency / balanced / max-throughput)"
+    - "MTP tuned per https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4: num-steps=3/4 (low-latency), 1/2 (balanced), disabled at max-throughput"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1145
+
+- config-keys:
     - dsr1-fp8-h100-dynamo-trt
     - dsr1-fp8-h100-dynamo-sglang
   description:
