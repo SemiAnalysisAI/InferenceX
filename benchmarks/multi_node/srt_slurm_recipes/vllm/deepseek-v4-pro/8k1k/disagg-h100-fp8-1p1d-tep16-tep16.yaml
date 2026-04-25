@@ -1,31 +1,26 @@
-# DeepSeek-V4-Pro Disaggregated with vLLM (H100 2P+2D / 32-GPU) — 8k/1k
+# DeepSeek-V4-Pro Disaggregated with vLLM (H100 1P+1D / 32-GPU, cross-node TP=16) — 8k/1k
 #
 # Same engine flags as the 1k1k variant. Only the benchmark block differs
 # (ISL=8192, tighter concurrency sweep due to larger prefill work).
 #
-# See recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-dep16-dep16.yaml
-# for the full rationale (FP8 KV cache, block_size=256, deepseek_v4 parsers,
-# NixlConnector, H100-tuned VLLM_MOE_DP_CHUNK_SIZE=192).
+# See recipes/vllm/deepseek-v4-pro/1k1k/disagg-h100-fp8-1p1d-tep16-tep16.yaml
+# for the full rationale (cross-node TP=16 layout, MultiprocExecutor +
+# torch.distributed PG handshake, --headless secondary node, IB-backed
+# NCCL TP all-reduce, deepseek_v4 parsers, NixlConnector).
 
-name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-dep16-dep16-8k1k"
+name: "deepseek-v4-pro-vllm-disagg-h100-1p1d-tep16-tep16-8k1k"
 
 model:
   path: "dsv4-fp8"
   container: "vllm/vllm-openai:deepseekv4-cu129"
   precision: "fp8"
 
-# Pin ai-dynamo to a commit whose vllm.inputs imports match the DSV4 vLLM
-# wheel. Requires the alec-flowers/srt-slurm fork (NVIDIA/srt-slurm#71),
-# which extends the dynamo config to accept `hash` as well as `version`.
 dynamo:
   hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
   install: true
 
 setup_script: vllm-container-deps.sh
 
-# See 1k1k recipe for slurm.time_limit and health_check rationale — three
-# concurrent matrix jobs starve the same Lustre OSTs and the default 1800s
-# orchestrator deadline fires before any job becomes healthy.
 slurm:
   time_limit: "8:00:00"
 
@@ -51,39 +46,33 @@ backend:
   type: vllm
   connector: nixl
 
-  # See 1k1k recipe for the rationale behind VLLM_USE_NCCL_SYMM_MEM /
-  # NCCL_CUMEM_ENABLE — the DSV4 wheel's NVSHMEM fails IPC bootstrap.
   prefill_environment:
     VLLM_USE_DEEP_GEMM: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     VLLM_SKIP_P2P_CHECK: "1"
-    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_SERVER_DEV_MODE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     NVIDIA_GDRCOPY: "enabled"
     GLOO_SOCKET_IFNAME: "eth0"
     PYTHONUNBUFFERED: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
 
   decode_environment:
     VLLM_USE_DEEP_GEMM: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
-    VLLM_MOE_DP_CHUNK_SIZE: "192"
     VLLM_SKIP_P2P_CHECK: "1"
-    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_SERVER_DEV_MODE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     NVIDIA_GDRCOPY: "enabled"
     GLOO_SOCKET_IFNAME: "eth0"
     PYTHONUNBUFFERED: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
 
   vllm_config:
-    # API-server flags (tokenizer-mode, tool-call-parser, reasoning-parser,
-    # enable-auto-tool-choice) are handled by Dynamo frontend, not the
-    # vLLM engine workers. See 1k1k recipe for rationale.
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -92,18 +81,14 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 1
+      tensor-parallel-size: 16
       pipeline-parallel-size: 1
-      data-parallel-size: 16
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 512
       max-num-batched-tokens: 512
-      # See 1k1k recipe for the rationale; H100 80GB needs ~6 GiB headroom
-      # for DSV4's sparse attention indexer.
-      gpu-memory-utilization: 0.85
+      gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
 
@@ -115,20 +100,16 @@ backend:
       block-size: 256
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 1
+      tensor-parallel-size: 16
       pipeline-parallel-size: 1
-      data-parallel-size: 16
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      enforce-eager: true
       max-model-len: 16384
       max-num-seqs: 512
       max-num-batched-tokens: 512
-      # See 1k1k recipe for the rationale; H100 80GB needs ~6 GiB headroom
-      # for DSV4's sparse attention indexer.
-      gpu-memory-utilization: 0.85
+      gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'
 
 benchmark:
   type: "sa-bench"
@@ -136,6 +117,4 @@ benchmark:
   osl: 1024
   concurrencies: "4x8x16x32x64"
   req_rate: "inf"
-  # See 1k1k recipe rationale — DSV4-Pro tokenizer has no chat_template;
-  # the server handles formatting via --tokenizer-mode deepseek_v4.
   use_chat_template: false
