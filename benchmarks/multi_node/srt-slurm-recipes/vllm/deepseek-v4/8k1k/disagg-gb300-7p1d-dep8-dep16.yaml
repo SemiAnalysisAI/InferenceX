@@ -27,6 +27,8 @@ setup_script: vllm-container-deps.sh
 # force cross-rack allocation; re-check this if topology changes.
 sbatch_directives:
   segment: "18"
+  # Use all node memory; cw default was too tight.
+  mem: "0"
 
 slurm:
   time_limit: "8:00:00"

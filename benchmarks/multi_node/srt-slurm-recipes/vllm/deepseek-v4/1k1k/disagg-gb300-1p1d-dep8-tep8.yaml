@@ -25,6 +25,8 @@ setup_script: vllm-container-deps.sh
 # racks and pay the cross-rack hop on every NIXL KV transfer.
 sbatch_directives:
   segment: "4"
+  # Use all node memory; cw default was too tight.
+  mem: "0"
 
 slurm:
   time_limit: "8:00:00"

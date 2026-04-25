@@ -22,6 +22,8 @@ setup_script: vllm-container-deps.sh
 # Pin all 6 nodes to the same rack on cw.
 sbatch_directives:
   segment: "6"
+  # Use all node memory; cw default was too tight.
+  mem: "0"
 
 slurm:
   time_limit: "8:00:00"

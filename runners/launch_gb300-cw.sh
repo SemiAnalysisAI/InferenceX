@@ -129,10 +129,10 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
-# Auto-emission of `#SBATCH --segment={total_nodes}` is turned off here
-# because each gb300 recipe sets its own `sbatch_directives: { segment: N }`.
-# Auto + per-recipe would emit two `#SBATCH --segment=` lines; explicit-only
-# keeps the directive in the recipe where the topology lives.
+# Auto-emission of #SBATCH --segment={total_nodes} is turned off here
+# because each gb300 recipe sets its own segment via sbatch_directives.
+# (Avoid backticks in this comment — heredoc is unquoted, so backtick
+# content would be command-substituted by bash and produce noisy errors.)
 use_segment_sbatch_directive: false
 EOF
 
