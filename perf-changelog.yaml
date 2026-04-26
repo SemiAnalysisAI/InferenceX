@@ -1840,7 +1840,9 @@
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
     - "Image: lmsysorg/sglang:deepseek-v4-b300"
     - "Model: deepseek-ai/DeepSeek-V4-Pro"
-    - "Two EAGLE chain lengths swept side-by-side per (tp, ep, dp-attn) combo: mtp=3/1/4 (default) and mtp_1=1/1/2 (single-step)"
-    - "Recipe selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
-    - "Configs: 1k1k and 8k1k, tp 4/8 with conc 1-512"
+    - "Four configs dispatched by CONC: A=TP8/mtp (1-8), B=TP4/mtp (16-128), C=DP4/mtp (64-256), D=DP4/mtp_1 (256-512)"
+    - "Overlaps for head-to-head comparison: B/C at conc 64,128; C/D at conc 256"
+    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn"
+    - "EAGLE chain selected by spec-decoding: mtp=3/1/4 vs mtp_1=1/1/2"
+    - "Configs: 1k1k and 8k1k, total 26 sweep entries"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166

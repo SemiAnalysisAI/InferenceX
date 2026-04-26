@@ -1888,32 +1888,27 @@ dsv4-fp4-b300-sglang-mtp:
   precision: fp4
   framework: sglang
   multinode: false
-  # Two EAGLE chain lengths sweep side-by-side per (tp, ep, dp-attn) combo:
-  #   mtp    -> num-steps=3, eagle-topk=1, num-draft-tokens=4 (default chain)
-  #   mtp_1  -> num-steps=1, eagle-topk=1, num-draft-tokens=2 (single-step)
+  # Four configs dispatched by CONC, with overlap at transitions:
+  #   A: TP=8 ep=1, mtp (3/1/4)            -- conc 1-8     (latency-bound)
+  #   B: TP=4 ep=1, mtp (3/1/4)            -- conc 16-128  (TP-only mid batch)
+  #   C: TP=4 ep=4 dp-attn, mtp (3/1/4)    -- conc 64-256  (DP-attn + EP)
+  #   D: TP=4 ep=4 dp-attn, mtp_1 (1/1/2)  -- conc 256-512 (short spec at large batch)
+  # Overlaps: B/C at conc 64,128 (TP-only vs DP-attn EP); C/D at 256 (3/1/4 vs 1/1/2).
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # mtp (3/1/4)
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
-    - { tp: 4, ep: 1, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp }
-    # mtp_1 (1/1/2)
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp_1 }
-    - { tp: 4, ep: 1, conc-start: 1, conc-end: 64, spec-decoding: mtp_1 }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp_1 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 16, conc-end: 128, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp_1 }
   - isl: 8192
     osl: 1024
     search-space:
-    # mtp (3/1/4)
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
-    - { tp: 4, ep: 1, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp }
-    # mtp_1 (1/1/2)
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp_1 }
-    - { tp: 4, ep: 1, conc-start: 1, conc-end: 64, spec-decoding: mtp_1 }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp_1 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 16, conc-end: 128, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp_1 }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
