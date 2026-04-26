@@ -1887,3 +1887,10 @@
     - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
     - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "better performance for dp-attention"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1178
