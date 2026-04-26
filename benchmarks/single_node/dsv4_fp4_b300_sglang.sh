@@ -69,7 +69,6 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 # Defaults; the DP-attn branches below override per recipe.
 MEM_FRACTION_STATIC=0.90
 MAX_RUNNING_REQUESTS="$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))"
-REQUEST_RATE="inf"
 
 if [ "${DP_ATTENTION}" = "true" ] && [ "$CONC" -ge 2048 ]; then
     # Ultra-high-concurrency DP-attention recipe: TP=8, deepep mega_moe backend.
@@ -95,7 +94,6 @@ if [ "${DP_ATTENTION}" = "true" ] && [ "$CONC" -ge 2048 ]; then
     )
     MEM_FRACTION_STATIC=0.87
     MAX_RUNNING_REQUESTS=2560
-    REQUEST_RATE=16
 elif [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
@@ -158,7 +156,6 @@ run_benchmark_serving \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
-    --request-rate "$REQUEST_RATE" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$PWD/"
 
