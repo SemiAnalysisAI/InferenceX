@@ -42,11 +42,7 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MAX_NUM_BATCHED_TOKENS=2048
-else
-    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 < 2048 ? 2048 : ISL * 2 ))
-fi
+MAX_NUM_BATCHED_TOKENS=2048
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
