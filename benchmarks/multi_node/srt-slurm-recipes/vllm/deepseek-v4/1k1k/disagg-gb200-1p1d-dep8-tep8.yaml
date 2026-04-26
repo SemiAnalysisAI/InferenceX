@@ -105,8 +105,9 @@ backend:
       enable-sleep-mode: true
       # CPU/DRAM expert offload — required for fit. Without these the prefill
       # rank reports `Available KV cache memory: -16 GiB` and the engine
-      # refuses to start.
-      numa-bind: true
+      # refuses to start. Numa-bind from upstream is still off because our
+      # NVIDIA/srt-slurm@sa-submission-q2-2026 clone doesn't ship the
+      # vllm_numa_bind_hash_fix.py patch.
       offload-group-size: 3
       offload-num-in-group: 1
       offload-prefetch-step: 2
@@ -140,5 +141,4 @@ benchmark:
   osl: 1024
   concurrencies: "1x4x8x16x32x64"
   req_rate: "inf"
-  tokenizer_mode: "deepseek_v4"
-  use_chat_template: true
+  use_chat_template: false

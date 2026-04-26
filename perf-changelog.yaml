@@ -1840,5 +1840,5 @@
     - "Re-submit DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/gb200-dsv4-recipes (PR #77, supersedes #71)"
     - "8k/1k search-space expanded from 3 topologies to 8: adds 1p4d/1p8d pure-TP-decode (offload), 1p1d/2p1d/3p1d DEP-8 decode, and a 3p1d-dep16-40 wide-decode shape"
     - "Drops local workarounds: numa-bind, benchmark.use_chat_template, and benchmark.tokenizer_mode are restored now that PR #77 ships vllm_numa_bind_hash_fix.py and sa-bench DSV4 tokenizer support"
-    - "1k/1k topologies unchanged (no upstream 1k/1k counterpart); 1k/1k tep8 also re-enables numa-bind + chat template to stay consistent"
+    - "1k/1k topologies unchanged (no upstream 1k/1k counterpart)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
