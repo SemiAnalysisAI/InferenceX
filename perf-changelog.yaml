@@ -1869,3 +1869,11 @@
     - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
 
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Recipe-per-CONC split for DeepSeek-V4-Pro on B300: low-latency (TP=8, EP=1), balanced (TP=4, EP=1) at conc=32, max-throughput (TP=4, EP=4, DP-attn + DeepEP) at conc=512, for both 1k1k and 8k1k"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
+    - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
+
