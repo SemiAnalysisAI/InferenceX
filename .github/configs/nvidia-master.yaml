@@ -1854,13 +1854,18 @@ dsv4-fp4-b300-sglang:
   # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
   # while low-latency leaves ep_size at the default of 1.
   seq-len-configs:
-  # NOTE: 1k1k and other 8k1k configs temporarily removed for conc=2048 experiment.
-  # Restore after experiment:
-  #   1k1k: tp8/ep1/conc1, tp4/ep1/conc32, tp4/ep4/dpa/conc512
-  #   8k1k: tp8/ep1/conc1, tp4/ep1/conc32, tp4/ep4/dpa/conc512
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
