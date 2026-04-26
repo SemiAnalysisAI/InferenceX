@@ -1882,6 +1882,9 @@ dsv4-fp4-b300-sglang:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+    # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
+    - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
+    - { tp: 4, ep: 8, dp-attn: true, conc-start: 1024, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:

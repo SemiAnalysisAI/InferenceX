@@ -1901,3 +1901,11 @@
     - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.09, tokenizer-workers 8"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "1k1k conc=512/1024: add mega_moe deepep backend with cuda-graph-max-bs 550, chunked-prefill 16384, max-running-requests 768"
+    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179

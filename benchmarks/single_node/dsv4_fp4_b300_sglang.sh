@@ -75,7 +75,24 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    if [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ]; then
+    # ep=8 in the yaml signals the mega_moe deepep backend for medium-conc
+    # (actual ep_size is still tp via deepep; ep=8 is a naming convention).
+    if [ "${EP_SIZE}" = "8" ]; then
+        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=550
+        PARALLEL_ARGS=(
+            --dp-size "$TP"
+            --enable-dp-attention
+            --moe-a2a-backend deepep
+            --cuda-graph-max-bs 550
+            --deepep-config "$DEEPEP_CONFIG"
+            --chunked-prefill-size 16384
+            --enable-prefill-delayer
+        )
+        MAX_RUNNING_REQUESTS=768
+        MEM_FRACTION_STATIC=0.94
+    elif [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ]; then
         export SGLANG_LOG_FORWARD_ITERS=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
         export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
