@@ -69,30 +69,36 @@ fi
 )
 
 # Install triton_kernels. The release atom0.1.2.post image cleans up
-# /triton-test/ from the build stage, so it's typically absent; fall back to
-# upstream triton-lang/triton at a pinned SHA chosen for compatibility with
-# both PR #650 and the image's installed triton:
-#   * CDNA4MXScaleLayout (renamed from GFX950MXScaleLayout) must be present,
-#     which means SHAs after 2026-01-10 (commit c69c3a95).
-#   * triton_kernels' target_info.py must NOT import is_hip_gfx1250 — that
-#     import was added on 2026-03-05 (commit 11aac682) and the image's
-#     triton is older, so it ImportErrors at module load.
-# d28db13d (parent of 11aac682) is the latest SHA satisfying both. Bump
-# this only after the image's triton is upgraded to one that has
-# is_hip_gfx1250 in triton.language.target_info.
-# triton_kernels itself is a self-contained subpackage (pyproject deps:
-# numpy, pytest), so installing it does not perturb the image's triton.
-TRITON_KERNELS_SHA="d28db13de0cf7079c5db00e37986916f96f273f2"
+# /triton-test/ from the build stage, so it's typically absent. Fall back
+# to ROCm/triton's RI3.5.x branch — NOT triton-lang/triton upstream:
+#
+#   * Upstream triton-lang/triton refactored the matmul_ogs module into
+#     matmul.py (and removed routing.py). PR #650's fused_moe_triton.py
+#     imports `from triton_kernels.matmul_ogs import matmul_ogs,
+#     PrecisionConfig` and `from triton_kernels.routing import routing`,
+#     which only resolve against the ROCm fork's release-internal branch.
+#   * ROCm/triton RI3.5.x at e491726 has matmul_ogs.py (with PrecisionConfig
+#     and matmul_ogs), routing.py, CDNA4MXScaleLayout in layout.py (the
+#     class PR #650 imports), and target_info.py that imports only is_hip /
+#     is_hip_cdna3 / is_hip_cdna4 — no is_hip_gfx1250, which the image's
+#     bundled triton would reject.
+#
+# triton_kernels is a self-contained subpackage (pyproject deps: numpy,
+# pytest); installing it does not perturb the image's triton itself.
+# Bump only after AMD ships a newer ATOM image whose bundled triton
+# exports is_hip_gfx1250, at which point we can move to a newer RI branch.
+TRITON_KERNELS_SHA="e49172654d55f460c6fc24d77a3ea8a286bcaee8"
 if [ -d /triton-test/python/triton_kernels/ ]; then
     pip install --no-deps -e /triton-test/python/triton_kernels/
 else
-    TRITON_DIR="/tmp/triton-upstream"
+    TRITON_DIR="/tmp/rocm-triton"
     if [ ! -d "$TRITON_DIR/.git" ]; then
-        git clone --filter=blob:none https://github.com/triton-lang/triton.git "$TRITON_DIR"
+        git clone --filter=blob:none https://github.com/ROCm/triton.git "$TRITON_DIR"
     fi
     (
         cd "$TRITON_DIR"
-        git fetch --depth=1 origin "$TRITON_KERNELS_SHA" 2>/dev/null || git fetch origin
+        git fetch --depth=1 origin "$TRITON_KERNELS_SHA" 2>/dev/null \
+            || git fetch --depth=1 origin RI3.5.x
         git checkout --force "$TRITON_KERNELS_SHA"
         pip install --no-deps -e python/triton_kernels/
     )
