@@ -205,13 +205,15 @@ set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
-# support yet (deferred to a follow-up PR). max-num-seqs uses the ATOM
-# default (512) — matches every other ATOM benchmark script in the repo.
-# The PR1 kv_cache[:1,...] hardcode in deepseek_v4.py means any forward
-# with batch>1 silently corrupts non-slot-0 lanes; this risk activates
-# whenever the scheduler assembles batch>1, regardless of the explicit
-# max-num-seqs value, so pinning it to 4 (the PR's offline repro value)
-# offered no protective benefit. eval (gsm8k) at conc>1 is the canary.
+# support yet (deferred to a follow-up PR). max-num-seqs is sized to the
+# client concurrency with a floor at 4 — the ATOM default (512) makes the
+# KV/GDN-mamba allocator overshoot the GPU budget ("GDN mamba tensor
+# exceeds available KV budget"), and using 1 hangs warmup at 0% GPU. 4
+# is the minimum we've seen complete warmup successfully (also the PR's
+# offline repro value). The PR1 kv_cache[:1,...] hardcode in
+# deepseek_v4.py means any forward with batch>1 silently corrupts
+# non-slot-0 lanes; eval (gsm8k) at conc>1 is the canary.
+MAX_NUM_SEQS=$(( CONC < 4 ? 4 : CONC ))
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -219,6 +221,7 @@ python3 -m atom.entrypoints.openai_server \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --block-size $BLOCK_SIZE \
     --enforce-eager \
+    --max-num-seqs $MAX_NUM_SEQS \
     --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
