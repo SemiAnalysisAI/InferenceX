@@ -1489,3 +1489,34 @@ dsv4-fp8-mi355x-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
+# PR1 of the ATOM DSv4 series — single-sequence only (kv_cache[:1,...]
+# hardcode), --enforce-eager required, ATOM_USE_TRITON_MOE=1 required on
+# gfx950. Image is the standard atom0.1.2.post MI355X base (matching
+# qwen3.5-fp8-mi355x-atom); the DSv4 PR is overlaid at runtime by
+# benchmarks/single_node/dsv4_fp4_mi355x_atom.sh at a pinned SHA. Sweep
+# will expand once ATOM PR3 (multi-request) and PR4 (CUDAGraph) land.
+dsv4-fp4-mi355x-atom:
+  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 8, ep: 1, conc-start: 16, conc-end: 16 }
+    - { tp: 8, ep: 1, conc-start: 32, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 8, ep: 1, conc-start: 16, conc-end: 16 }
+    - { tp: 8, ep: 1, conc-start: 32, conc-end: 32 }
