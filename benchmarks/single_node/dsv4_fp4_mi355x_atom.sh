@@ -155,9 +155,16 @@ except ModuleNotFoundError as e:
     sys.exit(f"FATAL: triton_kernels not importable. PR #650's MoE path needs it. Error: {e}")
 PYEOF
 
-# Calculate max-model-len based on ISL and OSL
+# DSv4-Pro's native max_position_embeddings is 1,048,576 (1M tokens), so we
+# can't leave --max-model-len blank for 1k1k the way the dsr1-atom scripts
+# do — ATOM would allocate KV cache for 1M context and OOM during warmup
+# (~240 GiB consumed before the dummy forward, then sparse_attn's
+# torch.where wants another ~36 GiB and there isn't 36 GiB free). DSR1's
+# native context is only 128k, which is why the same blank pattern works
+# there. Set 1k1k explicitly; 8k1k retains the existing 10240 cap that's
+# already running successfully.
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len 2304 "
 else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
@@ -180,9 +187,13 @@ set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
-# support yet (deferred to a follow-up PR). --max-num-seqs 1 caps the path
-# at the single-sequence ceiling that PR1 supports — the model_runner has a
-# hardcoded kv_cache[:1,...] that silently corrupts state for batch>1.
+# support yet (deferred to a follow-up PR). --max-num-seqs 4 matches the PR's
+# verified offline repro command (atom.examples.simple_inference) — using 1
+# left the warmup phase hung at 0% GPU even though the YAML constrains the
+# client-side concurrency to 1. The single-sequence kv_cache[:1,...] hardcode
+# in the model is still the actual correctness ceiling, but with max-concurrency
+# pinned to 1 on the client (via the CONC=1 sanity check above) the server
+# never sees a real batch>1 forward.
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -190,7 +201,7 @@ python3 -m atom.entrypoints.openai_server \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --block-size $BLOCK_SIZE \
     --enforce-eager \
-    --max-num-seqs 1 > $SERVER_LOG 2>&1 &
+    --max-num-seqs 4 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
