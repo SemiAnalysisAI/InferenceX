@@ -10,8 +10,8 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 #                      true  -> deepep + mega_moe + chunked-prefill 32768
 #                      false -> flashinfer_mxfp4  + chunked-prefill 8192
 #
-# EAGLE/MTP speculative-decoding flags are hardcoded to (4, 1, 5): num-steps=4,
-# eagle-topk=1, num-draft-tokens=5. Same chain across all CONC bands.
+# EAGLE/MTP speculative-decoding flags are hardcoded to (3, 1, 4): num-steps=3,
+# eagle-topk=1, num-draft-tokens=4. Same chain across all CONC bands.
 check_env_vars \
     MODEL \
     TP \
@@ -69,9 +69,9 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 # MTP (EAGLE) speculative-decoding flags applied unconditionally on every recipe.
 SPEC_FLAGS=(
     --speculative-algorithm EAGLE
-    --speculative-num-steps 4
+    --speculative-num-steps 3
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 5
+    --speculative-num-draft-tokens 4
 )
 
 if [ "${DP_ATTENTION}" = "true" ]; then
