@@ -125,7 +125,6 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --disable-radix-cache \
     "${RECIPE_FLAGS[@]}" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
