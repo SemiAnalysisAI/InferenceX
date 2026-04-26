@@ -49,7 +49,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
-    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+    MAX_NUM_BATCHED_TOKENS=${ISL}
 else
     MAX_NUM_BATCHED_TOKENS=2048
 fi
