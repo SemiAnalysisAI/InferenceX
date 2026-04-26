@@ -1838,7 +1838,7 @@ dsr1-fp8-b300-sglang:
 # until a B300-specific recipe ships. Prefix caching is disabled.
 # Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:d44a693204aea7995349a76d400190fbeb1662379fe874e81d151bdbe85e2234
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300

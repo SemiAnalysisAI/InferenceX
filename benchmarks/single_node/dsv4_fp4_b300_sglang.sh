@@ -65,7 +65,34 @@ fi
 # mega_moe optimizations; single-instance uses flashinfer_mxfp4.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-if [ "${DP_ATTENTION}" = "true" ]; then
+# Default; the CONC=512 DP-attn branch below overrides to 0.94.
+MEM_FRACTION_STATIC=0.90
+
+if [[ "$CONC" == "512" ]] && [ "${DP_ATTENTION}" = "true" ]; then
+    # Empirically tuned recipe for the highest-concurrency DP-attn point.
+    # Note vs the standard DP-attn path: deepgemm + hash_mega_moe disabled,
+    # flashinfer_mxfp4 used as the runner backend, prefill chunks halved to
+    # 16384, prefill-delayer turned on, mem fraction bumped to 0.94.
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    PARALLEL_ARGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --moe-runner-backend flashinfer_mxfp4
+        --disable-flashinfer-autotune
+        --deepep-config "$DEEPEP_CONFIG"
+        --chunked-prefill-size 16384
+        --enable-prefill-delayer
+    )
+    MEM_FRACTION_STATIC=0.94
+    # Override the ISL=1024 → 0.5 default; this recipe runs SWA at 0.1.
+    SWA_FULL_TOKENS_RATIO=0.1
+elif [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
     export SGLANG_OPT_USE_FAST_MASK_EP=1
@@ -104,7 +131,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --trust-remote-code \
     --tp $TP \
     --max-running-requests "$((CONC * 3 / 2))" \
-    --mem-fraction-static 0.90 \
+    --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
