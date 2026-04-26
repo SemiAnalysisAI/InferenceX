@@ -90,6 +90,7 @@ if [ "${DP_ATTENTION}" = "true" ] && [ "$CONC" -ge 2048 ]; then
         --cuda-graph-max-bs 288
         --deepep-config "$DEEPEP_CONFIG"
         --chunked-prefill-size 65536
+        --tokenizer-worker-num 4
         --enable-prefill-delayer
     )
     MEM_FRACTION_STATIC=0.87
