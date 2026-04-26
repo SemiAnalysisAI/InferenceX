@@ -1838,3 +1838,4 @@
     - dsv4-fp4-b300-sglang
   description:
     - "Retrigger DSV4 B300 DPA runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1161
