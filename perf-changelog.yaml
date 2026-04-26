@@ -1876,4 +1876,5 @@
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
     - "Image pinned to lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b"
     - "Adds SGLANG_OPT_* env knobs (SWA_SPLIT_LEAF_ON_INSERT, USE_JIT_NORM, USE_JIT_INDEXER_METADATA, USE_TOPK_V2, USE_CUSTOM_ALL_REDUCE_V2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1187
 
