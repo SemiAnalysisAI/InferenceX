@@ -1670,7 +1670,7 @@ dsr1-fp4-b200-sglang:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
 
 dsv4-fp4-b200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-blackwell
+  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1690,7 +1690,7 @@ dsv4-fp4-b200-sglang:
     osl: 1024
     search-space:
     # low-latency
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
     # max-throughput
@@ -1699,7 +1699,7 @@ dsv4-fp4-b200-sglang:
     osl: 1024
     search-space:
     # low-latency
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
     # max-throughput
@@ -1838,7 +1838,7 @@ dsr1-fp8-b300-sglang:
 # until a B300-specific recipe ships. Prefix caching is disabled.
 # Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:deepseek-v4-b300
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -1857,21 +1857,45 @@ dsv4-fp4-b300-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    # low-latency
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    # balanced
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
-    # max-throughput
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
-    # low-latency
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    # balanced
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
-    # max-throughput
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+
+# DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
+# selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
+# DP_ATTENTION:
+#   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
+#   dp-attn: true  -> DP-attn + deepep mega_moe + chunked-prefill 32768
+# `ep` is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
+# while the TP-only path leaves ep_size at the default of 1.
+dsv4-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  # Three CONC bands sweep with EAGLE/MTP (3/1/4) on top:
+  #   A: TP=8 ep=1            -- conc 1-8    (latency-bound, full TP)
+  #   B: TP=4 ep=1            -- conc 16-128 (TP-only, mid batch)
+  #   C: TP=4 ep=4 dp-attn    -- conc 64-512 (DP-attn + EP, large batch)
+  # Overlap: B/C at conc 64,128 (TP-only vs DP-attn EP head-to-head).
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
