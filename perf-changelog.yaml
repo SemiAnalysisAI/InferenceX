@@ -1903,3 +1903,11 @@
     - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
 
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Pass --dsv4 (PR #1153) to run_benchmark_serving so prompts go through the DeepSeek-V4 chat template (encoding_dsv4.py)"
+    - "Restores AGENTS.md compliance: every MTP script must benchmark against chat-formatted inputs; PR #1166 had to drop --use-chat-template because the DSv4-Pro tokenizer has no jinja template, which is exactly what --dsv4 sidesteps"
+    - "EAGLE acceptance rate is sensitive to input distribution; raw random tokens silently regress acceptance vs. chat-framed prompts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
