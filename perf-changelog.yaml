@@ -1821,14 +1821,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
 
 - config-keys:
-    - dsv4-fp4-b200-vllm
-  description:
-    - "Add DeepSeek-V4-Pro single-node B200 vLLM benchmark derived from B200 pareto sweep"
-    - "ISL=1024: TP8 conc 4-128; DP8 (dp-attn) conc 256-4096"
-    - "ISL=8192: TP8 conc 4-32; DP8 (dp-attn) conc 64-1024"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
-
-- config-keys:
     - dsv4-fp8-mi355x-sglang
   description:
     - "Drop --mem-fraction-static 0.88 and --max-total-tokens from dsv4_fp8_mi355x.sh"
@@ -1842,3 +1834,11 @@
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1159
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro single-node B200 vLLM benchmark derived from B200 pareto sweep"
+    - "ISL=1024: TP8 conc 4-128; DP8 (dp-attn) conc 256-4096"
+    - "ISL=8192: TP8 conc 4-32; DP8 (dp-attn) conc 64-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
