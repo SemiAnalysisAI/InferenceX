@@ -1872,7 +1872,7 @@
 - config-keys:
     - dsv4-fp4-b200-sglang
   description:
-    - "Recipe-per-CONC dispatch for DeepSeek-V4-Pro on B200, selected inside dsv4_fp4_b200.sh by DP_ATTENTION knob: low-latency (TP=8, EP=1) for conc 1-32, balanced (TP=8, EP=8, DP-attn) for conc 64-128, max-throughput (TP=8, EP=8, DP-attn + DeepEP) for conc 256-{512,1024}"
+    - "Two-recipe dispatch for DeepSeek-V4-Pro on B200, selected by DP_ATTENTION knob: low-latency (TP=8, EP=1, flashinfer_mxfp4) for conc 1-32, DP-attention (TP=8, EP=8, DP-attn + DeepEP + mega_moe) for conc 64-{512,1024}. The DP-attention recipe uses identical flags across balanced and max-throughput CONC ranges; only --max-running-requests scales with CONC."
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
     - "Image pinned to lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b"
     - "Adds SGLANG_OPT_* env knobs (SWA_SPLIT_LEAF_ON_INSERT, USE_JIT_NORM, USE_JIT_INDEXER_METADATA, USE_TOPK_V2, USE_CUSTOM_ALL_REDUCE_V2)"
