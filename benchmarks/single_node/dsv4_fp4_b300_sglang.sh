@@ -110,7 +110,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --max-running-requests "$((CONC * 3 / 2))" \
+    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
