@@ -43,6 +43,14 @@ mkdir -p "$SQUASH_DIR"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
+# Some images were imported with '+' separators (enroot's default) rather
+# than '_'. Check for the '+' variant and symlink so both names resolve.
+SQUASH_FILE_PLUS="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+if [ ! -f "$SQUASH_FILE" ] && [ -f "$SQUASH_FILE_PLUS" ]; then
+    ln -sf "$SQUASH_FILE_PLUS" "$SQUASH_FILE"
+    echo "[squash] symlinked $SQUASH_FILE -> $SQUASH_FILE_PLUS"
+fi
+
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
