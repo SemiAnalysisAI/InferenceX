@@ -1780,13 +1780,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1131
 
 - config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
-    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
-
-- config-keys:
     - dsv4-fp8-mi355x-sglang
   description:
     - "Day 0 DeepSeek-V4-Pro FP8 MI355X SGLang benchmark"
@@ -1857,26 +1850,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1170
 
 - config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
-    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
-
-- config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "Floor --max-running-requests at 8 in dsv4_fp4_b300_sglang.sh so low-CONC sweeps don't drop below the queue depth needed for stable benchmarking (CONC * 3 / 2 still applies above CONC=5)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1173
-
-- config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "better performance for dp-attention"
-    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1174
-
-- config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
@@ -1889,11 +1862,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166
 
 - config-keys:
-    - dsv4-fp4-b300-sglang
+   - dsv4-fp4-b300-vllm
   description:
-    - "better performance for dp-attention"
-    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1178
+    - "Update search space based on B300 pareto sweep results"
+    - "ISL=1024: TP4 conc 4-128; DP4 (dp-attn) conc 256-4096; DP8 (dp-attn) conc 2048-8192"
+    - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang
@@ -1902,4 +1876,4 @@
     - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell"
     - "Topology: 1P + 1D, both TP=4 on a single GB300; MXFP4 MoE kernels, NIXL KV transfer"
     - "Recipe ported from NVIDIA/srt-slurm PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1169
