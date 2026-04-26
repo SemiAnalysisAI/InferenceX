@@ -297,6 +297,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
+                    chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
+                    swa_full_tokens_ratio = bmk.get(Fields.SWA_FULL_TOKENS_RATIO.value)
 
                     # Apply max-tp filter if specified
                     if args.max_tp is not None:
@@ -363,6 +366,12 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 entry[Fields.EP.value] = ep
                             if dp_attn is not None:
                                 entry[Fields.DP_ATTN.value] = dp_attn
+                            if moe_runner_backend is not None:
+                                entry[Fields.MOE_RUNNER_BACKEND.value] = str(moe_runner_backend)
+                            if chunked_prefill_size is not None:
+                                entry[Fields.CHUNKED_PREFILL_SIZE.value] = str(chunked_prefill_size)
+                            if swa_full_tokens_ratio is not None:
+                                entry[Fields.SWA_FULL_TOKENS_RATIO.value] = str(swa_full_tokens_ratio)
 
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
@@ -511,6 +520,9 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
             ep = highest_tp_bmk.get(Fields.EP.value)
             dp_attn = highest_tp_bmk.get(Fields.DP_ATTN.value)
             spec_decoding = highest_tp_bmk.get(Fields.SPEC_DECODING.value, "none")
+            moe_runner_backend = highest_tp_bmk.get(Fields.MOE_RUNNER_BACKEND.value)
+            chunked_prefill_size = highest_tp_bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
+            swa_full_tokens_ratio = highest_tp_bmk.get(Fields.SWA_FULL_TOKENS_RATIO.value)
 
             for node in runner_nodes:
                 entry = {
@@ -525,6 +537,9 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.TP.value: highest_tp,
                     Fields.EP.value: ep if ep is not None else 1,
                     Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                    Fields.MOE_RUNNER_BACKEND.value: str(moe_runner_backend) if moe_runner_backend is not None else '',
+                    Fields.CHUNKED_PREFILL_SIZE.value: str(chunked_prefill_size) if chunked_prefill_size is not None else '',
+                    Fields.SWA_FULL_TOKENS_RATIO.value: str(swa_full_tokens_ratio) if swa_full_tokens_ratio is not None else '',
                     Fields.SPEC_DECODING.value: spec_decoding,
                     Fields.CONC.value: conc_value,
                     Fields.MAX_MODEL_LEN.value: 2048,
@@ -628,6 +643,9 @@ def generate_test_config_sweep(args, all_config_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
+                    chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
+                    swa_full_tokens_ratio = bmk.get(Fields.SWA_FULL_TOKENS_RATIO.value)
 
                     # Get concurrency values
                     if Fields.CONC_LIST.value in bmk:
@@ -667,6 +685,9 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                             Fields.EP.value: ep if ep is not None else 1,
                             Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                            Fields.MOE_RUNNER_BACKEND.value: str(moe_runner_backend) if moe_runner_backend is not None else '',
+                            Fields.CHUNKED_PREFILL_SIZE.value: str(chunked_prefill_size) if chunked_prefill_size is not None else '',
+                            Fields.SWA_FULL_TOKENS_RATIO.value: str(swa_full_tokens_ratio) if swa_full_tokens_ratio is not None else '',
                             Fields.SPEC_DECODING.value: spec_decoding,
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
