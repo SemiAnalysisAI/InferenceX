@@ -1838,11 +1838,10 @@
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
-    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:d44a693204aea7995349a76d400190fbeb1662379fe874e81d151bdbe85e2234 (pinned for deep_gemm transform_weights_for_mega_moe support)"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3 (pinned for deep_gemm transform_weights_for_mega_moe support; same digest as PR #1158)"
     - "Model: deepseek-ai/DeepSeek-V4-Pro"
-    - "Four configs dispatched by CONC: A=TP8/mtp (1-8), B=TP4/mtp (16-128), C=DP4/mtp (64-256), D=DP4/mtp_1 (256-512)"
-    - "Overlaps for head-to-head comparison: B/C at conc 64,128; C/D at conc 256"
-    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn"
-    - "EAGLE chain selected by spec-decoding: mtp=3/1/4 vs mtp_1=1/1/2"
-    - "Configs: 1k1k and 8k1k, total 26 sweep entries"
+    - "EAGLE/MTP flags hardcoded in script: num-steps=3, eagle-topk=1, num-draft-tokens=4"
+    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
+    - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
+    - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166

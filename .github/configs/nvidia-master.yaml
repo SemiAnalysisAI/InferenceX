@@ -1881,34 +1881,31 @@ dsv4-fp4-b300-sglang:
 # `ep` is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
 # while the TP-only path leaves ep_size at the default of 1.
 dsv4-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:d44a693204aea7995349a76d400190fbeb1662379fe874e81d151bdbe85e2234
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
   precision: fp4
   framework: sglang
   multinode: false
-  # Four configs dispatched by CONC, with overlap at transitions:
-  #   A: TP=8 ep=1, mtp (3/1/4)            -- conc 1-8     (latency-bound)
-  #   B: TP=4 ep=1, mtp (3/1/4)            -- conc 16-128  (TP-only mid batch)
-  #   C: TP=4 ep=4 dp-attn, mtp (3/1/4)    -- conc 64-256  (DP-attn + EP)
-  #   D: TP=4 ep=4 dp-attn, mtp_1 (1/1/2)  -- conc 256-512 (short spec at large batch)
-  # Overlaps: B/C at conc 64,128 (TP-only vs DP-attn EP); C/D at 256 (3/1/4 vs 1/1/2).
+  # Three CONC bands sweep with EAGLE/MTP (3/1/4) on top:
+  #   A: TP=8 ep=1            -- conc 1-8    (latency-bound, full TP)
+  #   B: TP=4 ep=1            -- conc 16-128 (TP-only, mid batch)
+  #   C: TP=4 ep=4 dp-attn    -- conc 64-512 (DP-attn + EP, large batch)
+  # Overlap: B/C at conc 64,128 (TP-only vs DP-attn EP head-to-head).
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 16, conc-end: 128, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp_1 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 512, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 16, conc-end: 128, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp_1 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e

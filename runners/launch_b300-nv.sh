@@ -259,7 +259,7 @@ else
         export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == mtp* ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else)
