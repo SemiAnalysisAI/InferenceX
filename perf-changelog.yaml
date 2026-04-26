@@ -1784,7 +1784,7 @@
   description:
     - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
 
 - config-keys:
     - dsv4-fp8-mi355x-sglang
