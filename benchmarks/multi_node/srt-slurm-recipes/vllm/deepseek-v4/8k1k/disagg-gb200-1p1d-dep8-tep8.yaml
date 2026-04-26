@@ -1,28 +1,19 @@
 name: "dsv4-vllm-disagg-gb200-1p1d-dep8-tep8"
 
-# Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch:
+# Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
 #   recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-1p1d-dep8-tep8.yaml
 #
-# Topology: 1 prefill (DP=8) + 1 decode (TP=8). 4 nodes total. Targets
-# very low concurrency (1-64) where TEP-style decode (TP-sharded
-# attention + EP'd experts within one worker) gives the best per-user
-# latency.
+# Topology: 1 prefill (DEP=8) + 1 decode (TEP=8). 4 nodes total. Targets
+# very low concurrency (1-64) where TP-sharded attention + EP'd experts
+# in one decode worker gives the best per-user latency.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     our launch script's SRT_SLURM_MODEL_PREFIX.
-#   * numa-bind dropped — our clone is NVIDIA/srt-slurm@sa-submission-q2-2026
-#     which doesn't ship the vllm_numa_bind_hash_fix.py patch. CPU/DRAM
-#     expert offload (offload-group-size/-num-in-group/-prefetch-step) is
-#     KEPT — it's load-bearing here, see the comment in vllm_config.prefill.
-#   * benchmark.use_chat_template: true -> false; benchmark.tokenizer_mode
-#     dropped. Both require PR #68 sa-bench tokenizer support that our
-#     pinned srtctl version doesn't have. The recipe-level
-#     `tokenizer-mode: deepseek_v4` for workers stays.
-#   * Container kept on the floating tag (`:deepseekv4-cu130`) instead of
-#     the upstream sha256 pin.
-#   * health_check / slurm.time_limit added — we observed cold-cache
-#     Lustre loads exceeding the default 1800s deadline.
+#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
+#   * model.container kept on the floating :deepseekv4-cu130 tag instead
+#     of the upstream sha256 pin (matches our enroot-import flow).
+#   * slurm.time_limit: "8:00:00" added; health_check.max_attempts bumped
+#     360 -> 1440 to absorb cold-cache /mnt/numa1 model loads.
 
 model:
   path: "deepseek-v4-pro"
@@ -51,15 +42,12 @@ resources:
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
-
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-
 backend:
   type: vllm
   connector: null
-
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -77,7 +65,6 @@ backend:
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
-
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -93,7 +80,6 @@ backend:
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
-
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -116,16 +102,12 @@ backend:
       gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      # CPU/DRAM expert offload — required for fit. Without these the prefill
-      # rank reports `Available KV cache memory: -16 GiB` and the engine
-      # refuses to start. Numa-bind from upstream is still off because our
-      # NVIDIA/srt-slurm@sa-submission-q2-2026 clone doesn't ship the
-      # vllm_numa_bind_hash_fix.py patch.
+      numa-bind: true
       offload-group-size: 3
       offload-num-in-group: 1
       offload-prefetch-step: 2
+      # offload-params: "w13_weight w2_weight w13_weight_scale w2_weight_scale wq_b wo_a wo_b shared_experts"
       tokenizer-mode: deepseek_v4
-
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -147,11 +129,11 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1x4x8x16x32x64"
+  concurrencies: "1x2x4x8x16x32x64"
   req_rate: "inf"
-  use_chat_template: false
+  tokenizer_mode: "deepseek_v4"
+  use_chat_template: true
