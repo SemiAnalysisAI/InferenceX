@@ -1510,7 +1510,13 @@ dsv4-fp4-mi355x-atom:
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 8, ep: 1, conc-start: 16, conc-end: 16 }
+    - { tp: 8, ep: 1, conc-start: 32, conc-end: 32 }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 8, ep: 1, conc-start: 16, conc-end: 16 }
+    - { tp: 8, ep: 1, conc-start: 32, conc-end: 32 }

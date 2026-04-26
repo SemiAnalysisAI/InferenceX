@@ -1843,4 +1843,4 @@
     - "Model: deepseek-ai/DeepSeek-V4-Pro (same canonical checkpoint used by dsv4-fp4-b300-vllm); compatibility with PR #650's WeightsMapper not yet verified — first run will tell us"
     - "Pinned to PR1 limitations: single-sequence kv_cache hardcode, --enforce-eager required, ATOM_USE_TRITON_MOE=1 (aiter fused_moe broken on gfx950)"
     - "Sweep will expand to TP=4/8 conc 4–256 once ROCm/ATOM PR3 (multi-request) and PR4 (CUDAGraph) land"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TODO
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1165

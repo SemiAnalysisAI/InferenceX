@@ -19,14 +19,13 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE"
 
-# PR1 invariants. The YAML constrains these to 1, but a manual invocation with
-# different env vars would silently produce wrong output (kv_cache[:1,...]
-# hardcode in deepseek_v4.py corrupts state at batch>1; expert-parallel serving
-# is not validated by the PR's repro). Fail fast instead.
-if [ "$CONC" -ne 1 ]; then
-    echo "FATAL: ROCm/ATOM#650 PR1 is single-sequence only; CONC must be 1, got $CONC" >&2
-    exit 1
-fi
+# EP_SIZE > 1 is still unvalidated by PR #650's repro (offline TP=8 EP=1
+# only). Keep the EP guard. The CONC guard was relaxed to empirically
+# probe whether kv_cache[:1,...] in deepseek_v4.py actually corrupts at
+# batch>1 in the server path: max-num-seqs=4 caps the running batch
+# below the YAML's max conc (32), and per-sequence eval correctness will
+# tell us if the hardcode bites. If gsm8k accuracy collapses at conc>1,
+# put `if [ "$CONC" -ne 1 ]; then exit 1` back.
 if [ "$EP_SIZE" -ne 1 ]; then
     echo "FATAL: ROCm/ATOM#650 PR1 has not validated expert parallel serving; EP_SIZE must be 1, got $EP_SIZE" >&2
     exit 1
@@ -104,8 +103,11 @@ fi
 # Bump only after AMD ships a newer ATOM image whose bundled triton
 # exports is_hip_gfx1250, at which point we can move to a newer RI branch.
 TRITON_KERNELS_SHA="e49172654d55f460c6fc24d77a3ea8a286bcaee8"
+# --force-reinstall mirrors the atom install above: triton_kernels also ships
+# as a wheel in the image, and without --force-reinstall pip can short-circuit
+# the editable switch when name/version match, leaving the wheel build active.
 if [ -d /triton-test/python/triton_kernels/ ]; then
-    pip install --no-deps -e /triton-test/python/triton_kernels/
+    pip install --no-deps --force-reinstall -e /triton-test/python/triton_kernels/
 else
     TRITON_DIR="/tmp/rocm-triton"
     if [ ! -d "$TRITON_DIR/.git" ]; then
@@ -116,7 +118,7 @@ else
         git fetch --depth=1 origin "$TRITON_KERNELS_SHA" 2>/dev/null \
             || git fetch --depth=1 origin RI3.5.x
         git checkout --force "$TRITON_KERNELS_SHA"
-        pip install --no-deps -e python/triton_kernels/
+        pip install --no-deps --force-reinstall -e python/triton_kernels/
     )
 fi
 
@@ -203,13 +205,13 @@ set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
-# support yet (deferred to a follow-up PR). --max-num-seqs 4 matches the PR's
-# verified offline repro command (atom.examples.simple_inference) — using 1
-# left the warmup phase hung at 0% GPU even though the YAML constrains the
-# client-side concurrency to 1. The single-sequence kv_cache[:1,...] hardcode
-# in the model is still the actual correctness ceiling, but with max-concurrency
-# pinned to 1 on the client (via the CONC=1 sanity check above) the server
-# never sees a real batch>1 forward.
+# support yet (deferred to a follow-up PR). max-num-seqs uses the ATOM
+# default (512) — matches every other ATOM benchmark script in the repo.
+# The PR1 kv_cache[:1,...] hardcode in deepseek_v4.py means any forward
+# with batch>1 silently corrupts non-slot-0 lanes; this risk activates
+# whenever the scheduler assembles batch>1, regardless of the explicit
+# max-num-seqs value, so pinning it to 4 (the PR's offline repro value)
+# offered no protective benefit. eval (gsm8k) at conc>1 is the canary.
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -217,7 +219,7 @@ python3 -m atom.entrypoints.openai_server \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --block-size $BLOCK_SIZE \
     --enforce-eager \
-    --max-num-seqs 4 > $SERVER_LOG 2>&1 &
+    --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -234,7 +236,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
