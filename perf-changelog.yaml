@@ -1833,3 +1833,12 @@
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1160
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Replace 8k1k recipes with NVIDIA/srt-slurm PR #78 configs (PD tuning + FlashInfer all2all)"
+    - "Old topologies: 1p1d-dep8-tep8 (c1-64), 3p1d-dep8-dep16 (c512-1024), 7p1d-dep8-dep16 (c4096-8192)"
+    - "New topologies: 2p1d-dep8-dep8 (c256-1024), 3p1d-dep8-dep8 (c2048), 7p1d-dep8-dep16 (c4096-8192)"
+    - "Key changes: max-model-len 16384, prefill max-num-seqs 16, offload+numa-bind on prefill, all2all-backend flashinfer_nvlink_one_sided on decode, enable-ep-weight-filter, tokenizer-mode deepseek_v4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
