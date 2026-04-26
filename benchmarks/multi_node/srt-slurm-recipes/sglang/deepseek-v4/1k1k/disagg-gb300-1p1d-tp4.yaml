@@ -144,9 +144,10 @@ benchmark:
   isl: 1024
   osl: 1024
   random_range_ratio: 0.8
-  # Low-latency band only — TP4 1P1D saturates near conc=128 on GB300
-  # (PR #75 verified: 838 Total TPS/GPU at conc=128). For high-conc
-  # Pareto use the DEP variants (not in this PR).
-  concurrencies: "4x8x16x32x64x128"
+  # Low-latency band — TP4 1P1D saturates near conc=128 on GB300
+  # (PR #75 verified: 838 Total TPS/GPU at conc=128). Conc 1/2 give
+  # single-user latency floor reference; 4-128 covers the saturation
+  # curve. For high-conc Pareto use the DEP variants.
+  concurrencies: "1x2x4x8x16x32x64x128"
   req_rate: "inf"
   use_chat_template: false

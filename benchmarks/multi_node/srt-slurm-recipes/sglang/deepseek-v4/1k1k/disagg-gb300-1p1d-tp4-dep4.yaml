@@ -1,0 +1,141 @@
+name: "dsv4-sglang-disagg-gb300-1p1d-tp4-dep4"
+
+# DeepSeek-V4-Pro disaggregated on GB300, asymmetric topology:
+#   Prefill: 1 node, TP=4 (no DP-attn, no EP).
+#   Decode:  1 node, full DP-attn (TP=4, DP=4) + DeepEP (EP=4 implicit).
+# Both on a single GB300 (4 GPUs / node). KV transfer over NIXL.
+#
+# Sibling of disagg-gb300-1p1d-tp4.yaml. The TP4 sibling mirrors upstream
+# PR #75 exactly; this DEP4 variant is a local extension to probe whether
+# decode-side DP-attn + DeepEP unlocks throughput past the symmetric
+# saturation point (~conc=128 / 838 Total TPS/GPU per PR #75).
+#
+# Asymmetric KV layout: prefill ranks see TP=4 sharding; decode ranks
+# see DP=4 replication. SGLang's --disaggregation-decode-tp and
+# --disaggregation-decode-dp flags on the prefill engine carry this
+# metadata so KV chunks route to the correct decode rank during NIXL
+# transfer (server_args.py:643-654, validate_disagg_tp_size).
+#
+# Same NIXL state-buffer-transfer caveat as the TP4 sibling - see
+# disagg-gb300-1p1d-tp4.yaml header. The grace-blackwell image build
+# carries the patch.
+#
+# Cluster: gb300-cw (CoreWeave 2x18-node racks); rack-pinned the same
+# way as the symmetric sibling.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
+  precision: "fp4"
+
+# Use the container-bundled dynamo (skip srtctl pip install). Same
+# rationale as the TP4 sibling - see its header for the casualty list.
+dynamo:
+  install: false
+
+sbatch_directives:
+  segment: "2"
+  mem: "0"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+
+  decode_environment:
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    # MEGA-MoE / DeepEP envs - only relevant on decode where DP-attn +
+    # EP is enabled. Mirror gen_launch.py medium/large defaults.
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      tensor-parallel-size: 4
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: nixl
+      # Decode runs DP-attn TP=4 / DP=4; prefill must be told both so
+      # KV chunks route to the correct decode rank during NIXL transfer.
+      disaggregation-decode-tp: 4
+      disaggregation-decode-dp: 4
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+      mem-fraction-static: 0.90
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      chunked-prefill-size: 8192
+      disable-radix-cache: true
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      tensor-parallel-size: 4
+      # Full DP-attn on 4 GPUs: each rank is its own DP unit for
+      # attention; MoE is sharded across EP (ep_size = tp_size = 4
+      # implicit when --moe-a2a-backend deepep).
+      enable-dp-attention: true
+      dp-size: 4
+      moe-a2a-backend: deepep
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: nixl
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+      mem-fraction-static: 0.90
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 8192
+      disable-radix-cache: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  random_range_ratio: 0.8
+  # Conc 16-128 overlaps the TP4 sibling for head-to-head comparison
+  # (where does decode-side DPA start beating TP-only?); 256-1024
+  # probes throughput past the symmetric saturation point.
+  concurrencies: "16x32x64x128x256x512x1024"
+  req_rate: "inf"
+  use_chat_template: false
