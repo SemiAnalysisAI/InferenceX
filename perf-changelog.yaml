@@ -1895,4 +1895,3 @@
     - "Drops local workarounds: numa-bind, benchmark.use_chat_template, and benchmark.tokenizer_mode are restored now that PR #77 ships vllm_numa_bind_hash_fix.py and sa-bench DSV4 tokenizer support"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
 
-  
