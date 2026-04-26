@@ -1,20 +1,15 @@
 name: "dsv4-sglang-disagg-gb200-3p1d-dep8-dep16"
 
-# High-concurrency 4096/8192 topology — the only block left active in
-# nvidia-master.yaml right now while we iterate on the DeepEP path.
-# Sibling 1p1d recipes are kept on disk but their master.yaml entries
-# are temporarily commented out.
+# High-concurrency 4096/8192 topology. Same TP=8 + DP-attn + no
+# DeepEP shape as the 1p1d siblings — see
+# ./disagg-gb200-1p1d-dep8-tep8.yaml header for the full constraint
+# chain (mxfp4_deepseek fork-bug → no DeepEP; FP8 block-quant → need
+# moe-dense-tp-size: 1; that flag → needs DP-attention; default `none`
+# moe-a2a-backend → forward_normal path bypasses the buggy kernel).
+# Adds prefill capacity (3 workers vs 1) for the high-conc tail —
+# single prefill saturates around conc 4096 at 1k prompts.
 #
-# This recipe DOES enable DeepEP (moe-a2a-backend: deepep, ep-size: 8,
-# deepep-mode: low_latency). The two 1p1d siblings stay on the
-# `forward_normal` (none) backend. With the lmsysorg/sglang:deepseek-
-# v4-grace-blackwell fork's `mxfp4_deepseek` bug still present (see
-# ./disagg-gb200-1p1d-dep8-tep8.yaml header), this run is expected to
-# either crash in the same way or surface new behaviour — the goal is
-# to capture the failure mode under the actual disagg/EP topology.
-#
-# Topology: 3 prefill (TP=8 / DP=8 / EP=8) + 1 decode (TP=8 / DP=8 /
-# EP=8). 8 nodes. Sized for conc 4096-8192.
+# Topology: 3 prefill (TP=8 / DP=8) + 1 decode (TP=8 / DP=8). 8 nodes.
 
 model:
   path: "deepseek-v4-pro"
@@ -78,9 +73,6 @@ backend:
       moe-dense-tp-size: 1
       enable-dp-attention: true
       dp-size: 8
-      ep-size: 8
-      moe-a2a-backend: "deepep"
-      deepep-mode: low_latency
       moe-runner-backend: "flashinfer_mxfp4"
       chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
@@ -100,9 +92,6 @@ backend:
       moe-dense-tp-size: 1
       enable-dp-attention: true
       dp-size: 8
-      ep-size: 8
-      moe-a2a-backend: "deepep"
-      deepep-mode: low_latency
       moe-runner-backend: "flashinfer_mxfp4"
       chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
