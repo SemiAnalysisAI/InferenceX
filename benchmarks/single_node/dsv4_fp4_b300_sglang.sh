@@ -61,18 +61,15 @@ else
 fi
 
 # Pick the parallelism + MoE backend based on DP_ATTENTION (mirrors the vllm
-# script's pattern). DP-attention turns on EP-MoE (deepep) and the related
-# mega_moe optimizations; single-instance uses flashinfer_mxfp4.
+# script's pattern). DP-attention runs the empirically-tuned high-concurrency
+# recipe (flashinfer_mxfp4 runner + halved prefill chunks + prefill-delayer);
+# single-instance uses flashinfer_mxfp4 with the cookbook defaults.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-# Default; the CONC=512 DP-attn branch below overrides to 0.94.
+# Default; the DP-attn branch below overrides to 0.94.
 MEM_FRACTION_STATIC=0.90
 
-if [[ "$CONC" == "512" ]] && [ "${DP_ATTENTION}" = "true" ]; then
-    # Empirically tuned recipe for the highest-concurrency DP-attn point.
-    # Note vs the standard DP-attn path: deepgemm + hash_mega_moe disabled,
-    # flashinfer_mxfp4 used as the runner backend, prefill chunks halved to
-    # 16384, prefill-delayer turned on, mem fraction bumped to 0.94.
+if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
     export SGLANG_OPT_USE_FAST_MASK_EP=1
@@ -90,21 +87,6 @@ if [[ "$CONC" == "512" ]] && [ "${DP_ATTENTION}" = "true" ]; then
         --enable-prefill-delayer
     )
     MEM_FRACTION_STATIC=0.94
-elif [ "${DP_ATTENTION}" = "true" ]; then
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    PARALLEL_ARGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --chunked-prefill-size 32768
-    )
 else
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
