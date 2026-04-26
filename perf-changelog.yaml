@@ -1827,36 +1827,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1148
 
 - config-keys:
-    - dsv4-fp4-gb200-dynamo-vllm
-  description:
-    - "Add DeepSeek-V4-Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (1k/1k sweep; 8k/1k currently commented out)"
-    - "Container: vllm/vllm-openai:deepseekv4-cu130; model from /mnt/numa1/models/deepseek-v4-pro/ (compute-node-local NVMe)"
-    - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
-    - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
-  
-- config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
-    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
-
-- config-keys:
-    - dsv4-fp8-mi355x-sglang
-  description:
-    - "Drop --mem-fraction-static 0.88 and --max-total-tokens from dsv4_fp8_mi355x.sh"
-    - "Bump --chunked-prefill-size from 4096 to 8192"
-    - "Retrigger dsv4-fp8-mi355x-sglang"
-
-- config-keys:
     - dsv4-fp8-mi355x-sglang
   description:
     - "Drop --mem-fraction-static 0.88 and --max-total-tokens from dsv4_fp8_mi355x.sh"
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1160
-  
+
 - config-keys:
     - dsv4-fp4-b300-vllm
   description:
