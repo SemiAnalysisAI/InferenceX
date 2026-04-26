@@ -42,12 +42,6 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# DP mode uses gpu-memory-utilization=0.85 (matched from pareto sweep)
-GMU_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ]; then
-    GMU_ARGS=(--gpu-memory-utilization 0.85)
-fi
-
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
     MAX_NUM_BATCHED_TOKENS=${ISL}
 else
