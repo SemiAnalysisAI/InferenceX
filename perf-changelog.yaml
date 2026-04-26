@@ -1866,4 +1866,5 @@
     - "Recipe: TP=8, EP=1, no DP-attn, no DeepEP — full concurrency sweep retained"
     - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
     - "Reverts the matrix expansion / script changes from #1132, #1158, #1173, #1174, #1178; clears prior changelog entries to start fresh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1184
 
