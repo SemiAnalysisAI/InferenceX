@@ -1490,6 +1490,33 @@ dsv4-fp8-mi355x-sglang:
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
+# stacked on #40871). Image must contain #40871's compiled C++ kernels;
+# #40889's Python-only changes are overlaid at runtime by
+# benchmarks/single_node/dsv4_fp8_mi355x_vllm.sh at a pinned SHA.
+# Update the image tag once #40871 merges into an official release or
+# nightly. TP=4 validated by PR authors; TP=8 for full-GPU comparison
+# with the SGLang config above.
+dsv4-fp8-mi355x-vllm:
+  image: vllm/vllm-openai-rocm:nightly
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 4, conc-end: 64 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series — single-sequence only (kv_cache[:1,...]
 # hardcode), --enforce-eager required, ATOM_USE_TRITON_MOE=1 required on
