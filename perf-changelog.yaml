@@ -1833,3 +1833,12 @@
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1160
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell"
+    - "Topology: 1P + 1D, both TP=4 on a single GB300; MXFP4 MoE kernels, NIXL KV transfer"
+    - "Recipe ported from NVIDIA/srt-slurm PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -18,8 +18,15 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our DSv4
+    # sglang recipes (benchmarks/multi_node/srt-slurm-recipes/sglang/
+    # deepseek-v4/1k1k/disagg-gb300-1p1d-tp4.yaml).
+    export SERVED_MODEL_NAME="deepseek-v4-pro"
+    export MODEL_PATH=/raid/shared/models/deepseek-v4-pro
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4"
     exit 1
 fi
 
@@ -46,6 +53,15 @@ fi
 git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout sa-submission-q2-2026
+
+# Overlay our hand-rolled DSv4 sglang recipes on top of the upstream tree.
+# NVIDIA/srt-slurm has no upstream sglang DSv4 disagg recipe for GB300
+# beyond PR #75's 1P1D-TP4 entry, so we ship the recipe locally and copy
+# it in here. Mirrors the equivalent block in launch_gb200-nv.sh.
+if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+fi
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
