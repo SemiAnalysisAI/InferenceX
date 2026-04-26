@@ -68,10 +68,28 @@ fi
     pip install --no-deps --force-reinstall -e .
 )
 
-# PR #650's repro explicitly reinstalls triton_kernels editable. Conditional
-# in case the path differs in the chosen image; safe no-op if already present.
+# Install triton_kernels. The release atom0.1.2.post image cleans up
+# /triton-test/ from the build stage, so it's typically absent; fall back to
+# upstream triton-lang/triton at a pinned SHA whose python/triton_kernels has
+# the CDNA4MXScaleLayout class PR #650 imports (the rename from
+# GFX950MXScaleLayout landed upstream in commit c69c3a95 on 2026-01-10; we
+# pin to 028e5da5 from 2026-04-10, the latest commit to that file).
+# triton_kernels is a self-contained subpackage (pyproject deps: numpy,
+# pytest) — installing it does not perturb the image's triton itself.
+TRITON_KERNELS_SHA="028e5da5"
 if [ -d /triton-test/python/triton_kernels/ ]; then
     pip install --no-deps -e /triton-test/python/triton_kernels/
+else
+    TRITON_DIR="/tmp/triton-upstream"
+    if [ ! -d "$TRITON_DIR/.git" ]; then
+        git clone --filter=blob:none https://github.com/triton-lang/triton.git "$TRITON_DIR"
+    fi
+    (
+        cd "$TRITON_DIR"
+        git fetch --depth=1 origin "$TRITON_KERNELS_SHA" 2>/dev/null || git fetch origin
+        git checkout --force "$TRITON_KERNELS_SHA"
+        pip install --no-deps -e python/triton_kernels/
+    )
 fi
 
 # Preflight version checks. The chosen base image
