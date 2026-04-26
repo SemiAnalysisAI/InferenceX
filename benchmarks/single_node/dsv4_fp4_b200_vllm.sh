@@ -48,7 +48,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     GMU_ARGS=(--gpu-memory-utilization 0.85)
 fi
 
-if [ "${ISL}" -eq 8192 ] && [ "${concurrency}" -le 128 ]; then
+if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
     MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
 else
     MAX_NUM_BATCHED_TOKENS=2048
