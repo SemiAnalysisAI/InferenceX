@@ -2,9 +2,20 @@
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
+# Tuning inputs from the matrix (all required):
+#   TP            -- tensor parallel size                       -> --tp
+#   EP_SIZE       -- expert parallel size                       -> --ep-size
+#   DP_ATTENTION  -- "true" enables --enable-dp-attention --dp-size $TP
+#                    Also selects MoE backend / chunked-prefill-size:
+#                      true  -> deepep + mega_moe + chunked-prefill 32768
+#                      false -> flashinfer_mxfp4  + chunked-prefill 8192
+#
+# EAGLE/MTP speculative-decoding flags are hardcoded to (3, 1, 4): num-steps=3,
+# eagle-topk=1, num-draft-tokens=4. Same chain across all CONC bands.
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     DP_ATTENTION \
     CONC \
     ISL \
@@ -42,7 +53,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -52,27 +63,21 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# 1k inputs need more SWA cache headroom on B300 than 8k inputs do; 0.5 was
-# tuned empirically for the 1k1k recipe, while 0.1 is the cookbook default.
-if [[ "$ISL" == "1024" ]]; then
-    SWA_FULL_TOKENS_RATIO=0.5
-else
-    SWA_FULL_TOKENS_RATIO=0.1
-fi
-
-# Pick the parallelism + MoE backend based on DP_ATTENTION (mirrors the vllm
-# script's pattern). DP-attention runs the empirically-tuned high-concurrency
-# recipe (flashinfer_mxfp4 runner + halved prefill chunks + prefill-delayer);
-# single-instance uses flashinfer_mxfp4 with the cookbook defaults.
+# Recipe path is selected by DP_ATTENTION; MoE backend and chunked-prefill-size follow.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-# Default; the DP-attn branch below overrides to 0.94.
-MEM_FRACTION_STATIC=0.90
+# MTP (EAGLE) speculative-decoding flags applied unconditionally on every recipe.
+SPEC_FLAGS=(
+    --speculative-algorithm EAGLE
+    --speculative-num-steps 3
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 4
+)
 
 if [ "${DP_ATTENTION}" = "true" ]; then
-    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
+    # Large-batch EP path: deepep + mega_moe.
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
@@ -81,19 +86,17 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(
         --dp-size "$TP"
         --enable-dp-attention
-        --moe-runner-backend flashinfer_mxfp4
-        --disable-flashinfer-autotune
+        --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
-        --chunked-prefill-size 16384
-        --enable-prefill-delayer
     )
-    MEM_FRACTION_STATIC=0.94
+    CHUNKED_PREFILL_SIZE=32768
 else
+    # Small-batch TP-only path: flashinfer_mxfp4.
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
-        --chunked-prefill-size 8192
         --disable-flashinfer-autotune
     )
+    CHUNKED_PREFILL_SIZE=8192
 fi
 
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
@@ -111,9 +114,12 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
+    --ep-size $EP_SIZE \
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
     --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
-    --mem-fraction-static "$MEM_FRACTION_STATIC" \
-    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
+    --mem-fraction-static 0.90 \
+    --swa-full-tokens-ratio 0.1 \
+    "${SPEC_FLAGS[@]}" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
