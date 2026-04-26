@@ -63,6 +63,24 @@ fi
         || git fetch --depth=1 origin pull/650/head
     git checkout --force "$ATOM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$ATOM_PR_SHA"
+
+    # WORKAROUND: PR #650 has no env-var toggle to disable the aiter
+    # mhc_pre/mhc_post kernels, and on this image those kernels crash with
+    # a HIPGuardImplMasqueradingAsCUDA INTERNAL ASSERT inside aiter the
+    # first time the model executes the hc_pre path during prefill. SGLang's
+    # DSv4 recipe disables the same family explicitly
+    # (SGLANG_OPT_USE_TILELANG_MHC_PRE/POST=false, _DEEPGEMM_HC_PRENORM=false),
+    # which corroborates that aiter's MHC path is unreliable here. Force
+    # the torch fallback by NULL-ing the aiter lookups; deepseek_v4.py's
+    # hc_pre/hc_post check `mhc_pre is not None` before taking the aiter
+    # path, and the torch path is the PR's own reference implementation.
+    # Slow but correct. Remove once PR #650 (or a follow-up) lands a real
+    # toggle for this kernel family.
+    sed -i 's|mhc_pre = getattr(_aiter, "mhc_pre", None)|mhc_pre = None  # patched out (HIP device-guard crash)|' atom/models/deepseek_v4.py
+    sed -i 's|mhc_post = getattr(_aiter, "mhc_post", None)|mhc_post = None  # patched out (HIP device-guard crash)|' atom/models/deepseek_v4.py
+    grep -c "patched out" atom/models/deepseek_v4.py | grep -q '^2$' \
+        || { echo "FATAL: mhc_pre/mhc_post sed patch did not apply twice"; exit 1; }
+
     # --no-deps: don't churn the image's pinned ROCm/torch/triton/aiter.
     # --force-reinstall: replace the wheel-installed atom with the editable copy.
     pip install --no-deps --force-reinstall -e .
