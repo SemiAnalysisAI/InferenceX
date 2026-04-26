@@ -1,40 +1,64 @@
 #!/usr/bin/bash
 
-# This script sets up the environment and launches multi-node benchmarks
+# Launches multi-node Dynamo + SGLang benchmarks on the gb300-cw
+# (CoreWeave) cluster. Adapted from the dynamo-vllm sibling launcher in
+# the dsv4-fp4-gb300-dynamo-vllm-disagg branch (PR #1150). Compared to
+# that script, the SGLang flow is simpler: no dynamo wheel prebuild and
+# no vllm-container-deps.sh override, because the SGLang recipes pin
+# `dynamo.version: 0.8.1` and srtctl pip-installs from PyPI per rank.
 
 set -x
 
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
-export ENROOT_ROOTFS_WRITABLE=1
-
-export MODEL_PATH=$MODEL
-
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # Weights staged on the shared VAST mount; no compute-node-local
+    # NVMe on cw. SRT_SLURM_MODEL_PREFIX matches the model.path alias in
+    # benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/.
+    export MODEL_PATH="/mnt/vast/models/dsv4/"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
+    echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
     exit 1
 fi
 
+# CoreWeave cluster has a single `all` partition; account `cw-sup` is
+# what `sacctmgr show assoc user=$USER` returns there. `benchmark`
+# (inherited from gb200-nv) does not exist on cw.
+export SLURM_PARTITION="all"
+export SLURM_ACCOUNT="cw-sup"
+
+# Pyxis/enroot's NVIDIA prestart hook reads these from the runtime env
+# to decide which host driver libraries (libcuda.so.1, libnvidia-*.so)
+# to mount into the container. cw doesn't set them by default — without
+# them the container has no libcuda and CUDA init fails. SLURM's default
+# --export=ALL propagates these from this shell through sbatch+srun
+# into the enroot environment.
+export NVIDIA_VISIBLE_DEVICES=all
+export NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# Squash files live alongside models on /mnt/vast (shared across nodes).
+SQUASH_DIR="/mnt/vast/squash"
+mkdir -p "$SQUASH_DIR"
+SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+enroot import -o $SQUASH_FILE docker://$IMAGE
+enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
 export OSL="$OSL"
+
+# srt-slurm path requires a CONFIG_FILE pointing to a recipe YAML.
+# Without it, srtctl apply scans every YAML in the repo and submits
+# hundreds of jobs.
+if [[ -z "$CONFIG_FILE" ]]; then
+    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+    echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
+    exit 1
+fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
@@ -47,13 +71,41 @@ git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout sa-submission-q2-2026
 
-echo "Installing srtctl..."
-export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$UV_INSTALL_DIR:$PATH"
+# Overlay our hand-rolled DSv4 SGLang recipes. NVIDIA/srt-slurm has no
+# upstream sglang DSv4 disagg recipe yet beyond PR #75's 1P1D-TP4
+# entry, so we ship the recipe locally and copy it in here. `cp -rT`
+# overlays onto a possibly-existing upstream stub instead of nesting.
+mkdir -p recipes/sglang/deepseek-v4
+cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 
-uv venv "$GITHUB_WORKSPACE/.venv"
-source "$GITHUB_WORKSPACE/.venv/bin/activate"
+echo "Installing srtctl..."
+# CRITICAL — uv install location.
+# Runner pod is x86 but compute nodes are aarch64, and /mnt/home is
+# shared NFS across both. srtctl's slurm template (job_script_minimal.j2)
+# does `if ! command -v uv` and skips its own ARM64 install when uv is
+# already on PATH; on compute nodes $HOME/.local/bin is on PATH by
+# default, so a stray x86 binary at $HOME/.local/bin/uv from this
+# runner shadows the template's install and crashes the orchestrator
+# with `cannot execute binary file: Exec format error`. Install to a
+# runner-pod-local /tmp path (tmpfs, not NFS) and scrub any stale x86
+# uv left in the shared path by prior runs.
+rm -f "$HOME/.local/bin/uv" "$HOME/.local/bin/uvx"
+export XDG_BIN_HOME="/tmp/uv-runner-${RUNNER_NAME:-default}/bin"
+mkdir -p "$XDG_BIN_HOME"
+curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+export PATH="$XDG_BIN_HOME:$PATH"
+
+if [ ! -x "$XDG_BIN_HOME/uv" ]; then
+    echo "ERROR: uv not at $XDG_BIN_HOME/uv after install — install script may not honor XDG_BIN_HOME on this version. Aborting before x86 uv leaks onto NFS." >&2
+    exit 1
+fi
+if [ -e "$HOME/.local/bin/uv" ]; then
+    echo "ERROR: uv install leaked to shared $HOME/.local/bin/uv. Remove it and re-run." >&2
+    exit 1
+fi
+
+uv venv
+source .venv/bin/activate
 uv pip install -e .
 
 if ! command -v srtctl &> /dev/null; then
@@ -63,31 +115,30 @@ fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
 
-# Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300
+# SRT SLURM Configuration for GB300-CW (SGLang)
 
-# Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
+default_time_limit: "6:00:00"
 
-# Resource defaults
 gpus_per_node: 4
 network_interface: ""
 
-# Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
 
-# Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+# Auto-emission of #SBATCH --segment={total_nodes} is turned off here
+# because each gb300 recipe sets its own segment via sbatch_directives
+# (rack-pinning on cw's 2x18-node racks).
 use_segment_sbatch_directive: false
 EOF
 
@@ -101,12 +152,6 @@ make setup ARCH=aarch64
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
-
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
-    echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
-    exit 1
-fi
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
@@ -125,12 +170,9 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
-# Use the JOB_ID to find the logs directory
-# srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
@@ -141,7 +183,6 @@ while ! ls "$LOG_FILE" &>/dev/null; do
     sleep 5
 done
 
-# Poll for job completion in background
 (
     while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
         sleep 10
@@ -151,7 +192,6 @@ POLL_PID=$!
 
 echo "Tailing LOG_FILE: $LOG_FILE"
 
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
 tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
 wait $POLL_PID
@@ -174,26 +214,20 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         exit 1
     fi
 
-    # Find all result subdirectories
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
     if [ -z "$RESULT_SUBDIRS" ]; then
         echo "Warning: No result subdirectories found in $LOGS_DIR"
     else
-        # Process results from all configurations
         for result_subdir in $RESULT_SUBDIRS; do
             echo "Processing result subdirectory: $result_subdir"
 
-            # Extract configuration info from directory name
             CONFIG_NAME=$(basename "$result_subdir")
 
-            # Find all result JSON files
             RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
 
             for result_file in $RESULT_FILES; do
                 if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
                     filename=$(basename "$result_file")
                     concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
                     gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
@@ -216,7 +250,6 @@ else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
-# Collect eval results if eval was requested
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
@@ -232,13 +265,3 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
 fi
-
-# Clean up srt-slurm outputs to prevent NFS silly-rename lock files
-# from blocking the next job's checkout on this runner
-echo "Cleaning up srt-slurm outputs..."
-for i in 1 2 3 4 5; do
-    rm -rf outputs 2>/dev/null && break
-    echo "Retry $i/5: Waiting for NFS locks to release..."
-    sleep 10
-done
-find . -name '.nfs*' -delete 2>/dev/null || true

@@ -7671,7 +7671,7 @@ dsv4-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:deepseek-v4-grace-blackwell
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300
+  runner: gb300-cw
   precision: fp4
   framework: dynamo-sglang
   multinode: true
@@ -7679,9 +7679,10 @@ dsv4-fp4-gb300-dynamo-sglang:
   # Ported from NVIDIA/srt-slurm PR #75 — 1P + 1D, both TP=4 on a single
   # GB300 (4 GPUs / node), MXFP4 MoE kernels, NIXL KV transfer. Recipe
   # staged at benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/
-  # 1k1k/ and overlaid into the srt-slurm checkout by launch_gb300-nv.sh.
-  # DEP/TEP variants are upstream follow-ups; mirror that and ship 1P1D
-  # only here.
+  # 1k1k/ and overlaid into the srt-slurm checkout by launch_gb300-cw.sh.
+  # Cluster gb300-cw is CoreWeave (2x 18-node racks); recipe sets its
+  # own sbatch_directives.segment for rack pinning. DEP/TEP variants
+  # are upstream follow-ups; mirror that and ship 1P1D only here.
   seq-len-configs:
   - isl: 1024
     osl: 1024

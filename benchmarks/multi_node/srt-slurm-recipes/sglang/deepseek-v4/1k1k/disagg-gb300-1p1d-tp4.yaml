@@ -5,6 +5,12 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4"
 # (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml). GB300 sibling of
 # the dsv4-sglang-disagg-gb200-1p1d-dep8-tep8 recipe in this directory tree.
 #
+# Cluster: gb300-cw (CoreWeave, 2x 18-node racks). 2 nodes total at
+# 1P1D-TP4 fits trivially within a single rack; the explicit segment
+# below pins them so the NIXL KV transfer between prefill and decode
+# stays rack-local. (Cluster's srtslurm.yaml turns off srtctl's auto
+# segment so each recipe owns its own value.)
+#
 # Topology: 1 prefill node + 1 decode node, each TP=4 on a single GB300
 # (4 GPUs / node). KV transfer over NIXL. Targets steady decode TPOT under
 # moderate-to-high concurrency.
@@ -15,6 +21,8 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4"
 #     in-recipe).
 #   * Disagg timeout triple + NCCL_MNNVL/CUMEM env vars copied from the
 #     GB200 sglang sibling — same handshake-stability rationale.
+#   * sbatch_directives.segment + mem: rack-pinning for cw, mirroring the
+#     dynamo-vllm gb300 recipe convention.
 
 model:
   path: "deepseek-v4-pro"
@@ -23,6 +31,14 @@ model:
 
 dynamo:
   version: 0.8.1
+
+# Pin both nodes (1P + 1D) to the same rack on cw. Without this they
+# can land on different racks and pay the cross-rack hop on every NIXL
+# KV transfer.
+sbatch_directives:
+  segment: "2"
+  # Use all node memory; cw default is too tight for the MXFP4 worker.
+  mem: "0"
 
 slurm:
   time_limit: "8:00:00"
