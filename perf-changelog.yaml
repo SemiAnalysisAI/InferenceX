@@ -1903,3 +1903,10 @@
     - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
 
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Fix missing line-continuation backslash before --dsv4 in run_benchmark_serving invocation"
+    - "Without the backslash bash truncated the bench command at --dsv4 and tried to exec the next line (--input-len ...) as a new command, breaking the run"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1183
+
