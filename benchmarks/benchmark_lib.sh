@@ -205,6 +205,7 @@ run_benchmark_serving() {
     local use_chat_template=false
     local dsv4=false
     local trust_remote_code=false
+    local request_rate="inf"
     local server_pid=""
 
     while [[ $# -gt 0 ]]; do
@@ -265,6 +266,10 @@ run_benchmark_serving() {
             --trust-remote-code)
                 trust_remote_code=true
                 shift
+                ;;
+            --request-rate)
+                request_rate="$2"
+                shift 2
                 ;;
             --server-pid)
                 server_pid="$2"
@@ -347,7 +352,7 @@ run_benchmark_serving() {
         --random-range-ratio "$random_range_ratio"
         --num-prompts "$num_prompts"
         --max-concurrency "$max_concurrency"
-        --request-rate inf
+        --request-rate "$request_rate"
         --ignore-eos
         "${profile_flag[@]}"
         --save-result

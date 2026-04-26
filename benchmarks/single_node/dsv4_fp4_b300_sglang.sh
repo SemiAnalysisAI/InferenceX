@@ -66,10 +66,35 @@ fi
 # single-instance uses flashinfer_mxfp4 with the cookbook defaults.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-# Default; the DP-attn branch below overrides to 0.94.
+# Default; the DP-attn branches below override per recipe.
 MEM_FRACTION_STATIC=0.90
+MAX_RUNNING_REQUESTS="$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))"
+REQUEST_RATE="inf"
 
-if [ "${DP_ATTENTION}" = "true" ]; then
+if [ "${DP_ATTENTION}" = "true" ] && [ "$CONC" -ge 2048 ]; then
+    # Ultra-high-concurrency DP-attention recipe: TP=8, deepep mega_moe backend.
+    export SGLANG_LOG_FORWARD_ITERS=1
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=288
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    PARALLEL_ARGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --moe-a2a-backend deepep
+        --cuda-graph-max-bs 288
+        --deepep-config "$DEEPEP_CONFIG"
+        --chunked-prefill-size 65536
+        --enable-prefill-delayer
+    )
+    MEM_FRACTION_STATIC=0.87
+    MAX_RUNNING_REQUESTS=2560
+    REQUEST_RATE=16
+elif [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
@@ -111,7 +136,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
+    --max-running-requests "$MAX_RUNNING_REQUESTS" \
     --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
@@ -131,6 +156,7 @@ run_benchmark_serving \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
+    --request-rate "$REQUEST_RATE" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$PWD/"
 
