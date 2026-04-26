@@ -1670,7 +1670,7 @@ dsr1-fp4-b200-sglang:
     - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
 
 dsv4-fp4-b200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  image: lmsysorg/sglang:deepseek-v4-blackwell
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1690,7 +1690,7 @@ dsv4-fp4-b200-sglang:
     osl: 1024
     search-space:
     # low-latency
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
     # max-throughput
@@ -1699,7 +1699,7 @@ dsv4-fp4-b200-sglang:
     osl: 1024
     search-space:
     # low-latency
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
+    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     # balanced
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
     # max-throughput
