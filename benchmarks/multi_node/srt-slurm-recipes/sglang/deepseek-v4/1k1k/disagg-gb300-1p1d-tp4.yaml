@@ -29,8 +29,16 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-dynamo:
-  version: 0.8.1
+# NB: no `dynamo:` block. Mirroring upstream PR #75: rely on whatever
+# dynamo the lmsysorg/sglang:deepseek-v4-grace-blackwell container ships.
+# That container's bundled dynamo has the native DeepSeekV4Formatter (added
+# at hash 6a159fed, 2026-04-23 — see comment in the gb200 vllm sibling
+# disagg-gb200-7p1d-dep8-dep16.yaml) which auto-detects DSv4 by model name
+# and serves /v1/completions without needing chat_template in
+# tokenizer_config.json. Forcing dynamo.version=0.8.1 made srtctl pip-install
+# an older release on top of the container that *did* require chat_template,
+# and the frontend then 404'd: PromptFormatter.from_mdc rejected the model
+# at pipeline build time. Run #24963242956 was the casualty.
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
 # can land on different racks and pay the cross-rack hop on every NIXL
