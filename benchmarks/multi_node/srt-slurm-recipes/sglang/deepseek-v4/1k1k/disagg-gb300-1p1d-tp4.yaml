@@ -12,33 +12,53 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4"
 # segment so each recipe owns its own value.)
 #
 # Topology: 1 prefill node + 1 decode node, each TP=4 on a single GB300
-# (4 GPUs / node). KV transfer over NIXL. Targets steady decode TPOT under
-# moderate-to-high concurrency.
+# (4 GPUs / node). KV transfer over NIXL. PR #75 measures saturation
+# at conc=128 / 838 Total TPS/GPU; sweep capped accordingly.
+#
+# ⚠️  NIXL state-buffer-transfer accuracy bug (upstream PR #75 body):
+# the SGLang NIXL backend currently registers and transfers the KV cache
+# correctly but DROPS the model's auxiliary state buffer (SWA / NSA /
+# Mamba). On DSv4-Pro this collapses GSM8K from 1.000 (agg) to ~0.13
+# (disagg) while throughput numbers and KV byte hashes look healthy.
+# Mooncake handles state buffers correctly; the NIXL fix mirrors that
+# (~237 lines extending KVArgsRegisterInfo/TransferInfo/register_buffer_
+# to_engine + adding send_state in
+# python/sglang/srt/disaggregation/nixl/conn.py). Until the upstream
+# sglang fix lands, the patch must be picked up via the
+# lmsysorg/sglang:deepseek-v4-grace-blackwell container build. If
+# eval-only GSM8K runs come back near 0.13 with healthy throughput,
+# that's the cause — not a tuning issue.
 #
 # Local deltas vs upstream PR #75:
-#   * benchmark.type = sa-bench (upstream uses "manual" because they pair
-#     with a separate sa-bench launcher; our sweep harness drives sa-bench
-#     in-recipe).
-#   * Disagg timeout triple + NCCL_MNNVL/CUMEM env vars copied from the
-#     GB200 sglang sibling — same handshake-stability rationale.
-#   * sbatch_directives.segment + mem: rack-pinning for cw, mirroring the
-#     dynamo-vllm gb300 recipe convention.
+#   * benchmark.type = sa-bench (upstream also uses sa-bench in the
+#     latest revision; matches).
+#   * sbatch_directives.segment + mem: rack-pinning for cw, mirroring
+#     the dynamo-vllm gb300 recipe convention. Upstream targets a
+#     different cluster and doesn't need this.
 
 model:
   path: "deepseek-v4-pro"
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-# NB: no `dynamo:` block. Mirroring upstream PR #75: rely on whatever
-# dynamo the lmsysorg/sglang:deepseek-v4-grace-blackwell container ships.
-# That container's bundled dynamo has the native DeepSeekV4Formatter (added
-# at hash 6a159fed, 2026-04-23 — see comment in the gb200 vllm sibling
-# disagg-gb200-7p1d-dep8-dep16.yaml) which auto-detects DSv4 by model name
-# and serves /v1/completions without needing chat_template in
-# tokenizer_config.json. Forcing dynamo.version=0.8.1 made srtctl pip-install
-# an older release on top of the container that *did* require chat_template,
-# and the frontend then 404'd: PromptFormatter.from_mdc rejected the model
-# at pipeline build time. Run #24963242956 was the casualty.
+# Use the container-bundled dynamo. The lmsysorg/sglang:deepseek-v4-
+# grace-blackwell image ships a dynamo build with the native Rust
+# DeepSeekV4Formatter (added at hash 6a159fed, 2026-04-23 — see comment
+# in the gb200 vllm sibling disagg-gb200-7p1d-dep8-dep16.yaml). That
+# formatter auto-detects DSv4 by model name and serves /v1/completions
+# without needing chat_template in tokenizer_config.json.
+#
+# `install: false` is critical here — without it, srtctl's schema
+# default (install: True, version: "0.8.0", see srt-slurm/src/srtctl/
+# core/schema.py:697) pip-installs ai-dynamo==0.8.0 from PyPI on top
+# of the container, which predates the DSv4 formatter. The frontend
+# then 404s on every request: PromptFormatter.from_mdc rejects the
+# model at pipeline build time with "chat_template field is required
+# in the tokenizer_config.json file". Casualties: runs #24963242956
+# (had dynamo.version: 0.8.1 explicit) and the follow-up (no dynamo
+# block, fell through to the 0.8.0 default).
+dynamo:
+  install: false
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
 # can land on different racks and pay the cross-rack hop on every NIXL
@@ -73,22 +93,10 @@ backend:
   type: sglang
 
   prefill_environment:
-    PYTHONUNBUFFERED: "1"
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
 
   decode_environment:
-    PYTHONUNBUFFERED: "1"
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
 
   sglang_config:
     prefill:
@@ -99,8 +107,12 @@ backend:
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: nixl
       moe-runner-backend: "flashinfer_mxfp4"
-      chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
+      mem-fraction-static: 0.90
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      chunked-prefill-size: 8192
+      disable-radix-cache: true
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -110,13 +122,21 @@ backend:
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: nixl
       moe-runner-backend: "flashinfer_mxfp4"
-      chunked-prefill-size: 4096
       disable-flashinfer-autotune: true
+      mem-fraction-static: 0.90
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      chunked-prefill-size: 8192
+      disable-radix-cache: true
 
 benchmark:
   type: "sa-bench"
   isl: 1024
   osl: 1024
-  concurrencies: "1x4x16x64x256"
+  random_range_ratio: 0.8
+  # Low-latency band only — TP4 1P1D saturates near conc=128 on GB300
+  # (PR #75 verified: 838 Total TPS/GPU at conc=128). For high-conc
+  # Pareto use the DEP variants (not in this PR).
+  concurrencies: "4x8x16x32x64x128"
   req_rate: "inf"
   use_chat_template: false
