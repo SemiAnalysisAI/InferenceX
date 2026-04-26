@@ -1864,8 +1864,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
 
 - config-keys:
-    - dsv4-fp4-b200-sglang
     - dsv4-fp4-b300-sglang
   description:
-    - "Floor --max-running-requests at 8 in dsv4_fp4_b200.sh and dsv4_fp4_b300_sglang.sh so low-CONC sweeps don't drop below the queue depth needed for stable benchmarking (CONC * 3 / 2 still applies above CONC=5)"
+    - "Floor --max-running-requests at 8 in dsv4_fp4_b300_sglang.sh so low-CONC sweeps don't drop below the queue depth needed for stable benchmarking (CONC * 3 / 2 still applies above CONC=5)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1173
