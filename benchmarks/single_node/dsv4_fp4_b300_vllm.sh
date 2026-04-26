@@ -42,9 +42,8 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# DP mode: mbt=ISL; TP mode: mbt=2*ISL; floor at 2048
 if [ "${DP_ATTENTION}" = "true" ]; then
-    MAX_NUM_BATCHED_TOKENS=$(( ISL < 2048 ? 2048 : ISL ))
+    MAX_NUM_BATCHED_TOKENS=2048
 else
     MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 < 2048 ? 2048 : ISL * 2 ))
 fi
