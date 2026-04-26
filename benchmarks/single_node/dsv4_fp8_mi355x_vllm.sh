@@ -5,9 +5,9 @@ set -eo pipefail
 # Based on vllm-project/vllm#40889 (AITER-accelerated sparse MLA decode,
 # stacked on #40871 which adds base DSv4 ROCm support).
 #
-# Requires an image that already has #40871 compiled (the base adds C++
-# kernels in csrc/). PR #40889 is Python-only and is patched in at runtime.
-# Once #40889 merges, update the image and remove the overlay block below.
+# Uses a stable vLLM ROCm image as the base and rebuilds vLLM from the PR
+# branch (includes both #40871 C++ kernels and #40889 AITER MLA decode).
+# Once both PRs merge into a release, pin the image and remove the build.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -34,9 +34,9 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-# Overlay PR #40889 Python files on top of the image's installed vLLM.
-# PR #40889 is Python-only (3 files); the base C++ from #40871 must already
-# be compiled in the image. Bump VLLM_PR_SHA when the PR moves.
+# Build vLLM from PR #40889 branch (includes #40871 base). The image
+# provides the ROCm toolchain (hipcc, cmake, ninja, torch, aiter); we
+# rebuild vLLM in-place. Bump VLLM_PR_SHA when the PR moves.
 VLLM_PR_SHA="b3a4a44f01e565219dd353611712d0ea2e8d11ee"
 VLLM_PR_DIR="/tmp/vllm-pr40889"
 
@@ -49,17 +49,11 @@ fi
         || git fetch --depth=1 origin rocm/aiter-mla-dsv4-decode
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
+
+    pip install --no-build-isolation --force-reinstall -e .
 )
 
-VLLM_SITE=$(python3 -c "import vllm; print(vllm.__path__[0])")
-mkdir -p "$VLLM_SITE/v1/attention/ops"
-cp "$VLLM_PR_DIR/vllm/v1/attention/ops/rocm_aiter_dsv4_decode.py" \
-   "$VLLM_SITE/v1/attention/ops/"
-cp "$VLLM_PR_DIR/vllm/model_executor/layers/deepseek_v4_attention.py" \
-   "$VLLM_SITE/model_executor/layers/"
-cp "$VLLM_PR_DIR/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" \
-   "$VLLM_SITE/model_executor/layers/fused_moe/oracle/"
-echo "Patched 3 files from PR #40889 @ ${VLLM_PR_SHA:0:12}"
+python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
