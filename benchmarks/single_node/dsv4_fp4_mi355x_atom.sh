@@ -70,13 +70,19 @@ fi
 
 # Install triton_kernels. The release atom0.1.2.post image cleans up
 # /triton-test/ from the build stage, so it's typically absent; fall back to
-# upstream triton-lang/triton at a pinned SHA whose python/triton_kernels has
-# the CDNA4MXScaleLayout class PR #650 imports (the rename from
-# GFX950MXScaleLayout landed upstream in commit c69c3a95 on 2026-01-10; we
-# pin to 028e5da5 from 2026-04-10, the latest commit to that file).
-# triton_kernels is a self-contained subpackage (pyproject deps: numpy,
-# pytest) — installing it does not perturb the image's triton itself.
-TRITON_KERNELS_SHA="028e5da5"
+# upstream triton-lang/triton at a pinned SHA chosen for compatibility with
+# both PR #650 and the image's installed triton:
+#   * CDNA4MXScaleLayout (renamed from GFX950MXScaleLayout) must be present,
+#     which means SHAs after 2026-01-10 (commit c69c3a95).
+#   * triton_kernels' target_info.py must NOT import is_hip_gfx1250 — that
+#     import was added on 2026-03-05 (commit 11aac682) and the image's
+#     triton is older, so it ImportErrors at module load.
+# d28db13d (parent of 11aac682) is the latest SHA satisfying both. Bump
+# this only after the image's triton is upgraded to one that has
+# is_hip_gfx1250 in triton.language.target_info.
+# triton_kernels itself is a self-contained subpackage (pyproject deps:
+# numpy, pytest), so installing it does not perturb the image's triton.
+TRITON_KERNELS_SHA="d28db13de0cf7079c5db00e37986916f96f273f2"
 if [ -d /triton-test/python/triton_kernels/ ]; then
     pip install --no-deps -e /triton-test/python/triton_kernels/
 else
