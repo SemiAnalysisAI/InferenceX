@@ -1888,6 +1888,36 @@ dsv4-fp4-b300-sglang:
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
 
+# DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
+# selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
+# DP_ATTENTION:
+#   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
+#   dp-attn: true  -> DP-attn + deepep mega_moe + chunked-prefill 32768
+# `ep` is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
+# while the TP-only path leaves ep_size at the default of 1.
+dsv4-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  # Three CONC bands sweep with EAGLE/MTP (3/1/4) on top:
+  #   A: TP=8 ep=1            -- conc 1-8    (latency-bound, full TP)
+  #   B: TP=4 ep=1            -- conc 16-128 (TP-only, mid batch)
+  #   C: TP=4 ep=4 dp-attn    -- conc 64-512 (DP-attn + EP, large batch)
+  # Overlap: B/C at conc 64,128 (TP-only vs DP-attn EP head-to-head).
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
   model: Qwen/Qwen3.5-397B-A17B
@@ -2492,17 +2522,15 @@ dsv4-fp4-b300-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 4 }
     - { tp: 4, conc-start: 4, conc-end: 128 }
-    - { tp: 8, conc-start: 128, conc-end: 128 }
-    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 4096 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 8192 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 4 }
-    - { tp: 4, conc-start: 4, conc-end: 128 }
-    - { tp: 8, conc-start: 128, conc-end: 128 }
-    - { tp: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
+    - { tp: 4, conc-start: 4, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 1024 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 1024, conc-end: 4096 }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
