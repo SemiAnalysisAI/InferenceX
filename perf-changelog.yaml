@@ -1833,3 +1833,8 @@
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1160
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Retrigger DSV4 B300 DPA runs"
