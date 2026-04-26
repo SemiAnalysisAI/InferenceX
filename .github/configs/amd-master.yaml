@@ -1491,14 +1491,14 @@ dsv4-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
-# stacked on #40871). The image provides the ROCm toolchain; vLLM is
-# rebuilt from the PR branch at runtime by
+# stacked on #40871). Uses the nightly image (has mori, latest torch/HIP);
+# vLLM is rebuilt from the PR branch at runtime by
 # benchmarks/single_node/dsv4_fp8_mi355x_vllm.sh at a pinned SHA.
 # Once both PRs merge into a release, pin that release image and remove
 # the build step. TP=4 validated by PR authors; TP=8 for full-GPU
 # comparison with the SGLang config above.
 dsv4-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
+  image: vllm/vllm-openai-rocm:nightly
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
