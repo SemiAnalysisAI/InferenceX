@@ -168,6 +168,9 @@ jobs:
             tp: ${{ matrix.config.tp }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
+            moe-runner-backend: ${{ matrix.config.moe-runner-backend }}
+            chunked-prefill-size: ${{ matrix.config.chunked-prefill-size }}
+            swa-full-tokens-ratio: ${{ matrix.config.swa-full-tokens-ratio }}
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -198,6 +201,9 @@ jobs:
             tp: ${{ matrix.config.tp }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
+            moe-runner-backend: ${{ matrix.config.moe-runner-backend }}
+            chunked-prefill-size: ${{ matrix.config.chunked-prefill-size }}
+            swa-full-tokens-ratio: ${{ matrix.config.swa-full-tokens-ratio }}
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
