@@ -1876,4 +1876,5 @@
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
 
