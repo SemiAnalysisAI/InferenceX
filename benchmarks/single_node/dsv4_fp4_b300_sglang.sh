@@ -70,6 +70,7 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 MEM_FRACTION_STATIC=0.90
 
 if [ "${DP_ATTENTION}" = "true" ]; then
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
     export SGLANG_OPT_USE_FAST_MASK_EP=1
