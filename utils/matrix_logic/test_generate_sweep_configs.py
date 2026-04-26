@@ -333,7 +333,7 @@ class TestMarkEvalEntries:
         result = mark_eval_entries(matrix_values)
 
         assert result[0]["run-eval"] is True
-        assert result[0]["eval-conc"] == 32
+        assert result[0]["eval-conc"] == 16
         assert result[1]["run-eval"] is False
 
     def test_marks_highest_and_median_conc(self):

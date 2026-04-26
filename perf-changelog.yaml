@@ -1886,3 +1886,9 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b"
     - "Adds SGLANG_OPT_* env knobs (SWA_SPLIT_LEAF_ON_INSERT, USE_JIT_NORM, USE_JIT_INDEXER_METADATA, USE_TOPK_V2, USE_CUSTOM_ALL_REDUCE_V2)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1187
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Run evals for DeepSeek-V4-Pro FP4 B300 SGLang MTP (conc 8 now eligible after MIN_EVAL_CONC lowered to 8)"
+  evals-only: true

@@ -19,7 +19,7 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
-MIN_EVAL_CONC = 16
+MIN_EVAL_CONC = 8
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
