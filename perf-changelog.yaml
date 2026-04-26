@@ -1896,6 +1896,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1178
 
 - config-keys:
+   - dsv4-fp4-b300-vllm
+  description:
+    - "Update search space based on B300 pareto sweep results"
+    - "ISL=1024: TP4 conc 4-128; DP4 (dp-attn) conc 256-4096; DP8 (dp-attn) conc 2048-8192"
+    - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
+
+- config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
