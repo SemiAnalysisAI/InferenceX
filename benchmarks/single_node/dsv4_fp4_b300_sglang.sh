@@ -75,7 +75,6 @@ if [ "${DP_ATTENTION}" = "true" ] && [ "$CONC" -ge 2048 ]; then
     # Ultra-high-concurrency DP-attention recipe: TP=8, deepep mega_moe backend.
     export CUDA_COREDUMP_GENERATION_FLAGS='skip_nonrelocated_elf_images,skip_global_memory,skip_shared_memory,skip_local_memory,skip_constbank_memory'
     export CUDA_COREDUMP_FILE="/tmp/cuda_coredump_%h.%p.%t"
-    export SGLANG_PREFILL_DELAYER_DEBUG_LOG=1
     export SGLANG_LOG_FORWARD_ITERS=1
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
