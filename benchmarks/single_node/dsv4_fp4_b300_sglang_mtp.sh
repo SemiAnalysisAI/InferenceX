@@ -132,6 +132,7 @@ run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
+    --dsv4 \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
