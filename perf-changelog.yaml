@@ -1870,6 +1870,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
 
 - config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Recipe-per-CONC split for DeepSeek-V4-Pro on B300: low-latency (TP=8, EP=1), balanced (TP=4, EP=1) at conc=32, max-throughput (TP=4, EP=4, DP-attn + DeepEP) at conc=512, for both 1k1k and 8k1k"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
+    - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
+  
+- config-keys:
     - dsv4-fp4-b200-sglang
   description:
     - "Two-recipe dispatch for DeepSeek-V4-Pro on B200, selected by DP_ATTENTION knob: low-latency (TP=8, EP=1, flashinfer_mxfp4) for conc 1-32, DP-attention (TP=8, EP=8, DP-attn + DeepEP + mega_moe) for conc 64-{512,1024}. The DP-attention recipe uses identical flags across balanced and max-throughput CONC ranges; only --max-running-requests scales with CONC."
@@ -1877,4 +1886,3 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b"
     - "Adds SGLANG_OPT_* env knobs (SWA_SPLIT_LEAF_ON_INSERT, USE_JIT_NORM, USE_JIT_INDEXER_METADATA, USE_TOPK_V2, USE_CUSTOM_ALL_REDUCE_V2)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1187
-
