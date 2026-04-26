@@ -48,7 +48,11 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     GMU_ARGS=(--gpu-memory-utilization 0.85)
 fi
 
-MAX_NUM_BATCHED_TOKENS=2048
+if [ "${ISL}" -eq 8192 ] && [ "${concurrency}" -le 128 ]; then
+    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+else
+    MAX_NUM_BATCHED_TOKENS=2048
+fi
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
