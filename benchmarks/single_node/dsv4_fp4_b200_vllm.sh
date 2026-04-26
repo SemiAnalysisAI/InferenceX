@@ -48,12 +48,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     GMU_ARGS=(--gpu-memory-utilization 0.85)
 fi
 
-# DP mode: mbt=ISL; TP mode: mbt=2*ISL; floor at 2048
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MAX_NUM_BATCHED_TOKENS=$(( ISL < 2048 ? 2048 : ISL ))
-else
-    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 < 2048 ? 2048 : ISL * 2 ))
-fi
+MAX_NUM_BATCHED_TOKENS=2048
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
