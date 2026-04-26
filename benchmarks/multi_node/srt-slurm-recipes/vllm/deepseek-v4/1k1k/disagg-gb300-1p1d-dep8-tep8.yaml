@@ -1,9 +1,8 @@
 name: "dsv4-vllm-disagg-gb300-1p1d-dep8-tep8"
 
-# GB300 mirror of disagg-gb200-1p1d-dep8-tep8.yaml. Same tuning — GB300 has
-# more HBM (288 GB vs 184 GB on GB200) so the offload knobs are still
-# present but headroom is larger; can be revisited if we want to push
-# max-num-seqs. Cluster: gb300-cw (CoreWeave, 2x 18-node racks). Job is
+# GB300 mirror of disagg-gb200-1p1d-dep8-tep8.yaml. Same tuning minus
+# weight offloading (GB300 has 288 GB HBM vs 184 GB on GB200).
+# Cluster: gb300-cw (CoreWeave, 2x 18-node racks). Job is
 # rack-pinned via the explicit sbatch_directives.segment below (cw's
 # srtslurm.yaml turns off srtctl's auto-segment so each recipe owns its
 # segment value alongside the topology it derives from).
@@ -128,14 +127,6 @@ backend:
       gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      # CPU/DRAM expert offload kept identical to the gb200 mirror — GB300's
-      # extra HBM means we likely have headroom to drop these, but until
-      # we've measured we keep them on for parity with the working gb200
-      # recipe (gb200 ran with `Available KV cache memory: -16 GiB` without
-      # them; gb300 should be safer but isn't yet validated).
-      offload-group-size: 3
-      offload-num-in-group: 1
-      offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
 
     decode:

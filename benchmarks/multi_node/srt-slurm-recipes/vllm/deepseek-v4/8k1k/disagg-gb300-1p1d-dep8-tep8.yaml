@@ -126,12 +126,6 @@ backend:
       gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-      # CPU/DRAM expert offload kept identical to the gb200 mirror — GB300's
-      # extra HBM (288 GB vs 184 GB) likely permits dropping these, but
-      # until measured we keep parity with the working gb200 recipe.
-      offload-group-size: 3
-      offload-num-in-group: 1
-      offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
 
     decode:
