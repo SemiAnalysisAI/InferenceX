@@ -1789,6 +1789,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1134
 
 - config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark (low-latency fallback)"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "Low-latency only (TP=8, EP=1, no DP-attn, no DeepEP) — DeepEP FP8 weight-postprocess path is broken for this checkpoint on B300"
+    - "Prefix caching disabled, no speculative decoding"
+    - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1143
+
+- config-keys:
     - dsv4-fp4-b300-vllm
   description:
     - "Add DeepSeek-V4-Pro single-node B300 vLLM aggregate benchmark"
@@ -1857,14 +1868,4 @@
     - "ISL=1024: TP4 conc 4-128; DP4 (dp-attn) conc 256-4096; DP8 (dp-attn) conc 2048-8192"
     - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
-
-- config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "Revert dsv4-fp4-b300-sglang to the #1143 low-latency-only baseline"
-    - "Image: lmsysorg/sglang:deepseek-v4-b300"
-    - "Recipe: TP=8, EP=1, no DP-attn, no DeepEP — full concurrency sweep retained"
-    - "Configs: 1k1k conc 4-1024, 8k1k conc 4-512"
-    - "Reverts the matrix expansion / script changes from #1132, #1158, #1173, #1174, #1178; clears prior changelog entries to start fresh"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1184
 
