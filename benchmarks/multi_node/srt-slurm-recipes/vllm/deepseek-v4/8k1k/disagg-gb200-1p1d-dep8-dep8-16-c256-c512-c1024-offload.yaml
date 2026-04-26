@@ -1,25 +1,28 @@
 name: "dsv4-vllm-disagg-gb200-1p1d-dep8-dep8"
 
 # Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
-#   recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-1p1d-dep8-dep8-16-c256-c512-c1024-offload.yaml
+#   recipes/vllm/deepseek-v4-pro-sa/8k1k/disagg-gb200-1p1d-dep8-dep8-16-c256-c512-c1024-offload.yaml
 #
-# Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 4 nodes total. Targets
-# c256-c1024 — same node count as 1p1d-tep8 but routes the decode through
-# data-parallel + expert-parallel instead of TP-sharded attention.
+# Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 4 nodes total. -sa
+# variant extends concurrencies to 64x128x256x512x1024.
 #
 # Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro.
-#   * model.container kept on the floating :deepseekv4-cu130 tag.
-#   * slurm.time_limit added; health_check.max_attempts 360 -> 1440.
-
+#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
+#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
+#   * model.container set to vllm/vllm-openai:deepseekv4-cu130-dynamo to
+#     match nvidia-master.yaml image (which the launch script registers as
+#     the alias key in srtslurm.yaml). Upstream variants ship either the
+#     non-dynamo floating tag or a sha256 pin.
+#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
+#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:deepseekv4-cu130"
+  container: "vllm/vllm-openai:deepseekv4-cu130-dynamo"
   precision: "fp4"
 
 dynamo:
   hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
-  install: true
+  install: false
 
 setup_script: vllm-container-deps.sh
 
@@ -29,7 +32,6 @@ slurm:
 health_check:
   max_attempts: 1440
   interval_seconds: 10
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
@@ -129,7 +131,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "256x512x1024"
+  concurrencies: "64x128x256x512x1024"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"
   use_chat_template: true

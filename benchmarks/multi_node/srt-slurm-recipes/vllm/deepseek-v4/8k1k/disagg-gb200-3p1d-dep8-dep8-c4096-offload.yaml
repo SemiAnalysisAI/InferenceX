@@ -1,28 +1,29 @@
-name: "dsv4-vllm-disagg-gb200-1p1d-dep8-tep8"
+name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep8-offload"
 
 # Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
-#   recipes/vllm/deepseek-v4-pro/8k1k/disagg-gb200-1p1d-dep8-tep8.yaml
+#   recipes/vllm/deepseek-v4-pro-sa/8k1k/disagg-gb200-3p1d-dep8-dep8-c4096-offload.yaml
 #
-# Topology: 1 prefill (DEP=8) + 1 decode (TEP=8). 4 nodes total. Targets
-# very low concurrency (1-64) where TP-sharded attention + EP'd experts
-# in one decode worker gives the best per-user latency.
+# Topology: 3 prefill (DEP=8 each) + 1 decode (DEP=8). 8 nodes.
+# c4096-tuned variant (decode max-num-seqs=512).
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
 #     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
-#   * model.container kept on the floating :deepseekv4-cu130 tag instead
-#     of the upstream sha256 pin (matches our enroot-import flow).
-#   * slurm.time_limit: "8:00:00" added; health_check.max_attempts bumped
-#     360 -> 1440 to absorb cold-cache /mnt/numa1 model loads.
-
+#   * model.container set to vllm/vllm-openai:deepseekv4-cu130-dynamo to
+#     match nvidia-master.yaml image (which the launch script registers as
+#     the alias key in srtslurm.yaml). Upstream variants ship either the
+#     non-dynamo floating tag or a sha256 pin.
+#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
+#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:deepseekv4-cu130"
+  container: "vllm/vllm-openai:deepseekv4-cu130-dynamo"
   precision: "fp4"
 
 dynamo:
   hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
-  install: true
+#  version: 1.0.2
+  install: false
 
 setup_script: vllm-container-deps.sh
 
@@ -32,13 +33,12 @@ slurm:
 health_check:
   max_attempts: 1440
   interval_seconds: 10
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 2
+  prefill_nodes: 6
   decode_nodes: 2
-  prefill_workers: 1
+  prefill_workers: 3
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
@@ -49,7 +49,6 @@ backend:
   type: vllm
   connector: null
   prefill_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -66,7 +65,6 @@ backend:
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -91,7 +89,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 9280
+      max-model-len: 16384
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -112,18 +110,19 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 9280
-      max-num-seqs: 64
-      max-cudagraph-capture-size: 64
-      max-num-batched-tokens: 64
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
-      attention-config: '{"use_fp4_indexer_cache":true}'
-      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","pass_config":{"fuse_allreduce_rms":false}}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
@@ -133,7 +132,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1x2x4x8x16x32x64"
+  concurrencies: "4096"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"
   use_chat_template: true
