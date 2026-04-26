@@ -1784,7 +1784,7 @@
   description:
     - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1132
 
 - config-keys:
     - dsv4-fp8-mi355x-sglang
@@ -1855,3 +1855,10 @@
     - "Pinned to PR1 limitations: single-sequence kv_cache hardcode, --enforce-eager required, ATOM_USE_TRITON_MOE=1 (aiter fused_moe broken on gfx950)"
     - "Sweep will expand to TP=4/8 conc 4–256 once ROCm/ATOM PR3 (multi-request) and PR4 (CUDAGraph) land"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1170
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Restore the recipe-per-CONC split (low-latency / balanced / max-throughput) on top of the low-latency-only fallback from #1143; the DeepEP FP8 weight-postprocess path is fixed, so the high-throughput scenario runs again"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1158
