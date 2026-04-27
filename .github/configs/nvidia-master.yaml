@@ -1876,25 +1876,27 @@ dsv4-fp4-b300-sglang:
   # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
   # while low-latency leaves ep_size at the default of 1.
   seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
-    # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+  # --- 1k1k temporarily disabled for focused 8k1k testing ---
+  # - isl: 1024
+  #   osl: 1024
+  #   search-space:
+  #   - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+  #   - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+  #   - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+  #   # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
+  #   - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
+  #   - { tp: 4, ep: 8, dp-attn: true, conc-start: 1024, conc-end: 1024 }
+  #   - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+  #   - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-    - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-    - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
-    # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
+    # --- only testing conc 2048/4096 for now ---
+    # - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    # - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
+    # - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+    # # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
+    # - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
