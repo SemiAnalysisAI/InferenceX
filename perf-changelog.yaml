@@ -1894,6 +1894,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
 
 - config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - Add low-latency configs and remove non-pareto configs
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1193
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro single-node B200 vLLM benchmark derived from B200 pareto sweep"
+    - "ISL=1024: TP8 conc 4-128; DP8 (dp-attn) conc 256-4096"
+    - "ISL=8192: TP8 conc 4-32; DP8 (dp-attn) conc 64-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
+
+- config-keys:
+   - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3 (pinned for deep_gemm transform_weights_for_mega_moe support; same digest as PR #1158)"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EAGLE/MTP flags hardcoded in script: num-steps=3, eagle-topk=1, num-draft-tokens=4"
+    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
+    - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
+    - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
