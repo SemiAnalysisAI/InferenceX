@@ -1677,32 +1677,33 @@ dsv4-fp4-b200-sglang:
   precision: fp4
   framework: sglang
   multinode: false
-  # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # are selected inside benchmarks/single_node/dsv4_fp4_b200.sh by CONC:
-  #   low-latency    (CONC <= 32):       TP-only
-  #   balanced       (32 < CONC <= 128): + DP-attn
-  #   max-throughput (CONC > 128):       + DP-attn
-  # Split so result filenames (ep=, dpa=) accurately reflect the recipe.
+  # Two recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
+  # are selected inside benchmarks/single_node/dsv4_fp4_b200.sh by DP_ATTENTION:
+  #   low-latency  (DP_ATTENTION=false): TP-only, flashinfer_mxfp4
+  #   DP-attention  (DP_ATTENTION=true):  DP-attn + DeepEP + mega_moe opts
+  # The DP-attention recipe covers both "balanced" (conc 64-128) and
+  # "max-throughput" (conc 256+) CONC ranges with identical flags;
+  # only --max-running-requests scales with CONC.
   # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
   # while low-latency leaves ep_size at the default of 1.
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # low-latency
+    # low-latency (DP_ATTENTION=false)
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
-    # balanced
+    # DP-attention (DP_ATTENTION=true) — balanced CONC range
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
-    # max-throughput
+    # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    # low-latency
+    # low-latency (DP_ATTENTION=false)
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
-    # balanced
+    # DP-attention (DP_ATTENTION=true) — balanced CONC range
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
-    # max-throughput
+    # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
@@ -1846,7 +1847,7 @@ dsv4-fp4-b300-sglang:
   framework: sglang
   multinode: false
   # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # are selected inside benchmarks/single_node/dsv4_fp4_b300.sh by CONC:
+  # are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh by CONC:
   #   low-latency    (CONC <= 32):       TP-only
   #   balanced       (32 < CONC <= 128): + DP-attn
   #   max-throughput (CONC > 128):       + DP-attn
