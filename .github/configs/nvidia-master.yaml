@@ -1885,8 +1885,8 @@ dsv4-fp4-b300-sglang:
     # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
     - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
     - { tp: 4, ep: 8, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -1895,8 +1895,8 @@ dsv4-fp4-b300-sglang:
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
     # ep=8 is a naming convention for mega_moe deepep backend (actual ep=tp=4)
     - { tp: 4, ep: 8, dp-attn: true, conc-start: 512, conc-end: 512 }
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    - { tp: 4, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
 # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
 # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by

@@ -100,6 +100,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
             CUDA_GRAPH_MAX_BS=288
             MAX_RUNNING_REQUESTS=2560
             MEM_FRACTION_STATIC=0.87
+            SWA_FULL_TOKENS_RATIO=0.1
             TOKENIZER_WORKER_NUM=4
         else
             CUDA_GRAPH_MAX_BS=544
