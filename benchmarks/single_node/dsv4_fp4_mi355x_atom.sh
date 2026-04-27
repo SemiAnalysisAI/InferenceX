@@ -19,13 +19,17 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE"
 
-# EP_SIZE > 1 is still unvalidated by PR #650's repro (offline TP=8 EP=1
-# only). Keep the EP guard. The CONC guard was relaxed to empirically
-# probe whether kv_cache[:1,...] in deepseek_v4.py actually corrupts at
-# batch>1 in the server path: max-num-seqs=4 caps the running batch
-# below the YAML's max conc (32), and per-sequence eval correctness will
-# tell us if the hardcode bites. If gsm8k accuracy collapses at conc>1,
-# put `if [ "$CONC" -ne 1 ]; then exit 1` back.
+# ROCm/ATOM#650 is still a single-request marker for DSv4. Run
+# 24953107645 showed CONC>1 fails in two ways: 1k warmup can exhaust the KV
+# budget after sparse-attn temporaries raise peak memory, and 8k prefill OOMs
+# in the torch sparse_attn fallback when two long requests are batched. Keep
+# this fatal guard until ATOM lands the AITER sparse-attention / multi-request
+# path for DeepSeek-V4.
+if [ "$CONC" -ne 1 ]; then
+    echo "FATAL: ROCm/ATOM#650 DSv4 path is single-request only; CONC must be 1, got $CONC" >&2
+    exit 1
+fi
+
 if [ "$EP_SIZE" -ne 1 ]; then
     echo "FATAL: ROCm/ATOM#650 PR1 has not validated expert parallel serving; EP_SIZE must be 1, got $EP_SIZE" >&2
     exit 1
@@ -42,6 +46,89 @@ export OMP_NUM_THREADS=1
 # warmup logs that otherwise drown out the server-ready signal.
 export ATOM_USE_TRITON_MOE=1
 export AITER_LOG_LEVEL=WARNING
+
+# Apply the pure-Python part of ROCm/aiter#2916 over the image's installed
+# aiter package. Rebuilding aiter inside the benchmark would churn compiled
+# ROCm kernels and make the run noisy; the upstream fix only changes
+# aiter/ops/mhc.py so mhc_pre intermediate tensors allocate on
+# residual.device instead of the global default device.
+export AITER_MHC_FIX_SHA="76ea1ed5b2a5f8176ed7a16b1640dd972546a925"
+python3 - <<'PYEOF'
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+required_snippets = [
+    "    device = residual.device\n    out_pad = torch.empty(",
+    "selected_splitk, m, (hc_mult3 + 31) // 32 * 32, dtype=dtypes.fp32, device=device",
+    "sqrsum = torch.empty(selected_splitk, m, dtype=dtypes.fp32, device=device)",
+    "post_mix = torch.empty(m, hc_mult, 1, dtype=dtypes.fp32, device=device)",
+    "comb_mix = torch.empty(m, hc_mult, hc_mult, dtype=dtypes.fp32, device=device)",
+    "layer_input = torch.empty(m, hidden_size, dtype=dtypes.bf16, device=device)",
+]
+
+spec = importlib.util.find_spec("aiter.ops.mhc")
+if spec is None or spec.origin is None:
+    sys.exit("FATAL: cannot locate installed aiter.ops.mhc for ROCm/aiter#2916 patch")
+
+mhc_path = Path(spec.origin)
+source = mhc_path.read_text()
+
+if all(snippet in source for snippet in required_snippets):
+    print(f"aiter mhc device patch already present: {mhc_path}")
+    sys.exit(0)
+
+replacements = [
+    (
+        "    out_pad = torch.empty(\n"
+        "        selected_splitk, m, (hc_mult3 + 31) // 32 * 32, dtype=dtypes.fp32\n"
+        "    )",
+        "    device = residual.device\n"
+        "    out_pad = torch.empty(\n"
+        "        selected_splitk, m, (hc_mult3 + 31) // 32 * 32, dtype=dtypes.fp32, device=device\n"
+        "    )",
+    ),
+    (
+        "    sqrsum = torch.empty(selected_splitk, m, dtype=dtypes.fp32)",
+        "    sqrsum = torch.empty(selected_splitk, m, dtype=dtypes.fp32, device=device)",
+    ),
+    (
+        "    post_mix = torch.empty(m, hc_mult, 1, dtype=dtypes.fp32)",
+        "    post_mix = torch.empty(m, hc_mult, 1, dtype=dtypes.fp32, device=device)",
+    ),
+    (
+        "    comb_mix = torch.empty(m, hc_mult, hc_mult, dtype=dtypes.fp32)",
+        "    comb_mix = torch.empty(m, hc_mult, hc_mult, dtype=dtypes.fp32, device=device)",
+    ),
+    (
+        "    layer_input = torch.empty(m, hidden_size, dtype=dtypes.bf16)",
+        "    layer_input = torch.empty(m, hidden_size, dtype=dtypes.bf16, device=device)",
+    ),
+]
+
+missing = [old for old, _ in replacements if old not in source]
+if missing:
+    sys.exit(
+        f"FATAL: {mhc_path} does not match the expected pre-ROCm/aiter#2916 "
+        f"source; refusing to patch mhc_pre blindly. Missing patterns: "
+        f"{[m.splitlines()[0].strip() for m in missing]}"
+    )
+
+patched = source
+for old, new in replacements:
+    patched = patched.replace(old, new, 1)
+
+mhc_path.write_text(patched)
+patched_source = mhc_path.read_text()
+if not all(snippet in patched_source for snippet in required_snippets):
+    sys.exit(f"FATAL: ROCm/aiter#2916 mhc device patch failed verification for {mhc_path}")
+
+print(
+    f"applied ROCm/aiter#2916 ({os.environ['AITER_MHC_FIX_SHA']}) "
+    f"mhc device patch: {mhc_path}"
+)
+PYEOF
 
 # Apply ROCm/ATOM#650 (DSv4 PR1 skeleton) over the image's wheel-installed
 # atom. The chosen base image ships atom as a built wheel, not editable, so
@@ -63,20 +150,11 @@ fi
     git checkout --force "$ATOM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$ATOM_PR_SHA"
 
-    # WORKAROUND: PR #650 has no env-var toggle to disable the aiter MHC
-    # kernels, and on this image aiter's `mhc_pre_big_fuse` crashes with a
-    # HIPGuardImplMasqueradingAsCUDA INTERNAL ASSERT the first time the
-    # model executes the hc_pre path during prefill (a HIP/CUDA device-type
-    # mismatch inside aiter, not something we can fix from outside). SGLang's
-    # DSv4 recipe disables the same family explicitly
-    # (SGLANG_OPT_USE_TILELANG_MHC_PRE/POST=false, _DEEPGEMM_HC_PRENORM=false).
-    # Force only `mhc_pre` to torch-fallback; leave `mhc_post` on the aiter
-    # path since the crash stack only implicated mhc_pre and we'd like to
-    # recover the perf of half the MHC pipeline. If mhc_post crashes too on
-    # the next run, add the second sed back.
-    sed -i 's|mhc_pre = getattr(_aiter, "mhc_pre", None)|mhc_pre = None  # patched out (HIP device-guard crash)|' atom/models/deepseek_v4.py
-    grep -c "patched out" atom/models/deepseek_v4.py | grep -q '^1$' \
-        || { echo "FATAL: mhc_pre sed patch did not apply"; exit 1; }
+    # ROCm/aiter#2916 keeps ATOM's mhc_pre fast path usable. Fail if the
+    # pinned ATOM checkout no longer exposes that aiter hook; silently
+    # disabling it would hide the regression this benchmark is meant to catch.
+    grep -q 'mhc_pre = getattr(_aiter, "mhc_pre", None)' atom/models/deepseek_v4.py \
+        || { echo "FATAL: ATOM DSv4 mhc_pre aiter hook not found"; exit 1; }
 
     # --no-deps: don't churn the image's pinned ROCm/torch/triton/aiter.
     # --force-reinstall: replace the wheel-installed atom with the editable copy.
