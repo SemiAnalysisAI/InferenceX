@@ -1892,3 +1892,9 @@
   description:
     - "Pass --dsv4 to run_benchmark_serving so MTP benchmarks use the DSv4 chat template (PR #1153)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
+
+- config-keys:
+    - gptoss-fp4-mi355x-atom
+  description:
+    - "Update GPTOSS-120B FP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1195
