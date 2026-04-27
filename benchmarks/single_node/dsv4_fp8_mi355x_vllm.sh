@@ -80,6 +80,37 @@ for dist in importlib.metadata.distributions():
             f"line(s) for {name}: {path}"
         )
 
+for dist in importlib.metadata.distributions():
+    dist_path = Path(str(dist._path))
+    name = (dist.metadata.get("Name") or dist_path.name).lower().replace("_", "-")
+    if name != "torch":
+        continue
+    for relpath in ("METADATA", "requires.txt"):
+        path = dist_path / relpath
+        if not path.exists():
+            continue
+        lines = path.read_text(errors="replace").splitlines(keepends=True)
+        kept = []
+        for line in lines:
+            normalized = line.strip().lower()
+            is_triton_req = (
+                relpath == "METADATA"
+                and normalized.startswith("requires-dist: triton")
+            ) or (
+                relpath == "requires.txt"
+                and normalized.startswith("triton")
+            )
+            if not is_triton_req:
+                kept.append(line)
+        if len(kept) == len(lines):
+            continue
+        changed = True
+        path.write_text("".join(kept))
+        print(
+            f"Removed {len(lines) - len(kept)} torch triton dependency "
+            f"metadata line(s): {path}"
+        )
+
 roots = set()
 for getter in (site.getsitepackages,):
     try:
