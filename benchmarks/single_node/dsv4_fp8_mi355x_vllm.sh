@@ -165,6 +165,33 @@ if not changed:
 PY
 }
 
+ensure_amdsmi_python() {
+    if python3 - <<'PY'
+import amdsmi
+
+print(f"amdsmi already importable from {amdsmi.__file__}")
+PY
+    then
+        return
+    fi
+
+    # ROCm ships the Python binding under /opt/rocm/share/amd_smi. Prefer
+    # that over PyPI so the Python wrapper matches the image's ROCm runtime.
+    if [ -d /opt/rocm/share/amd_smi ]; then
+        if ! python3 -m pip install --no-deps /opt/rocm/share/amd_smi; then
+            python3 -m pip install --no-deps amdsmi
+        fi
+    else
+        python3 -m pip install --no-deps amdsmi
+    fi
+
+    python3 - <<'PY'
+import amdsmi
+
+print(f"amdsmi installed from {amdsmi.__file__}")
+PY
+}
+
 patch_vllm_rocm_platform_detection() {
     # vLLM detects ROCm with amdsmi. On this MI355X/ATOM stack, amdsmi can be
     # unavailable or return no handles even when PyTorch sees HIP devices. Fall
@@ -248,6 +275,125 @@ new = '''def _get_gcn_arch() -> str:
 '''
 path.write_text(text[:start] + new + text[end:])
 print(f"Patched ROCm GCN arch fallback in {path}")
+
+text = path.read_text()
+
+def replace_block(text: str, start_marker: str, end_marker: str, replacement: str) -> str:
+    start = text.index(start_marker)
+    end = text.index(end_marker, start)
+    return text[:start] + replacement + text[end:]
+
+text = replace_block(
+    text,
+    "    @classmethod\n    @with_amdsmi_context\n    def is_fully_connected",
+    "    @classmethod\n    @with_amdsmi_context\n    @lru_cache(maxsize=8)\n    def get_device_name",
+    '''    @classmethod
+    def is_fully_connected(cls, physical_device_ids: list[int]) -> bool:
+        """
+        Query if the set of GPUs are fully connected by XGMI (1 hop).
+        Fall back to disabling custom allreduce when amdsmi is unavailable.
+        """
+        if "amdsmi_init" not in globals():
+            logger.warning(
+                "amdsmi is unavailable; treating ROCm GPU topology as not "
+                "fully connected for custom allreduce."
+            )
+            return False
+
+        try:
+            amdsmi_init()
+            try:
+                handles = [
+                    amdsmi_get_processor_handles()[i] for i in physical_device_ids
+                ]
+                for i, handle in enumerate(handles):
+                    for j, peer_handle in enumerate(handles):
+                        if i < j:
+                            link_type = amdsmi_topo_get_link_type(
+                                handle, peer_handle
+                            )
+                            # type is 2 for XGMI
+                            if link_type["hops"] != 1 or link_type["type"] != 2:
+                                return False
+                return True
+            finally:
+                amdsmi_shut_down()
+        except Exception as error:
+            logger.warning(
+                "AMD 1 hop XGMI detection failed; treating ROCm GPU topology "
+                "as not fully connected for custom allreduce.",
+                exc_info=error,
+            )
+            return False
+
+''',
+)
+
+text = replace_block(
+    text,
+    "    @classmethod\n    @with_amdsmi_context\n    @lru_cache(maxsize=8)\n    def get_device_name",
+    "    @classmethod\n    @with_amdsmi_context\n    def get_device_uuid",
+    '''    @classmethod
+    @lru_cache(maxsize=8)
+    def get_device_name(cls, device_id: int = 0) -> str:
+        if "amdsmi_init" in globals():
+            try:
+                amdsmi_init()
+                try:
+                    physical_device_id = cls.device_id_to_physical_device_id(device_id)
+                    handle = amdsmi_get_processor_handles()[physical_device_id]
+                    asic_info = amdsmi_get_gpu_asic_info(handle)
+                    asic_info_device_id: str = asic_info["device_id"]
+                    if asic_info_device_id in _ROCM_DEVICE_ID_NAME_MAP:
+                        return _ROCM_DEVICE_ID_NAME_MAP[asic_info_device_id]
+                    return asic_info["market_name"]
+                finally:
+                    amdsmi_shut_down()
+            except Exception as error:
+                logger.debug(
+                    "amdsmi device name query failed; falling back to torch.cuda.",
+                    exc_info=error,
+                )
+
+        return torch.cuda.get_device_name(device_id)
+
+''',
+)
+
+text = replace_block(
+    text,
+    "    @classmethod\n    @with_amdsmi_context\n    def get_device_uuid",
+    "    @classmethod\n    def get_device_total_memory",
+    '''    @classmethod
+    def get_device_uuid(cls, device_id: int = 0) -> str:
+        if "amdsmi_init" in globals():
+            try:
+                amdsmi_init()
+                try:
+                    device = amdsmi_get_processor_handles()[device_id]
+                    return amdsmi_get_gpu_device_uuid(device)
+                finally:
+                    amdsmi_shut_down()
+            except Exception as error:
+                logger.debug(
+                    "amdsmi device uuid query failed; falling back to torch.cuda.",
+                    exc_info=error,
+                )
+
+        try:
+            props = torch.cuda.get_device_properties(device_id)
+            device_uuid = getattr(props, "uuid", None)
+            if device_uuid:
+                return str(device_uuid)
+        except Exception as error:
+            logger.debug("torch.cuda device uuid fallback failed.", exc_info=error)
+        return f"cuda:{device_id}"
+
+''',
+)
+
+path.write_text(text)
+print(f"Patched ROCm amdsmi runtime fallbacks in {path}")
 PY
 }
 
@@ -281,6 +427,7 @@ fi
 
     patch_vllm_rocm_platform_detection
     sanitize_stale_triton_test_metadata
+    ensure_amdsmi_python
 
     # Pin ROCm packages so pip's resolver can't replace them with
     # CUDA builds from PyPI (torch, torchvision, aiter, triton, etc.).
