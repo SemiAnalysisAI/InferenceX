@@ -53,6 +53,7 @@ fi
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
+    pip install setuptools-scm
     pip install --no-build-isolation --no-deps --force-reinstall -e .
 )
 
