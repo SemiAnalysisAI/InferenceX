@@ -192,6 +192,32 @@ print(f"amdsmi installed from {amdsmi.__file__}")
 PY
 }
 
+install_tilelang_runtime_deps() {
+    # DeepSeek-V4 mHC kernels import tilelang lazily during the vLLM profile
+    # run. vLLM's ROCm requirements do not include it yet, while the unpinned
+    # package can fall back to a source build or try to resolve CUDA torch
+    # dependencies. Use binary wheels only, skip dependency resolution, and
+    # install the small direct runtime deps we need. TileLang 0.1.9 is required
+    # for T.pdl_sync used by mhc.py. Do not install torch-c-dlpack-ext on ROCm;
+    # its wheel expects CUDA libraries.
+    python3 -m pip install \
+        -c /tmp/rocm-pins.txt \
+        --no-deps \
+        --only-binary=:all: \
+        apache-tvm-ffi==0.1.9 \
+        z3-solver==4.15.4.0 \
+        tilelang==0.1.9
+
+    python3 - <<'PY'
+import tilelang
+import tilelang.language as T
+
+print(f"tilelang {tilelang.__version__} imported from {tilelang.__file__}")
+if not hasattr(T, "pdl_sync"):
+    raise SystemExit("tilelang.language.pdl_sync is required by vLLM mhc.py")
+PY
+}
+
 patch_vllm_rocm_platform_detection() {
     # vLLM detects ROCm with amdsmi. On this MI355X/ATOM stack, amdsmi can be
     # unavailable or return no handles even when PyTorch sees HIP devices. Fall
@@ -442,6 +468,7 @@ fi
     pip install --no-build-isolation --no-deps --force-reinstall -e .
     # Install runtime deps separately, constrained to keep ROCm packages intact.
     pip install -c /tmp/rocm-pins.txt -r requirements/rocm.txt
+    install_tilelang_runtime_deps
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
