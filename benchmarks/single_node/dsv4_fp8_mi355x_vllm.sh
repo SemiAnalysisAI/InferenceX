@@ -5,9 +5,10 @@ set -eo pipefail
 # Based on vllm-project/vllm#40889 (AITER-accelerated sparse MLA decode,
 # stacked on #40871 which adds base DSv4 ROCm support).
 #
-# Uses a stable vLLM ROCm image as the base and rebuilds vLLM from the PR
-# branch (includes both #40871 C++ kernels and #40889 AITER MLA decode).
-# Once both PRs merge into a release, pin the image and remove the build.
+# Uses the ATOM MI355X image as the base (ROCm 7.2.2, PyTorch 2.10,
+# aiter with MLA decode, MI355X GPU detection). vLLM is rebuilt from
+# the PR branch on top. Once both PRs merge into a release, switch to
+# a vLLM ROCm MI355X image and remove the build.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -34,9 +35,11 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-# Build vLLM from PR #40889 branch (includes #40871 base). The image
-# provides the ROCm toolchain (hipcc, cmake, ninja, torch, aiter); we
-# rebuild vLLM in-place. Bump VLLM_PR_SHA when the PR moves.
+# Build vLLM from PR #40889 branch (includes #40871 base). The ATOM
+# image provides ROCm 7.2.2 toolchain (hipcc, cmake, ninja, torch,
+# aiter with MLA decode); we rebuild vLLM in-place. --no-deps avoids
+# disturbing the ATOM image's pinned ROCm/torch packages.
+# Bump VLLM_PR_SHA when the PR moves.
 VLLM_PR_SHA="b3a4a44f01e565219dd353611712d0ea2e8d11ee"
 VLLM_PR_DIR="/tmp/vllm-pr40889"
 
@@ -50,7 +53,7 @@ fi
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
-    pip install --no-build-isolation --force-reinstall -e .
+    pip install --no-build-isolation --no-deps --force-reinstall -e .
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
