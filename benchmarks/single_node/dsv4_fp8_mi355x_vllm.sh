@@ -60,10 +60,18 @@ fi
     pip install setuptools-scm
     # Install vLLM code + build C++ extensions (no deps to avoid touching ROCm)
     pip install --no-build-isolation --no-deps --force-reinstall -e .
-    # The ATOM image has a stale editable install from /triton-test/ (build
-    # dir cleaned up by the Dockerfile). Remove it so pip doesn't choke
-    # resolving transitive deps that reference the missing path.
-    pip uninstall -y triton-kernels 2>/dev/null || true
+    # The ATOM image has stale editable installs from /triton-test/ (build
+    # dir cleaned up by the Dockerfile). Remove the direct_url.json metadata
+    # so pip doesn't choke resolving transitive deps through the missing path.
+    python3 -c "
+import importlib.metadata, pathlib
+for dist in importlib.metadata.distributions():
+    du = dist.read_text('direct_url.json')
+    if du and '/triton-test' in du:
+        p = pathlib.Path(dist._path) / 'direct_url.json'
+        print(f'Cleaning stale editable ref: {dist.name} -> {p}')
+        p.unlink(missing_ok=True)
+"
     # Install runtime deps separately, constrained to keep ROCm packages intact
     pip install -c /tmp/rocm-pins.txt -r requirements/rocm.txt
 )
