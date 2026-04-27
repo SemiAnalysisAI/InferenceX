@@ -38,18 +38,13 @@ export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 NGINX_IMAGE="nginx:1.27.4"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
-SQUASH_DIR="/mnt/vast/squash"
+# `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
+# pyxis rejects '+' in image paths with "Invalid image format", and the
+# old /mnt/vast/squash dir contains '+'-separated files from prior runs.
+SQUASH_DIR="/mnt/vast/squash_dupe"
 mkdir -p "$SQUASH_DIR"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-# Some images were imported with '+' separators (enroot's default) rather
-# than '_'. Check for the '+' variant and symlink so both names resolve.
-SQUASH_FILE_PLUS="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
-if [ ! -f "$SQUASH_FILE" ] && [ -f "$SQUASH_FILE_PLUS" ]; then
-    ln -sf "$SQUASH_FILE_PLUS" "$SQUASH_FILE"
-    echo "[squash] symlinked $SQUASH_FILE -> $SQUASH_FILE_PLUS"
-fi
 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE

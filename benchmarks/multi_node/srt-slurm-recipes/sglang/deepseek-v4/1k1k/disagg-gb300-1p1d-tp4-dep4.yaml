@@ -25,7 +25,7 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4-dep4"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
+  container: "lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64"
   precision: "fp4"
 
 # Use the container-bundled dynamo (skip srtctl pip install). Same

@@ -7691,7 +7691,11 @@ dsv4-fp4-gb200-dynamo-vllm:
         dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  # _arm64 variant: GH runner pod doing `enroot import` is amd64, but
+  # gb300-cw compute nodes are aarch64 (Grace). Without the explicit
+  # arm64 tag the registry serves the amd64 manifest, which fails to
+  # exec on the compute side.
+  image: lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
