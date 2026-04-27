@@ -52,3 +52,10 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+
+  collect:
+    needs: upload
+    uses: ./.github/workflows/collect-results.yml
+    secrets: inherit
+    with:
+      result-prefix: bmk
