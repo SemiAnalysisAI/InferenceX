@@ -9,7 +9,7 @@
   "spec_decoding": "mtp",
   "disagg": false,
   "isl": 8192,
-  "osl": 256,
+  "osl": 1024,
   "is_multinode": false,
   "tp": 16,
   "ep": 16,
