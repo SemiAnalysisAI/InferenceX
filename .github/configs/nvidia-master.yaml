@@ -3779,12 +3779,12 @@ gptoss-fp4-h100-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 2, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h100-vllm:
   image: vllm/vllm-openai:v0.18.0
@@ -4013,14 +4013,14 @@ gptoss-fp4-h200-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 1, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 1, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 2, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 1, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.18.0

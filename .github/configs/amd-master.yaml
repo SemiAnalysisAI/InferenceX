@@ -583,10 +583,12 @@ gptoss-fp4-mi300x-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256] }
+      # offloading=none covers low + mid concurrency (no KV pressure → no need to offload)
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      # offloading=cpu covers mid + high concurrency where KV pressure exceeds GPU; overlap at 64 for crossover
+      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.1
@@ -615,10 +617,10 @@ gptoss-fp4-mi325x-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, offloading: cpu, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
