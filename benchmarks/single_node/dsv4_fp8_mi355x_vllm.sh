@@ -34,11 +34,11 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_PLUGINS=""
 
 # Build vLLM from PR #40889 branch (includes #40871 base). The ATOM
 # image provides ROCm 7.2.2 toolchain (hipcc, cmake, ninja, torch,
-# aiter with MLA decode); we rebuild vLLM in-place. --no-deps avoids
-# disturbing the ATOM image's pinned ROCm/torch packages.
+# aiter with MLA decode); we rebuild vLLM in-place.
 # Bump VLLM_PR_SHA when the PR moves.
 VLLM_PR_SHA="b3a4a44f01e565219dd353611712d0ea2e8d11ee"
 VLLM_PR_DIR="/tmp/vllm-pr40889"
@@ -54,7 +54,7 @@ fi
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
     pip install setuptools-scm
-    pip install --no-build-isolation --no-deps --force-reinstall -e .
+    pip install --no-build-isolation --force-reinstall -e .
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
