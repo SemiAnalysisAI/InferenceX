@@ -36,9 +36,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -111,7 +110,7 @@ EOF
     fi
 
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
     # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
@@ -249,8 +248,7 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
