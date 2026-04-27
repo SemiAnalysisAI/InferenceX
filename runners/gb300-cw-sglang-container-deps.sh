@@ -42,3 +42,51 @@ cd /tmp/dynamo_build/dynamo
 pip install --break-system-packages -e .
 
 echo "Dynamo installed from prebuilt cache ($DYNAMO_HASH)"
+
+# --- API-drift patch: dynamo 1.1.0 vs sglang 0.5.9 --------------------------
+# ai-dynamo at hash 6a159fed (1.1.0-equivalent) calls
+# `engine.async_generate(return_routed_experts=...)`, but the sglang 0.5.9
+# bundled in lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 has an
+# Engine.async_generate signature that doesn't accept that kwarg, so every
+# request 500s with:
+#   TypeError: Engine.async_generate() got an unexpected keyword argument
+#       'return_routed_experts'
+# (See run 24973148979 → mooncake unblocked the disagg warmup; this is the
+# next failure layer.) Strip the kwarg from every call site in the
+# extracted dynamo source. `pip install -e .` above is editable, so the
+# patch propagates immediately at next `python3 -m dynamo.sglang ...`.
+DYNAMO_SRC=/tmp/dynamo_build/dynamo
+patch_targets=$(grep -rl 'return_routed_experts' "$DYNAMO_SRC" --include='*.py' 2>/dev/null || true)
+if [ -n "$patch_targets" ]; then
+    for f in $patch_targets; do
+        echo "[dynamo-patch] stripping return_routed_experts kwarg in $f"
+        # Match `return_routed_experts=<value>,?` where <value> is anything
+        # up to the next `,` or `)` at the same paren depth. Single-line
+        # case covers >99% of call sites; the value can be False/True/a
+        # var name. Trailing comma + whitespace is consumed too so we
+        # don't leave a stray `, )` behind.
+        python3 - "$f" <<'PYEOF'
+import re, sys
+path = sys.argv[1]
+with open(path) as fh:
+    src = fh.read()
+# Greedy on whitespace, non-greedy on the value (no commas/parens inside).
+new = re.sub(
+    r'return_routed_experts\s*=\s*[^,)]+\s*,?\s*',
+    '',
+    src,
+)
+if new != src:
+    with open(path, 'w') as fh:
+        fh.write(new)
+PYEOF
+    done
+    echo "[dynamo-patch] verifying no return_routed_experts call sites remain..."
+    if grep -rn 'return_routed_experts' "$DYNAMO_SRC" --include='*.py' 2>/dev/null; then
+        echo "[dynamo-patch] WARNING: residual matches above (likely defaults / declarations, not call sites). Inspect if 500s persist."
+    else
+        echo "[dynamo-patch] clean"
+    fi
+else
+    echo "[dynamo-patch] no occurrences of return_routed_experts found in $DYNAMO_SRC (already patched or moved upstream)"
+fi
