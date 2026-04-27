@@ -168,7 +168,9 @@ PY
 patch_vllm_rocm_platform_detection() {
     # vLLM detects ROCm with amdsmi. On this MI355X/ATOM stack, amdsmi can be
     # unavailable or return no handles even when PyTorch sees HIP devices. Fall
-    # back to torch ROCm visibility so current_platform is RocmPlatform.
+    # back to torch ROCm visibility so current_platform is RocmPlatform. Also
+    # avoid rocm.py's warning_once path during module import; it imports
+    # distributed modules while current_platform is still being initialized.
     python3 - <<'PY'
 from pathlib import Path
 
@@ -214,6 +216,38 @@ new = '''def rocm_platform_plugin() -> str | None:
 '''
 path.write_text(text[:start] + new + text[end:])
 print(f"Patched ROCm platform detection fallback in {path}")
+
+path = Path("vllm/platforms/rocm.py")
+text = path.read_text()
+start = text.index("def _get_gcn_arch() -> str:")
+end = text.index("\n\n# Resolve once at module load.", start)
+new = '''def _get_gcn_arch() -> str:
+    """
+    Get GCN arch via amdsmi when available, otherwise use torch.cuda.
+    Avoid warning_once during module import because it can re-enter
+    vllm.platforms.current_platform initialization.
+    """
+    try:
+        return _query_gcn_arch_from_amdsmi()
+    except Exception as e:
+        logger.debug("Failed to get GCN arch via amdsmi: %s", e)
+
+    try:
+        props = torch.cuda.get_device_properties(0)
+        gcn_arch = getattr(props, "gcnArchName", "")
+        if gcn_arch:
+            logger.debug("Got GCN arch via torch.cuda: %s", gcn_arch)
+            return gcn_arch
+    except Exception as e:
+        logger.debug("Failed to get GCN arch via torch.cuda: %s", e)
+
+    # This benchmark is MI355X-only. Keep a deterministic fallback instead of
+    # failing ROCm platform import when amdsmi is absent.
+    logger.warning("Falling back to gfx950 for MI355X ROCm platform detection.")
+    return "gfx950"
+'''
+path.write_text(text[:start] + new + text[end:])
+print(f"Patched ROCm GCN arch fallback in {path}")
 PY
 }
 
