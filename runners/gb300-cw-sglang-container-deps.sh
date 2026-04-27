@@ -58,35 +58,45 @@ echo "Dynamo installed from prebuilt cache ($DYNAMO_HASH)"
 DYNAMO_SRC=/tmp/dynamo_build/dynamo
 patch_targets=$(grep -rl 'return_routed_experts' "$DYNAMO_SRC" --include='*.py' 2>/dev/null || true)
 if [ -n "$patch_targets" ]; then
+    # Match WHOLE LINES that are just a kwarg pass:
+    #     return_routed_experts=<simple-identifier-or-attr>,?
+    # The value is constrained to a simple identifier ([A-Za-z_][\w.]*),
+    # which deliberately excludes function calls (no `(` allowed). This
+    # leaves the multi-line assignment statement at decode_handler.py:275
+    # intact:
+    #     return_routed_experts = getattr(
+    #         self.config.server_args, "enable_return_routed_experts", False
+    #     )
+    # That assignment is dead code after we strip the kwarg passes, but
+    # leaving it costs nothing and avoids the syntax-error trap from the
+    # earlier (over-greedy) version of this patch.
     for f in $patch_targets; do
-        echo "[dynamo-patch] stripping return_routed_experts kwarg in $f"
-        # Match `return_routed_experts=<value>,?` where <value> is anything
-        # up to the next `,` or `)` at the same paren depth. Single-line
-        # case covers >99% of call sites; the value can be False/True/a
-        # var name. Trailing comma + whitespace is consumed too so we
-        # don't leave a stray `, )` behind.
+        echo "[dynamo-patch] stripping return_routed_experts kwarg lines in $f"
         python3 - "$f" <<'PYEOF'
 import re, sys
 path = sys.argv[1]
 with open(path) as fh:
     src = fh.read()
-# Greedy on whitespace, non-greedy on the value (no commas/parens inside).
+# Whole-line kwarg pass: indented `return_routed_experts=<simple>,?` then EOL.
+# `[A-Za-z_][\w.]*` matches identifiers, attribute access, True/False/None — but NOT calls.
 new = re.sub(
-    r'return_routed_experts\s*=\s*[^,)]+\s*,?\s*',
+    r'^[ \t]+return_routed_experts\s*=\s*[A-Za-z_][\w.]*\s*,?[ \t]*\n',
     '',
     src,
+    flags=re.MULTILINE,
 )
 if new != src:
     with open(path, 'w') as fh:
         fh.write(new)
+    print(f'[dynamo-patch]   patched: {path}')
+else:
+    print(f'[dynamo-patch]   no kwarg-pass lines matched in: {path}')
 PYEOF
     done
-    echo "[dynamo-patch] verifying no return_routed_experts call sites remain..."
-    if grep -rn 'return_routed_experts' "$DYNAMO_SRC" --include='*.py' 2>/dev/null; then
-        echo "[dynamo-patch] WARNING: residual matches above (likely defaults / declarations, not call sites). Inspect if 500s persist."
-    else
-        echo "[dynamo-patch] clean"
-    fi
+    # Sanity: any remaining occurrence is fine if it's the assignment;
+    # log it so the next person knows what's left.
+    echo "[dynamo-patch] residual occurrences (expected: only the dead assignment in decode_handler.py):"
+    grep -rn 'return_routed_experts' "$DYNAMO_SRC" --include='*.py' 2>/dev/null || echo "  (none)"
 else
     echo "[dynamo-patch] no occurrences of return_routed_experts found in $DYNAMO_SRC (already patched or moved upstream)"
 fi
