@@ -33,6 +33,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_TARGET_DEVICE=rocm
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_PLUGINS=""
 
@@ -164,6 +165,76 @@ if not changed:
 PY
 }
 
+patch_vllm_rocm_platform_detection() {
+    # vLLM detects ROCm with amdsmi. On this MI355X/ATOM stack, amdsmi can be
+    # unavailable or return no handles even when PyTorch sees HIP devices. Fall
+    # back to torch ROCm visibility so current_platform is RocmPlatform.
+    python3 - <<'PY'
+from pathlib import Path
+
+path = Path("vllm/platforms/__init__.py")
+text = path.read_text()
+start = text.index("def rocm_platform_plugin() -> str | None:")
+end = text.index("\n\ndef xpu_platform_plugin() -> str | None:", start)
+new = '''def rocm_platform_plugin() -> str | None:
+    is_rocm = False
+    logger.debug("Checking if ROCm platform is available.")
+    try:
+        import amdsmi
+
+        amdsmi.amdsmi_init()
+        try:
+            if len(amdsmi.amdsmi_get_processor_handles()) > 0:
+                is_rocm = True
+                logger.debug("Confirmed ROCm platform is available via amdsmi.")
+            else:
+                logger.debug("ROCm platform is not available because no GPU is found by amdsmi.")
+        finally:
+            amdsmi.amdsmi_shut_down()
+    except Exception as e:
+        logger.debug("ROCm platform is not available via amdsmi because: %s", str(e))
+
+    if not is_rocm:
+        try:
+            import torch
+
+            is_rocm = (
+                torch.version.hip is not None
+                and torch.cuda.is_available()
+                and torch.cuda.device_count() > 0
+            )
+            if is_rocm:
+                logger.debug("Confirmed ROCm platform is available via torch HIP.")
+            else:
+                logger.debug("ROCm platform is not available via torch HIP.")
+        except Exception as e:
+            logger.debug("ROCm torch HIP fallback failed because: %s", str(e))
+
+    return "vllm.platforms.rocm.RocmPlatform" if is_rocm else None
+'''
+path.write_text(text[:start] + new + text[end:])
+print(f"Patched ROCm platform detection fallback in {path}")
+PY
+}
+
+check_vllm_rocm_platform_detection() {
+    VLLM_LOGGING_LEVEL=DEBUG python3 - <<'PY'
+import torch
+from vllm.platforms import current_platform
+
+print(f"torch.version.hip={torch.version.hip}")
+print(f"torch.cuda.is_available={torch.cuda.is_available()}")
+print(f"torch.cuda.device_count={torch.cuda.device_count()}")
+print(
+    "vllm.current_platform="
+    f"{current_platform.__class__.__module__}.{current_platform.__class__.__name__} "
+    f"device_type={current_platform.device_type}"
+)
+if not current_platform.is_rocm():
+    raise SystemExit("vLLM did not detect ROCm platform")
+PY
+}
+
 if [ ! -d "$VLLM_PR_DIR/.git" ]; then
     git clone --filter=blob:none https://github.com/ChuanLi1101/vllm.git "$VLLM_PR_DIR"
 fi
@@ -174,6 +245,7 @@ fi
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
+    patch_vllm_rocm_platform_detection
     sanitize_stale_triton_test_metadata
 
     # Pin ROCm packages so pip's resolver can't replace them with
@@ -192,6 +264,7 @@ fi
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
+check_vllm_rocm_platform_detection
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
