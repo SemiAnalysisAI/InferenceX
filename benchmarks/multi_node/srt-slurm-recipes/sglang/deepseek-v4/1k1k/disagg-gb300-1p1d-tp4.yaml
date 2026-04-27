@@ -41,27 +41,29 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64"
   precision: "fp4"
 
-# Pin a dynamo dev wheel that contains the native Rust DeepSeekV4Formatter
-# (added at hash 6a159fed on 2026-04-23 — see the comment in the gb200
-# vllm sibling disagg-gb200-7p1d-dep8-dep16.yaml). The 2026-04-26 dev wheel
-# from pypi.nvidia.com is the first wheel post that hash with both
-# ai-dynamo and ai-dynamo-runtime aarch64 builds. Without the formatter,
-# the dynamo frontend rejects DSv4 at pipeline build time with
-# "chat_template field is required in the tokenizer_config.json file"
-# and 404s every request — that's what runs #24963242956 and the
-# follow-up hit on stable 0.8.x.
-#
-# The lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 container does
-# NOT bundle ai-dynamo, so install: false is wrong here (gives
-# "ModuleNotFoundError: No module named 'dynamo'" the moment srtctl
-# tries to launch python3 -m dynamo.sglang). The gb200 vllm sibling
-# solves the same gap with hash + install: true + a setup_script that
-# pulls a prebuilt wheel from /mnt/vast/dynamo_cache; we don't have that
-# cache yet for SGLang, so we just let srtctl pip-install the dev wheel
-# per rank from pypi.nvidia.com — same payload, slower per-rank install.
+# Build dynamo from hash 6a159fed (the same commit the gb200 vllm sibling
+# pins, known sglang-API-stable). The lmsysorg/sglang:deepseek-v4-grace-
+# blackwell_arm64 image lacks both a working ai-dynamo and the rust
+# toolchain for an in-container build; pinning a published dev wheel
+# (1.2.0.dev*) trips API drift against bundled sglang 0.5.9 (compat
+# shim warns then disagg startup warmup hangs). Same prebuild-cache
+# pattern as PR #1150 for vllm: launch_gb300-cw.sh builds the wheel
+# ONCE on a single-node srun, drops it at /mnt/vast/dynamo_cache/<hash>,
+# and the setup_script below force-reinstalls from cache per rank
+# (~30 s, no per-rank rust build, no API drift).
 dynamo:
-  install: true
-  version: "1.2.0.dev20260425"
+  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
+  # install: false → srtctl skips its own pip install; setup_script is
+  # the sole installer.
+  install: false
+
+setup_script: gb300-cw-sglang-container-deps.sh
+
+# Mount /mnt/vast/dynamo_cache into every worker container so each
+# rank can pip-install from the wheel that launch_gb300-cw.sh
+# pre-built there.
+extra_mount:
+  - "/mnt/vast/dynamo_cache:/mnt/vast/dynamo_cache"
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
 # can land on different racks and pay the cross-rack hop on every NIXL

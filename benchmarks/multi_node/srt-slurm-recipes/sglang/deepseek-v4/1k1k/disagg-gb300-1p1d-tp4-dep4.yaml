@@ -28,14 +28,20 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64"
   precision: "fp4"
 
-# Pin a dynamo dev wheel containing the DSv4 formatter (hash 6a159fed,
-# 2026-04-23). See the TP4 sibling header for the full rationale and
-# casualty list — the lmsysorg sglang arm64 container ships no
-# ai-dynamo, so install: false dies with ModuleNotFoundError, and any
-# stable version <=1.0.2 lacks the formatter and 404s.
+# Build dynamo from hash 6a159fed via prebuild cache. See the TP4
+# sibling header for the full rationale and the casualty timeline —
+# short version: arm64 container ships no ai-dynamo, dev wheels API-
+# drift against sglang 0.5.9 and hang the disagg warmup, so we mirror
+# the gb200 vllm sibling's cache pattern (PR #1150) and force-reinstall
+# from /mnt/vast/dynamo_cache/<hash> per rank.
 dynamo:
-  install: true
-  version: "1.2.0.dev20260425"
+  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
+  install: false
+
+setup_script: gb300-cw-sglang-container-deps.sh
+
+extra_mount:
+  - "/mnt/vast/dynamo_cache:/mnt/vast/dynamo_cache"
 
 sbatch_directives:
   segment: "2"
