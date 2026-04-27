@@ -128,6 +128,12 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 pip install -q datasets pandas
 
+# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
+# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
+# tokenizer ships without a jinja chat_template, so plain --use-chat-template
+# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
+# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
+# silently regresses on raw random tokens).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -138,7 +144,8 @@ run_benchmark_serving \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir "$PWD/"
+    --result-dir "$PWD/" \
+    --dsv4
 
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
