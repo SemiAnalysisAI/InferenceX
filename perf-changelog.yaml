@@ -1890,5 +1890,6 @@
 - config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
-    - "Run evals for DeepSeek-V4-Pro FP4 B300 SGLang MTP (conc 8 now eligible after MIN_EVAL_CONC lowered to 8)"
+    - "Run evals for DSv4 FP4 B300 SGLang MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1189
   evals-only: true
