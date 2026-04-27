@@ -1,0 +1,47 @@
+name: Upload Mock 950DT Results
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        conc: [16, 64, 128]
+    env:
+      EXP_NAME: dsv4-fp4-950dt-huawei-mindie
+      PRECISION: fp4
+      FRAMEWORK: huawei-mindie
+      TP: '16'
+      EP: '16'
+      DPA: 'true'
+      DISAGG: 'false'
+      SPEC: mtp
+      RUNNER_TAG: 950dt-mock_00
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+
+      - name: Stage canned result
+        run: |
+          RESULT_FILENAME="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-ep${EP}-dpa${DPA}_disagg-${DISAGG}_spec-${SPEC}_conc${{ matrix.conc }}_${RUNNER_TAG}"
+          SRC="runners/mock_results/950dt/dsv4-fp4/agg_${RESULT_FILENAME}.json"
+          if [ ! -f "$SRC" ]; then
+            echo "Canned result not found at $SRC" >&2
+            exit 1
+          fi
+          cp "$SRC" "agg_${RESULT_FILENAME}.json"
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+
+      - name: Upload result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: bmk_${{ env.RESULT_FILENAME }}
+          path: agg_${{ env.RESULT_FILENAME }}.json
