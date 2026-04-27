@@ -35,7 +35,7 @@ model:
 # stable version <=1.0.2 lacks the formatter and 404s.
 dynamo:
   install: true
-  version: "1.2.0.dev20260426"
+  version: "1.2.0.dev20260425"
 
 sbatch_directives:
   segment: "2"

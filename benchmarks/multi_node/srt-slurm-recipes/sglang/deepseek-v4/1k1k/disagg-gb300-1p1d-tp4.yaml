@@ -61,7 +61,7 @@ model:
 # per rank from pypi.nvidia.com — same payload, slower per-rank install.
 dynamo:
   install: true
-  version: "1.2.0.dev20260426"
+  version: "1.2.0.dev20260425"
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
 # can land on different racks and pay the cross-rack hop on every NIXL
