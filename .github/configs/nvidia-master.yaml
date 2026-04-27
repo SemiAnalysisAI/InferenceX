@@ -1893,13 +1893,11 @@ dsv4-fp4-b300-sglang-mtp:
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 4, ep: 1, dp-attn: true, conc-start: 16, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
     - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - { tp: 4, ep: 1, dp-attn: true, conc-start: 16, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
