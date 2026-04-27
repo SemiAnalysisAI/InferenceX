@@ -2,6 +2,13 @@ name: Upload Mock 950DT Results
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - Mock-ascend
+      - main
+    paths:
+      - '.github/workflows/upload-mock-950dt.yml'
+      - 'runners/mock_results/950dt/**'
 
 permissions:
   contents: read
