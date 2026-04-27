@@ -43,6 +43,96 @@ export VLLM_PLUGINS=""
 VLLM_PR_SHA="b3a4a44f01e565219dd353611712d0ea2e8d11ee"
 VLLM_PR_DIR="/tmp/vllm-pr40889"
 
+sanitize_stale_triton_test_metadata() {
+    # The ATOM image was built with local /triton-test packages and the final
+    # layer removed that directory. Pip's resolver follows those metadata refs
+    # when installing unrelated deps, so remove only the stale metadata lines.
+    python3 - <<'PY'
+import importlib.metadata
+import site
+import sys
+from pathlib import Path
+
+STALE = "/triton-test"
+metadata_files = ("direct_url.json", "METADATA", "requires.txt")
+changed = False
+
+for dist in importlib.metadata.distributions():
+    dist_path = Path(str(dist._path))
+    name = dist.metadata.get("Name") or dist_path.name
+    for relpath in metadata_files:
+        path = dist_path / relpath
+        if not path.exists():
+            continue
+        text = path.read_text(errors="replace")
+        if STALE not in text:
+            continue
+        changed = True
+        if relpath == "direct_url.json":
+            path.unlink()
+            print(f"Removed stale editable metadata for {name}: {path}")
+            continue
+        lines = text.splitlines(keepends=True)
+        kept = [line for line in lines if STALE not in line]
+        path.write_text("".join(kept))
+        print(
+            f"Removed {len(lines) - len(kept)} stale {STALE} metadata "
+            f"line(s) for {name}: {path}"
+        )
+
+roots = set()
+for getter in (site.getsitepackages,):
+    try:
+        roots.update(Path(p) for p in getter())
+    except Exception:
+        pass
+try:
+    roots.add(Path(site.getusersitepackages()))
+except Exception:
+    pass
+roots.update(Path(p) for p in sys.path if "site-packages" in p or "dist-packages" in p)
+
+for root in roots:
+    if not root.exists():
+        continue
+    for pattern in ("*.egg-link", "*.pth"):
+        for path in root.glob(pattern):
+            text = path.read_text(errors="replace")
+            if STALE not in text:
+                continue
+            changed = True
+            kept = [line for line in text.splitlines(keepends=True) if STALE not in line]
+            if kept:
+                path.write_text("".join(kept))
+                print(f"Removed stale {STALE} line(s): {path}")
+            else:
+                path.unlink()
+                print(f"Removed stale {STALE} link file: {path}")
+
+remaining = []
+for dist in importlib.metadata.distributions():
+    dist_path = Path(str(dist._path))
+    for relpath in metadata_files:
+        path = dist_path / relpath
+        if path.exists() and STALE in path.read_text(errors="replace"):
+            remaining.append(str(path))
+for root in roots:
+    if root.exists():
+        for pattern in ("*.egg-link", "*.pth"):
+            for path in root.glob(pattern):
+                if STALE in path.read_text(errors="replace"):
+                    remaining.append(str(path))
+
+if remaining:
+    print("Stale /triton-test metadata remains:")
+    for path in remaining:
+        print(f"  {path}")
+    raise SystemExit(1)
+if not changed:
+    print("No stale /triton-test package metadata found.")
+PY
+}
+
 if [ ! -d "$VLLM_PR_DIR/.git" ]; then
     git clone --filter=blob:none https://github.com/ChuanLi1101/vllm.git "$VLLM_PR_DIR"
 fi
@@ -53,20 +143,21 @@ fi
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
+    sanitize_stale_triton_test_metadata
+
     # Pin ROCm packages so pip's resolver can't replace them with
     # CUDA builds from PyPI (torch, torchvision, aiter, triton, etc.).
     pip freeze | grep -iE '^(torch|aiter|triton|mori)' > /tmp/rocm-pins.txt
+    if grep -n "/triton-test" /tmp/rocm-pins.txt; then
+        echo "Stale /triton-test reference found in ROCm constraints"
+        exit 1
+    fi
 
     pip install setuptools-scm
     # Install vLLM code + build C++ extensions (no deps to avoid touching ROCm)
     pip install --no-build-isolation --no-deps --force-reinstall -e .
-    # Install runtime deps separately, constrained to keep ROCm packages.
-    # Filter out xgrammar — its dep chain resolves to a stale editable
-    # install from /triton-test/ (cleaned up by the ATOM Dockerfile).
-    # Not needed for serving benchmarks.
-    sed '/xgrammar/d' requirements/common.txt > /tmp/vllm-common.txt
-    sed 's|common.txt|/tmp/vllm-common.txt|' requirements/rocm.txt > /tmp/vllm-rocm.txt
-    pip install -c /tmp/rocm-pins.txt -r /tmp/vllm-rocm.txt
+    # Install runtime deps separately, constrained to keep ROCm packages intact.
+    pip install -c /tmp/rocm-pins.txt -r requirements/rocm.txt
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
