@@ -7,27 +7,28 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4"
 #
 # Cluster: gb300-cw (CoreWeave, 2x 18-node racks). 2 nodes total at
 # 1P1D-TP4 fits trivially within a single rack; the explicit segment
-# below pins them so the NIXL KV transfer between prefill and decode
-# stays rack-local. (Cluster's srtslurm.yaml turns off srtctl's auto
-# segment so each recipe owns its own value.)
+# below pins them so the KV transfer between prefill and decode stays
+# rack-local. (Cluster's srtslurm.yaml turns off srtctl's auto segment
+# so each recipe owns its own value.)
 #
 # Topology: 1 prefill node + 1 decode node, each TP=4 on a single GB300
-# (4 GPUs / node). KV transfer over NIXL. PR #75 measures saturation
-# at conc=128 / 838 Total TPS/GPU; sweep capped accordingly.
+# (4 GPUs / node). KV transfer over **Mooncake** (was NIXL; switched
+# below — see "Transport: Mooncake"). PR #75 measures saturation at
+# conc=128 / 838 Total TPS/GPU; sweep capped accordingly.
 #
-# ⚠️  NIXL state-buffer-transfer accuracy bug (upstream PR #75 body):
-# the SGLang NIXL backend currently registers and transfers the KV cache
-# correctly but DROPS the model's auxiliary state buffer (SWA / NSA /
-# Mamba). On DSv4-Pro this collapses GSM8K from 1.000 (agg) to ~0.13
-# (disagg) while throughput numbers and KV byte hashes look healthy.
-# Mooncake handles state buffers correctly; the NIXL fix mirrors that
-# (~237 lines extending KVArgsRegisterInfo/TransferInfo/register_buffer_
-# to_engine + adding send_state in
-# python/sglang/srt/disaggregation/nixl/conn.py). Until the upstream
-# sglang fix lands, the patch must be picked up via the
-# lmsysorg/sglang:deepseek-v4-grace-blackwell container build. If
-# eval-only GSM8K runs come back near 0.13 with healthy throughput,
-# that's the cause — not a tuning issue.
+# Transport: Mooncake (not NIXL).
+#   * NIXL hung the prefill startup warmup indefinitely on this stack
+#     (sglang 0.5.9 in container vs ai-dynamo ≥1.1.0 needed for the
+#     DSv4 formatter — compat shim warns on every worker, then a
+#     4-token warmup probe never runs forward). See runs through
+#     2026-04-27 ~02:35 (gh actions 24973148979) for the exact
+#     watchdog trace.
+#   * PR #75 explicitly notes "Mooncake handles state buffers
+#     correctly" — the disagg accuracy bug it warns about is NIXL-
+#     specific, and switching to Mooncake side-steps both that bug
+#     and our warmup hang.
+#   * The lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 container
+#     ships the Mooncake transport built-in; no extra deps needed.
 #
 # Local deltas vs upstream PR #75:
 #   * benchmark.type = sa-bench (upstream also uses sa-bench in the
@@ -66,8 +67,8 @@ extra_mount:
   - "/mnt/vast/dynamo_cache:/mnt/vast/dynamo_cache"
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
-# can land on different racks and pay the cross-rack hop on every NIXL
-# KV transfer.
+# can land on different racks and pay the cross-rack hop on every KV
+# transfer.
 sbatch_directives:
   segment: "2"
   # Use all node memory; cw default is too tight for the MXFP4 worker.
@@ -120,7 +121,7 @@ backend:
       trust-remote-code: true
       tensor-parallel-size: 4
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
       moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
       mem-fraction-static: 0.90
@@ -135,7 +136,7 @@ backend:
       trust-remote-code: true
       tensor-parallel-size: 4
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
       moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
       mem-fraction-static: 0.90

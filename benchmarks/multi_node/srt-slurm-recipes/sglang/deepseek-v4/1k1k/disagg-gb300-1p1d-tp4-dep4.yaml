@@ -3,7 +3,7 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4-dep4"
 # DeepSeek-V4-Pro disaggregated on GB300, asymmetric topology:
 #   Prefill: 1 node, TP=4 (no DP-attn, no EP).
 #   Decode:  1 node, full DP-attn (TP=4, DP=4) + DeepEP (EP=4 implicit).
-# Both on a single GB300 (4 GPUs / node). KV transfer over NIXL.
+# Both on a single GB300 (4 GPUs / node). KV transfer over **Mooncake**.
 #
 # Sibling of disagg-gb300-1p1d-tp4.yaml. The TP4 sibling mirrors upstream
 # PR #75 exactly; this DEP4 variant is a local extension to probe whether
@@ -13,12 +13,14 @@ name: "dsv4-sglang-disagg-gb300-1p1d-tp4-dep4"
 # Asymmetric KV layout: prefill ranks see TP=4 sharding; decode ranks
 # see DP=4 replication. SGLang's --disaggregation-decode-tp and
 # --disaggregation-decode-dp flags on the prefill engine carry this
-# metadata so KV chunks route to the correct decode rank during NIXL
+# metadata so KV chunks route to the correct decode rank during the
 # transfer (server_args.py:643-654, validate_disagg_tp_size).
 #
-# Same NIXL state-buffer-transfer caveat as the TP4 sibling - see
-# disagg-gb300-1p1d-tp4.yaml header. The grace-blackwell image build
-# carries the patch.
+# Transport: Mooncake (not NIXL) — same rationale as the TP4 sibling.
+# NIXL hung the disagg warmup on the lmsysorg sglang 0.5.9 container
+# regardless of dynamo version (run 24973148979 with hash 6a159fed +
+# prebuild cache still hit the same watchdog timeout). PR #75 calls
+# out Mooncake as the working transport for state buffers.
 #
 # Cluster: gb300-cw (CoreWeave 2x18-node racks); rack-pinned the same
 # way as the symmetric sibling.
@@ -103,7 +105,7 @@ backend:
       trust-remote-code: true
       tensor-parallel-size: 4
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
       # Decode runs DP-attn TP=4 / DP=4; prefill must be told both so
       # KV chunks route to the correct decode rank during NIXL transfer.
       disaggregation-decode-tp: 4
@@ -129,7 +131,7 @@ backend:
       moe-a2a-backend: deepep
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
       moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
       mem-fraction-static: 0.90
