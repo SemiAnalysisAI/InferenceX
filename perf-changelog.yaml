@@ -1823,5 +1823,6 @@
 - config-keys:
     - minimaxm2.5-fp8-mi355x-atom
   description:
-    - ""
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
+    - "Update MiniMax-M2.5 FP8 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
+    - "Concurrency up to 256 on TP2/TP4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1194
