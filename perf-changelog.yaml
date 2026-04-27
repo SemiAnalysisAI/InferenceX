@@ -1894,9 +1894,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
 
 - config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - Add low-latency configs and remove non-pareto configs
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1193
+
+- config-keys:
     - dsv4-fp4-b200-vllm
   description:
     - "Add DeepSeek-V4-Pro single-node B200 vLLM benchmark derived from B200 pareto sweep"
     - "ISL=1024: TP8 conc 4-128; DP8 (dp-attn) conc 256-4096"
     - "ISL=8192: TP8 conc 4-32; DP8 (dp-attn) conc 64-1024"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
+
