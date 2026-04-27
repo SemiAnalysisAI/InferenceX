@@ -54,7 +54,7 @@ fi
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
     pip install setuptools-scm
-    pip install --no-build-isolation --force-reinstall -e .
+    pip install --no-build-isolation -e .
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
