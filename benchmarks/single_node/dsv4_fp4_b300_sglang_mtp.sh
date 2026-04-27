@@ -90,7 +90,6 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --disable-flashinfer-autotune
         --deepep-config "$DEEPEP_CONFIG"
         --cuda-graph-max-bs 256
-        --schedule-conservativeness 2
     )
     CHUNKED_PREFILL_SIZE=32768
     MEM_FRACTION_STATIC=0.92
