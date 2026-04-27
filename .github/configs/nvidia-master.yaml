@@ -1883,19 +1883,22 @@ dsv4-fp4-b300-sglang-mtp:
   precision: fp4
   framework: sglang
   multinode: false
-  # Two CONC bands:
+  # Three CONC bands:
   #   A: TP=8 ep=1            -- conc 1-8    EAGLE (3,1,4) TP-only fallback
+  #   B: TP=4 ep=1            -- conc 4-32   EAGLE (3,1,4) TP-only mid batch
   #   C: TP=4 ep=1 dp-attn    -- conc 16-256 EAGLE (1,1,2) DP-attn flashinfer
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
     - { tp: 4, ep: 1, dp-attn: true, conc-start: 16, conc-end: 256, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
     - { tp: 4, ep: 1, dp-attn: true, conc-start: 16, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
