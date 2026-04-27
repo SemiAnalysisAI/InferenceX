@@ -1892,3 +1892,9 @@
   description:
     - "Pass --dsv4 to run_benchmark_serving so MTP benchmarks use the DSv4 chat template (PR #1153)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - Add low-latency configs and remove non-pareto configs
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1193
