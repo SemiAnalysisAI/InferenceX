@@ -53,8 +53,15 @@ fi
     git checkout --force "$VLLM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$VLLM_PR_SHA"
 
+    # Pin ROCm packages so pip's resolver can't replace them with
+    # CUDA builds from PyPI (torch, torchvision, aiter, triton, etc.).
+    pip freeze | grep -iE '^(torch|aiter|triton|mori)' > /tmp/rocm-pins.txt
+
     pip install setuptools-scm
-    pip install --no-build-isolation -e .
+    # Install vLLM code + build C++ extensions (no deps to avoid touching ROCm)
+    pip install --no-build-isolation --no-deps --force-reinstall -e .
+    # Install runtime deps separately, constrained to keep ROCm packages intact
+    pip install -c /tmp/rocm-pins.txt -r requirements/rocm.txt
 )
 
 python3 -c "import vllm; print(f'vLLM {vllm.__version__} from {vllm.__path__[0]}')"
