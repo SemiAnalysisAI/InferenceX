@@ -16,6 +16,11 @@ on:
                 description: "Ref (branch/sha) to checkout for generating configs"
                 required: false
                 type: string
+            debug-trace:
+                description: "Capture per-request prompt/response (incl. token IDs) for the trace replayer; uploaded with agentic_* artifacts"
+                required: false
+                type: boolean
+                default: false
     workflow_call:
         inputs:
             generate-cli-command:
@@ -30,6 +35,11 @@ on:
                 description: "Ref (branch/sha) to checkout for generating configs"
                 required: false
                 type: string
+            debug-trace:
+                description: "Capture per-request prompt/response (incl. token IDs) for the trace replayer; uploaded with agentic_* artifacts"
+                required: false
+                type: boolean
+                default: false
 
 jobs:
     get-jobs:
@@ -184,6 +194,7 @@ jobs:
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
+            debug-trace: ${{ inputs.debug-trace || false }}
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
@@ -224,6 +235,7 @@ jobs:
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
+            debug-trace: ${{ inputs.debug-trace || false }}
 
     test-sweep-single-node:
         needs: get-jobs

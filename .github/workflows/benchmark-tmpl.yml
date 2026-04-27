@@ -87,6 +87,11 @@ on:
         required: false
         type: string
         default: '1800'
+      debug-trace:
+        description: "Enable --debug-trace in the trace replayer (agentic-coding only)"
+        required: false
+        type: boolean
+        default: false
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -114,6 +119,7 @@ env:
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  DEBUG_TRACE: ${{ inputs.debug-trace }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
