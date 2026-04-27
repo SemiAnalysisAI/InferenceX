@@ -487,14 +487,14 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
     --tensor-parallel-size $TP \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization 0.90 \
     --max-model-len $MAX_MODEL_LEN \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
     --enforce-eager \
     --moe-backend "triton_unfused" \
     --no-enable-prefix-caching \
-    --max-num-seqs 256 \
+    --max-num-seqs 32 \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
