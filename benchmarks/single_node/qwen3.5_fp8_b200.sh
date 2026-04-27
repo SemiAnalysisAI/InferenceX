@@ -49,7 +49,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --chunked-prefill-size 81920 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
---scheduler-recv-interval 10 \
+--scheduler-recv-interval $( [[ $CONC -gt 16 ]] && echo 30 || echo 10 ) \
 --tokenizer-worker-num 6 \
 --tokenizer-path $MODEL \
 --context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
