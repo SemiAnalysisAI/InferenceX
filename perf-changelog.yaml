@@ -1888,6 +1888,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1187
 
 - config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Pass --dsv4 to run_benchmark_serving so MTP benchmarks use the DSv4 chat template (PR #1153)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
+
+- config-keys:
     - dsv4-fp8-mi355x-vllm
   description:
     - "Add vLLM DeepSeek-V4-Pro FP8 benchmark for MI355X with AITER-accelerated MLA decode (vllm-project/vllm#40889, stacked on #40871)"
