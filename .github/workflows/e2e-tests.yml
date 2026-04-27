@@ -21,6 +21,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            duration-override:
+                description: "Override matrix.config.duration (seconds). Empty = use matrix value."
+                required: false
+                type: string
+                default: ""
     workflow_call:
         inputs:
             generate-cli-command:
@@ -40,6 +45,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            duration-override:
+                description: "Override matrix.config.duration (seconds). Empty = use matrix value."
+                required: false
+                type: string
+                default: ""
 
 jobs:
     get-jobs:
@@ -185,7 +195,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.users }}
             offloading: ${{ matrix.config.offloading }}
-            duration: ${{ matrix.config.duration }}
+            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
@@ -231,7 +241,7 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             users: ${{ matrix.config.users }}
-            duration: ${{ matrix.config.duration }}
+            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
