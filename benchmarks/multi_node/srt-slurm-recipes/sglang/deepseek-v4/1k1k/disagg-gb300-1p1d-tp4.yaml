@@ -41,24 +41,27 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64"
   precision: "fp4"
 
-# Use the container-bundled dynamo. The lmsysorg/sglang:deepseek-v4-
-# grace-blackwell image ships a dynamo build with the native Rust
-# DeepSeekV4Formatter (added at hash 6a159fed, 2026-04-23 — see comment
-# in the gb200 vllm sibling disagg-gb200-7p1d-dep8-dep16.yaml). That
-# formatter auto-detects DSv4 by model name and serves /v1/completions
-# without needing chat_template in tokenizer_config.json.
+# Pin a dynamo dev wheel that contains the native Rust DeepSeekV4Formatter
+# (added at hash 6a159fed on 2026-04-23 — see the comment in the gb200
+# vllm sibling disagg-gb200-7p1d-dep8-dep16.yaml). The 2026-04-26 dev wheel
+# from pypi.nvidia.com is the first wheel post that hash with both
+# ai-dynamo and ai-dynamo-runtime aarch64 builds. Without the formatter,
+# the dynamo frontend rejects DSv4 at pipeline build time with
+# "chat_template field is required in the tokenizer_config.json file"
+# and 404s every request — that's what runs #24963242956 and the
+# follow-up hit on stable 0.8.x.
 #
-# `install: false` is critical here — without it, srtctl's schema
-# default (install: True, version: "0.8.0", see srt-slurm/src/srtctl/
-# core/schema.py:697) pip-installs ai-dynamo==0.8.0 from PyPI on top
-# of the container, which predates the DSv4 formatter. The frontend
-# then 404s on every request: PromptFormatter.from_mdc rejects the
-# model at pipeline build time with "chat_template field is required
-# in the tokenizer_config.json file". Casualties: runs #24963242956
-# (had dynamo.version: 0.8.1 explicit) and the follow-up (no dynamo
-# block, fell through to the 0.8.0 default).
+# The lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 container does
+# NOT bundle ai-dynamo, so install: false is wrong here (gives
+# "ModuleNotFoundError: No module named 'dynamo'" the moment srtctl
+# tries to launch python3 -m dynamo.sglang). The gb200 vllm sibling
+# solves the same gap with hash + install: true + a setup_script that
+# pulls a prebuilt wheel from /mnt/vast/dynamo_cache; we don't have that
+# cache yet for SGLang, so we just let srtctl pip-install the dev wheel
+# per rank from pypi.nvidia.com — same payload, slower per-rank install.
 dynamo:
-  install: false
+  install: true
+  version: "1.2.0.dev20260426"
 
 # Pin both nodes (1P + 1D) to the same rack on cw. Without this they
 # can land on different racks and pay the cross-rack hop on every NIXL

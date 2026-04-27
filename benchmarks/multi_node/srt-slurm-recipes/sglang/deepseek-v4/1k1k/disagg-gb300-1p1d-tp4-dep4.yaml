@@ -28,10 +28,14 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64"
   precision: "fp4"
 
-# Use the container-bundled dynamo (skip srtctl pip install). Same
-# rationale as the TP4 sibling - see its header for the casualty list.
+# Pin a dynamo dev wheel containing the DSv4 formatter (hash 6a159fed,
+# 2026-04-23). See the TP4 sibling header for the full rationale and
+# casualty list — the lmsysorg sglang arm64 container ships no
+# ai-dynamo, so install: false dies with ModuleNotFoundError, and any
+# stable version <=1.0.2 lacks the formatter and 404s.
 dynamo:
-  install: false
+  install: true
+  version: "1.2.0.dev20260426"
 
 sbatch_directives:
   segment: "2"
