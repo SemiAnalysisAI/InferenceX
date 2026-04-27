@@ -95,6 +95,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         MEM_FRACTION_STATIC=0.94
     elif [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ]; then
         export NVSHMEM_DISABLE_IB=1
+        export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
         export SGLANG_LOG_FORWARD_ITERS=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
         export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
