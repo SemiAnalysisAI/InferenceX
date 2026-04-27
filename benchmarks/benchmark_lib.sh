@@ -919,7 +919,6 @@ build_replay_cmd() {
     REPLAY_CMD+=" --advance-max $advance_max"
     REPLAY_CMD+=" --warmup-enabled"
     REPLAY_CMD+=" --seed 42"
-    REPLAY_CMD+=" --no-color"
     if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
         REPLAY_CMD+=" --hash-block-mode"
     fi
