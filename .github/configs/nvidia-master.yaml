@@ -1782,7 +1782,7 @@ qwen3.5-fp8-b200-sglang:
     osl: 1024
     search-space:
     - { tp: 8, conc-start: 4, conc-end: 16 }
-    - { tp: 4, ep: 4, conc-start: 32, conc-end: 256 }
+    - { tp: 4, ep: 4, conc-start: 4, conc-end: 256 }
   - isl: 8192
     osl: 1024
     search-space:

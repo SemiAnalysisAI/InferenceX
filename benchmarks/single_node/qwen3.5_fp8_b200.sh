@@ -44,14 +44,12 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC \
---max-running-requests $CONC \
---max-prefill-tokens 81920 \
---chunked-prefill-size 81920 \
+--max-prefill-tokens 16384 \
+--chunked-prefill-size 16384 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
 --scheduler-recv-interval $( [[ $CONC -gt 16 ]] && echo 30 || echo 10 ) \
 --tokenizer-worker-num 6 \
---tokenizer-path $MODEL \
 --context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
