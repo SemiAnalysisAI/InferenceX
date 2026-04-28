@@ -1,10 +1,10 @@
-name: "dsv4-vllm-disagg-gb200-1p8d-dep8-tp8-offload"
+name: "svf-vllm-disagg-gb200-mid-curve"
 
-# Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
-#   recipes/vllm/deepseek-v4-pro-sa/8k1k/disagg-gb200-1p8d-dep8-tp8-c8-c16-c32-c64-c128-c256-offload.yaml
+# Mirrored from NVIDIA/srt-slurm aflowers/vllm-gb200-v0.20.0 branch:
+#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-mid-curve.yaml
 #
-# Topology: 1 prefill (DEP=8) + 8 decode (pure TP=8). 18 nodes.
-# Targets c8-c512 with parallel TP-only decoders.
+# Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes total with a
+# dedicated NATS/etcd infra node. Mid-curve point at concurrency 256.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -36,11 +36,15 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 2
-  decode_nodes: 16
+  decode_nodes: 2
   prefill_workers: 1
-  decode_workers: 8
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -88,7 +92,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 16384
+      max-model-len: 9280
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -109,15 +113,15 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-#      data-parallel-size: 8
-#      data-parallel-rpc-port: 13345
-#      enable-expert-parallel: true
-      max-model-len: 16384
-      max-num-seqs: 256
-      max-cudagraph-capture-size: 256
-      max-num-batched-tokens: 256
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      max-model-len: 9280
+      max-num-seqs: 128
+      max-cudagraph-capture-size: 128
+      max-num-batched-tokens: 128
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -131,7 +135,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1x8x16x32x64x128x256x512"
+  concurrencies: "256"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"

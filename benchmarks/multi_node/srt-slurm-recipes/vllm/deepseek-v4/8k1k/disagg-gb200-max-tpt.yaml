@@ -1,10 +1,10 @@
-name: "dsv4-vllm-disagg-gb200-1p1d-dep8-dep8"
+name: "svf-vllm-disagg-gb200-max-tpt"
 
-# Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
-#   recipes/vllm/deepseek-v4-pro-sa/8k1k/disagg-gb200-1p1d-dep8-dep8-16-c256-c512-c1024-offload.yaml
+# Mirrored from NVIDIA/srt-slurm aflowers/vllm-gb200-v0.20.0 branch:
+#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-max-tpt.yaml
 #
-# Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 4 nodes total. -sa
-# variant extends concurrencies to 64x128x256x512x1024.
+# Topology: 3 prefill (DEP=8 each) + 1 decode (DEP=8). 9 nodes total with a
+# dedicated NATS/etcd infra node. Max-throughput point at concurrency 4096.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -35,12 +35,16 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 2
+  prefill_nodes: 6
   decode_nodes: 2
-  prefill_workers: 1
+  prefill_workers: 3
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -88,7 +92,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 9280
+      max-model-len: 16384
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -114,10 +118,10 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 9280
-      max-num-seqs: 128
-      max-cudagraph-capture-size: 128
-      max-num-batched-tokens: 128
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -131,7 +135,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "64x128x256x512x1024"
+  concurrencies: "4096"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"

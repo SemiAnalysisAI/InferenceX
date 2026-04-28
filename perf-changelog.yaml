@@ -1941,8 +1941,7 @@
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm
   description:
-    - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/gb200-dsv4-recipes (PR #77, supersedes #71)"
-    - "8k/1k search-space expanded from 3 topologies to 8: adds 1p4d/1p8d pure-TP-decode (offload), 1p1d/2p1d/3p1d DEP-8 decode, and a 3p1d-dep16-40 wide-decode shape"
-    - "Drops local workarounds: numa-bind, benchmark.use_chat_template, and benchmark.tokenizer_mode are restored now that PR #77 ships vllm_numa_bind_hash_fix.py and sa-bench DSV4 tokenizer support"
+    - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
+    - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
+    - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
-
