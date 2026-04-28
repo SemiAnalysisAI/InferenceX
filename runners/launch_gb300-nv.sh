@@ -103,7 +103,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 echo "Submitting job with srtctl..."
 
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a 'recipe:' field on the search-space entry (resolved by benchmark-multinode-tmpl.yml)." >&2
     echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
     exit 1
 fi

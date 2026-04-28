@@ -1,0 +1,101 @@
+name: "kimi-vllm-disagg-gb200-1p1d-dep4-dep16"
+
+model:
+  path: "kimi-k2.5-nvfp4"
+  container: "vllm/vllm-openai:v0.18.0-cu130"
+  precision: "fp4"
+
+dynamo:
+  version: 1.0.1
+  install: true
+
+setup_script: vllm-container-deps.sh
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 4
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  prefill_environment:
+    VLLM_USE_FLASHINFER_MOE_FP4: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+
+  decode_environment:
+    VLLM_USE_FLASHINFER_MOE_FP4: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "nvidia/Kimi-K2.5-NVFP4"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      max-model-len: 3072
+      max-num-seqs: 4096
+      enforce-eager: true
+      compilation-config: '{"custom_ops":["+quant_fp8","+rms_norm","+rotary_embedding"],"pass_config":{"fuse_attn_quant":true,"fuse_allreduce_rms":true}}'
+      max-num-batched-tokens: 16384
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-chunked-prefill: true
+      attention-backend: "FLASHINFER_MLA"
+      block-size: 64
+      attention-config: '{"use_trtllm_ragged_deepseek_prefill": true}'
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      gpu-memory-utilization: 0.9
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "nvidia/Kimi-K2.5-NVFP4"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      max-model-len: 3072
+      max-num-seqs: 4096
+      max-num-batched-tokens: 10240
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-chunked-prefill: true
+      async-scheduling: true
+      attention-backend: "FLASHINFER_MLA"
+      block-size: 64
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","custom_ops":["+quant_fp8","+rms_norm","+rotary_embedding"],"pass_config":{"fuse_attn_quant":true,"fuse_allreduce_rms":true}}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      max-cudagraph-capture-size: 512
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "256x512x1024x2048x3072x4096"
+  req_rate: "inf"

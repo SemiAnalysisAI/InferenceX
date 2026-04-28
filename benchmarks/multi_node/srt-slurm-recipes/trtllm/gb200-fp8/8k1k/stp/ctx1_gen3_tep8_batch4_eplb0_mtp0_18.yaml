@@ -1,0 +1,114 @@
+name: ctx1_gen3_tep8_batch4_eplb0_mtp0_18
+
+model:
+  path: "dsr1-fp8"
+  container: "dynamo-trtllm"
+  precision: "fp8"
+
+resources:
+  gpu_type: "gb200"
+  prefill_nodes: 2
+  prefill_workers: 1
+  gpus_per_prefill: 8
+
+  decode_workers: 3
+  decode_nodes: 6
+  gpus_per_decode: 8
+
+  gpus_per_node: 4
+
+backend:
+  type: trtllm
+
+  prefill_environment:
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    TRTLLM_ENABLE_PDL: "1"
+    ENROOT_ALLOW_DEV: "yes"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+
+  decode_environment:
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    TRTLLM_ENABLE_PDL: "1"
+    ENROOT_ALLOW_DEV: "yes"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+    TRTLLM_FORCE_COMM_METHOD: "NVLINK_TWO_SIDED"
+    ENABLE_CONFIGURABLE_MOE: "1"
+
+  trtllm_config:
+    prefill:
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      cuda_graph_config: null
+      disable_overlap_scheduler: true
+      enable_attention_dp: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.4
+      max_batch_size: 2
+      max_num_tokens: 16384
+      max_seq_len: 8232
+      moe_config:
+        backend: DEEPGEMM
+      moe_expert_parallel_size: 8
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      tensor_parallel_size: 8
+
+
+    decode:
+      allreduce_strategy: MNNVL
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      cuda_graph_config:
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        enable_padding: true
+      enable_attention_dp: false
+      enable_lm_head_tp_in_adp: false
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.9
+      max_batch_size: 4
+      max_num_tokens: 4
+      max_seq_len: 9256
+      moe_config:
+        backend: TRTLLM
+        use_low_precision_moe_combine: true
+      moe_expert_parallel_size: 8
+      num_postprocess_workers: 4
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      stream_interval: 100
+      tensor_parallel_size: 8
+
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: ['18']
+  req_rate: "inf"
+
+frontend:
+  type: "dynamo"
+  nginx_container: "nginx-sqsh"
+
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+dynamo:
+  install: false
+infra:
+  etcd_nats_dedicated_node: true

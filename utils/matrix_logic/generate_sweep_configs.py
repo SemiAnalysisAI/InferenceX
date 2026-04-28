@@ -267,6 +267,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     seq_len_str = seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
+                    recipe = bmk.get(Fields.RECIPE.value)
+
                     for runner_value in runners_for_entry:
                         entry = {
                             Fields.IMAGE.value: image,
@@ -285,6 +287,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
+                            Fields.RECIPE.value: recipe,
                         }
 
                         validate_matrix_entry(entry, is_multinode)
@@ -463,6 +466,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                 Fields.SPEC_DECODING.value, "none")
             prefill_config = lowest_conc_entry[Fields.PREFILL.value]
             decode_config = lowest_conc_entry[Fields.DECODE.value]
+            recipe = lowest_conc_entry.get(Fields.RECIPE.value)
 
             for node in runner_nodes:
                 entry = {
@@ -494,6 +498,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
                     Fields.RUN_EVAL.value: False,
+                    Fields.RECIPE.value: recipe,
                 }
                 matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
         else:
@@ -620,6 +625,7 @@ def generate_test_config_sweep(args, all_config_data):
                         Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                         Fields.DISAGG.value: disagg,
                         Fields.RUN_EVAL.value: False,
+                        Fields.RECIPE.value: bmk.get(Fields.RECIPE.value),
                     }
                     matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:

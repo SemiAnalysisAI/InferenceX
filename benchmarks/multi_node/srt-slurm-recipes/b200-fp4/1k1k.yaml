@@ -1,0 +1,259 @@
+# B200-FP4 1k1k — STP and MTP in one file
+#
+# Two inference modes distinguished by override key names:
+#   zip_override_stp_*  — standard token prediction (no speculative decoding)
+#   zip_override_mtp_*  — multi-token prediction (EAGLE speculative decoding)
+#
+# Low-latency variants: tep8 decode (DP=1), dep4 prefill (DP=4 TP=4)
+# Max-throughput variants: dep8 decode (DP=8), adds SGLANG_MOE_NVFP4_DISPATCH
+#
+# Note: max-tpt 1d has max-running-requests=1024; max-tpt 2d keeps 512.
+#       MTP max-tpt 1d additionally uses mem-fraction=0.75 for decode.
+#
+# Usage:
+#   srtctl apply  -f recipes/b200-fp4/1k1k.yaml                              # all 8 variants
+#   srtctl apply  -f recipes/b200-fp4/1k1k.yaml:*stp*                        # all STP variants
+#   srtctl apply  -f recipes/b200-fp4/1k1k.yaml:*mtp*                        # all MTP variants
+#   srtctl apply  -f recipes/b200-fp4/1k1k.yaml:zip_override_stp_lowlat[0]   # STP 1p5d only
+#   srtctl dry-run -f recipes/b200-fp4/1k1k.yaml                             # preview
+
+base:
+  name: "b200-fp4-stp-1k1k"
+
+  model:
+    path: "dsr1"
+    container: "dynamo-sglang"
+    precision: "fp4"
+
+  resources:
+    gpu_type: "b200"
+    prefill_nodes: 1
+    prefill_workers: 1
+    gpus_per_prefill: 4
+    decode_nodes: 5
+    decode_workers: 5
+    gpus_per_node: 8
+
+  backend:
+    prefill_environment:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      DYN_REQUEST_PLANE: nats
+    decode_environment:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      DYN_REQUEST_PLANE: nats
+    sglang_config:
+      prefill:
+        # Model configuration
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        # Disaggregation mode
+        disaggregation-mode: "prefill"
+        disaggregation-transfer-backend: nixl
+
+        # Memory and token limits
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 2200
+        max-running-requests: 512
+        disable-cuda-graph: true
+
+        # Parallelism
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+
+        # Attention
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        # MoE
+        moe-runner-backend: "flashinfer_trtllm"
+        moe-dense-tp-size: 1
+
+        # Other flags
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+      decode:
+        # Model configuration
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        # Disaggregation mode
+        disaggregation-mode: "decode"
+        disaggregation-transfer-backend: nixl
+
+        # Memory and token limits
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 2200
+        max-running-requests: 512
+        cuda-graph-max-bs: 512
+
+        # Parallelism
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+
+        # Attention
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        # MoE
+        moe-runner-backend: "flashinfer_trtllm"
+
+        # Other flags
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+  health_check:
+    max_attempts: 360
+    interval_seconds: 10
+
+  benchmark:
+    type: "sa-bench"
+    isl: 1024
+    osl: 1024
+    req_rate: "inf"
+
+
+# STP low-latency: tep8 decode (DP=1), scale sweep 1p5d and 1p6d
+zip_override_stp_lowlat:
+  name:
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-5d"
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-6d"
+  resources:
+    decode_nodes: [5, 6]
+    decode_workers: [5, 6]
+  benchmark:
+    concurrencies: ["16x128", "32x64x256"]
+
+
+# MTP low-latency: same scales as STP, adds EAGLE speculative decoding + fp4-gemm-backend
+zip_override_mtp_lowlat:
+  name:
+    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-5d"
+    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-6d"
+  resources:
+    decode_nodes: [5, 6]
+    decode_workers: [5, 6]
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      prefill:
+        fp4-gemm-backend: "flashinfer_trtllm"
+      decode:
+        fp4-gemm-backend: "flashinfer_trtllm"
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: ["16x512", "32x64x256x512"]
+
+
+# STP max-throughput: dep8 decode (DP=8), scale sweep 1p1d and 1p2d
+# Adds SGLANG_MOE_NVFP4_DISPATCH + SGLANG_FLASHINFER_FP4_GEMM_BACKEND env vars
+# 1d: max-running-requests=1024; 2d: keeps 512
+zip_override_stp_maxtpt:
+  name:
+    - "b200-fp4-stp-max-tpt-dep4-1p-dep8-1d"
+    - "b200-fp4-stp-max-tpt-dep4-1p-dep8-2d"
+  resources:
+    decode_nodes: [1, 2]
+    decode_workers: [1, 2]
+  backend:
+    decode_environment:
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
+    sglang_config:
+      prefill:
+        max-running-requests: [1024, 512]
+      decode:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: [1024, 512]
+        cuda-graph-max-bs: [1024, 512]
+  benchmark:
+    concurrencies: ["512", "512"]
+
+
+# MTP max-throughput: dep8 decode, scale sweep 1p1d and 1p2d, adds EAGLE speculative decoding
+# Adds SGLANG_MOE_NVFP4_DISPATCH + SGLANG_FLASHINFER_FP4_GEMM_BACKEND + fp4-gemm-backend
+# 1d: max-running-requests=1024, mem-fraction=0.75 for decode; 2d: keeps 512/0.85
+zip_override_mtp_maxtpt:
+  name:
+    - "b200-fp4-mtp-max-tpt-dep4-1p-dep8-1d"
+    - "b200-fp4-mtp-max-tpt-dep4-1p-dep8-2d"
+  resources:
+    decode_nodes: [1, 2]
+    decode_workers: [1, 2]
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      prefill:
+        fp4-gemm-backend: "flashinfer_trtllm"
+        max-running-requests: [1024, 512]
+      decode:
+        fp4-gemm-backend: "flashinfer_trtllm"
+        mem-fraction-static: [0.75, 0.85]
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: [1024, 512]
+        cuda-graph-max-bs: [1024, 512]
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: ["512x1024", "512"]

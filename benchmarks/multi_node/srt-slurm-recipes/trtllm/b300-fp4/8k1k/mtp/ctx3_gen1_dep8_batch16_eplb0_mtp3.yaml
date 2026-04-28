@@ -1,0 +1,125 @@
+name: "ctx3_gen1_dep8_batch16_eplb0_mtp3"
+
+model:
+  path: "dsr1"
+  container: "dynamo-trtllm"
+  precision: "fp4"
+
+resources:
+  gpu_type: "b300"
+  prefill_nodes: 1
+  prefill_workers: 3
+  gpus_per_prefill: 2
+
+  decode_workers: 1
+  decode_nodes: 1
+
+  gpus_per_node: 8
+
+backend:
+  type: trtllm
+
+  prefill_environment:
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+    OMPI_MCA_coll_ucc_enable: "0"
+    TLLM_ALL_RANK_LOG: "1"
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_ENABLE_PDL: "1"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
+    UCX_MAX_RMA_RAILS: "1"
+    UCX_MAX_RNDV_RAILS: "1"
+    UCX_RNDV_SCHEME: "put_zcopy"
+    OMPI_MCA_btl: "tcp,self"
+    OMPI_MCA_pml: "ob1"
+    TRTLLM_UCX_INTERFACE: "mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1"
+
+  decode_environment:
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+    OMPI_MCA_coll_ucc_enable: "0"
+    TLLM_ALL_RANK_LOG: "1"
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
+    UCX_MAX_RMA_RAILS: "1"
+    UCX_MAX_RNDV_RAILS: "1"
+    UCX_RNDV_SCHEME: "put_zcopy"
+    OMPI_MCA_btl: "tcp,self"
+    OMPI_MCA_pml: "ob1"
+    TRTLLM_UCX_INTERFACE: "mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1"
+
+
+  trtllm_config:
+    prefill:
+      max_batch_size: 2
+      max_num_tokens: 16896
+      max_seq_len: 8232
+      tensor_parallel_size: 2
+      moe_expert_parallel_size: 2
+      enable_attention_dp: true
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      cuda_graph_config: null
+      disable_overlap_scheduler: true
+      moe_config:
+        backend: TRTLLM
+      kv_cache_config:
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.75
+        dtype: fp8
+      cache_transceiver_config:
+        max_tokens_in_buffer: 8448
+        backend: UCX
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 3
+
+    decode:
+      tensor_parallel_size: 8
+      moe_expert_parallel_size: 8
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      pipeline_parallel_size: 1
+      max_batch_size: 16
+      max_num_tokens: 64
+      max_seq_len: 9256
+      cuda_graph_config:
+        enable_padding: true
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+      print_iter_log: true
+      kv_cache_config:
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.8
+        dtype: fp8
+      moe_config:
+        backend: CUTLASS
+        use_low_precision_moe_combine: true
+      cache_transceiver_config:
+        max_tokens_in_buffer: 8448
+        backend: UCX
+      stream_interval: 100
+      num_postprocess_workers: 4
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 3
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "181"
+  req_rate: "inf"
+
+frontend:
+  type: "dynamo"
+  enable_multiple_frontends: false
+
+dynamo:
+  install: false

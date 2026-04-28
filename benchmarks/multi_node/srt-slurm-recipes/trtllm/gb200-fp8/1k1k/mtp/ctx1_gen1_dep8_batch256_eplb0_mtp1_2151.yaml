@@ -1,0 +1,151 @@
+name: ctx1_gen1_dep8_batch256_eplb0_mtp1_2151
+
+model:
+  path: "dsr1-fp8"
+  container: "dynamo-trtllm"
+  precision: "fp8"
+
+resources:
+  gpu_type: "gb200"
+  prefill_nodes: 2
+  prefill_workers: 1
+  gpus_per_prefill: 8
+
+  decode_workers: 1
+  decode_nodes: 2
+  gpus_per_decode: 8
+
+  gpus_per_node: 4
+
+backend:
+  type: trtllm
+
+  prefill_environment:
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    TRTLLM_ENABLE_PDL: "1"
+    ENROOT_ALLOW_DEV: "yes"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+
+  decode_environment:
+    TLLM_LOG_LEVEL: "INFO"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    TRTLLM_ENABLE_PDL: "1"
+    ENROOT_ALLOW_DEV: "yes"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+    TRTLLM_FORCE_COMM_METHOD: "NVLINK_TWO_SIDED"
+    ENABLE_CONFIGURABLE_MOE: "1"
+
+  trtllm_config:
+    prefill:
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      cuda_graph_config: null
+      disable_overlap_scheduler: true
+      enable_attention_dp: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.5
+      max_batch_size: 16
+      max_num_tokens: 16384
+      max_seq_len: 1064
+      moe_config:
+        backend: DEEPGEMM
+      moe_expert_parallel_size: 8
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 1
+      tensor_parallel_size: 8
+
+
+    decode:
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      cuda_graph_config:
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 24
+        - 32
+        - 40
+        - 48
+        - 56
+        - 64
+        - 72
+        - 80
+        - 88
+        - 96
+        - 104
+        - 112
+        - 120
+        - 128
+        - 136
+        - 144
+        - 152
+        - 160
+        - 168
+        - 176
+        - 184
+        - 192
+        - 200
+        - 208
+        - 216
+        - 224
+        - 232
+        - 240
+        - 248
+        - 256
+        enable_padding: true
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.7
+      max_batch_size: 256
+      max_num_tokens: 512
+      max_seq_len: 2088
+      moe_config:
+        backend: DEEPGEMM
+        use_low_precision_moe_combine: true
+      moe_expert_parallel_size: 8
+      num_postprocess_workers: 4
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 1
+      stream_interval: 100
+      tensor_parallel_size: 8
+
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: ['2151']
+  req_rate: "inf"
+
+frontend:
+  type: "dynamo"
+  nginx_container: "nginx-sqsh"
+
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+dynamo:
+  install: false
+infra:
+  etcd_nats_dedicated_node: true

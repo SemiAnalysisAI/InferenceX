@@ -1,0 +1,111 @@
+name: "c64_ctx2_gen3_dep8_batch128_eplb0_mtp0"
+
+model:
+  path: "dsr1"
+  container: "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
+  precision: "fp8"
+
+sbatch_directives:
+  cpus-per-gpu: "16"
+
+resources:
+  gpu_type: "h200"
+  prefill_nodes: 2
+  prefill_workers: 2
+
+  decode_workers: 3
+  decode_nodes: 3
+
+  gpus_per_node: 8
+
+backend:
+  type: trtllm
+
+  prefill_environment:
+    UCX_TLS: "rc,dc,ud,cuda_copy,cuda_ipc,gdr_copy,tcp"
+    TRTLLM_ENABLE_PDL: "1"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+
+  decode_environment:
+    UCX_TLS: "rc,dc,ud,cuda_copy,cuda_ipc,gdr_copy,tcp"
+    TRTLLM_ENABLE_PDL: "1"
+    TRTLLM_SERVER_DISABLE_GC: "1"
+    TRTLLM_WORKER_DISABLE_GC: "1"
+    NCCL_GRAPH_MIXING_SUPPORT: "0"
+
+  trtllm_config:
+    prefill:
+      # Prefill Worker Config for Dynamo DSR1 (DEP mode)
+      # ISL/OSL: 8k/1k, TP=8 on H200
+      backend: pytorch
+      trust_remote_code: true
+      tensor_parallel_size: 8
+      moe_expert_parallel_size: 8
+      pipeline_parallel_size: 1
+      enable_attention_dp: false
+      enable_chunked_prefill: false
+      max_batch_size: 2
+      max_num_tokens: 16640
+      max_seq_len: 8232
+      kv_cache_config:
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.85
+        dtype: fp8
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 32768
+      moe_config:
+        backend: CUTLASS
+      cuda_graph_config: null
+      disable_overlap_scheduler: true
+      print_iter_log: true
+      # Performance tuning
+      stream_interval: 100
+      num_postprocess_workers: 4
+    decode:
+      # Decode Worker Config for Dynamo DSR1 (DEP c=64)
+      # ISL/OSL: 8k/1k, TP=8 on H200
+      backend: pytorch
+      trust_remote_code: true
+      tensor_parallel_size: 8
+      moe_expert_parallel_size: 8
+      pipeline_parallel_size: 1
+      enable_attention_dp: true
+      enable_chunked_prefill: false
+      max_batch_size: 128
+      max_num_tokens: 128
+      max_seq_len: 9256
+      kv_cache_config:
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.85
+        dtype: fp8
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      moe_config:
+        backend: CUTLASS
+        use_low_precision_moe_combine: true
+      cuda_graph_config:
+        enable_padding: true
+        batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128]
+      disable_overlap_scheduler: false
+      print_iter_log: true
+      # Performance tuning
+      stream_interval: 100
+      num_postprocess_workers: 4
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "192"
+  req_rate: "inf"
+
+frontend:
+  type: "dynamo"
+  enable_multiple_frontends: false # For some reason, the H200 cluster doesn't like nginx.
+
+dynamo:
+  install: false

@@ -1,0 +1,140 @@
+name: b200-fp8-stp-max-tpt-dep8-2p-1d
+
+dynamo:
+  version: 0.9.1
+
+model:
+  path: dsr1-fp8
+  container: dynamo-sglang
+  precision: fp8
+
+resources:
+  gpu_type: b200
+  prefill_nodes: 2
+  prefill_workers: 2
+  decode_nodes: 1
+  decode_workers: 1
+  gpus_per_node: 8
+
+backend:
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    DYN_REQUEST_PLANE: nats
+    CUDA_SCALE_LAUNCH_QUEUES: 4x
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
+
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    DYN_REQUEST_PLANE: nats
+    CUDA_SCALE_LAUNCH_QUEUES: 4x
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
+
+  sglang_config:
+    prefill:
+        # Model configuration
+      served-model-name: deepseek-ai/DeepSeek-R1
+      trust-remote-code: true
+      quantization: fp8
+
+        # Disaggregation mode
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: nixl
+      load-balance-method: round_robin
+
+        # Memory and token limits
+      mem-fraction-static: 0.6
+      max-prefill-tokens: 8192
+      chunked-prefill-size: 65536
+      max-running-requests: 8
+      context-length: 9600
+
+        # Parallelism
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 1
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+
+        # Attention
+      attention-backend: trtllm_mla
+      kv-cache-dtype: fp8_e4m3
+
+        # MoE
+      moe-runner-backend: flashinfer_trtllm
+      moe-dense-tp-size: 1
+
+        # Other flags
+      stream-interval: 30
+      watchdog-timeout: 1000000
+      enable-flashinfer-allreduce-fusion: true
+      disable-radix-cache: true
+
+    decode:
+        # Model configuration
+      served-model-name: deepseek-ai/DeepSeek-R1
+      trust-remote-code: true
+      quantization: fp8
+
+        # Disaggregation mode
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: nixl
+
+        # Memory and token limits
+      mem-fraction-static: 0.75
+      context-length: 9600
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+
+        # Parallelism
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+
+        # Attention
+      attention-backend: trtllm_mla
+      kv-cache-dtype: fp8_e4m3
+
+        # MoE
+      moe-runner-backend: flashinfer_trtllm
+
+        # Other flags
+      stream-interval: 30
+      watchdog-timeout: 1000000
+      enable-flashinfer-allreduce-fusion: true
+      disable-radix-cache: true
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+benchmark:
+  type: sa-bench
+  isl: 8192
+  osl: 1024
+  req_rate: inf
+  concurrencies: '512'

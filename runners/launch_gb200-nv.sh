@@ -125,10 +125,11 @@ PY
 fi
 
 
-# srt-slurm path requires a CONFIG_FILE pointing to a recipe YAML.
-# Without it, srtctl apply scans every YAML in the repo and submits hundreds of jobs.
+# srt-slurm path requires CONFIG_FILE (set by benchmark-multinode-tmpl.yml from
+# the search-space `recipe:` field). Without it, srtctl apply scans every YAML
+# in the repo and submits hundreds of jobs.
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a 'recipe:' field on the search-space entry (resolved by benchmark-multinode-tmpl.yml)." >&2
     echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
     exit 1
 fi
@@ -140,21 +141,10 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-    # Use `cp -rT` so if the upstream branch ever ships a stub
-    # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto
-    # it rather than nesting (`cp -r src dst` would create
-    # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
+# We only clone srt-slurm to install srtctl + pick up its sibling configs
+# (configs/, expert-distributions/, etc). The recipe itself is supplied as an
+# absolute CONFIG_FILE pointing at benchmarks/multi_node/srt-slurm-recipes/.
+if [[ $FRAMEWORK == "dynamo-vllm" || ( $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ) ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026

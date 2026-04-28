@@ -47,6 +47,32 @@ Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
 - Setting the fields above, particularly `ep` and `dp-attn`, only guarantee that the respective values will be passed as environment variables to the benchmark scripts! Actually using those environment variables is an implementation detail at the level of the benchmark Bash script.
 
+## Multi-node srt-slurm recipes
+
+Multi-node configs that dispatch via `srt-slurm` (i.e. `srtctl apply -f …`) reference their recipe as a first-class field on the search-space entry:
+
+```yaml
+search-space:
+- spec-decoding: "mtp"
+  conc-list: [1214]
+  recipe: "trtllm/b200-fp4/1k1k/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml"
+  prefill:
+    num-worker: 1
+    tp: 4
+    ep: 4
+    dp-attn: true
+  decode:
+    num-worker: 2
+    tp: 8
+    ep: 8
+    dp-attn: true
+```
+
+- `recipe` is a path **relative to `benchmarks/multi_node/srt-slurm-recipes/`** in this repo. The schema validator rejects entries whose recipe file does not exist on disk, so adding a new entry requires upstreaming the recipe yaml here first.
+- The path may carry an `:override[N]` / `:override_<name>` suffix to select a named override section inside an sglang-style recipe yaml (e.g. `"b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[0]"`). The launcher strips this suffix before reading the file but passes the full string to `srtctl`.
+- `recipe` is optional: multi-node entries that do *not* go through srt-slurm (e.g. dynamo-sglang aggregated topologies that drive their own bash) leave it unset.
+- Recipes live under `benchmarks/multi_node/srt-slurm-recipes/` mirroring the upstream NVIDIA/srt-slurm `recipes/` layout (e.g. `trtllm/b200-fp4/...`, `vllm/deepseek-v4/...`, `gb200-fp4/...`). The benchmark template resolves `recipe` to an absolute path and passes it to the launcher as `CONFIG_FILE`, so launchers do not see the relative form.
+
 ## Runners
 
 The `runners.yaml` config represents the available runners in the repository. The keys are the runner *types* (i.e., the GPUs as well as some specific combinations like `b200-trt`) whereas the value is a list of *runner nodes*. This config is used to verify the master configs.
