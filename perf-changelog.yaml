@@ -1908,12 +1908,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
 
 - config-keys:
-    - dsv4-fp4-b300-sglang
-  description:
-    - "1k1k conc=8192: mega_moe deepep backend with cuda-graph-max-bs 1056, max-running-requests 8224, mem 0.8, swa-ratio 0.3, tokenizer-workers 16"
-    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 entries"
-
-- config-keys:
    - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
@@ -1924,3 +1918,10 @@
     - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
     - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "1k1k conc=8192: mega_moe deepep backend with cuda-graph-max-bs 1056, max-running-requests 8224, mem 0.8, swa-ratio 0.3, tokenizer-workers 16"
+    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 entries"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1207
