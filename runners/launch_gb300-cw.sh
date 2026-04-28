@@ -19,7 +19,7 @@ fi
 
 # CoreWeave cluster has a single `all` partition; account `cw-sup` is
 # what `sacctmgr show assoc user=$USER` returns there. `benchmark`
-# (inherited from gb200-nv) does not exist on cw.
+# (inherited from gb300-nv) does not exist on cw.
 export SLURM_PARTITION="all"
 export SLURM_ACCOUNT="cw-sup"
 
@@ -75,7 +75,7 @@ git checkout "$SRT_SLURM_RECIPES_COMMIT"
 # Overlay the local copy of the exact pinned recipes. This keeps the PR
 # self-contained while preserving byte-for-byte recipe content from
 # NVIDIA/srt-slurm at $SRT_SLURM_RECIPES_COMMIT.
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/gb200-fp4" recipes/dsv4-pro/sglang/gb200-fp4
+cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/gb300-fp4" recipes/dsv4-pro/sglang/gb300-fp4
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
