@@ -179,22 +179,14 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
-          # Resolve `recipe` (path relative to benchmarks/multi_node/srt-slurm-recipes/,
-          # optionally ending in `:override[N]`) into an absolute CONFIG_FILE for the
-          # launcher. Copy the recipe to a scratch path first so the launcher's
-          # `sed -i` rewrites (job name, health-check timeout, ...) don't mutate the
-          # tracked file in-place between runs.
+          # RECIPE = "<path>[:override[N]]" relative to benchmarks/multi_node/srt-slurm-recipes/.
+          # Copy the file to scratch so the launcher's `sed -i` rewrites don't mutate the
+          # tracked recipe between concurrent runs; preserve any :override suffix verbatim.
           if [[ -n "$RECIPE" ]]; then
-            recipe_path="${RECIPE%%:*}"
-            recipe_suffix=""
-            if [[ "$RECIPE" == *:* ]]; then
-              recipe_suffix=":${RECIPE#*:}"
-            fi
-            src="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${recipe_path}"
-            scratch_dir="$(mktemp -d)"
-            scratch_recipe="${scratch_dir}/$(basename "$recipe_path")"
-            cp "$src" "$scratch_recipe"
-            export CONFIG_FILE="${scratch_recipe}${recipe_suffix}"
+            src="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${RECIPE%%:*}"
+            scratch="$(mktemp -d)/$(basename "${RECIPE%%:*}")"
+            cp "$src" "$scratch"
+            export CONFIG_FILE="${scratch}${RECIPE#"${RECIPE%%:*}"}"
           fi
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
