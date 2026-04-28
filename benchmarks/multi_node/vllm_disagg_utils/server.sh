@@ -185,15 +185,15 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # Container Synchronization
 # =============================================================================
 
-# echo "Waiting at the container creation barrier on $host_name"
-# python3 $VLLM_WS_PATH/sync.py barrier \
-#     --local-ip ${host_ip} \
-#     --local-port 5000 \
-#     --enable-port \
-#     --node-ips ${IPADDRS} \
-#     --node-ports 5000 \
-#     --wait-for-all-ports \
-#     --timeout 600
+echo "Waiting at the container creation barrier on $host_name"
+python3 $VLLM_WS_PATH/sync.py barrier \
+    --local-ip ${host_ip} \
+    --local-port 5000 \
+    --enable-port \
+    --node-ips ${IPADDRS} \
+    --node-ports 5000 \
+    --wait-for-all-ports \
+    --timeout 600
 
 # =============================================================================
 # ETCD Server Setup
@@ -242,7 +242,7 @@ done
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
-# vllm-router ZMQ discovery port (--vllm-discovery-address)
+# MoRI-IO proxy ZMQ registration port (must match moriio_proxy.py PROXY_PING_PORT)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
 # vLLM environment (UCX transport vars are set at the Docker level in job.slurm)
@@ -282,16 +282,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
     setup_vllm_env
 
     # Start MoRI-IO proxy FIRST — workers register via ZMQ on startup
-    echo "Starting vllm-router (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
-    PROXY_CMD="/app/vllm-router \
-        --vllm-pd-disaggregation \
-        --kv-connector moriio \
-        --vllm-discovery-address 0.0.0.0:$PROXY_PING_PORT \
-        --port $ROUTER_PORT \
-        --host 0.0.0.0 \
-        --policy consistent_hash \
-        --prefill-policy consistent_hash \
-        --decode-policy consistent_hash"    
+    echo "Starting MoRI-IO proxy (HTTP=$ROUTER_PORT, ZMQ=$PROXY_PING_PORT)..."
+    PROXY_CMD="PROXY_HTTP_PORT=$ROUTER_PORT PROXY_PING_PORT=$PROXY_PING_PORT \
+        python3 $VLLM_WS_PATH/moriio_proxy.py"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PROXY_CMD"
@@ -354,7 +347,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     export ROUTER_PORT=$ROUTER_PORT
     BENCH_CMD="bash $VLLM_WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
-        $MODEL_PATH $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
@@ -381,7 +374,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
         sleep 2
         # Fallback: ensure no orphaned processes keep ports open
-        pkill -f "vllm-router" 2>/dev/null || true
+        pkill -f moriio_proxy 2>/dev/null || true
         pkill -f "vllm serve" 2>/dev/null || true
     fi
 

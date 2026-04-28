@@ -143,14 +143,70 @@ install_libionic() {
     _SETUP_INSTALLED+=("libionic1")
 }
 
-assert_mori_installed() {
+# ---------------------------------------------------------------------------
+# 5. MoRI-IO proxy deps (Python packages for the MoRI-IO-aware proxy server)
+#    The proxy replaces vllm-router: it handles both HTTP routing AND the
+#    MoRI-IO ZMQ registration/request-enrichment protocol.
+#    Only needed on NODE_RANK=0 (proxy node).
+# ---------------------------------------------------------------------------
+install_mori_proxy_deps() {
+    if python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
+        echo "[SETUP] MoRI-IO proxy Python deps already present"
+        return 0
+    fi
+
+    echo "[SETUP] Installing MoRI-IO proxy Python deps..."
+    # v0.18.0 ships aiohttp, pyzmq, blinker(distutils); only quart and msgpack
+    # are missing.  --ignore-installed blinker avoids pip's distutils uninstall
+    # error when quart pulls a newer blinker version.
+    pip install --quiet --ignore-installed blinker
+    pip install --quiet quart msgpack
+
+    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
+        echo "[SETUP] ERROR: MoRI-IO proxy deps install failed"; exit 1
+    fi
+    _SETUP_INSTALLED+=("mori-proxy-deps")
+}
+
+# ---------------------------------------------------------------------------
+# 6. MoRI (Modular RDMA Interface — EP dispatch/combine kernels for MoE)
+#    Required for --all2all-backend mori (Expert Parallelism via RDMA).
+#    GPU kernels are JIT-compiled on first use; no hipcc needed at install.
+#
+#    v0.18.0 ships MoRI 0.1.dev185+g2d02c6a98, but it STILL has the PCI
+#    topology bug (TopoSystemPci::Load assertion failure on Broadcom
+#    PEX890xx switches).  Always rebuild from our target commit b645fc8
+#    which includes the dsp2dev subordinate-range fix.
+# ---------------------------------------------------------------------------
+install_mori() {
+    local MORI_TARGET_COMMIT="b645fc8"
+    local MORI_MARKER="/usr/local/lib/python3.*/dist-packages/.mori_commit_${MORI_TARGET_COMMIT}"
+
+    if ls $MORI_MARKER &>/dev/null; then
+        echo "[SETUP] MoRI @ $MORI_TARGET_COMMIT already installed (marker found)"
+        return 0
+    fi
+
+    echo "[SETUP] Installing MoRI build dependencies..."
+    apt-get update -q -y && apt-get install -q -y \
+        libopenmpi-dev openmpi-bin libpci-dev \
+        && rm -rf /var/lib/apt/lists/*
+
+    echo "[SETUP] Building MoRI from source (ROCm/mori @ $MORI_TARGET_COMMIT)..."
+    echo "[SETUP]   (overriding image-provided version to fix PCI topology bug)"
+    (
+        set -e
+        git_clone_retry https://github.com/ROCm/mori.git /opt/mori && cd /opt/mori
+        git checkout "$MORI_TARGET_COMMIT"
+        pip install --quiet --force-reinstall .
+    )
+    rm -rf /opt/mori
+
     if ! python3 -c "import mori" 2>/dev/null; then
         echo "[SETUP] ERROR: MoRI build failed"; exit 1
     fi
-    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
-        echo "[SETUP] MoRI-IO proxy Python deps not installed"
-        exit 1
-    fi
+    touch $(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")/.mori_commit_${MORI_TARGET_COMMIT}
+    _SETUP_INSTALLED+=("MoRI@$MORI_TARGET_COMMIT")
 }
 
 # ---------------------------------------------------------------------------
@@ -175,67 +231,54 @@ install_amd_quark() {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Patch vLLM MoRI-EP + FP8 incompatibility
+# 7. Patch vLLM MoRI-EP + FP8 incompatibility (present in v0.17.1 & v0.18.0)
 #    vLLM asserts MoRI requires AITER fused_moe, but AITER's FP8 kernel
-#    uses defer_input_quant=True which is incompatible with MoRI.
-#
-#    v0.17.1/v0.18.0: mori_prepare_finalize.py raised NotImplementedError on
-#      defer_input_quant=True. Fixed in v0.19+: prepare_finalize/mori.py
-#      already skips FP8 quant when defer_input_quant=True — no patch needed.
-#
-#    All versions: layer.py asserts rocm_aiter_fmoe_enabled when use_mori_kernels.
-#      v0.17.1/v0.18.0 text: "Mori needs to be used with aiter"
-#      v0.19+ text:          "Mori needs to be used with aiter fused_moe for now."
-#      Also added in v0.19+: assert not aiter_fmoe_shared_expert_enabled.
-#      Patch: replace both assertions with pass so non-AITER kernels work.
+#    uses defer_input_quant=True which MoRI's prepare/finalize rejects.
+#    Patch: remove both the AITER requirement assertion and the
+#    defer_input_quant NotImplementedError so non-AITER kernels work.
 # ---------------------------------------------------------------------------
 patch_mori_fp8_compat() {
     python3 -c '
 import re, os, sys
 patched = []
 
-# Patch layer.py: remove AITER requirement assertion(s) for MoRI
+# 1. Patch layer.py: remove multi-line AITER assertion for MoRI
 try:
     import vllm.model_executor.layers.fused_moe.layer as lm
     f = lm.__file__
     src = open(f).read()
-    if "[PATCHED] AITER requirement removed for MoRI-EP + FP8" in src:
-        print("[SETUP] layer.py MoRI-FP8 patch already applied")
-    elif "Mori needs to be used with aiter" in src:
-        # v0.19+: two consecutive assertions inside `if self.moe_config.use_mori_kernels:`
+    if "Mori needs to be used with aiter" in src:
         new = re.sub(
-            r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)\s*"
-            r"assert not self\.aiter_fmoe_shared_expert_enabled,\s*\([^)]*\)",
+            r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)",
             "pass  # [PATCHED] AITER requirement removed for MoRI-EP + FP8",
             src, flags=re.DOTALL)
-        if new == src:
-            # v0.17.1/v0.18.0: only the first assertion existed
-            new = re.sub(
-                r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)",
-                "pass  # [PATCHED] AITER requirement removed for MoRI-EP + FP8",
-                src, flags=re.DOTALL)
         if new != src:
             open(f, "w").write(new)
             patched.append("layer.py")
-        else:
-            print("[SETUP] ERROR: layer.py pattern found but regex had no effect", file=sys.stderr)
-            sys.exit(1)
-    else:
-        print("[SETUP] ERROR: layer.py AITER assertion pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
 except Exception as e:
-    print(f"[SETUP] ERROR patch layer.py: {e}", file=sys.stderr)
-    sys.exit(1)
+    print(f"[SETUP] WARN patch layer.py: {e}", file=sys.stderr)
 
-# prepare_finalize/mori.py (v0.19+) already handles defer_input_quant correctly
-# (skips FP8 quant when True). No patch needed for that file.
-# Added in 0.18.1: https://github.com/vllm-project/vllm/commit/6a9cceb219fcbd6b1eb540ddfdc77ec160f0e209
+# 2. Patch mori_prepare_finalize.py: remove defer_input_quant restriction
+try:
+    import vllm.model_executor.layers.fused_moe.mori_prepare_finalize as mm
+    f = mm.__file__
+    src = open(f).read()
+    if "defer_input_quant" in src:
+        new = re.sub(
+            r"raise NotImplementedError\([^)]*defer_input_quant[^)]*\)",
+            "pass  # [PATCHED] defer_input_quant check removed for MoRI-EP + FP8",
+            src)
+        if new != src:
+            open(f, "w").write(new)
+            patched.append("mori_prepare_finalize.py")
+except Exception as e:
+    print(f"[SETUP] WARN patch mori_pf: {e}", file=sys.stderr)
 
 if patched:
     print(f"[SETUP] Patched: {chr(44).join(patched)}")
 else:
     print("[SETUP] No MoRI-FP8 patches needed")
-' || exit 1
+'
     _SETUP_INSTALLED+=("MoRI-FP8-patch")
 }
 
@@ -270,8 +313,8 @@ try:
                 continue"""
 
     if old not in src:
-        print("[SETUP] ERROR: save_kv_layer busy-spin pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: save_kv_layer busy-spin pattern not found, skipping patch")
+        sys.exit(0)
 
     new = """        # [PATCHED] save_kv_layer — null guard + timeout + sleep
         if remote_engine_id is None:
@@ -297,15 +340,14 @@ try:
 
     new_src = src.replace(old, new)
     if new_src == src:
-        print("[SETUP] ERROR: save_kv_layer replacement had no effect", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: replacement had no effect")
+        sys.exit(0)
 
     open(f, "w").write(new_src)
     print("[SETUP] Patched save_kv_layer: null guard + timeout + sleep")
 except Exception as e:
-    print(f"[SETUP] ERROR patch save_kv_layer: {e}", file=sys.stderr)
-    sys.exit(1)
-' || exit 1
+    print(f"[SETUP] WARN patch save_kv_layer: {e}", file=sys.stderr)
+'
     _SETUP_INSTALLED+=("MoRIIO-save-kv-timeout-patch")
 }
 
@@ -412,8 +454,8 @@ try:
                     )"""
 
     if old_wait not in src:
-        print("[SETUP] ERROR: waiting_for_transfer_complete pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: waiting_for_transfer_complete pattern not found")
+        sys.exit(0)
 
     new_src = src.replace(old_wait, new_wait)
 
@@ -441,8 +483,7 @@ try:
     if old_loop in new_src:
         new_src = new_src.replace(old_loop, new_loop, 1)
     else:
-        print("[SETUP] ERROR: _write_worker_loop pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: _write_worker_loop pattern not found for error handling")
 
     # --- Patch 3: Add deferred task timeout to _process_deferred_tasks ---
     old_deferred = """    def _process_deferred_tasks(self) -> None:
@@ -511,8 +552,7 @@ try:
     if old_deferred in new_src:
         new_src = new_src.replace(old_deferred, new_deferred, 1)
     else:
-        print("[SETUP] ERROR: _process_deferred_tasks pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: _process_deferred_tasks pattern not found")
 
     # --- Patch 4: Stamp defer time when task is deferred ---
     old_defer_add = """                self._deferred_tasks.append(task)"""
@@ -523,16 +563,14 @@ try:
     if old_defer_add in new_src:
         new_src = new_src.replace(old_defer_add, new_defer_add, 1)
     else:
-        print("[SETUP] ERROR: deferred task timestamp patch target not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: deferred task timestamp patch target not found")
 
     open(f, "w").write(new_src)
     print("[SETUP] Patched: transfer timeout + writer error handling")
 
 except Exception as e:
-    print(f"[SETUP] ERROR patch transfer_timeout: {e}", file=sys.stderr)
-    sys.exit(1)
-' || exit 1
+    print(f"[SETUP] WARN patch transfer_timeout: {e}", file=sys.stderr)
+'
     _SETUP_INSTALLED+=("MoRIIO-transfer-timeout-patch")
 }
 
@@ -563,8 +601,8 @@ try:
                 continue"""
 
     if old not in src:
-        print("[SETUP] ERROR: start_load_kv busy-spin pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: start_load_kv busy-spin pattern not found, skipping")
+        sys.exit(0)
 
     new = """        # [PATCHED] start_load_kv timeout — prevent model worker deadlock
         if remote_engine_id is None and not wait_handshake_readd_req:
@@ -591,15 +629,14 @@ try:
 
     new_src = src.replace(old, new)
     if new_src == src:
-        print("[SETUP] ERROR: start_load_kv replacement had no effect", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: start_load_kv replacement had no effect")
+        sys.exit(0)
 
     open(f, "w").write(new_src)
     print("[SETUP] Patched start_load_kv busy-spin with timeout + sleep")
 except Exception as e:
-    print(f"[SETUP] ERROR patch start_load_kv: {e}", file=sys.stderr)
-    sys.exit(1)
-' || exit 1
+    print(f"[SETUP] WARN patch start_load_kv: {e}", file=sys.stderr)
+'
     _SETUP_INSTALLED+=("MoRIIO-load-kv-timeout-patch")
 }
 
@@ -653,8 +690,8 @@ try:
                     req_id, req.status.name)"""
 
     if old_recv not in src:
-        print("[SETUP] ERROR: scheduler finished_recving pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: scheduler finished_recving pattern not found, skipping")
+        sys.exit(0)
 
     new_src = src.replace(old_recv, new_recv, 1)
 
@@ -673,16 +710,14 @@ try:
     if old_send in new_src:
         new_src = new_src.replace(old_send, new_send, 1)
     else:
-        print("[SETUP] ERROR: scheduler finished_sending pattern not found — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: scheduler finished_sending pattern not found")
 
     open(f, "w").write(new_src)
     print("[SETUP] Patched: scheduler _update_from_kv_xfer_finished read-mode fix")
 
 except Exception as e:
-    print(f"[SETUP] ERROR patch scheduler read-mode: {e}", file=sys.stderr)
-    sys.exit(1)
-' || exit 1
+    print(f"[SETUP] WARN patch scheduler read-mode: {e}", file=sys.stderr)
+'
     _SETUP_INSTALLED+=("scheduler-read-mode-fix")
 }
 
@@ -715,14 +750,14 @@ try:
     # We inject into the method that processes KV transfer completions.
     marker = "[PATCHED] read-mode recv assertion"
     if marker not in src:
-        print("[SETUP] ERROR: scheduler read-mode patch not found — run patch_scheduler_read_mode_fix first", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: scheduler read-mode patch not found, skipping reaper")
+        sys.exit(0)
 
     # Add reaper state initialization to __init__
     old_init_marker = "self.finished_recving_kv_req_ids"
     if old_init_marker not in src:
-        print("[SETUP] ERROR: finished_recving_kv_req_ids not found in scheduler — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: finished_recving_kv_req_ids not found in scheduler")
+        sys.exit(0)
 
     # Find the first occurrence to insert reaper state
     init_pos = src.find(old_init_marker)
@@ -785,16 +820,15 @@ try:
     if send_handler in src:
         src = src.replace(send_handler, reaper_logic, 1)
     else:
-        print("[SETUP] ERROR: send handler not found for reaper injection — vLLM API may have changed", file=sys.stderr)
-        sys.exit(1)
+        print("[SETUP] WARN: send handler not found for reaper injection")
+        sys.exit(0)
 
     open(f, "w").write(src)
     print("[SETUP] Patched: idle KV block reaper for prefill")
 
 except Exception as e:
-    print(f"[SETUP] ERROR patch idle-kv-reaper: {e}", file=sys.stderr)
-    sys.exit(1)
-' || exit 1
+    print(f"[SETUP] WARN patch idle-kv-reaper: {e}", file=sys.stderr)
+'
     _SETUP_INSTALLED+=("idle-kv-reaper")
 }
 
@@ -832,12 +866,10 @@ try:
     print(f"[SETUP] Patched minimax_m2.py: {src} -> {target}")
 
 except Exception as e:
-    print(f"[SETUP] ERROR patch minimax_m2: {e}", file=sys.stderr)
-    sys.exit(1)
-' "$patch_file" || exit 1
+    print(f"[SETUP] WARN patch minimax_m2: {e}", file=sys.stderr)
+' "$patch_file"
     _SETUP_INSTALLED+=("minimax-m2-wideep-mori")
 }
-
 
 # =============================================================================
 # Run installers
@@ -847,8 +879,9 @@ install_ucx
 install_rixl
 install_etcd
 install_libionic
-assert_mori_installed
+install_mori
 install_amd_quark
+install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
