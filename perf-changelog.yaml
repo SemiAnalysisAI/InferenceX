@@ -1918,3 +1918,12 @@
     - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
     - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - "Pin image to vllm/vllm-openai:v0.20.0-x86_64-cu130-ubuntu2404 (was floating deepseekv4-cu130 tag)"
+    - "Install DeepGEMM via vllm v0.20.0 tools/install_deepgemm.sh before engine launch"
+    - "Switch compilation-config to {\"mode\": 0, \"cudagraph_mode\": \"FULL_DECODE_ONLY\"}, use --attention_config.use_fp4_indexer_cache=True, add --moe-backend deep_gemm_mega_moe"
+    - "Drop --pipeline-parallel-size 1 and --max-cudagraph-capture-size 2048 (no longer in v0.20.0 recipe); keep --no-enable-prefix-caching"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
