@@ -10,6 +10,57 @@ export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
 # --------------------------------
+# vLLM dynamic scheduler reconfiguration
+# --------------------------------
+
+# Reconfigure vLLM scheduler limits on a running endpoint. This requires a vLLM
+# build that exposes POST /pause, POST /reconfigure, and POST /resume.
+# The feature is opt-in via VLLM_DYNAMIC_RECONFIGURE=1 and is intended for
+# single-server sweeps where model, parallelism, and cache layout stay fixed.
+#
+# Supported env vars (set before calling):
+#   VLLM_MAX_NUM_BATCHED_TOKENS  -- max tokens scheduled per step
+#   VLLM_MAX_NUM_SEQS            -- max concurrent sequences
+reconfigure_vllm_scheduler() {
+    local port="$1"
+    local base_url="${VLLM_DYNAMIC_RECONFIGURE_BASE_URL:-http://0.0.0.0:$port}"
+
+    # Build JSON body from set env vars
+    local json="{"
+    local sep=""
+    if [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
+        json+="${sep}\"max_num_batched_tokens\":${VLLM_MAX_NUM_BATCHED_TOKENS}"
+        sep=","
+    fi
+    if [[ -n "${VLLM_MAX_NUM_SEQS:-}" ]]; then
+        json+="${sep}\"max_num_seqs\":${VLLM_MAX_NUM_SEQS}"
+        sep=","
+    fi
+    json+="}"
+
+    if [[ "$json" == "{}" ]]; then
+        echo "VLLM_DYNAMIC_RECONFIGURE=1 but no VLLM scheduler parameters were set"
+        return 1
+    fi
+
+    echo "Reconfiguring vLLM scheduler at $base_url: $json"
+    curl -fsS -X POST "$base_url/pause?mode=keep&clear_cache=true"
+
+    local rc=0
+    curl -fsS -X POST "$base_url/reconfigure" \
+        -H "Content-Type: application/json" \
+        -d "$json" || rc=$?
+
+    # Always resume so the server is never left paused on failure.
+    curl -fsS -X POST "$base_url/resume"
+
+    if [[ "$rc" -ne 0 ]]; then
+        echo "ERROR: /reconfigure failed (curl exit code $rc)" >&2
+        return "$rc"
+    fi
+}
+
+# --------------------------------
 # GPU monitoring helpers
 # --------------------------------
 
@@ -333,6 +384,10 @@ run_benchmark_serving() {
         fi
         profile_flag+=(--profile)
         num_prompts="$max_concurrency"
+    fi
+
+    if [[ "${VLLM_DYNAMIC_RECONFIGURE:-0}" == "1" && "$backend" == "vllm" ]]; then
+        reconfigure_vllm_scheduler "$port"
     fi
 
     # Build benchmark command
@@ -861,4 +916,82 @@ run_eval() {
         fi
     fi
     return $eval_rc
+}
+
+# --------------------------------
+# Patched vLLM distribution helpers
+# --------------------------------
+
+# Install a patched vLLM build before launching `vllm serve`. This is optional
+# and only needed when the active container/image does not already include the
+# dynamic scheduler reconfiguration API.
+#
+# Supported env vars:
+#   VLLM_PATCHED_WHEEL        -- local or remote wheel path/URL
+#   VLLM_PATCHED_REPO         -- git repository URL for patched vLLM
+#   VLLM_PATCHED_REF          -- branch, tag, or commit for VLLM_PATCHED_REPO
+#   VLLM_PATCHED_CHECKOUT     -- existing mounted checkout to install editable
+#   VLLM_PATCHED_INSTALL_MODE -- wheel, git, editable, or auto (default)
+install_patched_vllm() {
+    local mode="${VLLM_PATCHED_INSTALL_MODE:-auto}"
+
+    if [[ "$mode" == "auto" ]]; then
+        if [[ -n "${VLLM_PATCHED_WHEEL:-}" ]]; then
+            mode="wheel"
+        elif [[ -n "${VLLM_PATCHED_CHECKOUT:-}" ]]; then
+            mode="editable"
+        elif [[ -n "${VLLM_PATCHED_REPO:-}" ]]; then
+            mode="git"
+        else
+            echo "No patched vLLM install source configured; using existing vLLM"
+            return 0
+        fi
+    fi
+
+    case "$mode" in
+        wheel)
+            if [[ -z "${VLLM_PATCHED_WHEEL:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=wheel requires VLLM_PATCHED_WHEEL"
+                return 1
+            fi
+            echo "Installing patched vLLM wheel: $VLLM_PATCHED_WHEEL"
+            python3 -m pip install --no-cache-dir --no-deps --force-reinstall "$VLLM_PATCHED_WHEEL"
+            ;;
+        git)
+            if [[ -z "${VLLM_PATCHED_REPO:-}" || -z "${VLLM_PATCHED_REF:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=git requires VLLM_PATCHED_REPO and VLLM_PATCHED_REF"
+                return 1
+            fi
+            local checkout_dir="${VLLM_PATCHED_GIT_DIR:-/tmp/patched-vllm}"
+            rm -rf "$checkout_dir"
+            git clone --depth 1 --branch "$VLLM_PATCHED_REF" "$VLLM_PATCHED_REPO" "$checkout_dir" || {
+                git clone "$VLLM_PATCHED_REPO" "$checkout_dir"
+                git -C "$checkout_dir" checkout "$VLLM_PATCHED_REF"
+            }
+            echo "Installing patched vLLM from $VLLM_PATCHED_REPO@$VLLM_PATCHED_REF"
+            VLLM_USE_PRECOMPILED=${VLLM_USE_PRECOMPILED:-1} \
+                python3 -m pip install --no-cache-dir -e "$checkout_dir"
+            ;;
+        editable)
+            if [[ -z "${VLLM_PATCHED_CHECKOUT:-}" ]]; then
+                echo "VLLM_PATCHED_INSTALL_MODE=editable requires VLLM_PATCHED_CHECKOUT"
+                return 1
+            fi
+            echo "Installing patched vLLM editable checkout: $VLLM_PATCHED_CHECKOUT"
+            VLLM_USE_PRECOMPILED=${VLLM_USE_PRECOMPILED:-1} \
+                python3 -m pip install --no-cache-dir -e "$VLLM_PATCHED_CHECKOUT"
+            ;;
+        *)
+            echo "Unknown VLLM_PATCHED_INSTALL_MODE: $mode"
+            return 1
+            ;;
+    esac
+
+    python3 - <<'PY'
+import importlib.metadata
+try:
+    print("Installed vLLM version:", importlib.metadata.version("vllm"))
+except importlib.metadata.PackageNotFoundError:
+    print("Installed vLLM version: unknown")
+PY
 }
