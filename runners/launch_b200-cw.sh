@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 export HF_HUB_CACHE_MOUNT="/tmp/gharunner/hf-hub-cache"
 export PORT=8888
 
@@ -16,7 +18,7 @@ if [[ ! -f "$BENCH_SCRIPT" ]]; then
 fi
 
 PARTITION="b200"
-SQUASH_FILE="/tmp/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/tmp/gharunner/squash/$(sanitize_image_filename "$IMAGE").sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at

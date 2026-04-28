@@ -27,8 +27,8 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/home/sa-shared/squash/$(sanitize_image_filename "$IMAGE").sqsh"
+NGINX_SQUASH_FILE="/home/sa-shared/squash/$(sanitize_image_filename "$NGINX_IMAGE").sqsh"
 
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"

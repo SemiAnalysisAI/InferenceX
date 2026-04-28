@@ -64,8 +64,8 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(sanitize_image_filename "$IMAGE").sqsh"
+NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(sanitize_image_filename "$NGINX_IMAGE").sqsh"
 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE

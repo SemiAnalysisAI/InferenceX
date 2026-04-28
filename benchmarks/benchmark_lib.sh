@@ -864,6 +864,20 @@ run_eval() {
 }
 
 # --------------------------------
+# Container helpers
+# --------------------------------
+
+# Sanitize a container image reference (e.g. "lmsysorg/sglang:v0.5.8-cu130")
+# into a filename-safe slug by replacing /, :, @, # with the chosen separator.
+# Defaults to '_' (most clusters); pass '+' for clusters that adopted that
+# convention for their squash-file directory.
+sanitize_image_filename() {
+    local image="$1"
+    local sep="${2:-_}"
+    echo "$image" | sed "s|[/:@#]|${sep}|g"
+}
+
+# --------------------------------
 # srt-slurm helpers
 # --------------------------------
 

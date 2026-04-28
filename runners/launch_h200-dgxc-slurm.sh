@@ -44,12 +44,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # SGLang container mapping
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        SQUASH_FILE="/data/containers/$(sanitize_image_filename "$IMAGE" +).sqsh"
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+        SQUASH_FILE="/data/containers/$(sanitize_image_filename "${IMAGE#nvcr.io/}" +).sqsh"
     fi
 
     export ISL="$ISL"
@@ -242,7 +242,7 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/gharunners/containers/$(sanitize_image_filename "$IMAGE").sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')

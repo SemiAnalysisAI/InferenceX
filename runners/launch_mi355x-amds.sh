@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
@@ -182,7 +184,7 @@ else
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
     PARTITION="compute"
-    SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/var/lib/squash/$(sanitize_image_filename "$IMAGE").sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x

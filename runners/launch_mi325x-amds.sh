@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
 export PORT=8888
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(sanitize_image_filename "$IMAGE").sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 set -x

@@ -37,8 +37,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/home/sa-shared/containers/$(sanitize_image_filename "$IMAGE").sqsh"
+    NGINX_SQUASH_FILE="/home/sa-shared/containers/$(sanitize_image_filename "$NGINX_IMAGE").sqsh"
 
     # Import containers via enroot
     enroot import -o $SQUASH_FILE docker://$IMAGE
@@ -231,7 +231,7 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/home/sa-shared/containers/$(sanitize_image_filename "$IMAGE").sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models

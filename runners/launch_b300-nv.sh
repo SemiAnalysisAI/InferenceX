@@ -38,8 +38,8 @@ UV_VENV_DIR="$GITHUB_WORKSPACE/.venv" \
 
 # Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
-SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/data/squash/$(sanitize_image_filename "$IMAGE").sqsh"
+NGINX_SQUASH_FILE="/data/squash/$(sanitize_image_filename "$NGINX_IMAGE").sqsh"
 
 # Import containers via enroot
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
@@ -239,7 +239,7 @@ else
     elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
         export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
-    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(sanitize_image_filename "$IMAGE").sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
