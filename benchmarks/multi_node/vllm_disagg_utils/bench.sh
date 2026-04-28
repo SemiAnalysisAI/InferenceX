@@ -12,8 +12,9 @@ n_prefill=$1
 n_decode=$2
 prefill_gpus=$3
 decode_gpus=$4
-MODEL_PATH=$5
+model_path=$5
 model_name=$6
+MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
 log_path=$7
 
 chosen_isl=${8:-1024}
