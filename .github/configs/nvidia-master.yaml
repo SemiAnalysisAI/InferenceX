@@ -7728,82 +7728,24 @@ dsv4-fp4-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
-  # Five disagg topologies from NVIDIA/srt-slurm PR #85 branch
-  # recipes/dsv4-agg-disagg, overlaid with cw-specific fields by
-  # launch_gb300-cw.sh. Cluster gb300-cw is CoreWeave (2x 18-node
-  # racks); recipes set their own sbatch_directives.segment for rack
-  # pinning. All use NIXL KV transfer.
+  # Uses the sa-bench recipe copied exactly from NVIDIA/srt-slurm:
+  # recipes/dsv4-pro/sglang/gb200-fp4/1k1k/disagg/stp/disagg-1p3d-tp8.yaml
+  # at commit 9d75f82acec163594658a440f39dd7f1bd35bd16.
   seq-len-configs:
   - isl: 1024
     osl: 1024
     search-space:
-    # 1P1D TP=4 MXFP4 — low-latency baseline (2 nodes)
-    - conc-list: [4, 8, 16, 32, 64, 128]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 1
-        dp-attn: false
-        additional-settings:
-        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/disagg-1p1d-tp4-mxfp4.yaml"
-      decode:
-        num-worker: 1
-        tp: 4
-        ep: 1
-        dp-attn: false
-    # 1P1D DEP4 mega_moe — TEP disagg (2 nodes)
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512, 1024, 1536, 2048]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/disagg-1p1d-dep4-mega-moe.yaml"
-      decode:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-    # 1P2D asymmetric DEP4->DEP8 mega_moe — best per-GPU efficiency (3 nodes)
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512, 1024, 1536, 2048]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/disagg-1p2d-dep4-to-dep8-mega-moe.yaml"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-    # 2P2D symmetric DEP8 mega_moe — largest throughput (4 nodes)
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512, 1024, 1536, 2048]
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/disagg-2p2d-dep8-mega-moe.yaml"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-    # 2P2D TP=8 MXFP4 — TP-only 4-node baseline (4 nodes)
-    - conc-list: [4, 8, 16, 32, 64, 128, 256, 512]
+    # 1 prefill worker and 3 decode workers, each TP=8.
+    - conc-list: [32, 64, 128, 256, 512, 1024]
       prefill:
         num-worker: 1
         tp: 8
         ep: 1
         dp-attn: false
         additional-settings:
-        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/disagg-2p2d-tp8-mxfp4.yaml"
+        - "CONFIG_FILE=recipes/dsv4-pro/sglang/gb200-fp4/1k1k/disagg/stp/disagg-1p3d-tp8.yaml"
       decode:
-        num-worker: 1
+        num-worker: 3
         tp: 8
         ep: 1
         dp-attn: false

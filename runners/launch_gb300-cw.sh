@@ -2,19 +2,16 @@
 
 # Launches multi-node Dynamo + SGLang benchmarks on the gb300-cw
 # (CoreWeave) cluster. Adapted from the dynamo-vllm sibling launcher in
-# the dsv4-fp4-gb300-dynamo-vllm-disagg branch (PR #1150). Compared to
-# that script, the SGLang flow is simpler: no dynamo wheel prebuild and
-# no vllm-container-deps.sh override, because the SGLang recipes pin
-# `dynamo.version: 0.8.1` and srtctl pip-installs from PyPI per rank.
+# the dsv4-fp4-gb300-dynamo-vllm-disagg branch (PR #1150). The SGLang
+# recipes are copied exactly from the pinned srt-slurm commit below.
 
 set -x
 
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on the shared VAST mount; no compute-node-local
-    # NVMe on cw. SRT_SLURM_MODEL_PREFIX matches the model.path alias in
-    # benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/.
+    # NVMe on cw. The exact upstream recipes refer to this model as
+    # `dspro`.
     export MODEL_PATH="/mnt/vast/models/dsv4/"
-    export SRT_SLURM_MODEL_PREFIX="dsv4-pro"
 else
     echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
     exit 1
@@ -36,6 +33,7 @@ export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 NGINX_IMAGE="nginx:1.27.4"
+SRT_SLURM_RECIPES_COMMIT="9d75f82acec163594658a440f39dd7f1bd35bd16"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
 # `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
@@ -48,84 +46,6 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh
 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
-
-# Pre-build dynamo wheel ONCE on a single compute node, BEFORE submitting
-# the main sbatch. The lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64
-# image lacks a working ai-dynamo (install: false → ModuleNotFoundError),
-# and pinning a published dev wheel (1.2.0.dev*) trips API drift against
-# the bundled sglang 0.5.9 (compat shim warns then disagg startup warmup
-# hangs — see runs ending 2026-04-27). Building from hash 6a159fed (the
-# same commit the gb200 vllm sibling pins, known sglang-API-stable) on
-# a single dedicated srun eliminates per-rank coordination on /mnt/vast
-# (NFS flock is unreliable). Same pattern as PR #1150's vllm launcher.
-DYNAMO_HASH="6a159fedd8e4a1563aa647c31f622aedbf254b5b"
-DYNAMO_CACHE_ROOT="/mnt/vast/dynamo_cache"
-DYNAMO_CACHE_DIR="$DYNAMO_CACHE_ROOT/$DYNAMO_HASH"
-DYNAMO_DONE_MARKER="$DYNAMO_CACHE_DIR/.done"
-mkdir -p "$DYNAMO_CACHE_ROOT"
-
-if [ ! -f "$DYNAMO_DONE_MARKER" ]; then
-    echo "[dynamo-prebuild] cold cache, building wheel + source archive on a single compute node..."
-    # Build into a unique temp dir, then atomically mv into place. Two
-    # concurrent runners may both build; the first to finish the rename
-    # wins, the loser cleans up. Same-directory rename() is atomic on
-    # NFS (unlike flock).
-    TEMP_BUILD=$(mktemp -d "$DYNAMO_CACHE_ROOT/$DYNAMO_HASH.tmp.XXXXXX")
-    # --mem=0: claim full node memory. Default cgroup is much smaller and
-    # rustc's link phase can OOM otherwise. CARGO_BUILD_JOBS=8 caps
-    # parallelism so peak rustc memory stays bounded on a 72-core Grace
-    # node, and `-C debuginfo=0` cuts per-process memory further.
-    srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT \
-         --nodes=1 --ntasks=1 --mem=0 --time=00:45:00 \
-         --job-name="${RUNNER_NAME}-prebuild" \
-         --container-image="$SQUASH_FILE" \
-         --no-container-entrypoint --no-container-mount-home \
-         --container-mounts="$DYNAMO_CACHE_ROOT:$DYNAMO_CACHE_ROOT" \
-         bash -c "
-            set -e
-            apt-get update -qq
-            apt-get install -y -qq git curl libclang-dev protobuf-compiler >/dev/null 2>&1
-            if ! command -v cargo &>/dev/null; then
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . \$HOME/.cargo/env
-            fi
-            if ! command -v maturin &>/dev/null; then
-              pip install --break-system-packages maturin
-            fi
-            rm -rf /tmp/dynamo_build
-            mkdir -p /tmp/dynamo_build
-            cd /tmp/dynamo_build
-            git clone https://github.com/ai-dynamo/dynamo.git
-            cd dynamo
-            git checkout $DYNAMO_HASH
-            cd lib/bindings/python/
-            export CARGO_BUILD_JOBS=8
-            export RUSTFLAGS='-C target-cpu=native -C debuginfo=0 --cfg tokio_unstable'
-            maturin build -o '$TEMP_BUILD'
-            cd /tmp/dynamo_build/dynamo
-            tar czf '$TEMP_BUILD/dynamo-source.tar.gz' \
-                --exclude='lib/bindings/python/target' \
-                --exclude='.git' \
-                .
-            touch '$TEMP_BUILD/.done'
-        "
-    if [ -f "$TEMP_BUILD/.done" ]; then
-        # Atomic publish. If another runner already published, mv fails
-        # and we just discard our copy.
-        if mv "$TEMP_BUILD" "$DYNAMO_CACHE_DIR" 2>/dev/null; then
-            echo "[dynamo-prebuild] published cache at $DYNAMO_CACHE_DIR"
-        else
-            echo "[dynamo-prebuild] another runner published first, discarding our copy"
-            rm -rf "$TEMP_BUILD"
-        fi
-    else
-        echo "[dynamo-prebuild] BUILD FAILED — no .done in $TEMP_BUILD" >&2
-        rm -rf "$TEMP_BUILD"
-        exit 1
-    fi
-else
-    echo "[dynamo-prebuild] cache hit at $DYNAMO_CACHE_DIR"
-fi
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -150,24 +70,12 @@ fi
 
 git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout recipes/dsv4-agg-disagg
+git checkout "$SRT_SLURM_RECIPES_COMMIT"
 
-# Overlay our cw-adapted DSv4 SGLang disagg recipes onto the upstream
-# recipes from PR #85. The upstream recipes at
-# recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/ don't carry
-# cw-specific fields (dynamo.install, setup_script, extra_mount,
-# sbatch_directives), so we overlay locally-maintained copies that add
-# those. `cp -rT` replaces the upstream files in place.
-mkdir -p recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k" recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp
-
-# Drop our cache-installer setup_script next to upstream's configs.
-# Recipes reference it via `setup_script: gb300-cw-sglang-container-deps.sh`
-# alongside `dynamo.install: false` so srtctl skips its own pip install
-# and this script (force-reinstalling from /mnt/vast/dynamo_cache) is the
-# sole installer per rank.
-cp "$GITHUB_WORKSPACE/runners/gb300-cw-sglang-container-deps.sh" configs/gb300-cw-sglang-container-deps.sh
-chmod +x configs/gb300-cw-sglang-container-deps.sh
+# Overlay the local copy of the exact pinned recipes. This keeps the PR
+# self-contained while preserving byte-for-byte recipe content from
+# NVIDIA/srt-slurm at $SRT_SLURM_RECIPES_COMMIT.
+cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/gb200-fp4" recipes/dsv4-pro/sglang/gb200-fp4
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -213,7 +121,7 @@ cat > srtslurm.yaml <<EOF
 
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "6:00:00"
+default_time_limit: "8:00:00"
 
 gpus_per_node: 4
 network_interface: ""
@@ -221,18 +129,21 @@ network_interface: ""
 srtctl_root: "${SRTCTL_ROOT}"
 
 model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+  dspro: "${MODEL_PATH}"
+  dsv4-pro: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dspro-0426: ${SQUASH_FILE}
+  dspro-0426-nixl: ${SQUASH_FILE}
   dsv4-grace-blackwell: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx: ${NGINX_SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
-# Auto-emission of #SBATCH --segment={total_nodes} is turned off here
-# because each gb300 recipe sets its own segment via sbatch_directives
-# (rack-pinning on cw's 2x18-node racks).
-use_segment_sbatch_directive: false
+# Use one contiguous CW segment for the full allocation. This is a
+# cluster-level setting, not a recipe overlay; the copied recipe files
+# stay byte-identical to the pinned upstream commit.
+use_segment_sbatch_directive: true
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -246,8 +157,15 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+# Use the runner name for the submitted job. Some exact upstream recipes do
+# not define `name`, so insert it into only the cloned runtime copy.
+if grep -q '^name:' "$CONFIG_FILE"; then
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+else
+    TMP_CONFIG_FILE="$(mktemp)"
+    awk -v runner_name="${RUNNER_NAME}" 'BEGIN { print "name: \"" runner_name "\"" } { print }' "$CONFIG_FILE" > "$TMP_CONFIG_FILE"
+    mv "$TMP_CONFIG_FILE" "$CONFIG_FILE"
+fi
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"

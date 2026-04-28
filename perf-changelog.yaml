@@ -1924,6 +1924,6 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
     - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 (gb300-cw compute nodes are aarch64)"
-    - "Topology: 1P + 1D, both TP=4 on a single GB300; MXFP4 MoE kernels, NIXL KV transfer"
-    - "Recipe ported from NVIDIA/srt-slurm PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml)"
+    - "Topology: 1 prefill worker + 3 decode workers, TP=8, MXFP4 MoE kernels, NIXL KV transfer"
+    - "Recipes copied exactly from NVIDIA/srt-slurm recipes/dsv4-pro/sglang/gb200-fp4 at commit 9d75f82acec163594658a440f39dd7f1bd35bd16"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1169

@@ -1,0 +1,83 @@
+# DeepSeek-V4-Pro disaggregated on GB200 (1P3D, TP=8, MXFP4)
+#
+# Some basic rate matching
+# TODO: no optimizations have been applied yet
+
+dynamo:
+  hash: "9d3c913d300eb368cda28b3f98a23a5762621e0d"
+
+frontend:
+  type: dynamo
+  nginx_container: nginx
+
+model:
+  path: "dspro"
+  container: "dspro-0426"
+  precision: "mxfp4"
+
+resources:
+  gpu_type: "gb200"
+  prefill_nodes: 2
+  decode_nodes: 6
+  prefill_workers: 1
+  decode_workers: 3
+  gpus_per_node: 4
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+
+  decode_environment:
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+
+  sglang_config:
+    prefill:
+      disaggregation-bootstrap-port: 30001
+      served-model-name: "dspro"
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: nixl
+      moe-runner-backend: "flashinfer_mxfp4"
+      chunked-prefill-size: 8192
+      disable-flashinfer-autotune: true
+      max-running-requests: 1024
+      cuda-graph-max-bs: 2048
+      mem-fraction-static: 0.85
+
+    decode:
+      served-model-name: "dspro"
+      disaggregation-bootstrap-port: 30001
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: nixl
+      moe-runner-backend: "flashinfer_mxfp4"
+      chunked-prefill-size: 8192
+      disable-flashinfer-autotune: true
+      max-running-requests: 1024
+      cuda-graph-max-bs: 1024
+      mem-fraction-static: 0.85
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  random_range_ratio: 0.8
+  concurrencies: "32x64x128x256x512x1024"
+  req_rate: "inf"
+  use_chat_template: false
