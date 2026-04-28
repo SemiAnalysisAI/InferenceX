@@ -77,6 +77,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     if [ "$CONC" = "8192" ]; then
         # 1k1k high-concurrency mega_moe deepep recipe
+        export NVSHMEM_DISABLE_IB=1
         export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
         export SGLANG_LOG_FORWARD_ITERS=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
