@@ -2537,6 +2537,41 @@ dsv4-fp4-b300-vllm:
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
+# DeepSeek-V4-Pro on B300 with vLLM + MTP speculative decoding. The
+# deepseekv4-cu130 image registers DeepSeekV4MTPModel and exposes
+# --speculative-config '{"method":"deepseek_mtp",...}'; the script
+# defaults to num_speculative_tokens=1 (DSv4 publishes
+# num_nextn_predict_layers=1). Bench passes --dsv4 so prompts are
+# routed through encoding_dsv4.py -- required for honest MTP
+# acceptance numbers (random-token prompts silently regress).
+#
+# Two CONC bands (TP-only, mirrors dsv4-fp4-b300-sglang-mtp coverage):
+#   A: TP=8                 -- conc 1-8     low-conc, where MTP wins most
+#   B: TP=4                 -- conc 4-32    mid-batch
+# DP-attn (TP=4 ep=4 dp-attn / TP=8 ep=8 dp-attn) is wired in
+# benchmarks/single_node/dsv4_fp4_b300_vllm_mtp.sh via DP_ATTENTION=true
+# but is excluded from the initial sweep until the TP-only bands have
+# published numbers.
+dsv4-fp4-b300-vllm-mtp:
+  image: vllm/vllm-openai:deepseekv4-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
   model: Qwen/Qwen3.5-397B-A17B-FP8
