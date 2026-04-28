@@ -79,6 +79,7 @@ backend:
       stream-interval: 50
       decode-log-interval: 1000
       disaggregation-mode: "prefill"
+      disaggregation-bootstrap-port: 30001
       disaggregation-transfer-backend: nixl
 
     decode:
@@ -99,6 +100,7 @@ backend:
       stream-interval: 50
       decode-log-interval: 1000
       disaggregation-mode: "decode"
+      disaggregation-bootstrap-port: 30001
       disaggregation-transfer-backend: nixl
 
 benchmark:
