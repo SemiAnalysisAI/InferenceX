@@ -1937,11 +1937,24 @@
     - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Use ROCm/aiter#2916 mhc_pre device-allocation fix instead of disabling ATOM mhc_pre"
+    - "Patch installed aiter/ops/mhc.py at runtime to allocate mhc_pre intermediates on residual.device, preserving the aiter MHC fast path without rebuilding aiter"
+    - "Remove the ATOM deepseek_v4.py sed workaround that forced mhc_pre to torch fallback"
+    - "Keep dsv4-fp4-mi355x-atom at CONC=1 only; run 24953107645 showed high-concurrency DSv4 ATOM OOMs in PR #650 torch sparse-attention fallbacks before upstream AITER sparse-attention support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1202
 
 - config-keys:
-    - dsv4-fp4-gb200-dynamo-vllm
+    - dsv4-fp4-b300-vllm-mtp
   description:
-    - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
-    - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
-    - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
+  
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm
+description:
+  - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
+  - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
+  - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
+pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163

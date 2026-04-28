@@ -2539,6 +2539,27 @@ dsv4-fp4-b300-vllm:
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
+dsv4-fp4-b300-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
   model: Qwen/Qwen3.5-397B-A17B-FP8
