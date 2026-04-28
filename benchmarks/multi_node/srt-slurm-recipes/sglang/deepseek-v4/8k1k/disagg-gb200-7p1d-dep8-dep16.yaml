@@ -1,113 +1,203 @@
-name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
-
-# 8k/1k max-throughput topology: 7 prefill (DP=8 EP=8) + 1 wide decode
-# (DP=16 EP=16). 18 nodes — full GB200 cluster. Targets conc 4096-8192.
-# Per-worker tunings identical to the 3p1d sibling; only prefill_workers
-# and prefill_nodes scale up.
-#
-# See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the upstream-reference
-# list. Topology mirrors the dsv4-fp4-gb200-dynamo-vllm sibling.
-
-model:
-  path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
-  precision: "fp4"
-
-# See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the dynamo pin rationale.
-dynamo:
-  hash: 21f135f5edf40e12e6ff5db2b462d862a6d6ab9b
-  install: true
+name: "dsv4-pro-gb300-fp4"
 
 slurm:
-  time_limit: "8:00:00"
+  partition: hpc-mid
+  time_limit: "03:00:00"
 
-health_check:
-  max_attempts: 1440
-  interval_seconds: 10
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
 
-resources:
-  gpu_type: "gb200"
-  gpus_per_node: 4
-  prefill_nodes: 14
-  decode_nodes: 2
-  prefill_workers: 7
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
+dynamo:
+  hash: "9d3c913d300eb368cda28b3f98a23a5762621e0d"
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: false
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
+  nginx_container: /mnt/home/yangminl/containers/nginx-1.27.4.sqsh
+
+model:
+  path: "dsv4-pro"
+  container: "dsv4-grace-blackwell"
+  precision: "fp4"
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  # prefill_nodes / prefill_workers / decode_nodes / decode_workers are
+  # set per-override; not duplicated in base.
+
+extra_mount:
+  - "/mnt/home/yangminl/sglang-patched/sglang:/sgl-workspace/sglang"
+  - "/mnt/home/yangminl/sglang-patched/sglang:/workspace/sglang"
+
+# setup_script: "install_sglang.sh"
 
 backend:
   type: sglang
 
   prefill_environment:
+    # SGLANG_HACK_PRINT_REQ_LIFECYCLE: "1" # TODO temp debug
+    SGLANG_DG_CACHE_DIR: "/configs/deepgemm_cache" # NOTE hack for quick tests
     PYTHONUNBUFFERED: "1"
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
 
   decode_environment:
+    # SGLANG_HACK_PRINT_REQ_LIFECYCLE: "1" # TODO temp debug
+    SGLANG_DG_CACHE_DIR: "/configs/deepgemm_cache" # NOTE hack for quick tests
     PYTHONUNBUFFERED: "1"
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1152"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+    # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
+    # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
     prefill:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
       trust-remote-code: true
-      tensor-parallel-size: 8
-      moe-dense-tp-size: 1
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 30 # pr50 sets it, let's do it
+      # tokenizer-worker-num: 16  # need this if we run tokenizer
+
+      # Parallel
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+
       enable-dp-attention: true
-      dp-size: 8
-      moe-runner-backend: "flashinfer_mxfp4"
-      chunked-prefill-size: 4096
-      disable-flashinfer-autotune: true
-      disable-radix-cache: true
-      mem-fraction-static: 0.82
-      context-length: 9280
-      max-running-requests: 8
-      stream-interval: 50
-      decode-log-interval: 1000
+      moe-a2a-backend: "deepep"
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+
       disaggregation-mode: "prefill"
-      disaggregation-bootstrap-port: 30001
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
+
+      mem-fraction-static: 0.90
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 32768
+      # disable-radix-cache: true # NOTE try to enable radix cache
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
       trust-remote-code: true
-      tensor-parallel-size: 8
-      moe-dense-tp-size: 1
-      enable-dp-attention: true
-      dp-size: 8
-      moe-runner-backend: "flashinfer_mxfp4"
-      chunked-prefill-size: 4096
-      disable-flashinfer-autotune: true
-      disable-radix-cache: true
-      mem-fraction-static: 0.82
-      context-length: 9280
-      max-running-requests: 256
-      cuda-graph-max-bs: 256
-      stream-interval: 50
-      decode-log-interval: 1000
-      disaggregation-mode: "decode"
-      disaggregation-bootstrap-port: 30001
-      disaggregation-transfer-backend: nixl
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 30 # pr50 sets it, let's do it
+      # tokenizer-worker-num: 16  # need this if we run tokenizer
+      # disable-radix-cache: true # NOTE try to enable radix cache
 
-benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: "4096x8192"
-  req_rate: "inf"
-  use_chat_template: false
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: mooncake
+
+      # tensor-parallel-size / data-parallel-size / expert-parallel-size
+      # / max-running-requests / cuda-graph-max-bs are set per-override.
+
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.15
+      context-length: 16384
+
+  benchmark:
+    type: custom
+    command: |
+      set -e
+      REPO=/configs/upstream-sa-bench/InferenceX
+      [ -d "$REPO" ] || git clone https://github.com/fzyzcjy/InferenceX.git "$REPO"
+      cd "$REPO/utils/bench_serving"
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 8192 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 40960 --max-concurrency 4096 --request-rate 48 \
+        --num-warmups 512 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir /logs --result-filename results.json
+    # concurrencies set per-override
+
+############ 8k1k ##############
+# [0]is wideep, [1] is narrow ep
+zip_override_8k1k_hightpt:
+  resources:
+    prefill_nodes:   [7, 1]
+    prefill_workers: [7, 1]
+    decode_nodes:    [2, 2]
+    decode_workers:  [1, 1]
+  backend:
+    sglang_config:
+      decode:
+        tensor-parallel-size:     [8, 8] # NOTE change from 16gpu to 8gpu
+        data-parallel-size:       [8, 8] # NOTE change from 16gpu to 8gpu
+        expert-parallel-size:     [8, 8] # NOTE change from 16gpu to 8gpu
+
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+
+        # ep-num-redundant-experts + ep-dispatch-algorithm intentionally
+        # removed: no static dispatching file available yet.
+
+        moe-a2a-backend: "deepep"
+        deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+
+        max-running-requests: [9216, 256] # NOTE change from 16gpu to 8gpu
+        cuda-graph-max-bs:    [1152,  32]
+
+        # benchmark:
+        # isl: 8192
+        # osl: 1024
+        # concurrencies: "16384"
