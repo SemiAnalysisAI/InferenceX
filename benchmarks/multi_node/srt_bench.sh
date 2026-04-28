@@ -38,8 +38,6 @@
 #   USE_CHAT_TEMPLATE=true
 #   DSV4=false                 sets the --dsv4 flag (auto-enables chat template)
 #   TRUST_REMOTE_CODE=true
-#   DATASET_NAME=random
-#   DATASET_PATH=              (only meaningful when DATASET_NAME != random)
 #
 # The InferenceX repo is bind-mounted at /infmax-workspace via each recipe's
 # `container_mounts` block. Model files are auto-mounted at /model by srtctl
@@ -64,8 +62,6 @@ NUM_PROMPTS_MULT="${NUM_PROMPTS_MULT:-10}"
 USE_CHAT_TEMPLATE="${USE_CHAT_TEMPLATE:-true}"
 DSV4="${DSV4:-false}"
 TRUST_REMOTE_CODE="${TRUST_REMOTE_CODE:-true}"
-DATASET_NAME="${DATASET_NAME:-random}"
-DATASET_PATH="${DATASET_PATH:-}"
 
 RESULT_DIR="/logs/sa-bench_isl_${ISL}_osl_${OSL}"
 mkdir -p "$RESULT_DIR"
@@ -114,12 +110,10 @@ for conc in "${CONC_LIST_ARR[@]}"; do
         --random-range-ratio "$RANDOM_RANGE_RATIO"
         --num-prompts "$((conc * NUM_PROMPTS_MULT))"
         --max-concurrency "$conc"
-        --dataset-name "$DATASET_NAME"
         --result-filename "$result_filename"
         --result-dir "$RESULT_DIR"
         --bench-serving-dir "$INFMAX_WS"
     )
-    [[ -n "$DATASET_PATH" ]]                && args+=(--dataset-path "$DATASET_PATH")
     [[ "$USE_CHAT_TEMPLATE" == "true" ]]    && args+=(--use-chat-template)
     [[ "$DSV4" == "true" ]]                 && args+=(--dsv4)
     [[ "$TRUST_REMOTE_CODE" == "true" ]]    && args+=(--trust-remote-code)

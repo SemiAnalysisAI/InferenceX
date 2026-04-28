@@ -206,12 +206,13 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
-    # Optional knobs surfaced for the multi-node srt_bench.sh wrapper so it
-    # can use this same command-build instead of forking its own.
-    local endpoint=""
-    local dataset_name="random"
-    local dataset_path=""
+    # Optional --tokenizer / --endpoint pass-throughs for the multi-node
+    # srt_bench.sh. --tokenizer points the bench at the /model auto-mount
+    # (avoids relying on --model being a HF-resolvable id). --endpoint lets
+    # recipes target /v1/chat/completions when chat-template-only request
+    # paths are required.
     local tokenizer=""
+    local endpoint=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -276,20 +277,12 @@ run_benchmark_serving() {
                 server_pid="$2"
                 shift 2
                 ;;
-            --endpoint)
-                endpoint="$2"
-                shift 2
-                ;;
-            --dataset-name)
-                dataset_name="$2"
-                shift 2
-                ;;
-            --dataset-path)
-                dataset_path="$2"
-                shift 2
-                ;;
             --tokenizer)
                 tokenizer="$2"
+                shift 2
+                ;;
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
             *)
@@ -363,7 +356,7 @@ run_benchmark_serving() {
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
-        --dataset-name "$dataset_name"
+        --dataset-name random
         --random-input-len "$input_len"
         --random-output-len "$output_len"
         --random-range-ratio "$random_range_ratio"
@@ -380,14 +373,11 @@ run_benchmark_serving() {
     )
 
     # Optional pass-throughs.
-    if [[ -n "$endpoint" ]]; then
-        benchmark_cmd+=(--endpoint "$endpoint")
-    fi
-    if [[ -n "$dataset_path" ]]; then
-        benchmark_cmd+=(--dataset-path "$dataset_path")
-    fi
     if [[ -n "$tokenizer" ]]; then
         benchmark_cmd+=(--tokenizer "$tokenizer")
+    fi
+    if [[ -n "$endpoint" ]]; then
+        benchmark_cmd+=(--endpoint "$endpoint")
     fi
 
     # Add --use-chat-template if requested
