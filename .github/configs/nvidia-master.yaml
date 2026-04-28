@@ -13,7 +13,7 @@ dsr1-fp4-b200-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [1214]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -26,7 +26,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [875]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -39,7 +39,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [6]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -52,7 +52,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [10, 15, 25, 45, 90, 180]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -65,7 +65,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [ 4968 ]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx3_gen4_dep8_batch128_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx3_gen4_dep8_batch128_eplb0_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -78,7 +78,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [10860]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx3_gen5_dep4_batch512_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx3_gen5_dep4_batch512_eplb0_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -92,7 +92,7 @@ dsr1-fp4-b200-dynamo-trt:
 
     # Non-MTP configurations
     - conc-list: [4096]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -104,7 +104,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [2192]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen2_dep8_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen2_dep8_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -116,7 +116,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [1365]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen5_dep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen5_dep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -128,7 +128,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [6]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -140,7 +140,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [10, 15, 25, 45, 90, 180]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen5_tep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen5_tep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -152,7 +152,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [450]
-      recipe: "dsr1/trtllm/b200-fp4/1k/1k/disagg/stp/ctx1_gen6_tep8_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/1k1k/disagg/stp/ctx1_gen6_tep8_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -169,7 +169,7 @@ dsr1-fp4-b200-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [90]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -182,7 +182,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [66]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -195,7 +195,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [6]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -208,7 +208,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [10, 15, 30, 60]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -221,7 +221,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [548]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -234,7 +234,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1096, 1691]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml"
       prefill:
         num-worker: 5
         tp: 4
@@ -247,7 +247,7 @@ dsr1-fp4-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [658]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 5
         tp: 4
@@ -261,7 +261,7 @@ dsr1-fp4-b200-dynamo-trt:
 
     # Non-MTP configurations
     - conc-list: [6]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -273,7 +273,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [10, 15, 25, 50, 100]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -285,7 +285,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [370]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -297,7 +297,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [1606]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -309,7 +309,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [837]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -321,7 +321,7 @@ dsr1-fp4-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [2222]
-      recipe: "dsr1/trtllm/b200-fp4/8k/1k/disagg/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b200-fp4/8k1k/disagg/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -349,7 +349,7 @@ dsr1-fp8-b200-dynamo-trt:
     # MTP configurations - Low latency (TP attention)
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -362,7 +362,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch4_eplb0_mtp3_32.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch4_eplb0_mtp3_32.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -375,7 +375,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch8_eplb0_mtp3_64.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch8_eplb0_mtp3_64.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -388,7 +388,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [256]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch32_eplb0_mtp3_256.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch32_eplb0_mtp3_256.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -402,7 +402,7 @@ dsr1-fp8-b200-dynamo-trt:
     # MTP configurations - High throughput (DP attention)
     - spec-decoding: "mtp"
       conc-list: [896]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen7_dep8_batch128_eplb0_mtp3_896.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen7_dep8_batch128_eplb0_mtp3_896.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -415,7 +415,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1024]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen4_dep8_batch256_eplb0_mtp3_1024.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen4_dep8_batch256_eplb0_mtp3_1024.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -428,7 +428,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1184]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen3_dep8_batch384_eplb0_mtp3_1184.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen3_dep8_batch384_eplb0_mtp3_1184.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -441,7 +441,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1600]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/mtp/ctx1_gen2_dep8_batch768_eplb0_mtp2_1600.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/mtp/ctx1_gen2_dep8_batch768_eplb0_mtp2_1600.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -455,7 +455,7 @@ dsr1-fp8-b200-dynamo-trt:
 
     # Non-MTP (STP) configurations - Low latency (TP attention)
     - conc-list: [4]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_4.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_4.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -467,7 +467,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [32]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_32.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_32.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -479,7 +479,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [128]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_128.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx1_gen3_tp8_batch1024_eplb0_mtp0_128.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -492,7 +492,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     # Non-MTP (STP) configurations - High throughput (DP attention)
     - conc-list: [1920]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx1_gen5_dep8_batch48_eplb0_mtp0_1920.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx1_gen5_dep8_batch48_eplb0_mtp0_1920.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -504,7 +504,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [4096]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4096.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4096.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -516,7 +516,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [5152]
-      recipe: "dsr1/trtllm/b200-fp8/1k/1k/disagg/stp/ctx2_gen5_dep8_batch128_eplb0_mtp0_5152.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/1k1k/disagg/stp/ctx2_gen5_dep8_batch128_eplb0_mtp0_5152.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -534,7 +534,7 @@ dsr1-fp8-b200-dynamo-trt:
     # MTP configurations - Low latency (TP attention)
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -547,7 +547,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -560,7 +560,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [48]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -573,7 +573,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -587,7 +587,7 @@ dsr1-fp8-b200-dynamo-trt:
     # MTP configurations - High throughput (DP attention)
     - spec-decoding: "mtp"
       conc-list: [224]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -600,7 +600,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [288]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -613,7 +613,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1088]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml"
       prefill:
         num-worker: 4
         tp: 8
@@ -627,7 +627,7 @@ dsr1-fp8-b200-dynamo-trt:
 
     # Non-MTP (STP) configurations - Low latency (TP attention)
     - conc-list: [1]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -639,7 +639,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [32]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -651,7 +651,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [128]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -663,7 +663,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [96]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -676,7 +676,7 @@ dsr1-fp8-b200-dynamo-trt:
         dp-attn: false
     # Non-MTP (STP) configurations - High throughput (DP attention)
     - conc-list: [128]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -688,7 +688,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [128]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -700,7 +700,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [256]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -712,7 +712,7 @@ dsr1-fp8-b200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [640]
-      recipe: "dsr1/trtllm/b200-fp8/8k/1k/disagg/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml"
+      recipe: "dsr1/trtllm/b200-fp8/8k1k/disagg/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -740,7 +740,7 @@ dsr1-fp4-b300-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [654]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx1_gen1_dep8_batch64_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx1_gen1_dep8_batch64_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -753,7 +753,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [271]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx1_gen2_dep8_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx1_gen2_dep8_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -766,7 +766,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [11]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -779,7 +779,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [10, 20, 25, 60, 120, 200]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx1_gen5_tep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -792,7 +792,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [2342]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx2_gen1_dep8_batch256_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx2_gen1_dep8_batch256_eplb0_mtp1.yaml"
       prefill:
         num-worker: 2
         tp: 2
@@ -805,7 +805,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [8609]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx5_gen2_dep8_batch512_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx5_gen2_dep8_batch512_eplb0_mtp1.yaml"
       prefill:
         num-worker: 5
         tp: 2
@@ -818,7 +818,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [12926]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/mtp/ctx5_gen2_dep8_batch768_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/mtp/ctx5_gen2_dep8_batch768_eplb0_mtp1.yaml"
       prefill:
         num-worker: 5
         tp: 2
@@ -832,7 +832,7 @@ dsr1-fp4-b300-dynamo-trt:
 
     # Non-MTP configurations
     - conc-list: [1176]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -844,7 +844,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [6]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -856,7 +856,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [5, 10, 15, 25]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -868,7 +868,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [60, 110, 195, 395]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx1_gen5_tep8_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx1_gen5_tep8_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -880,7 +880,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [4405]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx2_gen1_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx2_gen1_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 2
@@ -892,7 +892,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [8192]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx3_gen1_dep8_batch1024_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx3_gen1_dep8_batch1024_eplb0_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -904,7 +904,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [4611]
-      recipe: "dsr1/trtllm/b300-fp4/1k/1k/disagg/stp/ctx3_gen2_dep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/1k1k/disagg/stp/ctx3_gen2_dep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -921,7 +921,7 @@ dsr1-fp4-b300-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [2198]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
       prefill:
         num-worker: 10
         tp: 2
@@ -934,7 +934,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [52]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -947,7 +947,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -960,7 +960,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -973,7 +973,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [181]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -986,7 +986,7 @@ dsr1-fp4-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1197]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml"
       prefill:
         num-worker: 9
         tp: 2
@@ -1000,7 +1000,7 @@ dsr1-fp4-b300-dynamo-trt:
 
     # Non-MTP configurations
     - conc-list: [105]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -1012,7 +1012,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [63]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -1024,7 +1024,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [4]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -1036,7 +1036,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [12]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -1048,7 +1048,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [589]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 5
         tp: 2
@@ -1060,7 +1060,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [1093]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 6
         tp: 2
@@ -1072,7 +1072,7 @@ dsr1-fp4-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [2048]
-      recipe: "dsr1/trtllm/b300-fp4/8k/1k/disagg/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/b300-fp4/8k1k/disagg/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 8
         tp: 2
@@ -1100,7 +1100,7 @@ dsr1-fp8-b300-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [10]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_10.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch1_eplb0_mtp3_10.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1113,7 +1113,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [160]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx1_gen8_tp8_batch16_eplb0_mtp3_160.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx1_gen8_tp8_batch16_eplb0_mtp3_160.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1126,7 +1126,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [3072]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx1_gen1_dp8_batch256_eplb0_mtp1_3072.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx1_gen1_dp8_batch256_eplb0_mtp1_3072.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1139,7 +1139,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [2560]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx1_gen2_dep8_batch128_eplb0_mtp1_2560.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx1_gen2_dep8_batch128_eplb0_mtp1_2560.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1152,7 +1152,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [720]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp2_720.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx1_gen5_dep8_batch16_eplb0_mtp2_720.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1165,7 +1165,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [11264]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/mtp/ctx3_gen2_dp8_batch512_eplb0_mtp1_11264.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/mtp/ctx3_gen2_dp8_batch512_eplb0_mtp1_11264.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -1181,7 +1181,7 @@ dsr1-fp8-b300-dynamo-trt:
     osl: 1024
     search-space:
     - conc-list: [2112]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_2112.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_2112.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1193,7 +1193,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [3072]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen2_dp8_batch128_eplb0_mtp0_3072.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen2_dp8_batch128_eplb0_mtp0_3072.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1205,7 +1205,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
     - conc-list: [1280]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen3_dp8_batch48_eplb0_mtp0_1280.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen3_dp8_batch48_eplb0_mtp0_1280.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1217,7 +1217,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
     - conc-list: [12]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_12.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_12.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1229,7 +1229,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [128]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_128.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_128.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1241,7 +1241,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [384]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_384.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx1_gen8_tp8_batch64_eplb0_mtp0_384.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1253,7 +1253,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [16384]
-      recipe: "dsr1/trtllm/b300-fp8/1k/1k/disagg/stp/ctx2_gen1_dp8_batch1024_eplb0_mtp0_16384.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/1k1k/disagg/stp/ctx2_gen1_dp8_batch1024_eplb0_mtp0_16384.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -1270,7 +1270,7 @@ dsr1-fp8-b300-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [40]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1283,7 +1283,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1296,7 +1296,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [20]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1309,7 +1309,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [72]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1322,7 +1322,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [144]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -1335,7 +1335,7 @@ dsr1-fp8-b300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [512]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -1351,7 +1351,7 @@ dsr1-fp8-b300-dynamo-trt:
     osl: 1024
     search-space:
     - conc-list: [64]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1363,7 +1363,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [16]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -1375,7 +1375,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [256]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -1387,7 +1387,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
     - conc-list: [512]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -1399,7 +1399,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
     - conc-list: [256]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -1411,7 +1411,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: false
     - conc-list: [1075]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml"
       prefill:
         num-worker: 5
         tp: 4
@@ -1423,7 +1423,7 @@ dsr1-fp8-b300-dynamo-trt:
         ep: 1
         dp-attn: true
     - conc-list: [3072]
-      recipe: "dsr1/trtllm/b300-fp8/8k/1k/disagg/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml"
+      recipe: "dsr1/trtllm/b300-fp8/8k1k/disagg/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -2440,7 +2440,7 @@ dsr1-fp8-h200-dynamo-trt:
     # MTP configurations
     - spec-decoding: "mtp"
       conc-list: [1]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c1_ctx1_gen11_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c1_ctx1_gen11_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2453,7 +2453,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [4]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c4_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c4_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2466,7 +2466,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c8_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c8_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2479,7 +2479,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [16]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c16_ctx1_gen9_tep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c16_ctx1_gen9_tep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2492,7 +2492,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c32_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c32_ctx1_gen11_tep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2505,7 +2505,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c64_ctx1_gen8_dep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c64_ctx1_gen8_dep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2518,7 +2518,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [128]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c128_ctx1_gen7_dep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c128_ctx1_gen7_dep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2531,7 +2531,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [256]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c256_ctx1_gen4_dep8_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c256_ctx1_gen4_dep8_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2544,7 +2544,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [512]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/mtp/c512_ctx1_gen2_dep8_batch256_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/mtp/c512_ctx1_gen2_dep8_batch256_eplb0_mtp1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2557,7 +2557,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     # Non-MTP configurations (STP)
     - conc-list: [1]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c1_ctx1_gen9_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c1_ctx1_gen9_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2569,7 +2569,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [4]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c4_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c4_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2581,7 +2581,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [8]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c8_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c8_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2593,7 +2593,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [16]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c16_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c16_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2605,7 +2605,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [32]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c32_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c32_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2617,7 +2617,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [64]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c64_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c64_ctx1_gen9_tep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2629,7 +2629,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [128]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c128_ctx1_gen9_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c128_ctx1_gen9_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2641,7 +2641,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [256]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c256_ctx1_gen6_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c256_ctx1_gen6_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2653,7 +2653,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [512]
-      recipe: "dsr1/trtllm/h200-fp8/1k/1k/disagg/stp/c512_ctx2_gen7_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/1k1k/disagg/stp/c512_ctx2_gen7_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -2670,7 +2670,7 @@ dsr1-fp8-h200-dynamo-trt:
     # MTP configurations
     - spec-decoding: "mtp"
       conc-list: [1]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2683,7 +2683,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [4]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2696,7 +2696,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2709,7 +2709,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [16]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2722,7 +2722,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -2735,7 +2735,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [64]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2748,7 +2748,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [128]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -2761,7 +2761,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [256]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -2774,7 +2774,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [512]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -2787,7 +2787,7 @@ dsr1-fp8-h200-dynamo-trt:
         dp-attn: true
     # Non-MTP configurations (STP)
     - conc-list: [1]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2799,7 +2799,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [4]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2811,7 +2811,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [8]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2823,7 +2823,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [16]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2835,7 +2835,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [32]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -2847,7 +2847,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [64]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -2859,7 +2859,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [128]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -2871,7 +2871,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [256]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 5
         tp: 8
@@ -2883,7 +2883,7 @@ dsr1-fp8-h200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [512]
-      recipe: "dsr1/trtllm/h200-fp8/8k/1k/disagg/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h200-fp8/8k1k/disagg/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -2911,7 +2911,7 @@ dsr1-fp8-h100-dynamo-trt:
     # MTP configurations
     - spec-decoding: "mtp"
       conc-list: [6]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2924,7 +2924,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [9]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2937,7 +2937,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [30]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2950,7 +2950,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [60]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2963,7 +2963,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [117]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2976,7 +2976,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [231]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_dep16_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_dep16_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -2989,7 +2989,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [462]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep16_batch128_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen3_tep16_batch128_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3002,7 +3002,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [615]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp2.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp2.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3015,7 +3015,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1229]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3028,7 +3028,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: true
     # Non-MTP configurations (STP)
     - conc-list: [6]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3040,7 +3040,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [9]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3052,7 +3052,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [30]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3064,7 +3064,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [60]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_tep16_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_tep16_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3076,7 +3076,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [231]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_dep16_batch4_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_dep16_batch4_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3088,7 +3088,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [462]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_dep16_batch8_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_dep16_batch8_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3100,7 +3100,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [924]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_dep16_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_dep16_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3112,7 +3112,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [1845]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx1_gen3_dep16_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx1_gen3_dep16_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3124,7 +3124,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [4916]
-      recipe: "dsr1/trtllm/h100-fp8/1k/1k/disagg/stp/ctx2_gen1_dep16_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/1k1k/disagg/stp/ctx2_gen1_dep16_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 16
@@ -3141,7 +3141,7 @@ dsr1-fp8-h100-dynamo-trt:
     # MTP configurations (6 points)
     - spec-decoding: "mtp"
       conc-list: [6]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3154,7 +3154,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [9]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3167,7 +3167,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [30]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3180,7 +3180,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [77]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3195,7 +3195,7 @@ dsr1-fp8-h100-dynamo-trt:
     # https://github.com/InferenceMAX/InferenceMAX/actions/runs/21769314582/job/62813105509
     # - spec-decoding: "mtp"
     #   conc-list: [78]
-    #   recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
+    #   recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3208,7 +3208,7 @@ dsr1-fp8-h100-dynamo-trt:
     #     dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [154]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 2
         tp: 16
@@ -3221,7 +3221,7 @@ dsr1-fp8-h100-dynamo-trt:
         dp-attn: true
     # STP configurations (5 points)
     - conc-list: [6]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3233,7 +3233,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [9]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3245,7 +3245,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [30]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3257,7 +3257,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [154]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3269,7 +3269,7 @@ dsr1-fp8-h100-dynamo-trt:
         ep: 16
         dp-attn: false
     - conc-list: [308]
-      recipe: "dsr1/trtllm/h100-fp8/8k/1k/disagg/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 16
@@ -3494,7 +3494,7 @@ dsr1-fp8-h100-dynamo-sglang:
     search-space:
     # # STP: Max throughput TEP (1 prefill, 2 decode)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-    #   recipe: "dsr1/sglang/h100-fp8/1k/1k/disagg/stp/h100-fp8-1p2d-max-tp.yaml"
+    #   recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/stp/h100-fp8-1p2d-max-tp.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3507,7 +3507,7 @@ dsr1-fp8-h100-dynamo-sglang:
     #     dp-attn: false
     # # STP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64]
-    #   recipe: "dsr1/sglang/h100-fp8/1k/1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
+    #   recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3521,7 +3521,7 @@ dsr1-fp8-h100-dynamo-sglang:
     # MTP: Max throughput TEP (1 prefill, 2 decode)
     - spec-decoding: "mtp"
       conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-      recipe: "dsr1/sglang/h100-fp8/1k/1k/disagg/mtp/h100-fp8-1p2d-max-tp-mtp.yaml"
+      recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/mtp/h100-fp8-1p2d-max-tp-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3535,7 +3535,7 @@ dsr1-fp8-h100-dynamo-sglang:
     # MTP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     - spec-decoding: "mtp"
       conc-list: [1, 2, 4, 8, 16, 32, 64]
-      recipe: "dsr1/sglang/h100-fp8/1k/1k/disagg/mtp/h100-fp8-1p1d-max-dep-mtp.yaml"
+      recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/mtp/h100-fp8-1p1d-max-dep-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3551,7 +3551,7 @@ dsr1-fp8-h100-dynamo-sglang:
     search-space:
     # # STP: Max throughput TEP (1 prefill, 1 decode)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-    #   recipe: "dsr1/sglang/h100-fp8/8k/1k/disagg/stp/h100-fp8-1p1d-max-tp.yaml"
+    #   recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/stp/h100-fp8-1p1d-max-tp.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3564,7 +3564,7 @@ dsr1-fp8-h100-dynamo-sglang:
     #     dp-attn: false
     # # STP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64]
-    #   recipe: "dsr1/sglang/h100-fp8/8k/1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
+    #   recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3578,7 +3578,7 @@ dsr1-fp8-h100-dynamo-sglang:
     # MTP: Max throughput TEP (1 prefill, 1 decode)
     - spec-decoding: "mtp"
       conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-      recipe: "dsr1/sglang/h100-fp8/8k/1k/disagg/mtp/h100-fp8-1p1d-max-tp-mtp.yaml"
+      recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/mtp/h100-fp8-1p1d-max-tp-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3592,7 +3592,7 @@ dsr1-fp8-h100-dynamo-sglang:
     # MTP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     - spec-decoding: "mtp"
       conc-list: [1, 2, 4, 8, 16, 32, 64]
-      recipe: "dsr1/sglang/h100-fp8/8k/1k/disagg/mtp/h100-fp8-1p1d-max-dep-mtp.yaml"
+      recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/mtp/h100-fp8-1p1d-max-dep-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 16
@@ -3687,7 +3687,7 @@ dsr1-fp4-gb200-dynamo-trt:
     # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
       conc-list: [ 180 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3700,7 +3700,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 4, 8, 12, 24, 48 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3713,7 +3713,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [ 4301 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/mtp/ctx2_gen1_dep16_batch256_eplb256_mtp1.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -3726,7 +3726,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 2253 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/mtp/ctx3_gen1_dep32_batch64_eplb288_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -3739,7 +3739,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 16130 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/mtp/ctx3_gen5_dep4_batch768_eplb0_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -3754,7 +3754,7 @@ dsr1-fp4-gb200-dynamo-trt:
 
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [ 4301 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3766,7 +3766,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [ 666 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1_gen1_dep32_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3778,7 +3778,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [ 6144 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1_gen2_dep4_batch768_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3790,7 +3790,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: true
     - conc-list: [ 12, 24, 48, 96, 192 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3802,7 +3802,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 5 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3814,7 +3814,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 4301 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx2_gen1_dep16_batch256_eplb256_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -3826,7 +3826,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 2253 ]
-      recipe: "dsr1/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/1k1k/disagg/stp/ctx2_gen1_dep32_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -3844,7 +3844,7 @@ dsr1-fp4-gb200-dynamo-trt:
     # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
       conc-list: [ 4, 8, 12, 24, 48 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3857,7 +3857,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [ 180 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -3870,7 +3870,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 1229 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -3883,7 +3883,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 666 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml"
       prefill:
         num-worker: 8
         tp: 4
@@ -3896,7 +3896,7 @@ dsr1-fp4-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [ 4301 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml"
       prefill:
         num-worker: 11
         tp: 4
@@ -3910,7 +3910,7 @@ dsr1-fp4-gb200-dynamo-trt:
 
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [ 12, 44, 76 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3922,7 +3922,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 5 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -3934,7 +3934,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 333 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -3946,7 +3946,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [ 1229 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -3958,7 +3958,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [ 2253 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 8
         tp: 4
@@ -3970,7 +3970,7 @@ dsr1-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 4096 ]
-      recipe: "dsr1/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb200-fp4/8k1k/disagg/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml"
       prefill:
         num-worker: 10
         tp: 4
@@ -3999,7 +3999,7 @@ dsr1-fp8-gb200-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [4301]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep8_batch512_eplb0_mtp1_4301.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen1_dep8_batch512_eplb0_mtp1_4301.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4012,7 +4012,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [2151]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep8_batch256_eplb0_mtp1_2151.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen1_dep8_batch256_eplb0_mtp1_2151.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4025,7 +4025,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1229]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4038,7 +4038,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [615]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3_615.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen1_dep32_batch16_eplb0_mtp3_615.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4051,7 +4051,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [36]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3_36.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3_36.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4064,7 +4064,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [18]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_18.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_18.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4077,7 +4077,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [9]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_9.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_9.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4090,7 +4090,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: false
   # 1k1k STP configs
     - conc-list: [6144]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep8_batch768_eplb0_mtp0_6144.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen1_dep8_batch768_eplb0_mtp0_6144.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4102,7 +4102,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [4301]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4301.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen1_dep8_batch512_eplb0_mtp0_4301.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4114,7 +4114,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [2151]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep16_batch128_eplb0_mtp0_2151.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen1_dep16_batch128_eplb0_mtp0_2151.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4126,7 +4126,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [1127]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep32_batch32_eplb0_mtp0_1127.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen1_dep32_batch32_eplb0_mtp0_1127.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4138,7 +4138,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [256]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen1_dep32_batch8_eplb0_mtp0_256.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen1_dep32_batch8_eplb0_mtp0_256.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4150,7 +4150,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [27]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen3_tep8_batch8_eplb0_mtp0_27.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen3_tep8_batch8_eplb0_mtp0_27.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4162,7 +4162,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [3]
-      recipe: "dsr1/trtllm/gb200-fp8/1k/1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_3.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/1k1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_3.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4179,7 +4179,7 @@ dsr1-fp8-gb200-dynamo-trt:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [666]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -4192,7 +4192,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [666]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       prefill:
         num-worker: 5
         tp: 8
@@ -4205,7 +4205,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [333]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -4218,7 +4218,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [333]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
       prefill:
         num-worker: 4
         tp: 8
@@ -4231,7 +4231,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [90]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -4244,7 +4244,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [15]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4257,7 +4257,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [6]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4270,7 +4270,7 @@ dsr1-fp8-gb200-dynamo-trt:
         dp-attn: false
   # 8k1k STP configs
     - conc-list: [1229]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
       prefill:
         num-worker: 5
         tp: 8
@@ -4282,7 +4282,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [666]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml"
       prefill:
         num-worker: 4
         tp: 8
@@ -4294,7 +4294,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [615]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -4306,7 +4306,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [333]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -4318,7 +4318,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [63]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4330,7 +4330,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [18]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4342,7 +4342,7 @@ dsr1-fp8-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [6]
-      recipe: "dsr1/trtllm/gb200-fp8/8k/1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml"
+      recipe: "dsr1/trtllm/gb200-fp8/8k1k/disagg/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4370,7 +4370,7 @@ dsr1-fp8-gb200-dynamo-sglang:
     search-space:
    # "Low latency" (1 prefill worker at TP4 and 1 decode worker at TP4)
     - conc-list: [4, 8]
-      recipe: "dsr1/sglang/gb200-fp8/1k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/1k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -4384,7 +4384,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
     # "Mid curve" (3 prefill workers at DEP8 and 1 decode worker at DEP48)
     - conc-list: [1024, 2048, 4096]
-      recipe: "dsr1/sglang/gb200-fp8/1k/1k/disagg/stp/mid-curve.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/1k1k/disagg/stp/mid-curve.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -4398,7 +4398,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
     # "Max throughput" (2 prefill workers at DEP8 and 1 decode worker at DEP32)
     - conc-list: [1024, 2048, 4096, 6144]
-      recipe: "dsr1/sglang/gb200-fp8/1k/1k/disagg/stp/max-tpt.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/1k1k/disagg/stp/max-tpt.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -4412,7 +4412,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
     # "Ultra throughput" (1 prefill workers at DEP8 and 1 decode worker at DEP8)
     - conc-list: [4096]
-      recipe: "dsr1/sglang/gb200-fp8/1k/1k/disagg/stp/ultra-tpt.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/1k1k/disagg/stp/ultra-tpt.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4429,7 +4429,7 @@ dsr1-fp8-gb200-dynamo-sglang:
     search-space:
    # "Low latency" (1 prefill worker at TP8 and 1 decode worker at TP8)
     - conc-list: [4, 8, 16]
-      recipe: "dsr1/sglang/gb200-fp8/8k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/8k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4443,7 +4443,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
     # "Mid curve" (5 prefill workers at DEP8 and 1 decode worker at DEP32)
     - conc-list: [512, 1024, 2048, 6144]
-      recipe: "dsr1/sglang/gb200-fp8/8k/1k/disagg/stp/mid-curve.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/8k1k/disagg/stp/mid-curve.yaml"
       prefill:
         num-worker: 5
         tp: 8
@@ -4457,7 +4457,7 @@ dsr1-fp8-gb200-dynamo-sglang:
 
     # "Max throughput" (6 prefill workers at DEP8 and 1 decode worker at DEP24)
     - conc-list: [2048, 4096, 6144]
-      recipe: "dsr1/sglang/gb200-fp8/8k/1k/disagg/stp/max_tpt.yaml"
+      recipe: "dsr1/sglang/gb200-fp8/8k1k/disagg/stp/max_tpt.yaml"
       prefill:
         num-worker: 6
         tp: 8
@@ -4484,7 +4484,7 @@ dsr1-fp8-gb300-dynamo-sglang:
     search-space:
    # "Low latency" (1 prefill worker at TP4 and 4 decode workers at TP4)
     - conc-list: [4, 8, 16, 32]
-      recipe: "dsr1/sglang/gb300-fp8/1k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/1k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -4498,7 +4498,7 @@ dsr1-fp8-gb300-dynamo-sglang:
 
     # "Mid curve" (2 prefill workers at DEP8 and 1 decode worker at DEP32)
     - conc-list: [1024, 2048, 4096, 6144]
-      recipe: "dsr1/sglang/gb300-fp8/1k/1k/disagg/stp/mid.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/1k1k/disagg/stp/mid.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -4512,7 +4512,7 @@ dsr1-fp8-gb300-dynamo-sglang:
 
     # "Max throughput" (1 prefill worker at DEP8 and 1 decode worker at DEP8)
     - conc-list: [4096, 7168, 7680]
-      recipe: "dsr1/sglang/gb300-fp8/1k/1k/disagg/stp/max.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/1k1k/disagg/stp/max.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -4529,7 +4529,7 @@ dsr1-fp8-gb300-dynamo-sglang:
     search-space:
    # "Low latency" (1 prefill worker at TP4 and 1 decode worker at TP4)
     - conc-list: [4, 8]
-      recipe: "dsr1/sglang/gb300-fp8/8k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/8k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -4543,7 +4543,7 @@ dsr1-fp8-gb300-dynamo-sglang:
 
     # "Mid curve" (5 prefill workers at DEP8 and 1 decode worker at DEP32)
     - conc-list: [128, 256, 512, 1024]
-      recipe: "dsr1/sglang/gb300-fp8/8k/1k/disagg/stp/mid.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/8k1k/disagg/stp/mid.yaml"
       prefill:
         num-worker: 5
         tp: 8
@@ -4557,7 +4557,7 @@ dsr1-fp8-gb300-dynamo-sglang:
 
     # "Max throughput" (6 prefill workers at DEP8 and 1 decode worker at DEP24)
     - conc-list: [2048, 4096]
-      recipe: "dsr1/sglang/gb300-fp8/8k/1k/disagg/stp/max.yaml"
+      recipe: "dsr1/sglang/gb300-fp8/8k1k/disagg/stp/max.yaml"
       prefill:
         num-worker: 6
         tp: 8
@@ -4586,7 +4586,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Low latency (1 prefill node, 2 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 4, 8, 32 ]
-      recipe: "dsr1/sglang/gb200-fp4/1k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/1k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -4601,7 +4601,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Mid curve (4 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 512, 2048, 4096, 8192 ]
-      recipe: "dsr1/sglang/gb200-fp4/1k/1k/disagg/stp/mid-curve.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/1k1k/disagg/stp/mid-curve.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -4616,7 +4616,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Max throughput (4 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 2048, 4096 ]
-      recipe: "dsr1/sglang/gb200-fp4/1k/1k/disagg/stp/max-tpt.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/1k1k/disagg/stp/max-tpt.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -4635,7 +4635,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Low latency (1 prefill node, 4 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 4, 8 ]
-      recipe: "dsr1/sglang/gb200-fp4/8k/1k/disagg/stp/low-latency.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/8k1k/disagg/stp/low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -4650,7 +4650,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Mid curve (6 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 512, 2048, 4096 ]
-      recipe: "dsr1/sglang/gb200-fp4/8k/1k/disagg/stp/mid-curve.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/8k1k/disagg/stp/mid-curve.yaml"
       prefill:
         num-worker: 6
         tp: 4
@@ -4665,7 +4665,7 @@ dsr1-fp4-gb200-dynamo-sglang:
     # Max throughput (10 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 2048 ]
-      recipe: "dsr1/sglang/gb200-fp4/8k/1k/disagg/stp/max-tpt.yaml"
+      recipe: "dsr1/sglang/gb200-fp4/8k1k/disagg/stp/max-tpt.yaml"
       prefill:
         num-worker: 10
         tp: 4
@@ -4693,7 +4693,7 @@ dsr1-fp4-gb300-dynamo-trt:
     # MTP configurations
     - spec-decoding: "mtp"
       conc-list: [3226]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx1_gen1_dep4_batch768_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx1_gen1_dep4_batch768_eplb0_mtp1.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4706,7 +4706,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [333]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx1_gen1_dep32_batch8_eplb0_mtp.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx1_gen1_dep32_batch8_eplb0_mtp.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4719,7 +4719,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [5]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4732,7 +4732,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8, 12, 24, 48]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4745,7 +4745,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx3_gen1_dep16_batch128_eplb256_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx3_gen1_dep16_batch128_eplb256_mtp1.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -4758,7 +4758,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/mtp/ctx3_gen1_dep32_batch32_eplb288_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/mtp/ctx3_gen1_dep32_batch32_eplb288_mtp3.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -4771,7 +4771,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [5]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4783,7 +4783,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [12, 48, 96, 192]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx1_gen4_tep8_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4795,7 +4795,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [8192]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx2_gen1_dep8_batch1024_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx2_gen1_dep8_batch1024_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 2
@@ -4807,7 +4807,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 2
@@ -4819,7 +4819,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [4301]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx3_gen1_dep16_batch256_eplb256_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx3_gen1_dep16_batch256_eplb256_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -4831,7 +4831,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp4/1k/1k/disagg/stp/ctx3_gen1_dep32_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/1k1k/disagg/stp/ctx3_gen1_dep32_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 2
@@ -4848,7 +4848,7 @@ dsr1-fp4-gb300-dynamo-trt:
     # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
       conc-list: [33]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4861,7 +4861,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [5]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4874,7 +4874,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [12, 24]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4887,7 +4887,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [180]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml"
       prefill:
         num-worker: 4
         tp: 2
@@ -4900,7 +4900,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [308]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml"
       prefill:
         num-worker: 8
         tp: 2
@@ -4913,7 +4913,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml"
       prefill:
         num-worker: 10
         tp: 2
@@ -4926,7 +4926,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [666]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml"
       prefill:
         num-worker: 10
         tp: 2
@@ -4939,7 +4939,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1127]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml"
       prefill:
         num-worker: 13
         tp: 2
@@ -4952,7 +4952,7 @@ dsr1-fp4-gb300-dynamo-trt:
         dp-attn: true
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [72]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4964,7 +4964,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [5]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4976,7 +4976,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [12]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -4988,7 +4988,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [5, 15, 30]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 2
@@ -5000,7 +5000,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [666]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 7
         tp: 2
@@ -5012,7 +5012,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 9
         tp: 2
@@ -5024,7 +5024,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [3228]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 11
         tp: 2
@@ -5036,7 +5036,7 @@ dsr1-fp4-gb300-dynamo-trt:
         ep: 4
         dp-attn: true
     - conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp4/8k/1k/disagg/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml"
+      recipe: "dsr1/trtllm/gb300-fp4/8k1k/disagg/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 14
         tp: 2
@@ -5065,7 +5065,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Low latency (1 prefill node, 2 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 4, 8, 32 ]
-      recipe: "dsr1/sglang/gb300-fp4/1k/1k/disagg/stp/low_latency.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/1k1k/disagg/stp/low_latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5080,7 +5080,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Mid curve (4 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 512, 2048, 4096, 8192 ]
-      recipe: "dsr1/sglang/gb300-fp4/1k/1k/disagg/stp/mid_curve.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/1k1k/disagg/stp/mid_curve.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -5095,7 +5095,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Max throughput (4 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 512, 2048, 4096, 8192 ]
-      recipe: "dsr1/sglang/gb300-fp4/1k/1k/disagg/stp/max_tpt.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/1k1k/disagg/stp/max_tpt.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -5114,7 +5114,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Low latency (1 prefill node, 4 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 4, 8, 32, 64 ]
-      recipe: "dsr1/sglang/gb300-fp4/8k/1k/disagg/stp/low_latency.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/8k1k/disagg/stp/low_latency.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5129,7 +5129,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Mid curve (6 prefill nodes, 12 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 512, 2048, 4096 ]
-      recipe: "dsr1/sglang/gb300-fp4/8k/1k/disagg/stp/mid_curve.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/8k1k/disagg/stp/mid_curve.yaml"
       prefill:
         num-worker: 6
         tp: 4
@@ -5144,7 +5144,7 @@ dsr1-fp4-gb300-dynamo-sglang:
     # Max throughput (10 prefill nodes, 8 decode nodes)
     - spec-decoding: "none"
       conc-list: [ 2048 ]
-      recipe: "dsr1/sglang/gb300-fp4/8k/1k/disagg/stp/max_tpt.yaml"
+      recipe: "dsr1/sglang/gb300-fp4/8k1k/disagg/stp/max_tpt.yaml"
       prefill:
         num-worker: 10
         tp: 4
@@ -5172,7 +5172,7 @@ dsr1-fp8-gb300-dynamo-trt:
     # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5185,7 +5185,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [24]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5198,7 +5198,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [180]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx1_gen1_dep32_batch4_eplb0_mtp3_180.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5211,7 +5211,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [564]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx2_gen1_dep32_batch16_eplb0_mtp3_564.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -5224,7 +5224,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [666]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx1_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5237,7 +5237,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx2_gen1_dep16_batch128_eplb0_mtp1_2253.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -5250,7 +5250,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [8192]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/mtp/ctx3_gen2_dep8_batch512_eplb0_mtp1_8192.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -5263,7 +5263,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     # STP configurations (no spec_decoding)
     - conc-list: [4]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5275,7 +5275,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [24]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5287,7 +5287,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [84]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0_84.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5299,7 +5299,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx2_gen1_dep32_batch32_eplb0_mtp0_1229.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -5311,7 +5311,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [2253]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx2_gen1_dep16_batch128_eplb0_mtp0_2253.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -5323,7 +5323,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [8602]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx3_gen2_dep8_batch512_eplb0_mtp0_8602.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -5335,7 +5335,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [12288]
-      recipe: "dsr1/trtllm/gb300-fp8/1k/1k/disagg/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/1k1k/disagg/stp/ctx3_gen2_dep8_batch768_eplb0_mtp0_12288.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -5352,7 +5352,7 @@ dsr1-fp8-gb300-dynamo-trt:
     # MTP configurations (spec_decoding="mtp")
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5365,7 +5365,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [24]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5378,7 +5378,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [333]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml"
       prefill:
         num-worker: 6
         tp: 4
@@ -5391,7 +5391,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [666]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml"
       prefill:
         num-worker: 8
         tp: 4
@@ -5404,7 +5404,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml"
       prefill:
         num-worker: 10
         tp: 4
@@ -5417,7 +5417,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -5430,7 +5430,7 @@ dsr1-fp8-gb300-dynamo-trt:
         dp-attn: true
     # STP configurations (no spec_decoding)
     - conc-list: [4]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5442,7 +5442,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [24]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5454,7 +5454,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [36]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -5466,7 +5466,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [512]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml"
       prefill:
         num-worker: 6
         tp: 4
@@ -5478,7 +5478,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [666]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml"
       prefill:
         num-worker: 4
         tp: 4
@@ -5490,7 +5490,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [1229]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -5502,7 +5502,7 @@ dsr1-fp8-gb300-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [2151]
-      recipe: "dsr1/trtllm/gb300-fp8/8k/1k/disagg/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml"
+      recipe: "dsr1/trtllm/gb300-fp8/8k1k/disagg/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -5800,7 +5800,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: Low latency (1 prefill, 9 decode, TEP)
     - spec-decoding: "none"
       conc-list: [1, 4, 8, 16, 32, 64, 128, 256]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/stp/low-latency-1p9d.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/stp/low-latency-1p9d.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5814,7 +5814,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: High throughput TEP (1 prefill, 6 decode)
     - spec-decoding: "none"
       conc-list: [512, 1024, 2048]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/stp/bs256-1p6d-tp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/stp/bs256-1p6d-tp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5828,7 +5828,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: High throughput DEP (1 prefill, 6 decode, dp-attention)
     - spec-decoding: "none"
       conc-list: [128, 256, 512, 1024, 2048]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/stp/bs256-1p6d-dep.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/stp/bs256-1p6d-dep.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5842,7 +5842,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: Low latency (1 prefill, 9 decode, TEP)
     - spec-decoding: "mtp"
       conc-list: [1, 4, 8, 16, 32, 64, 128, 256]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/mtp/low-latency-1p9d-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/mtp/low-latency-1p9d-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5856,7 +5856,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: High throughput TEP (1 prefill, 6 decode)
     - spec-decoding: "mtp"
       conc-list: [512, 1024, 2048]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/mtp/bs256-1p6d-tp-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/mtp/bs256-1p6d-tp-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5870,7 +5870,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: High throughput DEP (1 prefill, 6 decode, dp-attention)
     - spec-decoding: "mtp"
       conc-list: [128, 256, 512, 1024, 2048]
-      recipe: "dsr1/sglang/h200-fp8/1k/1k/disagg/mtp/bs256-1p6d-dep-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/1k1k/disagg/mtp/bs256-1p6d-dep-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5887,7 +5887,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: Low latency TEP (1 prefill, 7 decode)
     - spec-decoding: "none"
       conc-list: [1, 4, 8]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/stp/bs4-1p7d.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/stp/bs4-1p7d.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5901,7 +5901,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: TEP (1 prefill, 6 decode)
     - spec-decoding: "none"
       conc-list: [4, 8, 16]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/stp/bs8-1p6d.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/stp/bs8-1p6d.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5915,7 +5915,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: TEP (1 prefill, 3 decode)
     - spec-decoding: "none"
       conc-list: [8, 16, 32]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/stp/bs16-1p3d.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/stp/bs16-1p3d.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5929,7 +5929,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: TEP (2 prefill, 3 decode)
     - spec-decoding: "none"
       conc-list: [32, 64, 128]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/stp/bs64-2p3d.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/stp/bs64-2p3d.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -5943,7 +5943,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # STP: High throughput DEP (1 prefill, 1 decode, dp-attention)
     - spec-decoding: "none"
       conc-list: [64, 128, 256]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/stp/bs128-1p1d-dep.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/stp/bs128-1p1d-dep.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5957,7 +5957,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: Low latency TEP (1 prefill, 7 decode)
     - spec-decoding: "mtp"
       conc-list: [1, 4, 8]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/mtp/bs4-1p7d-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/mtp/bs4-1p7d-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5971,7 +5971,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: TEP (1 prefill, 6 decode)
     - spec-decoding: "mtp"
       conc-list: [2, 4, 8, 16, 32]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/mtp/bs8-1p6d-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/mtp/bs8-1p6d-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5985,7 +5985,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: TEP (1 prefill, 3 decode)
     - spec-decoding: "mtp"
       conc-list: [4, 8, 16, 32, 64]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/mtp/bs16-1p3d-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/mtp/bs16-1p3d-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -5999,7 +5999,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: TEP (2 prefill, 3 decode)
     - spec-decoding: "mtp"
       conc-list: [32, 64, 128]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/mtp/bs64-2p3d-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/mtp/bs64-2p3d-mtp.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -6013,7 +6013,7 @@ dsr1-fp8-h200-dynamo-sglang:
     # MTP: High throughput DEP (1 prefill, 1 decode, dp-attention)
     - spec-decoding: "mtp"
       conc-list: [32, 64, 128, 256, 512]
-      recipe: "dsr1/sglang/h200-fp8/8k/1k/disagg/mtp/bs128-1p1d-dep-mtp.yaml"
+      recipe: "dsr1/sglang/h200-fp8/8k1k/disagg/mtp/bs128-1p1d-dep-mtp.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6040,7 +6040,7 @@ dsr1-fp4-b200-dynamo-sglang:
     search-space:
     # Non-MTP configurations
     - conc-list: [16, 128]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_stp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_stp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6052,7 +6052,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [32, 64, 256]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_stp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_stp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6064,7 +6064,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [512]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[0]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6076,7 +6076,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
     - conc-list: [512]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[1]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6092,7 +6092,7 @@ dsr1-fp4-b200-dynamo-sglang:
     search-space:
     # Non-MTP configurations
     - conc-list: [64, 128]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_stp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_stp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6104,7 +6104,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [8]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_stp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_stp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6116,7 +6116,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [4, 128]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_stp_lowlat[2]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_stp_lowlat[2]"
       prefill:
         num-worker: 2
         tp: 4
@@ -6128,7 +6128,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [4, 8, 16, 64]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:override_stp_tp4"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:override_stp_tp4"
       prefill:
         num-worker: 1
         tp: 4
@@ -6140,7 +6140,7 @@ dsr1-fp4-b200-dynamo-sglang:
         ep: 1
         dp-attn: false
     - conc-list: [1024, 2048]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:override_stp_maxtpt_7p2d"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:override_stp_maxtpt_7p2d"
       prefill:
         num-worker: 7
         tp: 4
@@ -6167,7 +6167,7 @@ dsr1-fp8-b200-dynamo-sglang:
     search-space:
     # Non-MTP configurations
     - conc-list: [4]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_stp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_stp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6179,7 +6179,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [16, 32, 64, 128, 256]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_stp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_stp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6191,7 +6191,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: false
     - conc-list: [1024, 2048, 4096]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[0]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[0]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6203,7 +6203,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
     - conc-list: [2048, 4096]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[1]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_stp_maxtpt[1]"
       prefill:
         num-worker: 2
         tp: 8
@@ -6219,7 +6219,7 @@ dsr1-fp8-b200-dynamo-sglang:
     search-space:
     # STP low-latency: resolved from 8k1k.yaml zip_override_stp_lowlat
     - conc-list: [128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6231,7 +6231,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: false
     - conc-list: [128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6243,7 +6243,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 1
         dp-attn: false
     - conc-list: [8, 16, 32, 64, 128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6256,7 +6256,7 @@ dsr1-fp8-b200-dynamo-sglang:
         dp-attn: false
     # STP max-throughput: resolved from 8k1k.yaml zip_override_stp_maxtpt
     - conc-list: [288]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6268,7 +6268,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
     - conc-list: [160, 288]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6280,7 +6280,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
     - conc-list: [512]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -6292,7 +6292,7 @@ dsr1-fp8-b200-dynamo-sglang:
         ep: 8
         dp-attn: true
     - conc-list: [1024]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/stp/8k1k_stp_maxtpt_3.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_3.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -6320,7 +6320,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP low-latency: 1P1D
     - spec-decoding: "mtp"
       conc-list: [4, 64]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6334,7 +6334,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP low-latency: 1P3D
     - spec-decoding: "mtp"
       conc-list: [4, 8, 16, 32, 128]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6348,7 +6348,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP max-tpt: 1P5D
     - spec-decoding: "mtp"
       conc-list: [512, 4096]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[1]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       prefill:
         num-worker: 1
         tp: 8
@@ -6362,7 +6362,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP max-tpt: 2P5D
     - spec-decoding: "mtp"
       conc-list: [1024, 2048, 4096]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[2]"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[2]"
       prefill:
         num-worker: 2
         tp: 8
@@ -6376,7 +6376,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP max-tpt: 1P2D
     - spec-decoding: "mtp"
       conc-list: [512, 1024, 2048]
-      recipe: "dsr1/sglang/b200-fp8/1k/1k/disagg/1k1k.yaml:override_mtp_maxtpt_1p2d"
+      recipe: "dsr1/sglang/b200-fp8/1k1k/disagg/1k1k.yaml:override_mtp_maxtpt_1p2d"
       prefill:
         num-worker: 1
         tp: 8
@@ -6393,7 +6393,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP low-latency: resolved from 8k1k.yaml zip_override_mtp_lowlat
     - spec-decoding: "mtp"
       conc-list: [128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_lowlat_0.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_lowlat_0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6406,7 +6406,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_lowlat_1.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_lowlat_1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6419,7 +6419,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8, 16, 32, 64, 128]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_lowlat_2.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_lowlat_2.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6433,7 +6433,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
     # MTP max-throughput: resolved from 8k1k.yaml zip_override_mtp_maxtpt
     - spec-decoding: "mtp"
       conc-list: [288]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_maxtpt_0.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_0.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6446,7 +6446,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [160, 288]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_maxtpt_1.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_1.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6459,7 +6459,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [512]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_maxtpt_2.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_2.yaml"
       prefill:
         num-worker: 2
         tp: 8
@@ -6472,7 +6472,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [1024]
-      recipe: "dsr1/sglang/b200-fp8/8k/1k/disagg/mtp/8k1k_mtp_maxtpt_3.yaml"
+      recipe: "dsr1/sglang/b200-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_3.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -6499,7 +6499,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [16, 512]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6512,7 +6512,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [32, 64, 256, 512]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6525,7 +6525,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [512, 1024]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[0]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6538,7 +6538,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: true
     - spec-decoding: "mtp"
       conc-list: [512]
-      recipe: "dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[1]"
+      recipe: "dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_mtp_maxtpt[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6557,7 +6557,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
     search-space:
     - spec-decoding: "mtp"
       conc-list: [64, 128]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[0]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[0]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6570,7 +6570,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [8]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[1]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[1]"
       prefill:
         num-worker: 1
         tp: 4
@@ -6583,7 +6583,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [4, 128]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[2]"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:zip_override_mtp_lowlat[2]"
       prefill:
         num-worker: 2
         tp: 4
@@ -6596,7 +6596,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
         dp-attn: false
     - spec-decoding: "mtp"
       conc-list: [4, 8, 16, 64]
-      recipe: "dsr1/sglang/b200-fp4/8k/1k/disagg/8k1k.yaml:override_mtp_tp4"
+      recipe: "dsr1/sglang/b200-fp4/8k1k/disagg/8k1k.yaml:override_mtp_tp4"
       prefill:
         num-worker: 1
         tp: 4
@@ -6623,7 +6623,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
     search-space:
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [ 4, 192, 360, 668 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6635,7 +6635,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 5, 15, 30, 55 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6647,7 +6647,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [ 666 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6659,7 +6659,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 2253 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6671,7 +6671,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 32
         dp-attn: true
     - conc-list: [ 4301, 6452 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6683,7 +6683,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [ 4301 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -6695,7 +6695,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 4301 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/1k/1k/disagg/stp/ctx2dep4_gen1dep32_batch128_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/1k1k/disagg/stp/ctx2dep4_gen1dep32_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -6712,7 +6712,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
     search-space:
     # Non-MTP configurations (default spec_decoding="none")
     - conc-list: [ 4 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6724,7 +6724,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: false
     - conc-list: [ 156 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6736,7 +6736,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [ 5, 15, 30, 60, 105 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6748,7 +6748,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 4
         dp-attn: false
     - conc-list: [ 333 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml"
       prefill:
         num-worker: 2
         tp: 4
@@ -6760,7 +6760,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 615 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -6772,7 +6772,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 16
         dp-attn: true
     - conc-list: [ 2151 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml"
       prefill:
         num-worker: 5
         tp: 4
@@ -6784,7 +6784,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
         ep: 8
         dp-attn: true
     - conc-list: [ 2253 ]
-      recipe: "kimik2.5/trtllm/gb200-fp4/8k/1k/disagg/stp/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
+      recipe: "kimik2.5/trtllm/gb200-fp4/8k1k/disagg/stp/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
       prefill:
         num-worker: 7
         tp: 4
@@ -6810,7 +6810,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
     osl: 1024
     search-space:
     - conc-list: [256, 512, 1024, 2048, 3072, 4096]
-      recipe: "kimik2.5/vllm/gb200-fp4/1k/1k/disagg/stp/disagg-gb200-1p1d-dep4-dep16.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p1d-dep4-dep16.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6822,7 +6822,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         ep: 16
         dp-attn: true
     - conc-list: [4, 8, 16, 32, 64, 128]
-      recipe: "kimik2.5/vllm/gb200-fp4/1k/1k/disagg/stp/disagg-gb200-1p4d-dep4-tep4.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p4d-dep4-tep4.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6837,7 +6837,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
     osl: 1024
     search-space:
     - conc-list: [4, 8, 16, 32, 128]
-      recipe: "kimik2.5/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-1p4d-dep4-tep4.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-1p4d-dep4-tep4.yaml"
       prefill:
         num-worker: 1
         tp: 4
@@ -6849,7 +6849,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         ep: 4
         dp-attn: false
     - conc-list: [512, 1024]
-      recipe: "kimik2.5/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-3p1d-dep4-dep16.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-3p1d-dep4-dep16.yaml"
       prefill:
         num-worker: 3
         tp: 4
@@ -6861,7 +6861,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         ep: 16
         dp-attn: true
     - conc-list: [2048]
-      recipe: "kimik2.5/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-5p1d-dep4-dep8.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-5p1d-dep4-dep8.yaml"
       prefill:
         num-worker: 5
         tp: 4
@@ -6873,7 +6873,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         ep: 8
         dp-attn: true
     - conc-list: [3072, 4096]
-      recipe: "kimik2.5/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-6p1d-dep4-dep16.yaml"
+      recipe: "kimik2.5/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-6p1d-dep4-dep16.yaml"
       prefill:
         num-worker: 6
         tp: 4
@@ -6905,7 +6905,7 @@ dsv4-fp4-gb200-dynamo-vllm:
     # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch
     # 1p1d-dep8-tep8.yaml (offload + numa-bind stripped — see recipe header).
     - conc-list: [1, 4, 8, 16, 32, 64]
-      recipe: "dsv4/vllm/gb200-fp4/1k/1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6919,7 +6919,7 @@ dsv4-fp4-gb200-dynamo-vllm:
     # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
     # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
     - conc-list: [128, 256, 1024, 2048, 4096]
-      recipe: "dsv4/vllm/gb200-fp4/1k/1k/disagg/stp/disagg-gb200-1p1d-dep8-dep16.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p1d-dep8-dep16.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6934,7 +6934,7 @@ dsv4-fp4-gb200-dynamo-vllm:
     # The 4096 overlap with the 1p1d block gives a crossover point. 8192
     # would saturate 1p1d's prefill, so this topology takes over there.
     - conc-list: [4096, 8192]
-      recipe: "dsv4/vllm/gb200-fp4/1k/1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -6952,7 +6952,7 @@ dsv4-fp4-gb200-dynamo-vllm:
     # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
     # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch.
     - conc-list: [1, 4, 8, 16, 32, 64]
-      recipe: "dsv4/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6965,7 +6965,7 @@ dsv4-fp4-gb200-dynamo-vllm:
         dp-attn: false
     # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
     - conc-list: [512, 1024]
-      recipe: "dsv4/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -6979,7 +6979,7 @@ dsv4-fp4-gb200-dynamo-vllm:
     # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
     # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
     - conc-list: [4096, 8192]
-      recipe: "dsv4/vllm/gb200-fp4/8k/1k/disagg/stp/disagg-gb200-7p1d-dep8-dep16.yaml"
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-7p1d-dep8-dep16.yaml"
       prefill:
         num-worker: 7
         tp: 8

@@ -69,9 +69,9 @@ search-space:
 ```
 
 - `recipe` is a path **relative to `benchmarks/multi_node/srt-slurm-recipes/`** in this repo. The schema validator rejects entries whose recipe file does not exist on disk, so adding a new entry requires upstreaming the recipe yaml here first.
-- The path may carry an `:override[N]` / `:override_<name>` suffix to select a named override section inside an sglang-style recipe yaml (e.g. `"dsr1/sglang/b200-fp4/1k/1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"`). The launcher strips this suffix before reading the file but passes the full string to `srtctl`.
+- The path may carry an `:override[N]` / `:override_<name>` suffix to select a named override section inside an sglang-style recipe yaml (e.g. `"dsr1/sglang/b200-fp4/1k1k/disagg/1k1k.yaml:zip_override_mtp_lowlat[0]"`). The launcher strips this suffix before reading the file but passes the full string to `srtctl`.
 - `recipe` is optional: multi-node entries that do *not* go through srt-slurm (e.g. dynamo-sglang aggregated topologies that drive their own bash) leave it unset.
-- Recipes live under `benchmarks/multi_node/srt-slurm-recipes/` organized as `<model>/<framework>/<hw>-<precision>/<isl>/<osl>/<agg|disagg>/<stp|mtp>/<recipe-name>.yaml` — e.g. `dsr1/trtllm/b200-fp4/1k/1k/disagg/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml`. A handful of sglang-style files that carry override sections spanning both stp and mtp are parked one level shallower (the trailing `<stp|mtp>/` segment is omitted). The benchmark template resolves `recipe` to an absolute path and passes it to the launcher as `CONFIG_FILE`, so launchers do not see the relative form.
+- Recipes live under `benchmarks/multi_node/srt-slurm-recipes/` organized as `<model>/<framework>/<hw>-<precision>/<isl><osl>/<agg|disagg>/<stp|mtp>/<recipe-name>.yaml` — e.g. `dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml`. A handful of sglang-style files that carry override sections spanning both stp and mtp are parked one level shallower (the trailing `<stp|mtp>/` segment is omitted). The benchmark template resolves `recipe` to an absolute path and passes it to the launcher as `CONFIG_FILE`, so launchers do not see the relative form.
 
 ## Runners
 
