@@ -71,23 +71,47 @@ MEM_FRACTION_STATIC=0.90
 
 if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    PARALLEL_ARGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-runner-backend flashinfer_mxfp4
-        --disable-flashinfer-autotune
-        --deepep-config "$DEEPEP_CONFIG"
-        --chunked-prefill-size 16384
-        --enable-prefill-delayer
-    )
-    MEM_FRACTION_STATIC=0.94
+    if [ "$CONC" = "8192" ]; then
+        # 1k1k high-concurrency mega_moe deepep recipe
+        export NVSHMEM_DISABLE_IB=1
+        export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
+        export SGLANG_LOG_FORWARD_ITERS=1
+        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8224
+        PARALLEL_ARGS=(
+            --dp-size "$TP"
+            --enable-dp-attention
+            --moe-a2a-backend deepep
+            --cuda-graph-max-bs 1056
+            --deepep-config "$DEEPEP_CONFIG"
+            --chunked-prefill-size 65536
+            --tokenizer-worker-num 16
+            --enable-prefill-delayer
+            --decode-log-interval 5
+        )
+        MAX_RUNNING_REQUESTS=8224
+        MEM_FRACTION_STATIC=0.8
+        SWA_FULL_TOKENS_RATIO=0.3
+    else
+        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
+        export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+        PARALLEL_ARGS=(
+            --dp-size "$TP"
+            --enable-dp-attention
+            --moe-runner-backend flashinfer_mxfp4
+            --disable-flashinfer-autotune
+            --deepep-config "$DEEPEP_CONFIG"
+            --chunked-prefill-size 16384
+            --enable-prefill-delayer
+        )
+        MEM_FRACTION_STATIC=0.94
+    fi
 else
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
@@ -111,7 +135,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
+    --max-running-requests "${MAX_RUNNING_REQUESTS:-$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))}" \
     --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
