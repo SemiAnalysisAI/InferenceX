@@ -4,13 +4,11 @@ export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 # export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
 # export MODEL_DIR="$HOME/.cache/huggingface/hub"
 # export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
-export MODEL_NAME="gpt-oss-120b"   # key from models_vllm.yaml
+export MODEL_NAME="MiniMax-M2.5"   # key from models_vllm.yaml
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
-export MODEL_PATH="$HOME/.cache/huggingface/hub/models--openai--gpt-oss-120b/snapshots/b5c939de8f754692c1647ca79fbf85e8c1e70f8a/"
-# export NODE0_ADDR="10.21.9.8"          # this node's IP
-#export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
-export NODE0_ADDR="10.21.9.47"          # this node's IP
-export IPADDRS="10.21.9.47,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
+export MODEL_PATH="$HOME/.cache/huggingface/hub/models--MiniMaxAI--MiniMax-M2.5/snapshots/f710177d938eff80b684d42c5aa84b382612f21f/"
+export NODE0_ADDR="10.21.9.47"          # this node's IP (prefill)
+export IPADDRS="10.21.9.47,10.21.9.29"  # prefill IP, then decode IPs
 export xP=1 yD=1
 export NNODES=2
 export GPUS_PER_NODE=8
@@ -20,7 +18,7 @@ export DRY_RUN=0
 
 export BENCH_INPUT_LEN=1024
 export BENCH_OUTPUT_LEN=1024
-export BENCH_MAX_CONCURRENCY="4x8x16x32x64x128x256x512"
+export BENCH_MAX_CONCURRENCY="4"
 
 # Repo root (3 levels up from this script's directory)
 export DI_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -115,13 +113,20 @@ docker run --rm \
     -e UCX_ROCM_IPC_MIN_ZCOPY=0 \
     -e UCX_LOG_LEVEL=warn \
     -e HSA_ENABLE_SDMA=1 \
+    -e GLOO_SOCKET_IFNAME=ens51np0 \
     -e NCCL_SOCKET_IFNAME=ens51np0 \
+    -e VLLM_USE_V1=1 \
+    -e VLLM_ROCM_USE_AITER=1 \
+    -e VLLM_ROCM_USE_AITER_RMSNORM=1 \
+    -e VLLM_ENGINE_READY_TIMEOUT_S=3600 \
+    -e PREFILL_NODES=1 \
+    -e DECODE_NODES=1 \
     -e PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300} \
     -e VLLM_MORIIO_CONNECTOR_READ_MODE=${VLLM_MORIIO_CONNECTOR_READ_MODE:-1} \
     -e PYTHONPYCACHEPREFIX=/tmp/pycache \
-    -e PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP:-false} \
+    -e PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP:-true} \
     -e PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP:-false} \
-    -e DECODE_ENABLE_EP=${DECODE_ENABLE_EP:-false} \
+    -e DECODE_ENABLE_EP=${DECODE_ENABLE_EP:-true} \
     -e DECODE_ENABLE_DP=${DECODE_ENABLE_DP:-false} \
     -e PREFILL_TP_SIZE=${PREFILL_TP_SIZE:-8} \
     -e DECODE_TP_SIZE=${DECODE_TP_SIZE:-8} \
