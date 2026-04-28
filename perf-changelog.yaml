@@ -1920,6 +1920,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
 
 - config-keys:
+    - dsv4-fp8-mi355x-vllm
+  description:
+    - "Add vLLM DeepSeek-V4-Pro FP8 benchmark for MI355X with AITER-accelerated MLA decode (vllm-project/vllm#40889, stacked on #40871)"
+    - "Base image rocm/atom:rocm7.2.2 (MI355X ROCm 7.2.2, aiter with MLA decode); vLLM rebuilt from PR branch at pinned SHA b3a4a44 at runtime via --no-deps overlay"
+    - "Key flags: --enforce-eager, --moe-backend triton_unfused, --kv-cache-dtype fp8, VLLM_ROCM_USE_AITER=1"
+    - "Search space: TP=8, concurrency 4-64, 1k1k and 8k1k"
+    - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 sweep on cluster gb300-cw (CoreWeave; 2x 18-node racks)"
@@ -1928,4 +1938,3 @@
     - "vLLM patches (auto-applied by upstream configs/vllm-container-deps.sh): cumem expandable_segments fix, MegaMoE free-orig (vllm-project/vllm#40860 backport), nvlink one-sided bf16 fix, numa-bind hash fix"
     - "New runners group gb300-cw (gb300-cw_0/1) and launch_gb300-cw.sh: SLURM partition `all`, model staging at /mnt/vast/models/dsv4/, squash files at /mnt/vast/squash/. Each recipe rack-pins via sbatch_directives.segment (cw's srtslurm.yaml turns off srtctl auto-segment)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1150
-  
