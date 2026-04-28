@@ -2512,7 +2512,7 @@ dsv4-fp8-h200-vllm:
 
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP4, TP-only).
 dsv4-fp4-h200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-hopper
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
