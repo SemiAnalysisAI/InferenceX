@@ -139,15 +139,7 @@ fi
 # We only clone srt-slurm to install srtctl + pick up its sibling configs
 # (configs/, expert-distributions/, etc). The recipe itself is supplied as an
 # absolute CONFIG_FILE pointing at benchmarks/multi_node/srt-slurm-recipes/.
-if [[ $FRAMEWORK == "dynamo-vllm" || ( $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ) ]]; then
-    SRT_REPO_URL=https://github.com/NVIDIA/srt-slurm.git
-    SRT_BRANCH=sa-submission-q2-2026
-else
-    SRT_REPO_URL=https://github.com/ishandhanani/srt-slurm.git
-    SRT_BRANCH=sa-submission-q1-2026
-fi
-SRT_REPO_URL="$SRT_REPO_URL" SRT_BRANCH="$SRT_BRANCH" \
-    clone_and_install_srtctl || exit 1
+clone_and_install_srtctl || exit 1
 
 echo "Configs available at: $SRT_REPO_DIR/"
 

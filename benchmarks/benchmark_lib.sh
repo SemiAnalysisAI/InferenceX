@@ -887,22 +887,24 @@ sanitize_image_filename() {
 #
 # All inputs are env vars (set before calling); all are optional:
 #   SRT_REPO_URL    default https://github.com/NVIDIA/srt-slurm.git
-#   SRT_BRANCH      default sa-submission-q2-2026
+#   SRT_REF         default pinned commit SHA on NVIDIA/srt-slurm; accepts
+#                   any git ref (branch / tag / SHA). Pinning to a SHA keeps
+#                   benchmark runs reproducible across srt-slurm churn.
 #   SRT_REPO_DIR    default srt-slurm (relative to current cwd)
 #   UV_INSTALL_DIR  default $HOME/.local/bin (uv's own default)
 #   UV_VENV_DIR     default .venv (inside the cloned repo)
 clone_and_install_srtctl() {
     local repo_url="${SRT_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}"
-    local branch="${SRT_BRANCH:-sa-submission-q2-2026}"
+    local ref="${SRT_REF:-52e697d595569b1055b3bb436e06408a6f078293}"
     local repo_dir="${SRT_REPO_DIR:-srt-slurm}"
     local uv_install_dir="${UV_INSTALL_DIR:-${HOME}/.local/bin}"
     local uv_venv_dir="${UV_VENV_DIR:-.venv}"
 
-    echo "Cloning ${repo_url}@${branch} into ${repo_dir}..."
+    echo "Cloning ${repo_url}@${ref} into ${repo_dir}..."
     rm -rf "$repo_dir"
     git clone "$repo_url" "$repo_dir"
     cd "$repo_dir" || return 1
-    git checkout "$branch"
+    git checkout "$ref"
 
     echo "Installing uv + srtctl into venv at ${uv_venv_dir}..."
     export UV_INSTALL_DIR="$uv_install_dir"
