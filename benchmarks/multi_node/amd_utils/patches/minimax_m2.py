@@ -184,7 +184,8 @@ class MiniMaxM2MoE(nn.Module):
             )
             final_hidden_states = final_hidden_states[:num_tokens]
         elif self.tp_size > 1:
-            final_hidden_states = self.experts.maybe_all_reduce_tensor_model_parallel(
+            from vllm.distributed.communication_op import tensor_model_parallel_all_reduce
+            final_hidden_states = tensor_model_parallel_all_reduce(
                 final_hidden_states
             )
 
