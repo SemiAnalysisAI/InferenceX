@@ -102,12 +102,18 @@ backend:
         decoding_type: MTP
         num_nextn_predict_layers: 3
 
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: "308"
-  req_rate: "inf"
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    PREFILL_GPUS: "2"
+    DECODE_GPUS: "32"
+    TOTAL_GPUS: "48"
 
 frontend:
   type: "dynamo"

@@ -106,12 +106,18 @@ backend:
       tensor_parallel_size: 8
 
 
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
 benchmark:
-  type: "sa-bench"
-  isl: 1024
-  osl: 1024
-  concurrencies: [16384]
-  req_rate: "inf"
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    PREFILL_GPUS: "4"
+    DECODE_GPUS: "8"
+    TOTAL_GPUS: "16"
 
 frontend:
   type: "dynamo"

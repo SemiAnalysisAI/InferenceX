@@ -110,9 +110,16 @@ backend:
       expert-parallel-size: 1
       enable-dp-attention: false
 
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
 benchmark:
-  type: "sa-bench"
-  isl: 8192 
-  osl: 1024
-  concurrencies: "4x8"
-  req_rate: 300 
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    MODEL_NAME: "deepseek-ai/DeepSeek-R1"
+    PREFILL_GPUS: "4"
+    DECODE_GPUS: "4"
+    TOTAL_GPUS: "20"

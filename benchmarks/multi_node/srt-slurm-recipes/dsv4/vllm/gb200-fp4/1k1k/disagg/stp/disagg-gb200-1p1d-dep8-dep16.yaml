@@ -116,10 +116,16 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
 
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
 benchmark:
-  type: "sa-bench"
-  isl: 1024
-  osl: 1024
-  concurrencies: "128x256x1024x2048x4096"
-  req_rate: "inf"
-  use_chat_template: false
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    PREFILL_GPUS: "8"
+    DECODE_GPUS: "16"
+    TOTAL_GPUS: "24"
+    USE_CHAT_TEMPLATE: "false"
