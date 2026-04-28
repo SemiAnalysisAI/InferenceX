@@ -881,7 +881,6 @@ except Exception as e:
 # install_libionic
 # install_mori
 install_amd_quark
-install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
