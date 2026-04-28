@@ -137,7 +137,6 @@ class MiniMaxM2MoE(nn.Module):
             top_k=config.num_experts_per_tok,
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            reduce_results=False,
             renormalize=True,
             scoring_func=getattr(config, "scoring_func", "softmax"),
             e_score_correction_bias=self.e_score_correction_bias,
