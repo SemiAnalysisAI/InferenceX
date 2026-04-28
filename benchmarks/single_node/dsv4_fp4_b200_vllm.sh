@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
-# pareto sweep. TP mode (dp-attn=false) runs without expert parallel; DP mode
+# DeepSeek-V4-Pro B200 single-node vLLM recipe derived from the B200 pareto
+# sweep. TP mode (dp-attn=false) runs without expert parallel; DP mode
 # (dp-attn=true) enables expert parallel (EP_SIZE=TP value = DP size).
 
 source "$(dirname "$0")/../benchmark_lib.sh"
@@ -42,10 +42,15 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+GMU_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    MAX_NUM_BATCHED_TOKENS=2048
+    GMU_ARGS=(--gpu-memory-utilization 0.85)
+fi
+
+if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
+    MAX_NUM_BATCHED_TOKENS=${ISL}
 else
-    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+    MAX_NUM_BATCHED_TOKENS=2048
 fi
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
@@ -73,6 +78,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --block-size 256 \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
+    "${GMU_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \

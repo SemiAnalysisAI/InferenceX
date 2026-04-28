@@ -186,7 +186,7 @@ else
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -212,6 +212,15 @@ else
         SLRUM_HOME_MOUNT=" --container-mount-home "
     fi
 
+    SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
+    SCRIPT_FW="benchmarks/single_node/${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    SCRIPT_FALLBACK="benchmarks/single_node/${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    if [[ -f "$SCRIPT_FW" ]]; then
+        BENCHMARK_SCRIPT="$SCRIPT_FW"
+    else
+        BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
@@ -219,7 +228,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_mi355x${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash "$BENCHMARK_SCRIPT"
 
     scancel $JOB_ID
 

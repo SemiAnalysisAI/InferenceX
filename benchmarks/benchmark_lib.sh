@@ -165,7 +165,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --use-chat-template and --trust-remote-code
+# All parameters are required except --use-chat-template, --dsv4, and --trust-remote-code
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -178,6 +178,9 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --dsv4: Optional flag to use the DeepSeek-V4 chat template
+#           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
+#           template. Implies --use-chat-template.
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
@@ -200,6 +203,7 @@ run_benchmark_serving() {
     local result_dir=""
     local workspace_dir=""
     local use_chat_template=false
+    local dsv4=false
     local trust_remote_code=false
     local server_pid=""
 
@@ -250,6 +254,11 @@ run_benchmark_serving() {
                 shift 2
                 ;;
             --use-chat-template)
+                use_chat_template=true
+                shift
+                ;;
+            --dsv4)
+                dsv4=true
                 use_chat_template=true
                 shift
                 ;;
@@ -351,6 +360,12 @@ run_benchmark_serving() {
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Add --dsv4 if requested (requires --use-chat-template, which we
+    # auto-enable when --dsv4 is passed in).
+    if [[ "$dsv4" == true ]]; then
+        benchmark_cmd+=(--dsv4)
     fi
 
     # Add --trust-remote-code if requested
