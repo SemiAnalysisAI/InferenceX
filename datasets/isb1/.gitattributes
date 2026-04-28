@@ -1,0 +1,2 @@
+exports/**/*.json filter=lfs diff=lfs merge=lfs -text linguist-generated=true
+converted/**/*.json filter=lfs diff=lfs merge=lfs -text linguist-generated=true
