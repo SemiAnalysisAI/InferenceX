@@ -2510,6 +2510,25 @@ dsv4-fp8-h200-vllm:
     search-space:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
 
+# DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP4, TP-only).
+dsv4-fp4-h200-sglang:
+  image: lmsysorg/sglang:deepseek-v4-hopper
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
+
 # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
 # pareto sweep. The single-node schema has no explicit data-parallel-size
 # field, so dp-attn=true is used as the existing vLLM script switch for DP4
