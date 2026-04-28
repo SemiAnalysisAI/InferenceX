@@ -1929,4 +1929,4 @@
     - "Bench passes --dsv4 (auto-enables --use-chat-template) so MTP acceptance is measured against DSv4 chat-formatted prompts (encoding_dsv4.py from PR #1153) — random-token prompts silently regress acceptance"
     - "Two CONC bands (TP-only, mirrors dsv4-fp4-b300-sglang-mtp coverage): TP8 conc 1-8, TP4 conc 4-32, for both 1k1k and 8k1k"
     - "DP-attn (TP=4 ep=4 / TP=8 ep=8) supported in script via DP_ATTENTION=true but excluded from initial sweep until TP-only numbers land"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1203
