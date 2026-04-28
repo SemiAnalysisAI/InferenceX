@@ -73,6 +73,34 @@ search-space:
 - `recipe` is optional: multi-node entries that do *not* go through srt-slurm (e.g. dynamo-sglang aggregated topologies that drive their own bash) leave it unset.
 - Recipes live under `benchmarks/multi_node/srt-slurm-recipes/` organized as `<model>/<framework>/<hw>-<precision>/<isl><osl>/<agg|disagg>/<stp|mtp>/<recipe-name>.yaml` — e.g. `dsr1/trtllm/b200-fp4/1k1k/disagg/mtp/ctx1_gen2_dep8_batch64_eplb0_mtp2.yaml`. A handful of sglang-style files that carry override sections spanning both stp and mtp are parked one level shallower (the trailing `<stp|mtp>/` segment is omitted). The benchmark template resolves `recipe` to an absolute path and passes it to the launcher as `CONFIG_FILE`, so launchers do not see the relative form.
 
+### Custom-script benchmarking
+
+Recipes are migrating from srt-slurm's bundled `benchmark.type: sa-bench` to `benchmark.type: custom` so the benchmark client lives in this repo (`utils/bench_serving/benchmark_serving.py`) instead of being maintained twice. New shape:
+
+```yaml
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
+benchmark:
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    MODEL_NAME: "deepseek-r1-fp4"   # served-model-name advertised by the engine
+    ISL: "1024"
+    OSL: "1024"
+    CONCURRENCIES: "128x256x1024"   # x-separated, looped inside srt_bench.sh
+    REQ_RATE: "inf"
+    IS_DISAGGREGATED: "true"
+    PREFILL_GPUS: "4"               # per prefill worker
+    DECODE_GPUS: "8"                # per decode worker
+    TOTAL_GPUS: "20"                # sum across all workers
+    USE_CHAT_TEMPLATE: "false"      # optional, defaults to true
+```
+
+`benchmarks/multi_node/srt_bench.sh` is a thin wrapper around `utils/bench_serving/benchmark_serving.py` that mirrors sa-bench's per-conc warmup-then-bench loop and writes results to `/logs/sa-bench_isl_<ISL>_osl_<OSL>/results_concurrency_<N>_gpus_<TOT>_ctx_<P>_gen_<D>.json` so the existing launcher result-harvester picks them up unchanged. See the script's header for the full env-var contract.
+
+The `container_mounts` block bind-mounts the host-side `$INFMAX_WORKSPACE` (set by the launcher to `$GITHUB_WORKSPACE`) at `/infmax-workspace` inside srt-slurm's benchmark container, so the wrapper and bench client are reachable at known paths. `srtctl` resolves `$INFMAX_WORKSPACE` via `os.path.expandvars` at submission time.
+
 ## Runners
 
 The `runners.yaml` config represents the available runners in the repository. The keys are the runner *types* (i.e., the GPUs as well as some specific combinations like `b200-trt`) whereas the value is a list of *runner nodes*. This config is used to verify the master configs.

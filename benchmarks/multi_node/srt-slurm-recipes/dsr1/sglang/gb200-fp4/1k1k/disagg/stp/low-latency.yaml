@@ -108,9 +108,24 @@ backend:
       tensor-parallel-size: 4
       expert-parallel-size: 1
 
+# InferenceX bench-serving wrapper, invoked via srt-slurm `benchmark.type: custom`.
+# srt_bench.sh lives at /infmax-workspace/benchmarks/multi_node/srt_bench.sh
+# inside the benchmark container; the host-side workspace is bind-mounted via
+# the container_mounts block below. See benchmarks/multi_node/srt_bench.sh for
+# the full env-var contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
 benchmark:
-  type: "sa-bench"
-  isl: 1024
-  osl: 1024
-  concurrencies: "4x8x32"
-  req_rate: "inf"
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    MODEL_NAME: "deepseek-ai/DeepSeek-R1"
+    ISL: "1024"
+    OSL: "1024"
+    CONCURRENCIES: "4x8x32"
+    REQ_RATE: "inf"
+    IS_DISAGGREGATED: "true"
+    PREFILL_GPUS: "4"
+    DECODE_GPUS: "4"
+    TOTAL_GPUS: "12"
