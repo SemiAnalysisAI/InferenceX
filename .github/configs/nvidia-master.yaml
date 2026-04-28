@@ -1860,7 +1860,7 @@ dsr1-fp8-b300-sglang:
 # until a B300-specific recipe ships. Prefix caching is disabled.
 # Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -1888,6 +1888,8 @@ dsv4-fp4-b300-sglang:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
 # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
 # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
