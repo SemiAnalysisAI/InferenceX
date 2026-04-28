@@ -40,9 +40,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -127,8 +126,7 @@ EOF
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "${CONFIG_FILE%%:*}"
-    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
@@ -292,7 +290,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
+        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
 
     scancel $JOB_ID
 

@@ -4,19 +4,58 @@
 
 set -x
 
-export SLURM_PARTITION="batch"
+export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
+export SLURM_EXCLUDED_NODELIST="${SLURM_EXCLUDED_NODELIST:-im-gb300-r01-c011}"
 export ENROOT_ROOTFS_WRITABLE=1
 
 export MODEL_PATH=$MODEL
 
+resolve_model_path() {
+    local selected=""
+    for candidate in "$@"; do
+        if [[ -d "$candidate" ]]; then
+            selected="$candidate"
+            break
+        fi
+    done
+
+    if [[ -z "$selected" ]]; then
+        echo "ERROR: None of the candidate model paths exist:" >&2
+        for candidate in "$@"; do
+            echo "  - $candidate" >&2
+        done
+        echo "Common model directories:" >&2
+        ls -la /data/models /raid/shared/models /mnt/lustre01/models /home/sa-shared/models /data/home/sa-shared/models >&2 || true
+        return 1
+    fi
+
+    echo "$selected"
+}
+
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
+    MODEL_PATH=$(resolve_model_path \
+        /data/models/dsr1-fp4 \
+        /data/models/deepseek-r1-0528-fp4-v2 \
+        /data/models/DeepSeek-R1-0528-NVFP4-v2 \
+        /raid/shared/models/deepseek-r1-0528-fp4-v2 \
+        /mnt/lustre01/models/deepseek-r1-0528-fp4-v2 \
+        /home/sa-shared/models/deepseek-r1-0528-fp4-v2 \
+        /data/home/sa-shared/models/deepseek-r1-0528-fp4-v2) || exit 1
+    export MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
+    MODEL_PATH=$(resolve_model_path \
+        /data/models/dsr1-fp8 \
+        /data/models/deepseek-r1-0528 \
+        /data/models/DeepSeek-R1-0528 \
+        /raid/shared/models/deepseek-r1-0528 \
+        /mnt/lustre01/models/deepseek-r1-0528 \
+        /home/sa-shared/models/deepseek-r1-0528 \
+        /data/home/sa-shared/models/deepseek-r1-0528) || exit 1
+    export MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
@@ -25,11 +64,81 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+select_squash_dir() {
+    local candidates=(
+        "${SQUASH_DIR:-}"
+        "/data/squash"
+        "/data/home/sa-shared/squash"
+        "/home/sa-shared/squash"
+    )
 
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+    for candidate in "${candidates[@]}"; do
+        if [[ -n "$candidate" ]] && mkdir -p "$candidate" 2>/dev/null && [[ -w "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    echo "ERROR: No writable shared squash directory found" >&2
+    printf 'Checked:\n' >&2
+    printf '  - %s\n' "${candidates[@]}" >&2
+    return 1
+}
+
+SQUASH_DIR=$(select_squash_dir) || exit 1
+SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+cleanup_broken_squash_symlink() {
+    local squash_file="$1"
+    if [[ -L "$squash_file" && ! -e "$squash_file" ]]; then
+        echo "Removing broken squash symlink: $squash_file"
+        rm -f "$squash_file"
+    elif [[ -L "$squash_file" ]] && ! readlink -f "$squash_file" >/dev/null 2>&1; then
+        echo "Removing unresolvable squash symlink: $squash_file"
+        rm -f "$squash_file"
+    fi
+}
+
+cleanup_broken_squash_symlink "$SQUASH_FILE"
+cleanup_broken_squash_symlink "$NGINX_SQUASH_FILE"
+
+import_container() {
+    local image="$1"
+    local squash_file="$2"
+
+    if [[ -f "$squash_file" ]] && unsquashfs -l "$squash_file" >/dev/null 2>&1; then
+        echo "Using existing squash image: $squash_file"
+        return 0
+    fi
+
+    echo "Importing $image to $squash_file"
+    rm -f "$squash_file"
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" --exclusive --time=180 \
+        bash -lc "mkdir -p '$(dirname "$squash_file")' && enroot import -o '$squash_file' 'docker://$image' && test -f '$squash_file' && unsquashfs -l '$squash_file' >/dev/null"
+
+    # /data/squash can lag briefly after enroot writes from the import node.
+    for _ in {1..30}; do
+        if [[ -f "$squash_file" ]] && unsquashfs -l "$squash_file" >/dev/null 2>&1; then
+            echo "Imported squash image is visible: $squash_file"
+            return 0
+        fi
+        sleep 2
+    done
+
+    if [[ ! -f "$squash_file" ]]; then
+        echo "ERROR: Container image path does not exist after import: $squash_file" >&2
+        ls -la "$(dirname "$squash_file")" >&2 || true
+        exit 1
+    fi
+
+    echo "ERROR: Container image exists but failed unsquashfs validation: $squash_file" >&2
+    ls -la "$squash_file" >&2 || true
+    exit 1
+}
+
+import_container "$IMAGE" "$SQUASH_FILE"
+import_container "$NGINX_IMAGE" "$NGINX_SQUASH_FILE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -43,9 +152,8 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q2-2026
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -84,6 +192,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+  "dsfp4": "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
@@ -109,9 +218,26 @@ if [[ -z "$CONFIG_FILE" ]]; then
 fi
 
 # Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+if [[ -n "$SLURM_EXCLUDED_NODELIST" ]]; then
+    if grep -q "^sbatch_directives:" "$CONFIG_PATH"; then
+        if grep -q "^  exclude:" "$CONFIG_PATH"; then
+            sed -i "s/^  exclude:.*/  exclude: \"${SLURM_EXCLUDED_NODELIST}\"/" "$CONFIG_PATH"
+        else
+            sed -i "/^sbatch_directives:/a\\  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
+        fi
+    else
+        sed -i "/^name:.*/a sbatch_directives:\\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
+    fi
+fi
+
+if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+else
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+fi
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -129,6 +255,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+mkdir -p "$LOGS_DIR"
 
 # Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
