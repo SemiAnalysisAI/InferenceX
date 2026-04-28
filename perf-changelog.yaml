@@ -1929,7 +1929,7 @@
     - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
  
- - config-keys:
+- config-keys:
     - dsv4-fp4-b300-sglang
   description:
     - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
