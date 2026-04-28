@@ -26,6 +26,7 @@ On the client side, run:
 import argparse
 import asyncio
 import base64
+import contextlib
 import gc
 import io
 import json
@@ -35,6 +36,7 @@ import time
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
+from multiprocessing import Pool, cpu_count
 from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -54,6 +56,7 @@ except ImportError:
     from argparse import ArgumentParser as FlexibleArgumentParser
 
 from benchmark_utils import convert_to_pytorch_benchmark_format
+from encoding_dsv4 import encode_messages as dsv4_encode_messages
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
@@ -88,6 +91,80 @@ class BenchmarkMetrics:
     percentiles_e2el_ms: List[Tuple[float, float]]
 
 
+# --- Multiprocessing helpers for sample_random_requests ---
+_worker_tokenizer = None
+
+
+def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
+    """Initialize tokenizer once per worker process."""
+    global _worker_tokenizer
+    _worker_tokenizer = get_tokenizer(
+        tokenizer_id,
+        tokenizer_mode=tokenizer_mode,
+        trust_remote_code=trust_remote_code,
+    )
+
+
+def _apply_chat_template(prompt, tokenizer, dsv4):
+    """Render a single user message into the appropriate chat-template prompt.
+
+    When `dsv4` is True we use the self-contained DeepSeek-V4 encoder
+    (encoding_dsv4.encode_messages) which emits the
+    <bos><User>...<Assistant><think> framing the model expects. Otherwise we
+    fall back to the tokenizer's built-in jinja chat template.
+    """
+    if dsv4:
+        return dsv4_encode_messages(
+            [{"role": "user", "content": prompt}],
+            thinking_mode="thinking",
+        )
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt}],
+        add_generation_prompt=True,
+        tokenize=False,
+    )
+
+
+def _process_prompt_chunk(chunk_args):
+    """Generate a chunk of random prompts in a worker process."""
+    (indices, prefix_token_ids, input_lens, output_lens, offsets,
+     prefix_len, vocab_size, use_chat_template, dsv4, seed) = chunk_args
+
+    rng = np.random.RandomState(seed)
+    tokenizer = _worker_tokenizer
+
+    results = []
+    for local_idx, global_idx in enumerate(indices):
+        tgt_prompt_len = prefix_len + input_lens[local_idx]
+        prompt_token_ids = prefix_token_ids + [
+            (offsets[local_idx] + global_idx + j) % vocab_size
+            for j in range(input_lens[local_idx])
+        ]
+        prompt = tokenizer.decode(prompt_token_ids)
+
+        max_retries = 10
+        for _ in range(max_retries):
+            prompt_token_ids = tokenizer.encode(prompt, add_special_tokens=False)
+            if len(prompt_token_ids) < tgt_prompt_len:
+                num_extras = tgt_prompt_len - len(prompt_token_ids)
+                prompt_token_ids.extend(
+                    rng.randint(0, vocab_size, size=num_extras).tolist())
+            elif len(prompt_token_ids) > tgt_prompt_len:
+                prompt_token_ids = prompt_token_ids[:tgt_prompt_len]
+            else:
+                break
+            prompt = tokenizer.decode(prompt_token_ids)
+
+        if use_chat_template:
+            prompt = _apply_chat_template(prompt, tokenizer, dsv4)
+
+        prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
+        mismatch = prompt_len - tgt_prompt_len
+        results.append((prompt, prompt_len, output_lens[local_idx], None, mismatch))
+
+    return results
+
+
 def sample_random_requests(
     prefix_len: int,
     input_len: int,
@@ -96,15 +173,20 @@ def sample_random_requests(
     range_ratio: float,
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
+    dsv4: bool = False,
+    tokenizer_id: Optional[str] = None,
+    tokenizer_mode: str = "auto",
+    trust_remote_code: bool = False,
+    num_workers: int = 0,
 ) -> List[Tuple[str, int, int]]:
-    prefix_token_ids = np.random.randint(0, tokenizer.vocab_size, size=prefix_len).tolist()
+    vocab_size = tokenizer.vocab_size
+    prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()
+
+    if dsv4 and not use_chat_template:
+        raise ValueError("--dsv4 requires --use-chat-template to be set.")
 
     if use_chat_template:
-        chat_template_dummy = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "a"}],
-            add_generation_prompt=True,
-            tokenize=False,
-        )
+        chat_template_dummy = _apply_chat_template("a", tokenizer, dsv4)
         tokenized_chat_template_dummy = tokenizer.encode(chat_template_dummy, add_special_tokens=False)
         chat_template_len = len(tokenized_chat_template_dummy) - 1
         input_len = input_len - chat_template_len
@@ -117,37 +199,91 @@ def sample_random_requests(
 
     input_lens = sample_uniform(input_len)
     output_lens = sample_uniform(output_len)
-    offsets = np.random.randint(0, tokenizer.vocab_size, size=num_prompts)
+    offsets = np.random.randint(0, vocab_size, size=num_prompts)
 
-    input_requests = []
-    mismatches = []
-    for i in range(num_prompts):
-        tgt_prompt_len = prefix_len + input_lens[i]
-        prompt_token_ids = prefix_token_ids + [(offsets[i] + i + j) % tokenizer.vocab_size for j in range(input_lens[i])]
-        prompt = tokenizer.decode(prompt_token_ids)
+    # Create a local RNG for retry-loop padding so that neither serial nor
+    # parallel path consumes global np.random draws beyond this point.
+    # This ensures downstream code (e.g. gamma draws for inter-arrival times)
+    # sees identical global RNG state regardless of num_workers.
+    local_rng = np.random.RandomState(
+        np.random.get_state()[1][:4].tolist()  # derive seed from current state without advancing it
+    )
 
-        max_retries = 10
-        for _ in range(max_retries):
-            prompt_token_ids = tokenizer.encode(prompt, add_special_tokens=False)
-            if len(prompt_token_ids) < tgt_prompt_len:
-                num_extras = tgt_prompt_len - len(prompt_token_ids)
-                prompt_token_ids.extend(np.random.randint(0, tokenizer.vocab_size, size=num_extras).tolist())
-            elif len(prompt_token_ids) > tgt_prompt_len:
-                prompt_token_ids = prompt_token_ids[:tgt_prompt_len]
-            else:
+    # Decide whether to use multiprocessing
+    if num_workers <= 0:
+        num_workers = min(cpu_count() or 1, 8)
+    use_parallel = num_workers > 1 and tokenizer_id is not None
+
+    if use_parallel:
+        # Split work into chunks, one per worker
+        chunk_size = (num_prompts + num_workers - 1) // num_workers
+        chunk_args_list = []
+        for w in range(num_workers):
+            start = w * chunk_size
+            end = min(start + chunk_size, num_prompts)
+            if start >= num_prompts:
                 break
+            chunk_args_list.append((
+                list(range(start, end)),
+                prefix_token_ids,
+                input_lens[start:end],
+                output_lens[start:end],
+                offsets[start:end].tolist(),
+                prefix_len,
+                vocab_size,
+                use_chat_template,
+                dsv4,
+                int(local_rng.randint(0, 2**31)),
+            ))
+
+        actual_workers = len(chunk_args_list)
+        print(f"Generating {num_prompts} prompts using {actual_workers} worker processes...")
+        t0 = time.perf_counter()
+        with Pool(
+            processes=actual_workers,
+            initializer=_init_tokenizer_worker,
+            initargs=(tokenizer_id, tokenizer_mode, trust_remote_code),
+        ) as pool:
+            chunk_results = pool.map(_process_prompt_chunk, chunk_args_list)
+
+        input_requests = []
+        mismatches = []
+        for chunk in chunk_results:
+            for prompt, prompt_len, out_len, mm_content, mismatch in chunk:
+                input_requests.append((prompt, prompt_len, out_len, mm_content))
+                mismatches.append(mismatch)
+        elapsed = time.perf_counter() - t0
+        print(f"Prompt generation completed in {elapsed:.1f}s")
+    else:
+        # Original serial path — also uses local_rng for retry-loop padding
+        # to keep global RNG consumption identical to the parallel path.
+        if tokenizer_id is None and num_workers > 1:
+            print("Warning: tokenizer_id not provided, falling back to serial prompt generation.")
+        input_requests = []
+        mismatches = []
+        for i in range(num_prompts):
+            tgt_prompt_len = prefix_len + input_lens[i]
+            prompt_token_ids = prefix_token_ids + [(offsets[i] + i + j) % vocab_size for j in range(input_lens[i])]
             prompt = tokenizer.decode(prompt_token_ids)
 
-        if use_chat_template:
-            prompt = tokenizer.apply_chat_template(
-                [{"role": "user", "content": prompt}],
-                add_generation_prompt=True,
-                tokenize=False,
-            )
+            max_retries = 10
+            for _ in range(max_retries):
+                prompt_token_ids = tokenizer.encode(prompt, add_special_tokens=False)
+                if len(prompt_token_ids) < tgt_prompt_len:
+                    num_extras = tgt_prompt_len - len(prompt_token_ids)
+                    prompt_token_ids.extend(local_rng.randint(0, vocab_size, size=num_extras).tolist())
+                elif len(prompt_token_ids) > tgt_prompt_len:
+                    prompt_token_ids = prompt_token_ids[:tgt_prompt_len]
+                else:
+                    break
+                prompt = tokenizer.decode(prompt_token_ids)
 
-        prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
-        mismatches.append(prompt_len - tgt_prompt_len)
-        input_requests.append((prompt, prompt_len, output_lens[i], None))
+            if use_chat_template:
+                prompt = _apply_chat_template(prompt, tokenizer, dsv4)
+
+            prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
+            mismatches.append(prompt_len - tgt_prompt_len)
+            input_requests.append((prompt, prompt_len, output_lens[i], None))
 
     header_str = f'{"-"*19}  Input/Output Length Statistics  {"-"*19}'
     print(header_str)
@@ -371,9 +507,11 @@ async def benchmark(
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
         warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else contextlib.nullcontext()
+        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
         async def warmup_limited_req_fn():
+            if warmup_semaphore is None:
+                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
                 return await request_func(request_func_input=test_input, pbar=warmup_pbar)
 
@@ -420,10 +558,6 @@ async def benchmark(
 
     pbar = None if disable_tqdm else tqdm(total=len(input_requests))
 
-    # This can be used once the minimum Python version is 3.10 or higher,
-    # and it will simplify the code in limited_request_func.
-    #    semaphore = (asyncio.Semaphore(max_concurrency)
-    #                 if max_concurrency else contextlib.nullcontext())
     semaphore = (asyncio.Semaphore(max_concurrency)
                  if max_concurrency else None)
 
@@ -663,6 +797,11 @@ def main(args: argparse.Namespace):
             range_ratio=args.random_range_ratio,
             tokenizer=tokenizer,
             use_chat_template=args.use_chat_template,
+            dsv4=args.dsv4,
+            tokenizer_id=tokenizer_id,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=args.trust_remote_code,
+            num_workers=args.random_num_workers,
         )
 
     else:
@@ -1022,6 +1161,23 @@ if __name__ == "__main__":
         "--use-chat-template",
         action="store_true",
         help="Use chat template to format the prompt.",
+    )
+    random_group.add_argument(
+        '--random-num-workers',
+        type=int,
+        default=0,
+        help="Number of worker processes for parallel random prompt generation. "
+        "Only used with --dataset-name random. "
+        "0 (default) = auto (min(cpu_count, 8)). 1 = serial (no multiprocessing).",
+    )
+
+    dsv4_group = parser.add_argument_group("DeepSeek-V4 chat template options")
+    dsv4_group.add_argument(
+        "--dsv4",
+        action="store_true",
+        help="Use the DeepSeek-V4 chat template (encoding_dsv4.py) instead of "
+        "the tokenizer's built-in jinja chat template. Requires "
+        "--use-chat-template to also be set. Applies to the random dataset.",
     )
 
     hf_group = parser.add_argument_group("hf dataset options")

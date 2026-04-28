@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Shared benchmarking utilities for InferenceMAX
+# Shared benchmarking utilities for InferenceX
 
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
@@ -165,7 +165,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --use-chat-template and --trust-remote-code
+# All parameters are required except --use-chat-template, --dsv4, and --trust-remote-code
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -178,6 +178,9 @@ wait_for_server_ready() {
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
+#   --dsv4: Optional flag to use the DeepSeek-V4 chat template
+#           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
+#           template. Implies --use-chat-template.
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
@@ -200,6 +203,7 @@ run_benchmark_serving() {
     local result_dir=""
     local workspace_dir=""
     local use_chat_template=false
+    local dsv4=false
     local trust_remote_code=false
     local server_pid=""
 
@@ -250,6 +254,11 @@ run_benchmark_serving() {
                 shift 2
                 ;;
             --use-chat-template)
+                use_chat_template=true
+                shift
+                ;;
+            --dsv4)
+                dsv4=true
                 use_chat_template=true
                 shift
                 ;;
@@ -351,6 +360,12 @@ run_benchmark_serving() {
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
+    fi
+
+    # Add --dsv4 if requested (requires --use-chat-template, which we
+    # auto-enable when --dsv4 is passed in).
+    if [[ "$dsv4" == true ]]; then
+        benchmark_cmd+=(--dsv4)
     fi
 
     # Add --trust-remote-code if requested
@@ -506,13 +521,13 @@ _install_lm_eval_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
-        if ! python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+        if ! python3 -m pip install -q --no-cache-dir --no-deps --force-reinstall --break-system-packages \
             "git+https://github.com/EleutherAI/lm-evaluation-harness.git@${lm_eval_ref}"; then
-            python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+            python3 -m pip install -q --no-cache-dir --no-deps --force-reinstall --break-system-packages \
                 "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
         fi
     else
-        python3 -m pip install -q --no-cache-dir --no-deps --break-system-packages \
+        python3 -m pip install -q --no-cache-dir --no-deps --force-reinstall --break-system-packages \
             "https://github.com/EleutherAI/lm-evaluation-harness/archive/${lm_eval_ref}.tar.gz" || true
     fi
 }
@@ -593,20 +608,29 @@ PY
 
 get_native_max_context_length() {
     local model_path="$1"
+    # Prefer MODEL_PATH (local model directory) when available, since the
+    # argument may be a served-model name that is neither a valid HF repo
+    # ID nor a local path (e.g. "deepseek-r1-fp4" on the B300 cluster).
+    if [ -n "${MODEL_PATH:-}" ] && [ -d "${MODEL_PATH}" ]; then
+        model_path="${MODEL_PATH}"
+    fi
     python3 -c "
-from transformers import AutoConfig
-config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
-for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
-    if hasattr(config, attr):
-        print(getattr(config, attr))
-        break
-else:
+try:
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
+    for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+        if hasattr(config, attr):
+            print(getattr(config, attr))
+            break
+    else:
+        print(0)
+except Exception:
     print(0)
 "
 }
 
 # Compute the context length for eval-only mode.
-# Uses 5x the benchmark context capped at the model's native max.
+# Uses the requested benchmark context capped at the model's native max.
 # Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
 # Echoes the computed value for scripts to capture.
 #
@@ -638,7 +662,7 @@ compute_eval_context_length() {
 # Call directly (not in a subshell) so the export persists.
 # Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
 setup_eval_context() {
-    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 200))")
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 256))")
     export EVAL_MAX_MODEL_LEN
 }
 
@@ -708,8 +732,32 @@ append_lm_eval_summary() {
     # Write minimal meta for collectors that expect it
     local meta_json="${out_dir}/meta_env.json"
     local model_name="${MODEL_NAME:-$MODEL}"
+    local is_multinode_json="false"
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        is_multinode_json="true"
+    fi
+
+    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
+    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
+    local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
+    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
+
     local dp_json="false"
-    if [ "${DP_ATTENTION}" = "true" ]; then dp_json="true"; fi
+    if [ "${DP_ATTENTION:-false}" = "true" ]; then dp_json="true"; fi
+    local prefill_dp_json="$dp_json"
+    if [ "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
+        prefill_dp_json="true"
+    else
+        prefill_dp_json="false"
+    fi
+    local decode_dp_json="$dp_json"
+    if [ "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
+        decode_dp_json="true"
+    else
+        decode_dp_json="false"
+    fi
 
     # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
     # RESULT_FILENAME format (from workflow):
@@ -734,6 +782,7 @@ append_lm_eval_summary() {
     fi
     cat > "${meta_json}" <<META
 {
+  "is_multinode": ${is_multinode_json},
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING}",
@@ -741,6 +790,14 @@ append_lm_eval_summary() {
   "conc": ${CONC:-1},
   "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
+  "prefill_tp": ${prefill_tp},
+  "prefill_ep": ${prefill_ep},
+  "prefill_dp_attention": ${prefill_dp_json},
+  "prefill_num_workers": ${prefill_num_workers},
+  "decode_tp": ${decode_tp},
+  "decode_ep": ${decode_ep},
+  "decode_dp_attention": ${decode_dp_json},
+  "decode_num_workers": ${decode_num_workers},
   "model": "${model_name:-}",
   "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
   "hw": "${RUNNER_TYPE:-unknown}",
