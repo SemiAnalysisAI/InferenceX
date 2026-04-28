@@ -1939,6 +1939,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Use ROCm/aiter#2916 mhc_pre device-allocation fix instead of disabling ATOM mhc_pre"
+    - "Patch installed aiter/ops/mhc.py at runtime to allocate mhc_pre intermediates on residual.device, preserving the aiter MHC fast path without rebuilding aiter"
+    - "Remove the ATOM deepseek_v4.py sed workaround that forced mhc_pre to torch fallback"
+    - "Keep dsv4-fp4-mi355x-atom at CONC=1 only; run 24953107645 showed high-concurrency DSv4 ATOM OOMs in PR #650 torch sparse-attention fallbacks before upstream AITER sparse-attention support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1202
+
+- config-keys:
     - dsv4-fp4-b300-vllm-mtp
   description:
     - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
