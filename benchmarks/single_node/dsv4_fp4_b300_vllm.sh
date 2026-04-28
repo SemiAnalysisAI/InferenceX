@@ -23,11 +23,6 @@ fi
 
 nvidia-smi
 
-# install_deepgemm.sh git-clones the DeepGEMM repo, but the v0.20.0
-# vllm image ships without git — install it first.
-apt-get update && apt-get install -y --no-install-recommends git
-bash <(curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm/v0.20.0/tools/install_deepgemm.sh)
-
 hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
