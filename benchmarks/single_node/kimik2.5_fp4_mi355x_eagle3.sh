@@ -25,7 +25,7 @@ fi
 
 # Draft model (Eagle3 head). Override via SPEC_DRAFT_MODEL if needed.
 SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-lightseekorg/kimi-k2.5-eagle3}"
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
 SPEC_DRAFT_TP="${SPEC_DRAFT_TP:-1}"
 
 hf download "$MODEL"
