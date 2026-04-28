@@ -1901,7 +1901,7 @@ dsv4-fp4-b300-sglang:
 #   dp-attn: true  -> DP-attn  + flashinfer_mxfp4 + chunked-prefill 32768
 #                     + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
 dsv4-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2922230d92982cec72f4ead04fb1da2af5301bef48f223a822fa4cf9696b9fcd
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
