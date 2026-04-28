@@ -41,7 +41,7 @@ fi
 
 EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(--enable-expert-parallel --moe-backend deep_gemm_mega_moe)
 fi
 
 GMU_ARGS=()
@@ -82,7 +82,6 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${GMU_ARGS[@]}" \
     --compilation-config '{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}' \
     --attention_config.use_fp4_indexer_cache=True \
-    --moe-backend deep_gemm_mega_moe \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
