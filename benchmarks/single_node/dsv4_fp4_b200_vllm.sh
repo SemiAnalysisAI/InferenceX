@@ -23,6 +23,8 @@ fi
 
 nvidia-smi
 
+bash <(curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm/v0.20.0/tools/install_deepgemm.sh)
+
 hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
@@ -71,21 +73,19 @@ start_gpu_monitor
 
 set -x
 vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
-    "${PARALLEL_ARGS[@]}" \
-    --pipeline-parallel-size 1 \
-    --kv-cache-dtype fp8 \
     --trust-remote-code \
+    --kv-cache-dtype fp8 \
     --block-size 256 \
-    --no-enable-prefix-caching \
+    "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     "${GMU_ARGS[@]}" \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
-    --attention_config.use_fp4_indexer_cache True \
+    --compilation-config '{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}' \
+    --attention_config.use_fp4_indexer_cache=True \
+    --moe-backend deep_gemm_mega_moe \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-cudagraph-capture-size 2048 \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
