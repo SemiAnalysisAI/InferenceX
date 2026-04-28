@@ -109,10 +109,10 @@ backend:
       expert-parallel-size: 1
 
 # InferenceX bench-serving wrapper, invoked via srt-slurm `benchmark.type: custom`.
-# srt_bench.sh lives at /infmax-workspace/benchmarks/multi_node/srt_bench.sh
-# inside the benchmark container; the host-side workspace is bind-mounted via
-# the container_mounts block below. See benchmarks/multi_node/srt_bench.sh for
-# the full env-var contract.
+# Most env (MODEL, ISL, OSL, CONC_LIST, DISAGG) is exported by
+# benchmark-multinode-tmpl.yml and propagated through srtctl → srun → pyxis,
+# so the recipe only carries per-recipe knobs that have no workflow source.
+# See benchmarks/multi_node/srt_bench.sh for the full env contract.
 container_mounts:
   "$INFMAX_WORKSPACE": "/infmax-workspace"
 
@@ -120,12 +120,9 @@ benchmark:
   type: "custom"
   command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
   env:
+    # Override $MODEL because this sglang recipe advertises a different
+    # served-model-name from what master-yaml's `model:` field is set to.
     MODEL_NAME: "deepseek-ai/DeepSeek-R1"
-    ISL: "1024"
-    OSL: "1024"
-    CONCURRENCIES: "4x8x32"
-    REQ_RATE: "inf"
-    IS_DISAGGREGATED: "true"
     PREFILL_GPUS: "4"
     DECODE_GPUS: "4"
     TOTAL_GPUS: "12"

@@ -85,19 +85,17 @@ benchmark:
   type: "custom"
   command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
   env:
-    MODEL_NAME: "deepseek-r1-fp4"   # served-model-name advertised by the engine
-    ISL: "1024"
-    OSL: "1024"
-    CONCURRENCIES: "128x256x1024"   # x-separated, looped inside srt_bench.sh
-    REQ_RATE: "inf"
-    IS_DISAGGREGATED: "true"
-    PREFILL_GPUS: "4"               # per prefill worker
-    DECODE_GPUS: "8"                # per decode worker
-    TOTAL_GPUS: "20"                # sum across all workers
-    USE_CHAT_TEMPLATE: "false"      # optional, defaults to true
+    PREFILL_GPUS: "4"               # per prefill worker  (filename component)
+    DECODE_GPUS: "8"                # per decode worker   (filename component)
+    TOTAL_GPUS: "20"                # sum across workers  (filename component)
+    # MODEL_NAME: "..."             # only when server's served-model-name
+                                    # differs from master-yaml's `model:`
+    # USE_CHAT_TEMPLATE: "false"    # only when overriding default (true)
 ```
 
-`benchmarks/multi_node/srt_bench.sh` is a thin wrapper around `utils/bench_serving/benchmark_serving.py` that mirrors sa-bench's per-conc warmup-then-bench loop and writes results to `/logs/sa-bench_isl_<ISL>_osl_<OSL>/results_concurrency_<N>_gpus_<TOT>_ctx_<P>_gen_<D>.json` so the existing launcher result-harvester picks them up unchanged. See the script's header for the full env-var contract.
+`MODEL`, `ISL`, `OSL`, `CONC_LIST`, `DISAGG`, `RANDOM_RANGE_RATIO` are exported by `benchmark-multinode-tmpl.yml` at the workflow step and propagate through the launcher → `srtctl` → `srun` (default `--export=ALL`) → pyxis into the benchmark container, so they don't need to be re-declared in `benchmark.env`. The recipe only carries per-recipe topology knobs (`PREFILL_GPUS`/`DECODE_GPUS`/`TOTAL_GPUS`, used in the result filename) plus the rare overrides (`MODEL_NAME` when the server's served-model-name diverges from `model:`, `USE_CHAT_TEMPLATE: false` for tokenizers that have no chat template, etc.).
+
+`benchmarks/multi_node/srt_bench.sh` is a thin wrapper around `run_benchmark_serving()` in `benchmarks/benchmark_lib.sh` (the same shim every single-node bench script uses). It loops once per concurrency in `$CONC_LIST` and writes results to `/logs/sa-bench_isl_<ISL>_osl_<OSL>/results_concurrency_<N>_gpus_<TOT>_ctx_<P>_gen_<D>.json` so existing launcher result-harvesters pick them up unchanged. Tokenizer is loaded from `/model` — `srtctl`'s `RuntimeContext.create` auto-mounts the model dir at that path in every container, so we don't need any HF Hub egress.
 
 The `container_mounts` block bind-mounts the host-side `$INFMAX_WORKSPACE` (set by the launcher to `$GITHUB_WORKSPACE`) at `/infmax-workspace` inside srt-slurm's benchmark container, so the wrapper and bench client are reachable at known paths. `srtctl` resolves `$INFMAX_WORKSPACE` via `os.path.expandvars` at submission time.
 

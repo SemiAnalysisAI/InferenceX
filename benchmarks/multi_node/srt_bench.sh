@@ -1,69 +1,79 @@
 #!/usr/bin/env bash
-# Drop-in replacement for srt-slurm's bundled `sa-bench` benchmark, wired to
-# this repo's utils/bench_serving/benchmark_serving.py via srt-slurm's
-# `benchmark.type: custom` feature. srt-slurm owns server bring-up; this
-# script runs against the already-ready frontend on the head node, then
-# writes one results JSON per concurrency to a path the launcher's
-# result-harvester recognizes.
+# Multi-node bench-serving wrapper invoked by srt-slurm via
+# `benchmark.type: custom`. srt-slurm owns server bring-up; this script runs
+# inside the same job's benchmark container against the already-ready
+# frontend on the head node, then writes one results JSON per concurrency to
+# /logs/sa-bench_isl_<ISL>_osl_<OSL>/ — the same path the launcher's existing
+# result-harvesters glob.
 #
-# Required env (set via `benchmark.env` in the recipe yaml):
-#   ISL OSL CONCURRENCIES MODEL_NAME
-#   IS_DISAGGREGATED TOTAL_GPUS PREFILL_GPUS DECODE_GPUS
+# This is a thin loop on top of run_benchmark_serving() in benchmark_lib.sh
+# (the same shim every single-node bench script uses), so any future change
+# to bench-serving CLI conventions, profiling, server-health monitoring, etc.
+# applies here automatically.
 #
-# Optional env (defaults shown):
+# Reads from env. Most of these are *already* exported by
+# .github/workflows/benchmark-multinode-tmpl.yml at the workflow step level
+# and propagate down through the launcher → srtctl → srun (default
+# --export=ALL) → pyxis → bench container, so recipes do not need to
+# re-declare them in `benchmark.env`:
+#
+#   $MODEL              served-model-name; matches workflow `inputs.model`
+#   $ISL $OSL           sequence lengths
+#   $CONC_LIST          space-separated concurrency list
+#   $DISAGG             "true" / "false" — disagg vs aggregated
+#   $RANDOM_RANGE_RATIO 0.8 (workflow default)
+#
+# Per-recipe knobs that *do* live in `benchmark.env` (no workflow equivalent):
+#   PREFILL_GPUS        per-prefill-worker GPU count (filename component)
+#   DECODE_GPUS         per-decode-worker GPU count (filename component)
+#   TOTAL_GPUS          sum across all workers (filename component)
+#
+# Optional per-recipe overrides (defaults shown):
+#   MODEL_NAME=$MODEL          override when server's served-model-name differs
+#                              from the master-yaml `model:` field
 #   PORT=8000                  frontend port reachable at localhost
-#   REQ_RATE=inf
-#   RANDOM_RANGE_RATIO=0.8
+#   BACKEND=dynamo
+#   ENDPOINT=/v1/completions
 #   NUM_PROMPTS_MULT=10        prompts per conc = NUM_PROMPTS_MULT * conc
-#   NUM_WARMUP_MULT=2          warmup prompts per conc = NUM_WARMUP_MULT * conc
 #   USE_CHAT_TEMPLATE=true
-#   CUSTOM_TOKENIZER=          (empty: skip --custom-tokenizer)
+#   DSV4=false                 sets the --dsv4 flag (auto-enables chat template)
+#   TRUST_REMOTE_CODE=true
 #   DATASET_NAME=random
-#   DATASET_PATH=              (only used when DATASET_NAME != random)
-#   TOKENIZER_PATH=$MODEL_PATH (or container path; falls back to $MODEL_NAME)
-#   PORT_HEALTH_PATH=/v1/models
+#   DATASET_PATH=              (only meaningful when DATASET_NAME != random)
 #
-# The InferenceX repo is bind-mounted into the container at /infmax-workspace
-# (configured by the recipe's `container_mounts` block). This script lives at
-# /infmax-workspace/benchmarks/multi_node/srt_bench.sh and shells out to
-# /infmax-workspace/utils/bench_serving/benchmark_serving.py.
+# The InferenceX repo is bind-mounted at /infmax-workspace via each recipe's
+# `container_mounts` block. Model files are auto-mounted at /model by srtctl
+# (RuntimeContext.create unconditionally adds the mount when model.path is a
+# local path), so we point --tokenizer at /model to load the tokenizer from
+# the same files the engine is serving — no HF Hub dependency.
 set -euo pipefail
 
 INFMAX_WS="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
+# shellcheck disable=SC1091
+source "$INFMAX_WS/benchmarks/benchmark_lib.sh"
 
-require() {
-    for v in "$@"; do
-        if [[ -z "${!v:-}" ]]; then
-            echo "ERROR: required env var '$v' is unset" >&2
-            exit 64
-        fi
-    done
-}
-require ISL OSL CONCURRENCIES MODEL_NAME IS_DISAGGREGATED TOTAL_GPUS
+check_env_vars MODEL ISL OSL CONC_LIST DISAGG \
+               PREFILL_GPUS DECODE_GPUS TOTAL_GPUS
 
+MODEL_NAME="${MODEL_NAME:-$MODEL}"
 PORT="${PORT:-8000}"
-REQ_RATE="${REQ_RATE:-inf}"
+BACKEND="${BACKEND:-dynamo}"
+ENDPOINT="${ENDPOINT:-/v1/completions}"
 RANDOM_RANGE_RATIO="${RANDOM_RANGE_RATIO:-0.8}"
 NUM_PROMPTS_MULT="${NUM_PROMPTS_MULT:-10}"
-NUM_WARMUP_MULT="${NUM_WARMUP_MULT:-2}"
 USE_CHAT_TEMPLATE="${USE_CHAT_TEMPLATE:-true}"
-CUSTOM_TOKENIZER="${CUSTOM_TOKENIZER:-}"
+DSV4="${DSV4:-false}"
+TRUST_REMOTE_CODE="${TRUST_REMOTE_CODE:-true}"
 DATASET_NAME="${DATASET_NAME:-random}"
 DATASET_PATH="${DATASET_PATH:-}"
-PREFILL_GPUS="${PREFILL_GPUS:-0}"
-DECODE_GPUS="${DECODE_GPUS:-0}"
 
-ENDPOINT="http://localhost:${PORT}"
 RESULT_DIR="/logs/sa-bench_isl_${ISL}_osl_${OSL}"
 mkdir -p "$RESULT_DIR"
 
-BENCH_PY="${INFMAX_WS}/utils/bench_serving/benchmark_serving.py"
-[[ -f "$BENCH_PY" ]] || { echo "ERROR: benchmark_serving.py not found at $BENCH_PY (mount $INFMAX_WS missing?)" >&2; exit 65; }
-
-# Bench-serving deps. The srt-slurm worker container ships most of these but
-# not all (datasets in particular). Reuse system-site-packages so we don't
-# rebuild what's already there.
-ensure_deps() {
+# srt-slurm worker containers don't always ship bench_serving.py's runtime
+# deps (datasets in particular). Install missing ones into a system-site-
+# packages venv so we don't perturb the framework's own packages.
+ensure_bench_serving_deps() {
     local deps=(aiohttp numpy pandas datasets Pillow tqdm transformers huggingface_hub)
     if python3 -c "import aiohttp, numpy, pandas, datasets, PIL, tqdm, transformers, huggingface_hub" 2>/dev/null; then
         return
@@ -74,79 +84,47 @@ ensure_deps() {
     source "$venv/bin/activate"
     pip install --quiet "${deps[@]}"
 }
-ensure_deps
+ensure_bench_serving_deps
 
-# Verify endpoint
-echo "Verifying endpoint at $ENDPOINT ..."
-curl -fsS "${ENDPOINT}/v1/models" >/dev/null || {
-    echo "ERROR: endpoint $ENDPOINT did not respond on /v1/models" >&2
+curl -fsS "http://localhost:${PORT}/v1/models" >/dev/null || {
+    echo "ERROR: frontend at http://localhost:${PORT} did not respond on /v1/models" >&2
     exit 66
 }
-
 ulimit -n 65536 2>/dev/null || true
 
-DATASET_ARGS=(--dataset-name "$DATASET_NAME")
-[[ -n "$DATASET_PATH" ]] && DATASET_ARGS+=(--dataset-path "$DATASET_PATH")
+# CONC_LIST from the workflow is space-separated; bench loops one run per value.
+read -r -a CONC_LIST_ARR <<< "$CONC_LIST"
 
-RANDOM_LEN_ARGS=()
-if [[ "$DATASET_NAME" == "random" ]]; then
-    RANDOM_LEN_ARGS=(
-        --random-input-len "$ISL"
-        --random-output-len "$OSL"
-        --random-range-ratio "$RANDOM_RANGE_RATIO"
-    )
-fi
-
-CHAT_TEMPLATE_ARGS=()
-[[ "$USE_CHAT_TEMPLATE" == "true" ]] && CHAT_TEMPLATE_ARGS+=(--use-chat-template)
-
-CUSTOM_TOKENIZER_ARGS=()
-[[ -n "$CUSTOM_TOKENIZER" ]] && CUSTOM_TOKENIZER_ARGS+=(--custom-tokenizer "$CUSTOM_TOKENIZER")
-
-# `tokenizer` is required by benchmark_serving.py; pass MODEL_NAME by default
-# (HF will fetch). Recipe can override via TOKENIZER_PATH for a local path.
-TOKENIZER_PATH="${TOKENIZER_PATH:-$MODEL_NAME}"
-
-# Concurrency list is "x"-separated for parity with sa-bench.
-IFS='x' read -r -a CONC_LIST <<< "$CONCURRENCIES"
-
-run_bench() {
-    local conc=$1
-    local n_prompts=$2
-    local request_rate=$3
-    shift 3
-    python3 -u "$BENCH_PY" \
-        --model "$MODEL_NAME" --tokenizer "$TOKENIZER_PATH" \
-        --host localhost --port "$PORT" \
-        --backend dynamo --endpoint /v1/completions \
-        --disable-tqdm \
-        "${DATASET_ARGS[@]}" \
-        --num-prompts "$n_prompts" \
-        "${RANDOM_LEN_ARGS[@]}" \
-        --ignore-eos \
-        --request-rate "$request_rate" \
-        --percentile-metrics ttft,tpot,itl,e2el \
-        --max-concurrency "$conc" \
-        --trust-remote-code \
-        "${CHAT_TEMPLATE_ARGS[@]}" \
-        "${CUSTOM_TOKENIZER_ARGS[@]}" \
-        "$@"
-}
-
-for conc in "${CONC_LIST[@]}"; do
-    echo "=== conc=$conc warmup ==="
-    run_bench "$conc" "$((conc * NUM_WARMUP_MULT))" 250 || true
-
-    if [[ "$IS_DISAGGREGATED" == "true" ]]; then
-        result_filename="results_concurrency_${conc}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}.json"
+for conc in "${CONC_LIST_ARR[@]}"; do
+    if [[ "$DISAGG" == "true" ]]; then
+        result_filename="results_concurrency_${conc}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}"
     else
-        result_filename="results_concurrency_${conc}_gpus_${TOTAL_GPUS}.json"
+        result_filename="results_concurrency_${conc}_gpus_${TOTAL_GPUS}"
     fi
+    echo "=== conc=$conc → $RESULT_DIR/${result_filename}.json ==="
 
-    echo "=== conc=$conc bench → $RESULT_DIR/$result_filename ==="
-    run_bench "$conc" "$((conc * NUM_PROMPTS_MULT))" "$REQ_RATE" \
-        --result-dir "$RESULT_DIR" \
+    args=(
+        --model "$MODEL_NAME"
+        --tokenizer /model
+        --port "$PORT"
+        --backend "$BACKEND"
+        --endpoint "$ENDPOINT"
+        --input-len "$ISL"
+        --output-len "$OSL"
+        --random-range-ratio "$RANDOM_RANGE_RATIO"
+        --num-prompts "$((conc * NUM_PROMPTS_MULT))"
+        --max-concurrency "$conc"
+        --dataset-name "$DATASET_NAME"
         --result-filename "$result_filename"
+        --result-dir "$RESULT_DIR"
+        --bench-serving-dir "$INFMAX_WS"
+    )
+    [[ -n "$DATASET_PATH" ]]                && args+=(--dataset-path "$DATASET_PATH")
+    [[ "$USE_CHAT_TEMPLATE" == "true" ]]    && args+=(--use-chat-template)
+    [[ "$DSV4" == "true" ]]                 && args+=(--dsv4)
+    [[ "$TRUST_REMOTE_CODE" == "true" ]]    && args+=(--trust-remote-code)
+
+    run_benchmark_serving "${args[@]}"
 done
 
 echo "Done. Results in $RESULT_DIR."

@@ -206,6 +206,12 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
+    # Optional knobs surfaced for the multi-node srt_bench.sh wrapper so it
+    # can use this same command-build instead of forking its own.
+    local endpoint=""
+    local dataset_name="random"
+    local dataset_path=""
+    local tokenizer=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -268,6 +274,22 @@ run_benchmark_serving() {
                 ;;
             --server-pid)
                 server_pid="$2"
+                shift 2
+                ;;
+            --endpoint)
+                endpoint="$2"
+                shift 2
+                ;;
+            --dataset-name)
+                dataset_name="$2"
+                shift 2
+                ;;
+            --dataset-path)
+                dataset_path="$2"
+                shift 2
+                ;;
+            --tokenizer)
+                tokenizer="$2"
                 shift 2
                 ;;
             *)
@@ -341,7 +363,7 @@ run_benchmark_serving() {
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
-        --dataset-name random
+        --dataset-name "$dataset_name"
         --random-input-len "$input_len"
         --random-output-len "$output_len"
         --random-range-ratio "$random_range_ratio"
@@ -356,7 +378,18 @@ run_benchmark_serving() {
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
     )
-    
+
+    # Optional pass-throughs.
+    if [[ -n "$endpoint" ]]; then
+        benchmark_cmd+=(--endpoint "$endpoint")
+    fi
+    if [[ -n "$dataset_path" ]]; then
+        benchmark_cmd+=(--dataset-path "$dataset_path")
+    fi
+    if [[ -n "$tokenizer" ]]; then
+        benchmark_cmd+=(--tokenizer "$tokenizer")
+    fi
+
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
