@@ -32,8 +32,8 @@
 #   MODEL_NAME=$MODEL          override when server's served-model-name differs
 #                              from the master-yaml `model:` field
 #   PORT=8000                  frontend port reachable at localhost
-#   BACKEND=dynamo
-#   ENDPOINT=/v1/completions
+#   BACKEND=openai             generic OpenAI-API; works against the dynamo frontend
+#   ENDPOINT=                  empty -> bench_serving.py default (/v1/completions)
 #   NUM_PROMPTS_MULT=10        prompts per conc = NUM_PROMPTS_MULT * conc
 #   USE_CHAT_TEMPLATE=true
 #   DSV4=false                 sets the --dsv4 flag (auto-enables chat template)
@@ -55,8 +55,11 @@ check_env_vars MODEL ISL OSL CONC_LIST DISAGG \
 
 MODEL_NAME="${MODEL_NAME:-$MODEL}"
 PORT="${PORT:-8000}"
-BACKEND="${BACKEND:-dynamo}"
-ENDPOINT="${ENDPOINT:-/v1/completions}"
+# `openai` matches every dynamo frontend (frontend exposes a generic OpenAI-
+# compatible API regardless of the underlying engine). Recipes that need
+# /v1/chat/completions can override ENDPOINT.
+BACKEND="${BACKEND:-openai}"
+ENDPOINT="${ENDPOINT:-}"
 RANDOM_RANGE_RATIO="${RANDOM_RANGE_RATIO:-0.8}"
 NUM_PROMPTS_MULT="${NUM_PROMPTS_MULT:-10}"
 USE_CHAT_TEMPLATE="${USE_CHAT_TEMPLATE:-true}"
@@ -104,7 +107,6 @@ for conc in "${CONC_LIST_ARR[@]}"; do
         --tokenizer /model
         --port "$PORT"
         --backend "$BACKEND"
-        --endpoint "$ENDPOINT"
         --input-len "$ISL"
         --output-len "$OSL"
         --random-range-ratio "$RANDOM_RANGE_RATIO"
@@ -114,6 +116,7 @@ for conc in "${CONC_LIST_ARR[@]}"; do
         --result-dir "$RESULT_DIR"
         --bench-serving-dir "$INFMAX_WS"
     )
+    [[ -n "$ENDPOINT" ]]                    && args+=(--endpoint "$ENDPOINT")
     [[ "$USE_CHAT_TEMPLATE" == "true" ]]    && args+=(--use-chat-template)
     [[ "$DSV4" == "true" ]]                 && args+=(--dsv4)
     [[ "$TRUST_REMOTE_CODE" == "true" ]]    && args+=(--trust-remote-code)
