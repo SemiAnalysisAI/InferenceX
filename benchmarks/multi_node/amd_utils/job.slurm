@@ -1,265 +1,265 @@
 #!/bin/bash
-#SBATCH --job-name=1p2d_bench-serving    # Specify a custom string for your slurm batch job
-#SBATCH -N 3            # CHECK this to be right in batch jobs
-#SBATCH -n 3          # CHECK this to be right in batch jobs
+#SBATCH --job-name=disagg-bench
+#SBATCH -N 3            # Overridden by submit.sh -N flag
+#SBATCH -n 3            # Overridden by submit.sh -n flag
 #SBATCH --ntasks-per-node=1
 #SBATCH --spread-job
-#SBATCH --gres=gpu:8      # Request 8 GPUs and 8 NICs (use --gres if specific GPU resources are needed)
-#SBATCH --time=24:00:00         # Set a time limit for the job (HH:MM:SS)
+#SBATCH --gres=gpu:8
+#SBATCH --time=24:00:00
 # --output and --error are set by submit.sh via BENCHMARK_LOGS_DIR
 
+ENGINE="${ENGINE:-sglang-disagg}"
 
-# ------------------------
-# Print current time in UTC and PST formats
-# ------------------------
 echo "=== Job Start Time ==="
 echo "UTC Time: $(TZ=UTC date '+%Y-%m-%d %H:%M:%S %Z')"
 echo "PST Time: $(TZ=America/Los_Angeles date '+%Y-%m-%d %H:%M:%S %Z')"
+echo "ENGINE: $ENGINE"
 echo "======================="
 echo ""
 
 # =============================================================================
-# Model validation from models.yaml (replaces hardcoded VALID_MODELS array)
+# Model Validation
 # =============================================================================
-# DI_REPO_DIR is set below from $(pwd); use the submit-time working directory
-# because sbatch copies this script to /var/spool/slurmd/ at runtime.
-MODELS_YAML="$(pwd)/models.yaml"
+
+# Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
+# at runtime, but the CWD remains the submit-time directory (amd_utils/).
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
+    MODELS_YAML="$(pwd)/models_vllm.yaml"
+else
+    MODELS_YAML="$(pwd)/models.yaml"
+fi
 
 if [[ ! -f "$MODELS_YAML" ]]; then
-    echo "Error: models.yaml not found at $MODELS_YAML"
+    echo "Error: models YAML not found at $MODELS_YAML"
     exit 1
 fi
-
-# Validate MODEL_NAME exists as a top-level key in models.yaml
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in models.yaml"
-    echo "Available models:"
-    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
-    exit 1
-fi
-echo "Model found: $MODEL_NAME"
-
-# All models use server.sh as the entrypoint
-RUN_FILE="server.sh"
-echo "Runfile set: $RUN_FILE"
 
 if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
     echo "Error: DOCKER_IMAGE_NAME is not set."
     exit 1
 fi
 
-# DI_REPO_DIR points to the repo root so Docker can access both benchmarks/ and utils/.
+MODEL_NAME="${MODEL_NAME:-None}"
+if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
+    echo "Error: Model '$MODEL_NAME' not found in $MODELS_YAML"
+    echo "Available models:"
+    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
+    exit 1
+fi
+echo "Model found: $MODEL_NAME"
+
+RUN_FILE="server.sh"
+echo "Runfile set: $RUN_FILE"
+
+# DI_REPO_DIR points to the repo root.
 # $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
 export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
-xP="${xP:-1}" #-> Number of Prefill Workers
-yD="${yD:-1}" #-> Number of Decode Workers
+xP="${xP:-1}"
+yD="${yD:-1}"
 
-# Parallelism Configuration with defaults
-PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
-PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-true}"
-PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-true}"
-DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
-DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-true}"
-DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-true}"
-DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0} # 0 for disabling MTP
-
-# Benchmark Configuration with defaults
+# Benchmark configuration
 BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
 BENCH_OUTPUT_LEN="${BENCH_OUTPUT_LEN:-1024}"
 BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
 BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
 BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
+BENCH_REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
 
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
-MODEL_NAME="${MODEL_NAME:-None}"
+# Engine-specific defaults
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-false}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-false}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-false}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-false}"
+PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
+DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
+DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
+
+# Router selection: "vllm-router" (external container) or "moriio" (in-container proxy)
+ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+ROUTER_PORT="${ROUTER_PORT:-30000}"
+PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+
+# =============================================================================
+# Docker privilege detection
+# =============================================================================
+# Detect on the batch host. Per-node detection happens inside srun below.
+if docker ps &>/dev/null; then
+    DOCKER_CMD="docker"
+else
+    DOCKER_CMD="sudo docker"
+fi
+export DOCKER_CMD
+
+# =============================================================================
+# Model Path Resolution
+# =============================================================================
 
 # MODEL_DIR detection: prefer env var, fall back to hostname detection
 if [[ -z "$MODEL_DIR" ]]; then
     NODENAME=$(hostname -s)
     if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
         MODEL_DIR="/nfsdata"
-        echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $NODENAME"
     elif [[ $NODENAME == mia1* ]]; then
         MODEL_DIR="/it-share/data"
-        echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $NODENAME"
     else
-        MODEL_DIR="/nfsdata"  # Default fallback
-        echo "[INFO] Using default MODEL_DIR=$MODEL_DIR (hostname $NODENAME not recognized)"
+        MODEL_DIR="/nfsdata"
     fi
+    echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $(hostname -s)"
 fi
 export MODEL_DIR
 
-# ------------------------
-# Model path validation and selection across all nodes
-# ------------------------
-echo "Looking for model: $MODEL_NAME"
-echo "Checking model availability across all allocated nodes..."
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
+    # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
+    DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+        found && /^[^ ]/{exit}
+        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+    DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
+    echo "Looking for model: $MODEL_NAME (disk dir: $DISK_DIR_NAME)"
 
-# Get all allocated nodes
-ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
-TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
-
-echo "Total allocated nodes: $TOTAL_NODES"
-echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
-
-# Function to check model path on all nodes
-check_model_path() {
-    local path=$1
-    local check_name=$2
-
-    echo "Checking $check_name: $path"
-
-    # Run check on all nodes in parallel
-    srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
-        if [ -d '$path' ]; then
-            echo \"\$(hostname): ✓ Found $path\"
-            exit 0
-        else
-            echo \"\$(hostname): ✗ Missing $path\"
-            exit 1
+    resolve_hf_cache_path() {
+        local base_path=$1
+        if [[ -d "${base_path}/snapshots" ]]; then
+            local snapshot=$(ls -1 "${base_path}/snapshots" 2>/dev/null | head -1)
+            if [[ -n "$snapshot" ]]; then
+                echo "${base_path}/snapshots/${snapshot}"
+                return 0
+            fi
         fi
-    "
-
-    # Check if all nodes succeeded (exit code 0)
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
-        echo "✓ $check_name available on ALL nodes"
-        return 0
-    else
-        echo "✗ $check_name NOT available on all nodes"
+        echo "$base_path"
         return 1
-    fi
-}
+    }
 
-# Check model weights exist on "$MODEL_DIR/$MODEL_NAME"
-if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
-    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
-    echo ""
-    echo "✓ Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+    MODEL_PATH=""
+    SEARCH_PATHS=(
+        "${MODEL_DIR}/${DISK_DIR_NAME}"
+        "${MODEL_DIR}/${MODEL_NAME}"
+        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
+        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
+    )
+
+    for search_path in "${SEARCH_PATHS[@]}"; do
+        if [[ -d "$search_path" ]]; then
+            RESOLVED=$(resolve_hf_cache_path "$search_path")
+            MODEL_PATH="$RESOLVED"
+            echo "Found MODEL_PATH: $MODEL_PATH"
+            break
+        fi
+    done
+
+    if [[ -z "$MODEL_PATH" ]]; then
+        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
+        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
+        exit 1
+    fi
+    echo "Final MODEL_PATH: $MODEL_PATH"
 else
-    echo ""
-    echo "✗ FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in the following:"
-    echo "  - $MODEL_DIR/$MODEL_NAME"
-    echo ""
-    echo "Model must be accessible from all nodes for distributed execution."
-    echo "Please ensure the model is available on all allocated nodes."
-    exit 1
+    # SGLang: Validate model path across all allocated nodes
+    echo "Looking for model: $MODEL_NAME"
+    echo "Checking model availability across all allocated nodes..."
+
+    ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
+    TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
+    echo "Total allocated nodes: $TOTAL_NODES"
+    echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
+
+    check_model_path() {
+        local path=$1
+        local check_name=$2
+        echo "Checking $check_name: $path"
+        srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
+            if [ -d '$path' ]; then
+                echo \"\$(hostname): Found $path\"
+                exit 0
+            else
+                echo \"\$(hostname): Missing $path\"
+                exit 1
+            fi
+        "
+        local exit_code=$?
+        if [ $exit_code -eq 0 ]; then
+            echo "$check_name available on ALL nodes"
+            return 0
+        else
+            echo "$check_name NOT available on all nodes"
+            return 1
+        fi
+    }
+
+    if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+        MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+    else
+        echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+        echo "  - $MODEL_DIR/$MODEL_NAME"
+        exit 1
+    fi
+    echo "Final MODEL_PATH: $MODEL_PATH"
 fi
 
-echo "Final MODEL_PATH: $MODEL_PATH"
-echo ""
+# =============================================================================
+# Node Selection
+# =============================================================================
 
-NUM_NODES="${NUM_NODES}"
+NUM_NODES=$((xP + yD))
+echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
 
-# ------------------------
-# Extract first NUM_NODES from SLURM allocation and update SLURM variables
-# ------------------------
-echo "Original SLURM allocation:"
-echo "SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
-echo "SLURM_NNODES: $SLURM_NNODES"
-echo "SLURM_NTASKS: $SLURM_NTASKS"
-
-# Get the full nodelist and extract first NUM_NODES
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
 SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
-
-# Create new nodelist in SLURM format
-# This is a simplified approach - for complex ranges, you might need more sophisticated parsing
-NEW_SLURM_NODELIST=$(echo "$SELECTED_NODES" | paste -sd, | sed 's/,/,/g')
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES
 export SLURM_NTASKS=$NUM_NODES
 export SLURM_JOB_NUM_NODES=$NUM_NODES
 export SLURM_NPROCS=$NUM_NODES
-export SLURM_JOB_NODELIST="$NEW_SLURM_NODELIST"
-export SLURM_NODELIST="$NEW_SLURM_NODELIST"
-
-# Keep other SLURM variables as they were or set defaults
+export SLURM_JOB_NODELIST="$SELECTED_NODELIST_STR"
+export SLURM_NODELIST="$SELECTED_NODELIST_STR"
 export SLURM_TASKS_PER_NODE="1(x$NUM_NODES)"
-export SLURM_SUBMIT_DIR="${SLURM_SUBMIT_DIR:-$HOME}"
-export SLURM_CLUSTER_NAME="${SLURM_CLUSTER_NAME}"  # Let SLURM set this automatically
-export SLURM_JOB_CPUS_PER_NODE="${SLURM_JOB_CPUS_PER_NODE}"
-export SLURM_JOB_PARTITION="${SLURM_JOB_PARTITION}"  # Should be set by sbatch/runner
-export SLURM_JOBID="${SLURM_JOBID:-$SLURM_JOB_ID}"
-export SLURM_JOB_QOS="${SLURM_JOB_QOS}"  # Should be set by sbatch/runner if needed
-export SLURM_JOB_ACCOUNT="${SLURM_JOB_ACCOUNT}"  # Should be set by sbatch/runner
 export SLURM_NTASKS_PER_NODE=1
-export SLURM_SUBMIT_HOST="${SLURM_SUBMIT_HOST}"
-export SLURM_JOB_ID="${SLURM_JOB_ID}"
-# SLURM_CONF is auto-set by SLURM, no need to override
-export SLURM_JOB_NAME="${SLURM_JOB_NAME:-1p1d_bench-serving}"
 
 echo ""
-echo "Updated SLURM Environment Variables:"
-echo "SLURM_JOB_ID: $SLURM_JOB_ID"
-echo "SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
-echo "SLURM_NNODES: $SLURM_NNODES"
-echo "SLURM_NTASKS: $SLURM_NTASKS"
-echo "SLURM_TASKS_PER_NODE: $SLURM_TASKS_PER_NODE"
-echo "SLURM_JOB_CPUS_PER_NODE: $SLURM_JOB_CPUS_PER_NODE"
-echo "SLURM_JOB_PARTITION: $SLURM_JOB_PARTITION"
-echo "SLURM_JOB_NUM_NODES: $SLURM_JOB_NUM_NODES"
-echo "SLURM_JOBID: $SLURM_JOBID"
-echo "SLURM_JOB_QOS: $SLURM_JOB_QOS"
-echo "SLURM_NODELIST: $SLURM_NODELIST"
-echo "SLURM_JOB_ACCOUNT: $SLURM_JOB_ACCOUNT"
-echo "SLURM_NPROCS: $SLURM_NPROCS"
-echo "SLURM_SUBMIT_HOST: $SLURM_SUBMIT_HOST"
-echo "SLURM_CONF: $SLURM_CONF"
-echo "SLURM_JOB_NAME: $SLURM_JOB_NAME"
-echo "SLURM_NTASKS_PER_NODE: $SLURM_NTASKS_PER_NODE"
-echo "SLURM_SUBMIT_DIR: $SLURM_SUBMIT_DIR"
-echo "SLURM_CLUSTER_NAME: $SLURM_CLUSTER_NAME"
-echo "ulimit: $(ulimit -a)"
-echo ""
-echo "Selected nodes for execution:"
-echo "$SELECTED_NODES"
-echo ""
+echo "Selected nodes: $SELECTED_NODELIST_STR"
 
-# Node information
+# =============================================================================
+# IP Resolution
+# =============================================================================
+
 USER_NAME=$(whoami)
 MASTER_NODE=$(echo "$SELECTED_NODES" | head -n 1)
 NODE0_ADDR=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$MASTER_NODE" bash -c 'ip route get 1.1.1.1')
 NODE0_ADDR=$(echo "$NODE0_ADDR" | awk '/src/ {print $7}')
 
 IPS=()
-
-GW_NIC=$(ip route | awk '/^default/ {print $5; exit}')
 for NODE in $SELECTED_NODES; do
     IP=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$NODE" bash -c 'ip route get 1.1.1.1')
     IP=$(echo "$IP" | awk '/src/ {print $7}')
     IPS+=("$IP")
 done
 
-echo "Selected node IPs: ${IPS[*]}" | sed 's/ /,/g'
+echo "Node IPs: ${IPS[*]}"
 
 DOCKER_MOUNT_PATH="/workspace"
-SGLANG_WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/amd_utils"
-timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/amd_utils"
 
 NNODES=$NUM_NODES
 
-echo "MASTER_NODE is ${MASTER_NODE}"
-echo "NODE0_ADDR is ${NODE0_ADDR}"
-echo "NNODES is ${NNODES}"
-echo "REPO Directory is ${DI_REPO_DIR}"
-echo "USER_NAME is ${USER_NAME}"
-
-# Get the RDMA priority and DSCP value from the NIC
-if ! command -v nicctl >/dev/null 2>&1; then
-    echo "Error: nicctl command not found. Please ensure nicctl is installed and available." >&2
-    exit 1
-fi
+echo "MASTER_NODE: ${MASTER_NODE}"
+echo "NODE0_ADDR:  ${NODE0_ADDR}"
+echo "NNODES:      ${NNODES}"
+echo "REPO DIR:    ${DI_REPO_DIR}"
+echo "USER:        ${USER_NAME}"
 
 # Reduce log spam
 export TQDM_MININTERVAL=20
 
+# Translate the host-resolved MODEL_PATH to the Docker mount namespace
+DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
+
 export DI_REPO_DIR=$DI_REPO_DIR
-export SGLANG_WS_PATH=$SGLANG_WS_PATH
+export WS_PATH=$WS_PATH
 export NNODES=$NNODES
 export NODE0_ADDR=$NODE0_ADDR
 export MODEL_PATH=$MODEL_PATH
@@ -269,54 +269,128 @@ export yD=$yD
 export MODEL_NAME=$MODEL_NAME
 export USER_NAME=$USER_NAME
 export IPADDRS="$(echo "${IPS[*]}" | sed 's/ /,/g')"
-export PREFILL_TP_SIZE=$PREFILL_TP_SIZE
-export PREFILL_ENABLE_EP=$PREFILL_ENABLE_EP
-export PREFILL_ENABLE_DP=$PREFILL_ENABLE_DP
-export DECODE_TP_SIZE=$DECODE_TP_SIZE
-export DECODE_ENABLE_EP=$DECODE_ENABLE_EP
-export DECODE_ENABLE_DP=$DECODE_ENABLE_DP
-export DECODE_MTP_SIZE=$DECODE_MTP_SIZE
 export GPUS_PER_NODE=$GPUS_PER_NODE
 export BENCH_INPUT_LEN=$BENCH_INPUT_LEN
 export BENCH_OUTPUT_LEN=$BENCH_OUTPUT_LEN
 export BENCH_RANDOM_RANGE_RATIO=$BENCH_RANDOM_RANGE_RATIO
 export BENCH_NUM_PROMPTS_MULTIPLIER=$BENCH_NUM_PROMPTS_MULTIPLIER
 export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
+export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
+export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
+export ENGINE=$ENGINE
+
+# Eval-related env vars (threaded from submit.sh)
+export RUN_EVAL="${RUN_EVAL:-false}"
+export EVAL_ONLY="${EVAL_ONLY:-false}"
+export EVAL_CONC="${EVAL_CONC:-}"
+export FRAMEWORK="${FRAMEWORK:-}"
+export PRECISION="${PRECISION:-}"
+export MODEL_PREFIX="${MODEL_PREFIX:-}"
+export RUNNER_TYPE="${RUNNER_TYPE:-}"
+export RESULT_FILENAME="${RESULT_FILENAME:-}"
+export SPEC_DECODING="${SPEC_DECODING:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_sbatch_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
-export RUN_FILE_FULL="$SGLANG_WS_PATH/${RUN_FILE}"
+export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
+# vLLM external router container
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-ghcr.io/simondanielsson/vllm-router:dev-streaming-cn-cjy}"
+ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
+export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
-# Use only the selected nodes for srun execution
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
-
 cleanup() {
-  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning stale logs folder..."
-  # clean up the logs folder
-  sudo rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
-
+  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up..."
+  rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
 trap cleanup INT TERM HUP
 
-
-# Force NFS cache refresh on all nodes before running Docker to avoid stale file handle errors
+# Force NFS cache refresh on all nodes
 echo "Refreshing NFS caches on all nodes..."
 srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     sync
-    # Force re-stat of the mounted directory to refresh NFS handles
     ls -la '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils > /dev/null 2>&1
     stat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
     cat '"$DI_REPO_DIR"'/benchmarks/multi_node/amd_utils/server.sh > /dev/null 2>&1
-    # Drop caches if we have permission (optional, requires root)
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
 '
+
+# =============================================================================
+# Build engine-specific Docker environment variables
+# =============================================================================
+
+# Common env vars (always passed)
+DOCKER_ENV_COMMON=(
+    -e SLURM_JOB_ID=\$SLURM_JOB_ID
+    -e SLURM_JOB_NODELIST=\$SLURM_JOB_NODELIST
+    -e NNODES=\$NNODES
+    -e NODE_RANK=\$SLURM_PROCID
+    -e NODE0_ADDR=\$NODE0_ADDR
+    -e MODEL_DIR=/models
+    -e MODEL_NAME=\$MODEL_NAME
+    -e GPUS_PER_NODE=\$GPUS_PER_NODE
+    -e xP=\$xP
+    -e yD=\$yD
+    -e IPADDRS=\$IPADDRS
+    -e BENCH_INPUT_LEN=\$BENCH_INPUT_LEN
+    -e BENCH_OUTPUT_LEN=\$BENCH_OUTPUT_LEN
+    -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
+    -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
+    -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
+    -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
+    -e DRY_RUN=\$DRY_RUN
+    -e BENCHMARK_LOGS_DIR=/benchmark_logs
+    -e ENGINE=\$ENGINE
+    -e WS_PATH=${WS_PATH}
+    -e RUN_EVAL=\$RUN_EVAL
+    -e EVAL_ONLY=\$EVAL_ONLY
+    -e EVAL_CONC=\$EVAL_CONC
+    -e FRAMEWORK=\$FRAMEWORK
+    -e PRECISION=\$PRECISION
+    -e MODEL_PREFIX=\$MODEL_PREFIX
+    -e RUNNER_TYPE=\$RUNNER_TYPE
+    -e RESULT_FILENAME=\$RESULT_FILENAME
+    -e SPEC_DECODING=\$SPEC_DECODING
+    -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
+    -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
+    -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
+    -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
+    -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
+    -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
+)
+
+# Engine-specific env vars
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
+    DOCKER_ENV_ENGINE=(
+        -e VLLM_WS_PATH=${WS_PATH}
+        -e MODEL_PATH=$DOCKER_MODEL_PATH
+        -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
+        -e UCX_SOCKADDR_TLS_PRIORITY=tcp
+        -e UCX_MEMTYPE_CACHE=y
+        -e UCX_RNDV_SCHEME=get_zcopy
+        -e UCX_RNDV_THRESH=4k
+        -e UCX_ROCM_IPC_MIN_ZCOPY=0
+        -e UCX_LOG_LEVEL=warn
+        -e HSA_ENABLE_SDMA=1
+        -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
+        -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
+        -e PYTHONPYCACHEPREFIX=/tmp/pycache
+    )
+else
+    DOCKER_ENV_ENGINE=(
+        -e SGLANG_WS_PATH=${WS_PATH}
+    )
+fi
+
+# Engine-specific container filter for pre-clean
+CONT_FILTER="name=^container_${ENGINE}_"
 
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
@@ -329,10 +403,29 @@ set -euo pipefail
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
 # Pre-clean (idempotent)
-sudo docker ps -aq --filter \"name=^container_sbatch_\" | xargs -r sudo docker rm -f || true
-sudo docker ps -aq | xargs -r sudo docker stop || true
+\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
 
-exec sudo docker run --rm \
+# Start vLLM external router container on node 0
+if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+    \$DOCKER_CMD run -d \
+        --name \"$ROUTER_CONT_NAME\" \
+        --network host \
+        -v /tmp:/run_logs \
+        \"$VLLM_ROUTER_IMAGE\" \
+        bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
+            --vllm-pd-disaggregation \
+            --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
+            --port ${ROUTER_PORT} \
+            --host 0.0.0.0 \
+            --policy consistent_hash \
+            --prefill-policy consistent_hash \
+            --decode-policy consistent_hash \
+            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
+fi
+
+exec \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -355,41 +448,18 @@ exec sudo docker run --rm \
     --cap-add SYS_PTRACE \
     --security-opt seccomp=unconfined \
     --privileged \
+    -v /sys:/sys \
+    $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    -v $(which nicctl):/usr/sbin/nicctl \
     --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
-    -e SLURM_JOB_ID=\$SLURM_JOB_ID \
-    -e SLURM_JOB_NODELIST=\$SLURM_JOB_NODELIST \
-    -e NNODES=\$NNODES \
-    -e NODE_RANK=\$SLURM_PROCID \
-    -e NODE0_ADDR=\$NODE0_ADDR \
-    -e MODEL_DIR=/models \
-    -e SGLANG_WS_PATH=${SGLANG_WS_PATH} \
-    -e GPUS_PER_NODE=\$GPUS_PER_NODE \
-    -e xP=\$xP \
-    -e yD=\$yD \
-    -e MODEL_NAME=\$MODEL_NAME \
-    -e IPADDRS=\$IPADDRS \
-    -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE \
-    -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP \
-    -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP \
-    -e DECODE_TP_SIZE=\$DECODE_TP_SIZE \
-    -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP \
-    -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP \
-    -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE \
-    -e BENCH_INPUT_LEN=\$BENCH_INPUT_LEN \
-    -e BENCH_OUTPUT_LEN=\$BENCH_OUTPUT_LEN \
-    -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO \
-    -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER \
-    -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY \
-    -e TQDM_MININTERVAL=\$TQDM_MININTERVAL \
-    -e DRY_RUN=\$DRY_RUN \
-    -e BENCHMARK_LOGS_DIR=/benchmark_logs \
+    ${DOCKER_ENV_COMMON[*]} \
+    ${DOCKER_ENV_ENGINE[*]} \
     --name \"$DOCKER_CONT_NAME\" \
+    --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
@@ -402,4 +472,13 @@ if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
 fi
 "
 
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'sudo docker rm -f $DOCKER_CONT_NAME 2>/dev/null || true'
+if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '$DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+
+    # Clean up vLLM external router container on node 0
+    if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
+        srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
+            '"$DOCKER_CMD"' rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
+        '
+    fi
+fi

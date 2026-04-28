@@ -19,7 +19,8 @@ check_env_vars \
     DECODE_DP_ATTN \
     PREFILL_NODES \
     DECODE_NODES \
-    RANDOM_RANGE_RATIO
+    RANDOM_RANGE_RATIO \
+    FRAMEWORK
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -27,7 +28,7 @@ fi
 
 set -x
 
-cd "$GITHUB_WORKSPACE/benchmarks/multi_node/vllm_disagg_utils" || exit 1
+cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH

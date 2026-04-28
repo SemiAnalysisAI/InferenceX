@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comment recipe reminder
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const owner = context.repo.owner;
@@ -40,6 +40,12 @@ jobs:
 
             If it is not, please create a PR first before we can merge your PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
             - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sgl-cookbook`.replace(/^            /gm, '');
+            - https://github.com/sgl-project/sgl-cookbook
+
+            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. If re-running failed jobs is attempted, PR authors are responsible for ensuring it passes. See GitHub's docs on re-running failed jobs: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
+
+            As a rule of thumb, generally, PR authors should request a review & get a PR approval from the respective companies' [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) before requesting a review from core maintainers.
+
+            If additional help is needed, PR authors can reach out to core maintainers over Slack.`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });

@@ -133,21 +133,12 @@ jobs:
 
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            if [[ "${{ runner.name }}" == mi355x-amds* || "${{ runner.name }}" == gb200-nv* || "${{ runner.name }}" == gb300-nv* || "${{ runner.name }}" == h100-dgxc-slurm* || "${{ runner.name }}" == h200-dgxc-slurm* || "${{ runner.name }}" == b200-dgxc-slurm* ]]; then
-              echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-              scancel --name="${{ runner.name }}" || true
-              while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-                squeue --name="${{ runner.name }}"
-                sleep 5
-              done
-            else
-              echo "[Slurm] Cleaning up jobs for user: $USER ..."
-              scancel -u "$USER" || true
-              while [ -n "$(squeue -u "$USER" --noheader --format='%i')" ]; do
-                squeue -u "$USER"
-                sleep 5
-              done
-            fi
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
           fi
 
       - name: Checkout code
@@ -212,7 +203,7 @@ jobs:
 
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}
           path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
@@ -220,7 +211,7 @@ jobs:
 
       - name: Upload TP-0-DECODE trace as artifact
         if: ${{ steps.run.outputs.tp0_decode != '' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
           path: ${{ steps.run.outputs.tp0_decode }}
@@ -228,7 +219,7 @@ jobs:
 
       - name: Upload TP-0-EXTEND trace as artifact
         if: ${{ steps.run.outputs.tp0_extend != '' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
           path: ${{ steps.run.outputs.tp0_extend }}
@@ -236,7 +227,7 @@ jobs:
 
       - name: Upload MoE debug log as artifact
         if: ${{ env.MOE_DEBUG == '1' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
           path: "moe_debug.tp0.log"

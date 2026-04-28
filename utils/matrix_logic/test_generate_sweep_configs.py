@@ -2,11 +2,13 @@
 import pytest
 import argparse
 from generate_sweep_configs import (
+    MIN_EVAL_CONC,
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    mark_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
 )
@@ -178,6 +180,209 @@ class TestSeqLenToStr:
         """Unknown sequence lengths should return isl_osl format."""
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
+
+
+# =============================================================================
+# Test mark_eval_entries
+# =============================================================================
+
+class TestMarkEvalEntries:
+    """Tests for eval matrix selection policy."""
+
+    def test_single_node_skips_eval_entries_below_min_conc(self):
+        """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 8,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": MIN_EVAL_CONC,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 32,
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200",
+                "framework": "sglang",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "dp-attn": False,
+                "tp": 8,
+                "conc": 64,
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert result[1]["run-eval"] is False
+        assert result[2]["run-eval"] is True
+        assert result[3]["run-eval"] is True
+
+    def test_multi_node_skips_groups_with_only_conc_below_min_conc(self):
+        """Multinode eval selection should skip groups whose conc lists are all below MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [1],
+            }
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert "eval-conc" not in result[0]
+
+    def test_multi_node_eval_conc_uses_only_conc_values_at_or_above_min_conc(self):
+        """Multinode eval-conc should be chosen from conc values >= MIN_EVAL_CONC."""
+        matrix_values = [
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": True,
+                },
+                "decode": {
+                    "num-worker": 4,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [8, 16, 32],
+            },
+            {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "b200-multinode",
+                "framework": "dynamo-trt",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": True,
+                },
+                "decode": {
+                    "num-worker": 4,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [8],
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is True
+        assert result[0]["eval-conc"] == 32
+        assert result[1]["run-eval"] is False
+
+    def test_marks_highest_and_median_conc(self):
+        """Should mark highest and median concurrency for 8k1k entries."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 32,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 128,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        # conc values: [32, 128, 512]. median=128 (index 1), highest=512
+        assert result[0]['run-eval'] is False   # conc=32
+        assert result[1]['run-eval'] is True    # conc=128 (median)
+        assert result[2]['run-eval'] is True    # conc=512 (highest)
+
+    def test_non_8k1k_never_marked(self):
+        """Entries with non-8k1k seq lengths should never be eval-marked."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        assert result[0]['run-eval'] is False
+
+    def test_never_marks_all_entries(self):
+        """mark_eval_entries should never mark every single-node entry,
+        ensuring the e2e splitting logic can distinguish default from evals-only."""
+        entries = [
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': c,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False}
+            for c in [32, 64, 128, 256, 512]
+        ] + [
+            # Non-8k1k entry that should never be marked
+            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 64,
+             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
+        ]
+        result = mark_eval_entries(entries)
+        non_prefill = [x for x in result if 'prefill' not in x]
+        assert not all(x['run-eval'] for x in non_prefill), \
+            "mark_eval_entries must not mark all entries — would break e2e splitting"
 
 
 # =============================================================================
@@ -438,14 +643,14 @@ class TestGenerateFullSweepSingleNode:
         assert all(entry["exp-name"] == "dsr1_1k1k" for entry in result)
 
     def test_max_model_len_calculation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max-model-len should be isl + osl + 200."""
+        """max-model-len should be isl + osl + 256."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
         )
         for entry in result:
-            expected_max_model_len = entry["isl"] + entry["osl"] + 200
+            expected_max_model_len = entry["isl"] + entry["osl"] + 256
             assert entry["max-model-len"] == expected_max_model_len
 
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
@@ -1582,3 +1787,102 @@ class TestExpandConfigKeys:
             "dsr1-fp8-h200-trt",
             "gptoss-fp8-b200-sglang",
         ]
+
+
+# =============================================================================
+# Tests for e2e-tests.yml workflow config splitting
+# =============================================================================
+
+def _split_e2e_configs(data):
+    """Replicate the splitting logic from e2e-tests.yml get-jobs step.
+
+    Returns (SINGLE, MULTI, EVALS) lists matching the workflow filters.
+    """
+    single = [x for x in data if 'prefill' not in x and not x.get('eval-only', False)]
+    multi = [x for x in data if 'prefill' in x and not x.get('eval-only', False)]
+    evals = [x for x in data if 'prefill' not in x and x.get('run-eval', False)]
+    return single, multi, evals
+
+
+class TestE2EConfigSplitting:
+    """Verify the e2e-tests.yml config splitting logic handles all flag
+    combinations correctly: default, --no-evals, and --evals-only."""
+
+    @pytest.fixture
+    def mixed_entries(self):
+        """Simulates default mode output: single-node (some eval-marked),
+        plus multi-node entries."""
+        return [
+            {'exp-name': 'a', 'isl': 1024, 'osl': 1024, 'conc': 64, 'tp': 2, 'run-eval': False},
+            {'exp-name': 'b', 'isl': 1024, 'osl': 1024, 'conc': 128, 'tp': 2, 'run-eval': False},
+            {'exp-name': 'c', 'isl': 8192, 'osl': 1024, 'conc': 256, 'tp': 2, 'run-eval': True},
+            {'exp-name': 'd', 'isl': 8192, 'osl': 1024, 'conc': 512, 'tp': 2, 'run-eval': True},
+            {'exp-name': 'e', 'conc': 64, 'prefill': {'tp': 2, 'num-worker': 1}},
+        ]
+
+    def test_default_mode_benchmarks_all_single_node(self, mixed_entries):
+        """Default: all single-node entries (including eval-marked) are benchmarked."""
+        single, multi, evals = _split_e2e_configs(mixed_entries)
+        assert len(single) == 4
+        assert all('prefill' not in x for x in single)
+
+    def test_default_mode_evals_only_eval_marked(self, mixed_entries):
+        """Default: only eval-marked entries go to EVALS."""
+        single, multi, evals = _split_e2e_configs(mixed_entries)
+        assert len(evals) == 2
+        assert all(x['run-eval'] for x in evals)
+
+    def test_default_mode_eval_marked_in_both(self, mixed_entries):
+        """Default: eval-marked entries appear in BOTH single and evals."""
+        single, multi, evals = _split_e2e_configs(mixed_entries)
+        eval_names = {x['exp-name'] for x in evals}
+        single_names = {x['exp-name'] for x in single}
+        assert eval_names.issubset(single_names)
+
+    def test_no_evals_all_benchmarked(self):
+        """--no-evals: mark_eval_entries is skipped, no run-eval=True entries."""
+        data = [
+            {'exp-name': 'a', 'conc': 64, 'tp': 2, 'run-eval': False},
+            {'exp-name': 'b', 'conc': 128, 'tp': 2, 'run-eval': False},
+            {'exp-name': 'c', 'conc': 256, 'tp': 2, 'run-eval': False},
+        ]
+        single, multi, evals = _split_e2e_configs(data)
+        assert len(single) == 3
+        assert len(evals) == 0
+
+    def test_evals_only_no_benchmarks(self):
+        """--evals-only: entries have eval-only flag, SINGLE must be empty."""
+        data = [
+            {'exp-name': 'c', 'conc': 256, 'tp': 2, 'run-eval': True, 'eval-only': True},
+            {'exp-name': 'd', 'conc': 512, 'tp': 2, 'run-eval': True, 'eval-only': True},
+        ]
+        single, multi, evals = _split_e2e_configs(data)
+        assert len(single) == 0, "evals-only should not trigger benchmarks"
+        assert len(evals) == 2
+
+    def test_empty_config(self):
+        """Empty input produces empty outputs."""
+        single, multi, evals = _split_e2e_configs([])
+        assert single == [] and multi == [] and evals == []
+
+    def test_all_eval_marked_without_eval_only_flag_still_benchmarked(self):
+        """Default mode where mark_eval_entries marks every entry (e.g. only
+        8k1k with single conc). Without eval-only flag, SINGLE must still
+        include them for benchmarking."""
+        data = [
+            {'exp-name': 'a', 'conc': 64, 'tp': 2, 'run-eval': True},
+            {'exp-name': 'b', 'conc': 64, 'tp': 4, 'run-eval': True},
+        ]
+        single, multi, evals = _split_e2e_configs(data)
+        assert len(single) == 2, "all-eval-marked entries must still be benchmarked in default mode"
+        assert len(evals) == 2
+
+    def test_prefill_entries_never_in_single_or_evals(self, mixed_entries):
+        """Prefill (multi-node) entries only appear in MULTI."""
+        single, multi, evals = _split_e2e_configs(mixed_entries)
+        assert len(multi) == 1
+        assert all('prefill' in x for x in multi)
+        assert all('prefill' not in x for x in single)
+        assert all('prefill' not in x for x in evals)
+
+
