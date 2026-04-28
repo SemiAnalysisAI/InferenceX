@@ -2,6 +2,8 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 export SLURM_PARTITION="batch"
@@ -36,30 +38,9 @@ export EVAL_ONLY="${EVAL_ONLY:-false}"
 export ISL="$ISL"
 export OSL="$OSL"
 
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
-
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR"
-git checkout sa-submission-q2-2026
-
-echo "Installing srtctl..."
-export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$UV_INSTALL_DIR:$PATH"
-
-uv venv "$GITHUB_WORKSPACE/.venv"
-source "$GITHUB_WORKSPACE/.venv/bin/activate"
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
+UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin" \
+UV_VENV_DIR="$GITHUB_WORKSPACE/.venv" \
+    clone_and_install_srtctl || exit 1
 
 echo "Configs available at: $SRT_REPO_DIR/"
 

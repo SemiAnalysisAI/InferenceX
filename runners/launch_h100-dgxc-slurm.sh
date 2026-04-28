@@ -5,6 +5,8 @@ SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
 SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -34,36 +36,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
-    SRT_REPO_DIR="srt-slurm"
-    if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
-        rm -rf "$SRT_REPO_DIR"
-    fi
-
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-
-    echo "Installing srtctl..."
-    export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
+    # Pin uv state onto the NFS-shared volume so cluster nodes share a single
+    # cached install, and so the binary persists across runner workspaces.
     export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
     export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
-    mkdir -p "$UV_INSTALL_DIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
-    if ! [ -x "$UV_INSTALL_DIR/uv" ]; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-    fi
-    export PATH="$UV_INSTALL_DIR:$PATH"
-    source $UV_INSTALL_DIR/env
-
-    uv venv
-    source .venv/bin/activate
-    uv pip install -e .
-
-    if ! command -v srtctl &> /dev/null; then
-        echo "Error: Failed to install srtctl"
-        exit 1
-    fi
+    mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
+    UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin" \
+        clone_and_install_srtctl || exit 1
 
     echo "Configs available at: $SRT_REPO_DIR/"
 

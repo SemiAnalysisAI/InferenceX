@@ -862,3 +862,52 @@ run_eval() {
     fi
     return $eval_rc
 }
+
+# --------------------------------
+# srt-slurm helpers
+# --------------------------------
+
+# Clone srt-slurm and install `srtctl` into a uv venv. After this returns
+# successfully, cwd is the cloned repo and the venv is active. Idempotent on
+# uv: skips re-curl if the binary is already present at $UV_INSTALL_DIR.
+#
+# All inputs are env vars (set before calling); all are optional:
+#   SRT_REPO_URL    default https://github.com/NVIDIA/srt-slurm.git
+#   SRT_BRANCH      default sa-submission-q2-2026
+#   SRT_REPO_DIR    default srt-slurm (relative to current cwd)
+#   UV_INSTALL_DIR  default $HOME/.local/bin (uv's own default)
+#   UV_VENV_DIR     default .venv (inside the cloned repo)
+clone_and_install_srtctl() {
+    local repo_url="${SRT_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}"
+    local branch="${SRT_BRANCH:-sa-submission-q2-2026}"
+    local repo_dir="${SRT_REPO_DIR:-srt-slurm}"
+    local uv_install_dir="${UV_INSTALL_DIR:-${HOME}/.local/bin}"
+    local uv_venv_dir="${UV_VENV_DIR:-.venv}"
+
+    echo "Cloning ${repo_url}@${branch} into ${repo_dir}..."
+    rm -rf "$repo_dir"
+    git clone "$repo_url" "$repo_dir"
+    cd "$repo_dir" || return 1
+    git checkout "$branch"
+
+    echo "Installing uv + srtctl into venv at ${uv_venv_dir}..."
+    export UV_INSTALL_DIR="$uv_install_dir"
+    mkdir -p "$uv_install_dir"
+    if ! [ -x "$uv_install_dir/uv" ]; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    export PATH="$uv_install_dir:$PATH"
+    # uv's installer drops an `env` script next to the binary; source it so
+    # PATH/PS1 changes pick up in shells that don't re-read the env.
+    [ -f "$uv_install_dir/env" ] && source "$uv_install_dir/env"
+
+    uv venv "$uv_venv_dir"
+    # shellcheck disable=SC1091
+    source "$uv_venv_dir/bin/activate"
+    uv pip install -e .
+
+    if ! command -v srtctl &> /dev/null; then
+        echo "Error: Failed to install srtctl" >&2
+        return 1
+    fi
+}

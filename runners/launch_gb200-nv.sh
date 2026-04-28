@@ -2,6 +2,8 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
@@ -134,38 +136,18 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
-
 # We only clone srt-slurm to install srtctl + pick up its sibling configs
 # (configs/, expert-distributions/, etc). The recipe itself is supplied as an
 # absolute CONFIG_FILE pointing at benchmarks/multi_node/srt-slurm-recipes/.
 if [[ $FRAMEWORK == "dynamo-vllm" || ( $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ) ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    SRT_REPO_URL=https://github.com/NVIDIA/srt-slurm.git
+    SRT_BRANCH=sa-submission-q2-2026
 else
-    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q1-2026
+    SRT_REPO_URL=https://github.com/ishandhanani/srt-slurm.git
+    SRT_BRANCH=sa-submission-q1-2026
 fi
-
-echo "Installing srtctl..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
-uv venv
-source .venv/bin/activate
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
+SRT_REPO_URL="$SRT_REPO_URL" SRT_BRANCH="$SRT_BRANCH" \
+    clone_and_install_srtctl || exit 1
 
 echo "Configs available at: $SRT_REPO_DIR/"
 

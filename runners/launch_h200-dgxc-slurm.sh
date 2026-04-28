@@ -4,6 +4,8 @@
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -33,29 +35,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
-    SRT_REPO_DIR="srt-slurm"
-    if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
-        rm -rf "$SRT_REPO_DIR"
-    fi
-
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-
-    echo "Installing srtctl..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
-
-    uv venv
-    source .venv/bin/activate
-    uv pip install -e .
-
-    if ! command -v srtctl &> /dev/null; then
-        echo "Error: Failed to install srtctl"
-        exit 1
-    fi
+    clone_and_install_srtctl || exit 1
 
     echo "Configs available at: $SRT_REPO_DIR/"
 
