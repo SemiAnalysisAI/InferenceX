@@ -1508,11 +1508,11 @@ dsv4-fp8-mi355x-vllm:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 1, conc-end: 32 }
+    - { tp: 8, conc-start: 1, conc-end: 1 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 1, conc-end: 32 }
+    - { tp: 8, conc-start: 1, conc-end: 1 }
 
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series — single-sequence only (kv_cache[:1,...]
