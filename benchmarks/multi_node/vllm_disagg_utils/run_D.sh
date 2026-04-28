@@ -2,7 +2,7 @@
 
 export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 
-export MODEL_NAME="DeepSeek-R1-0528"   # key from models.yaml
+export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
 export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
 # export NODE0_ADDR="10.21.9.8"          # prefill (rank-0) node's IP
@@ -22,10 +22,10 @@ export BENCH_MAX_CONCURRENCY="32x64x128x256x512"
 
 # Repo root (3 levels up from this script's directory)
 export DI_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# Mount point inside the container (must match VLLM_WS_PATH computation below)
+# Mount point inside the container (must match WS_PATH computation below)
 export DOCKER_MOUNT_PATH="/workspace"
 # Container-side path to the scripts directory
-export VLLM_WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/vllm_disagg_utils"
+export WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/amd_utils"
 # Remap host MODEL_PATH into the container's /models mount
 export DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
 
@@ -73,13 +73,14 @@ docker run --rm \
     -e MODEL_DIR=/models \
     -e MODEL_NAME=$MODEL_NAME \
     -e MODEL_PATH=$DOCKER_MODEL_PATH \
-    -e VLLM_WS_PATH=${VLLM_WS_PATH} \
+    -e WS_PATH=${WS_PATH} \
     -e GPUS_PER_NODE=$GPUS_PER_NODE \
     -e NODE_RANK=$NODE_RANK \
     -e xP=$xP \
     -e yD=$yD \
     -e IBDEVICES=$IBDEVICES \
     -e DRY_RUN=$DRY_RUN \
+    -e ENGINE=vllm-disagg \
     -e HF_HUB_CACHE=/models \
     -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma \
     -e UCX_SOCKADDR_TLS_PRIORITY=tcp \
@@ -96,8 +97,8 @@ docker run --rm \
     -e PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP:-false} \
     -e DECODE_ENABLE_EP=${DECODE_ENABLE_EP:-false} \
     -e DECODE_ENABLE_DP=${DECODE_ENABLE_DP:-false} \
-    -e PREFILL_TP=${PREFILL_TP:-8} \
-    -e DECODE_TP=${DECODE_TP:-8} \
+    -e PREFILL_TP_SIZE=${PREFILL_TP_SIZE:-8} \
+    -e DECODE_TP_SIZE=${DECODE_TP_SIZE:-8} \
     --entrypoint /bin/bash \
     vllm-router-rocm:0.1.0 \
-    -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${VLLM_WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"
+    -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"

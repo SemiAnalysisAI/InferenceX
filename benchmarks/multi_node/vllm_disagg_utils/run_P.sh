@@ -1,7 +1,7 @@
 #!/bin/bash
 export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 
-export MODEL_NAME="DeepSeek-R1-0528"   # key from models.yaml
+export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
 # export MODEL_DIR="/root/.cache/huggingface/hub/"
 # export MODEL_PATH="/root/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
@@ -23,15 +23,38 @@ export BENCH_MAX_CONCURRENCY="32x64x128x256x512"
 
 # Repo root (3 levels up from this script's directory)
 export DI_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# Mount point inside the container (must match VLLM_WS_PATH computation below)
+# Mount point inside the container (must match WS_PATH computation below)
 export DOCKER_MOUNT_PATH="/workspace"
 # Container-side path to the scripts directory
-export VLLM_WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/vllm_disagg_utils"
+export WS_PATH="${DOCKER_MOUNT_PATH}/benchmarks/multi_node/amd_utils"
 # Remap host MODEL_PATH into the container's /models mount
 export DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
 
 export SLURM_JOB_ID=1
 mkdir -p "/tmp/slurm_job-${SLURM_JOB_ID}"
+
+ROUTER_PORT="${ROUTER_PORT:-30000}"
+PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-ghcr.io/simondanielsson/vllm-router:dev-streaming-cn-cjy}"
+ROUTER_CONT_NAME="router_vllm_local_${SLURM_JOB_ID}"
+
+# Launch vllm-router as a separate container (mirrors job.slurm behavior)
+docker rm -f "$ROUTER_CONT_NAME" 2>/dev/null || true
+docker run -d \
+    --name "$ROUTER_CONT_NAME" \
+    --network host \
+    -v /tmp:/run_logs \
+    "$VLLM_ROUTER_IMAGE" \
+    bash -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
+        --vllm-pd-disaggregation \
+        --kv-connector moriio \
+        --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
+        --port ${ROUTER_PORT} \
+        --host 0.0.0.0 \
+        --policy consistent_hash \
+        --prefill-policy consistent_hash \
+        --decode-policy consistent_hash \
+        --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log"
 
 CONTAINER_NAME="vllm-disagg-prefill"
 docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
@@ -74,13 +97,14 @@ docker run --rm \
     -e MODEL_DIR=/models \
     -e MODEL_NAME=$MODEL_NAME \
     -e MODEL_PATH=$DOCKER_MODEL_PATH \
-    -e VLLM_WS_PATH=${VLLM_WS_PATH} \
+    -e WS_PATH=${WS_PATH} \
     -e GPUS_PER_NODE=$GPUS_PER_NODE \
     -e NODE_RANK=$NODE_RANK \
     -e xP=$xP \
     -e yD=$yD \
     -e IBDEVICES=$IBDEVICES \
     -e DRY_RUN=$DRY_RUN \
+    -e ENGINE=vllm-disagg \
     -e HF_HUB_CACHE=/models \
     -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma \
     -e UCX_SOCKADDR_TLS_PRIORITY=tcp \
@@ -97,8 +121,8 @@ docker run --rm \
     -e PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP:-false} \
     -e DECODE_ENABLE_EP=${DECODE_ENABLE_EP:-false} \
     -e DECODE_ENABLE_DP=${DECODE_ENABLE_DP:-false} \
-    -e PREFILL_TP=${PREFILL_TP:-8} \
-    -e DECODE_TP=${DECODE_TP:-8} \
+    -e PREFILL_TP_SIZE=${PREFILL_TP_SIZE:-8} \
+    -e DECODE_TP_SIZE=${DECODE_TP_SIZE:-8} \
     -e BENCH_INPUT_LEN=${BENCH_INPUT_LEN:-1024} \
     -e BENCH_OUTPUT_LEN=${BENCH_OUTPUT_LEN:-1024} \
     -e BENCH_RANDOM_RANGE_RATIO=${BENCH_RANDOM_RANGE_RATIO:-1} \
@@ -108,4 +132,6 @@ docker run --rm \
     -e TQDM_MININTERVAL=${TQDM_MININTERVAL:-20} \
     --entrypoint /bin/bash \
     vllm-router-rocm:0.1.0 \
-    -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${VLLM_WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"
+    -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"
+
+docker rm -f "$ROUTER_CONT_NAME" 2>/dev/null || true
