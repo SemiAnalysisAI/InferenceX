@@ -23,8 +23,6 @@ fi
 
 nvidia-smi
 
-bash <(curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm/v0.20.0/tools/install_deepgemm.sh)
-
 hf download "$MODEL"
 
 SERVER_LOG=/workspace/server.log
