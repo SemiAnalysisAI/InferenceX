@@ -1928,7 +1928,7 @@
     - "Search space: TP=8, concurrency 4-64, 1k1k and 8k1k"
     - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
- 
+
 - config-keys:
     - dsv4-fp4-b300-sglang
   description:
@@ -1952,3 +1952,12 @@
   description:
     - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Pin image to vllm/vllm-openai:v0.20.0-cu130 (was floating deepseekv4-cu130 tag); DeepGEMM is preinstalled in this image"
+    - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
+    - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true per the v0.20.0 recipe"
+    - "Drop --pipeline-parallel-size 1; keep --no-enable-prefix-caching and --max-cudagraph-capture-size 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
