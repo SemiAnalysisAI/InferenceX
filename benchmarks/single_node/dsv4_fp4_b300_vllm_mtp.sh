@@ -37,7 +37,8 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
 fi
 
 
-AX_NUM_BATCHED_TOKENS=$( ISL * 2 )
+-AX_NUM_BATCHED_TOKENS=$( ISL * 2 )
++MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
