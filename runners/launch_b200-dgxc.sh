@@ -1,38 +1,33 @@
 #!/usr/bin/bash
 
-# System-specific configuration for H100 DGXC Slurm cluster
-SLURM_PARTITION="hpc-gpu-1"
-SLURM_ACCOUNT="customer"
-SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
+# System-specific configuration for B200 DGXC Slurm cluster
+SLURM_PARTITION="gpu"
+SLURM_ACCOUNT="benchmark"
 
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-    # MODEL_PATH: Override with pre-downloaded paths on H100 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H100 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
-            export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-        else
-            echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
-            export SERVED_MODEL_NAME="DeepSeek-R1-0528"
-            export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
-        else
-            echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    else
+    # Validate framework
+    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
         exit 1
     fi
+
+    # MODEL_PATH: Override with pre-downloaded paths on B200 runner
+    # The yaml files specify HuggingFace model IDs for portability, but we use
+    # local paths to avoid repeated downloading on the shared B200 cluster.
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
+        export SRT_SLURM_MODEL_PREFIX="dsr1"
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+    else
+        echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
+        exit 1
+    fi
+    export SERVED_MODEL_NAME=$MODEL
 
     echo "Cloning srt-slurm repository..."
     SRT_REPO_DIR="srt-slurm"
@@ -42,22 +37,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q2-2026
 
     echo "Installing srtctl..."
-    export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
-    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
-    export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
-    mkdir -p "$UV_INSTALL_DIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
-    if ! [ -x "$UV_INSTALL_DIR/uv" ]; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-    fi
+    export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    source $UV_INSTALL_DIR/env
 
-    uv venv
-    source .venv/bin/activate
+    uv venv "$GITHUB_WORKSPACE/.venv"
+    source "$GITHUB_WORKSPACE/.venv/bin/activate"
     uv pip install -e .
 
     if ! command -v srtctl &> /dev/null; then
@@ -65,20 +54,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Configs available at: $SRT_REPO_DIR/"
+    # Map container images to local squash files
+    NGINX_IMAGE="nginx:1.27.4"
+    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    # Map container images to local squash files based on framework
-    NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
-
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
-        SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
-        CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-        CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-    fi
+    # Import containers via enroot
+    enroot import -o $SQUASH_FILE docker://$IMAGE
+    enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
     export ISL="$ISL"
     export OSL="$OSL"
@@ -88,12 +71,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H100
+# SRT SLURM Configuration for B200
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "6:00:00"
+default_time_limit: "4:00:00"
 # Resource defaults
 gpus_per_node: 8
 network_interface: ""
@@ -102,16 +85,12 @@ srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+# Container aliases
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-# SLURM directive compatibility
-use_gpus_per_node_directive: true
-use_segment_sbatch_directive: false
-use_exclusive_sbatch_directive: false
+use_exclusive_sbatch_directive: true
 EOF
 
     echo "Generated srtslurm.yaml:"
@@ -133,10 +112,11 @@ EOF
 
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
-    # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
-    sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
+    # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
+    # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
+    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
@@ -269,27 +249,46 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
-    SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"
+    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    LOCK_FILE="${SQUASH_FILE}.lock"
 
-    salloc --exclude="$SLURM_EXCLUDED_NODELIST" --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
+    # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang), so
+    # the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install and
+    # breaks `import sglang`. Mount this one image at /ix instead; drop the
+    # conditional once the image stops installing editable under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    if ! srun --jobid=$JOB_ID bash -c "unsquashfs -l $SQUASH_FILE > /dev/null"; then
-        echo "unsquashfs failed, removing $SQUASH_FILE and re-importing..."
-        srun --jobid=$JOB_ID bash -c "rm -f $SQUASH_FILE"
-        srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-    fi
+    # Use flock to serialize concurrent imports to the same squash file
+    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
+    srun --jobid=$JOB_ID bash -c "
+        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
+        mkdir -p \$ENROOT_CACHE_PATH
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+        fi
+    "
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h100.sh
-
-    scancel $JOB_ID
-
+        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
 fi

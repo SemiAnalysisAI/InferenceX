@@ -1,0 +1,53 @@
+# Model-specific vLLM server configurations for disaggregated inference.
+#
+# Each top-level key is a MODEL_NAME value (must match the model identifier
+# used in amd-master.yaml and the directory/HF-cache name under MODEL_DIR).
+#
+# To add a new model: add a new top-level entry following the same schema.
+# No script changes are required.
+#
+# Schema:
+#   <model-name>:
+#     prefill_flags: str       # vLLM CLI flags for prefill workers
+#     decode_flags: str        # vLLM CLI flags for decode workers
+#     env: str                 # Space-separated KEY=VALUE pairs exported before vllm serve
+#     hf_dir: str              # (optional) On-disk directory name if it differs from the key
+#                              #   e.g. HF cache layout: models--deepseek-ai--DeepSeek-R1-0528
+
+Llama-3.1-405B-Instruct-FP8-KV:
+  prefill_flags: "--tensor-parallel-size 8 --kv-cache-dtype fp8"
+  decode_flags: "--tensor-parallel-size 8 --kv-cache-dtype fp8"
+  env: "VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
+
+amd-Llama-3.3-70B-Instruct-FP8-KV:
+  prefill_flags: "--tensor-parallel-size 8 --max-model-len 65536 --kv-cache-dtype fp8"
+  decode_flags: "--tensor-parallel-size 8 --max-model-len 65536 --kv-cache-dtype fp8"
+  env: "VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
+
+DeepSeek-V3:
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
+  decode_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0"
+
+DeepSeek-R1-0528:
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--deepseek-ai--DeepSeek-R1-0528"
+
+Kimi-K2.5-MXFP4:
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--amd--Kimi-K2.5-MXFP4"
+
+MiniMax-M2.5:
+  prefill_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--MiniMaxAI--MiniMax-M2.5"
+
+gpt-oss-120b:
+  prefill_flags: "--tensor-parallel-size 8"
+  decode_flags: "--tensor-parallel-size 8"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0 VLLM_USE_AITER_UNIFIED_ATTENTION=1 VLLM_ROCM_USE_AITER_MHA=0 ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0"

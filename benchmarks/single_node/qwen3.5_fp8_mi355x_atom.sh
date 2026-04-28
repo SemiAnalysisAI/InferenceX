@@ -5,26 +5,31 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    EP_SIZE \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    EP_SIZE \
+    DP_ATTENTION
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-nvidia-smi
-
-hf download "$MODEL"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export VLLM_FLOAT32_MATMUL_PRECISION=high
+export OMP_NUM_THREADS=1
+
+# Calculate max-model-len based on ISL and OSL
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    CALCULATED_MAX_MODEL_LEN=""
+else
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
+fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
@@ -32,31 +37,27 @@ else
   EP=" "
 fi
 
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
-fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
+MEM_FRAC_STATIC=0.9
 
 set -x
-vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
-$EP \
---gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
---block-size=32 \
---kv-cache-dtype fp8 \
---max-cudagraph-capture-size 2048 \
---max-num-batched-tokens "$((ISL * 2 ))" \
---stream-interval 20 --no-enable-prefix-caching \
---trust-remote-code > $SERVER_LOG 2>&1 &
+
+python3 -m atom.entrypoints.openai_server \
+    --model $MODEL \
+    --server-port $PORT \
+    -tp $TP \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    --gpu-memory-utilization $MEM_FRAC_STATIC \
+    --trust-remote-code \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+export PYTHONDONTWRITEBYTECODE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -72,7 +73,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
+    run_eval --framework lm-eval --port "$PORT" 
     append_lm_eval_summary
 fi
 
