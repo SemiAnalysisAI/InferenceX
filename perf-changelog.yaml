@@ -1924,6 +1924,7 @@
   description:
     - "Pin image to vllm/vllm-openai:v0.20.0-x86_64-cu130-ubuntu2404 (was floating deepseekv4-cu130 tag)"
     - "Install DeepGEMM via vllm v0.20.0 tools/install_deepgemm.sh before engine launch"
-    - "Switch compilation-config to {\"mode\": 0, \"cudagraph_mode\": \"FULL_DECODE_ONLY\"}, use --attention_config.use_fp4_indexer_cache=True, add --moe-backend deep_gemm_mega_moe"
+    - "Switch compilation-config to {\"mode\": 0, \"cudagraph_mode\": \"FULL_DECODE_ONLY\"} and use --attention_config.use_fp4_indexer_cache=True"
+    - "Bundle --moe-backend deep_gemm_mega_moe into EP_ARGS so it only applies when EP is enabled (EP_SIZE>1)"
     - "Drop --pipeline-parallel-size 1 and --max-cudagraph-capture-size 2048 (no longer in v0.20.0 recipe); keep --no-enable-prefix-caching"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1206
