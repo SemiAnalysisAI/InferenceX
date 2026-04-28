@@ -90,6 +90,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
+    --max-cudagraph-capture-size 2048 \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
