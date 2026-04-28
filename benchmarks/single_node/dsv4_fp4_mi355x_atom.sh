@@ -40,18 +40,150 @@ PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 
-# DSv4-specific ATOM env vars (from ROCm/ATOM#650 repro command).
-# The aiter fused_moe path is broken on gfx950 with a16w4+Swiglu, so PR1
-# requires the triton matmul_ogs path. AITER_LOG_LEVEL quiets the noisy
-# warmup logs that otherwise drown out the server-ready signal.
-export ATOM_USE_TRITON_MOE=1
+# DSv4-specific ATOM env vars. Prefer the native AITER MXFP4 MoE path after
+# overlaying the AITER perf stack below. Set AITER_DSV4_FP4_MOE_BACKEND=triton
+# to return to ROCm/ATOM#650's original triton_kernels matmul_ogs path.
+if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
+    DEFAULT_AITER_DSV4_FP4_MOE_BACKEND=native
+else
+    DEFAULT_AITER_DSV4_FP4_MOE_BACKEND=triton
+fi
+AITER_DSV4_FP4_MOE_BACKEND=${AITER_DSV4_FP4_MOE_BACKEND:-$DEFAULT_AITER_DSV4_FP4_MOE_BACKEND}
+if [ "$AITER_DSV4_FP4_MOE_BACKEND" = "triton" ]; then
+    export ATOM_USE_TRITON_MOE=1
+else
+    unset ATOM_USE_TRITON_MOE
+    unset ATOM_USE_TRITON_GEMM
+fi
 export AITER_LOG_LEVEL=WARNING
 
-# Apply the pure-Python part of ROCm/aiter#2916 over the image's installed
-# aiter package. Rebuilding aiter inside the benchmark would churn compiled
-# ROCm kernels and make the run noisy; the upstream fix only changes
-# aiter/ops/mhc.py so mhc_pre intermediate tensors allocate on
-# residual.device instead of the global default device.
+# Pull in the AITER pieces that matter for DSv4 FP4 on MI355X:
+#   * origin/main@dde1703e includes ROCm/aiter#2770 a16w4 MoE support.
+#   * ROCm/aiter#2822 speeds up batched MXFP4 GEMM on gfx950.
+#   * ROCm/aiter#2900 fixes MXFP4 scale padding for non-256 K.
+#   * ROCm/aiter#2642 enables/fixes TP=4/8 MXFP4 MoE dispatch.
+#   * sunway513/aiter@e450e4d adds DSv4 FP4 MoE tuned rows that route
+#     eligible token counts to FlyDSL FP4 MoE kernels instead of default CK
+#     heuristics when the image has the optional flydsl package.
+#
+# ROCm/aiter#2916 is intentionally not cherry-picked here. That PR branch is
+# based on a divergent fork and can conflict in unrelated test files; the
+# narrow mhc_pre device fix is applied directly to installed aiter below.
+# The non-mHC PRs cherry-pick cleanly over the pinned main SHA as of 2026-04-27.
+# Keep this as a runtime overlay until AMD publishes an ATOM image with these
+# AITER changes baked in; then remove this block and pin that image instead.
+if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
+    AITER_PERF_REPO=${AITER_PERF_REPO:-https://github.com/ROCm/aiter.git}
+    AITER_PERF_DIR=${AITER_PERF_DIR:-/tmp/aiter-dsv4-fp4-perf}
+    AITER_PERF_BASE_SHA=${AITER_PERF_BASE_SHA:-dde1703ebfc35d3724e07fc4e6e824023063494c}
+    AITER_PERF_PATCH_REFS=(
+        "${AITER_PERF_BATCHED_FP4_REF:-pull/2822/head}"
+        "${AITER_PERF_MXFP4_SCALE_REF:-pull/2900/head}"
+        "${AITER_PERF_MOE_REF:-pull/2642/head}"
+    )
+    AITER_DSV4_TUNED_FMOE=${AITER_DSV4_TUNED_FMOE:-1}
+    AITER_DSV4_TUNED_FMOE_REPO=${AITER_DSV4_TUNED_FMOE_REPO:-https://github.com/sunway513/aiter.git}
+    AITER_DSV4_TUNED_FMOE_SHA=${AITER_DSV4_TUNED_FMOE_SHA:-e450e4deb992c5ecd9db5ef5ef79f1d40208bc9c}
+    AITER_DSV4_TUNED_FMOE_PATH=${AITER_DSV4_TUNED_FMOE_PATH:-aiter/configs/model_configs/dsv4_fp4_tuned_fmoe.csv}
+
+    rm -rf "$AITER_PERF_DIR"
+    git clone --filter=blob:none "$AITER_PERF_REPO" "$AITER_PERF_DIR"
+    (
+        cd "$AITER_PERF_DIR"
+        git fetch --depth=1 origin "$AITER_PERF_BASE_SHA"
+        git checkout --force "$AITER_PERF_BASE_SHA"
+        test "$(git rev-parse HEAD)" = "$AITER_PERF_BASE_SHA"
+
+        for ref in "${AITER_PERF_PATCH_REFS[@]}"; do
+            # Do not use --depth=1 here. A shallow PR-head fetch hides the
+            # parent commit and makes git treat the cherry-pick as add/add
+            # conflicts across unrelated files.
+            git fetch origin "$ref"
+            git cherry-pick --no-commit FETCH_HEAD
+        done
+
+        if [ "$AITER_DSV4_TUNED_FMOE" = "1" ]; then
+            mkdir -p "$(dirname "$AITER_DSV4_TUNED_FMOE_PATH")"
+            git fetch --depth=1 "$AITER_DSV4_TUNED_FMOE_REPO" "$AITER_DSV4_TUNED_FMOE_SHA"
+            test "$(git rev-parse FETCH_HEAD)" = "$AITER_DSV4_TUNED_FMOE_SHA"
+            git show "FETCH_HEAD:$AITER_DSV4_TUNED_FMOE_PATH" > "$AITER_DSV4_TUNED_FMOE_PATH"
+            grep -q '7168,512,385,6,ActivationType.Silu' "$AITER_DSV4_TUNED_FMOE_PATH" \
+                || { echo "FATAL: DSv4 FP4 tuned fMoE rows not found in $AITER_DSV4_TUNED_FMOE_PATH"; exit 1; }
+        fi
+
+        if [ ! -d 3rdparty/composable_kernel/include ]; then
+            git submodule update --init --recursive --depth=1 3rdparty/composable_kernel \
+                || git submodule update --init --recursive 3rdparty/composable_kernel
+        fi
+
+        PREBUILD_KERNELS=${AITER_PREBUILD_KERNELS:-0} \
+        python3 -m pip install --no-deps --no-build-isolation --force-reinstall -e .
+    )
+
+    if [ "$AITER_DSV4_TUNED_FMOE" = "1" ]; then
+        export AITER_DSV4_TUNED_FMOE_FILE="$AITER_PERF_DIR/$AITER_DSV4_TUNED_FMOE_PATH"
+    fi
+    if [ "$AITER_DSV4_TUNED_FMOE" = "1" ] && [ -z "${AITER_CONFIG_FMOE:-}" ]; then
+        export AITER_CONFIG_FMOE="$AITER_PERF_DIR/aiter/configs/tuned_fmoe.csv:$AITER_DSV4_TUNED_FMOE_FILE"
+    fi
+
+    python3 - <<'PYEOF'
+import importlib.util
+import csv
+import os
+from pathlib import Path
+import aiter
+
+root = Path(aiter.__file__).resolve().parent
+moe = (root / "fused_moe.py").read_text()
+fp4_utils = (root / "utility" / "fp4_utils.py").read_text()
+dsv4_tuned_fmoe = Path(os.environ["AITER_DSV4_TUNED_FMOE_FILE"]) if os.environ.get("AITER_DSV4_TUNED_FMOE_FILE") else None
+required = {
+    "native MXFP4 MoE skip_inter_quant": "skip_inter_quant" in moe,
+    "MXFP4 scaleN_pad fix": "scaleN_pad" in fp4_utils,
+    "DSv4 FP4 tuned fMoE config": dsv4_tuned_fmoe is None or dsv4_tuned_fmoe.exists(),
+}
+missing = [name for name, ok in required.items() if not ok]
+if missing:
+    raise SystemExit(f"FATAL: AITER DSv4 perf stack verification failed: {missing}")
+
+if dsv4_tuned_fmoe is not None and dsv4_tuned_fmoe.exists():
+    config_paths = os.environ.get("AITER_CONFIG_FMOE", "").split(":")
+    if str(dsv4_tuned_fmoe) not in config_paths:
+        print(
+            "WARN: AITER_CONFIG_FMOE was user-supplied and does not include "
+            f"{dsv4_tuned_fmoe}; DSv4 tuned fMoE rows may not be active."
+        )
+    try:
+        from aiter.ops.flydsl import is_flydsl_available
+    except Exception as exc:
+        print(f"aiter DSv4 tuned fMoE installed; FlyDSL availability check failed: {exc!r}")
+    else:
+        flydsl_available = is_flydsl_available()
+        print(f"aiter FlyDSL available: {flydsl_available}")
+        if flydsl_available:
+            from aiter.ops.flydsl.moe_kernels import get_flydsl_kernel_params
+
+            missing_kernels = set()
+            with dsv4_tuned_fmoe.open(newline="") as handle:
+                for row in csv.DictReader(handle):
+                    for name in (row.get("kernelName1", ""), row.get("kernelName2", "")):
+                        if name.startswith("flydsl_") and get_flydsl_kernel_params(name) is None:
+                            missing_kernels.add(name)
+            if missing_kernels:
+                raise SystemExit(
+                    "FATAL: DSv4 FP4 tuned fMoE references missing FlyDSL kernels: "
+                    f"{sorted(missing_kernels)[:5]}"
+                )
+print(f"aiter DSv4 perf stack imported from: {root}")
+PYEOF
+else
+    echo "WARN: AITER_DSV4_PERF_STACK=0; using image-provided aiter"
+fi
+
+# Ensure the pure-Python part of ROCm/aiter#2916 is present. The AITER perf
+# stack above already includes it; this block is kept as a fallback for
+# AITER_DSV4_PERF_STACK=0 or future images that ship aiter without the fix.
 export AITER_MHC_FIX_SHA="76ea1ed5b2a5f8176ed7a16b1640dd972546a925"
 python3 - <<'PYEOF'
 import importlib.util
@@ -155,6 +287,78 @@ fi
     # disabling it would hide the regression this benchmark is meant to catch.
     grep -q 'mhc_pre = getattr(_aiter, "mhc_pre", None)' atom/models/deepseek_v4.py \
         || { echo "FATAL: ATOM DSv4 mhc_pre aiter hook not found"; exit 1; }
+
+    # ROCm/ATOM#650 sparse_attn_v4.py is a correctness-first torch fallback.
+    # Add two local mitigations while we wait for a serving-compatible AITER
+    # sparse-attention kernel:
+    #   1. chunk prefill over the M dimension to keep temporary scores under
+    #      memory pressure, making higher-conc experiments less likely to OOM;
+    #   2. use a B=1,M=1 decode fast path that avoids the fallback's large
+    #      broadcast/mask/concat intermediates on every generated token.
+    python3 - <<'PYEOF'
+from pathlib import Path
+
+path = Path("atom/model_ops/sparse_attn_v4.py")
+source = path.read_text()
+marker = "ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS"
+if marker not in source:
+    source = source.replace(
+        "from typing import Tuple\n\nimport torch\n",
+        "from typing import Tuple\n\nimport os\n\nimport torch\n",
+        1,
+    )
+    old = """    out_dtype = q.dtype
+    device = q.device
+
+    # ----- Gather KV per query position -----
+"""
+    new = """    out_dtype = q.dtype
+    device = q.device
+
+    chunk_tokens = int(os.environ.get("ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS", "0") or "0")
+    if B == 1 and chunk_tokens > 0 and M > chunk_tokens:
+        return torch.cat(
+            [
+                sparse_attn(
+                    q[:, start : start + chunk_tokens],
+                    kv,
+                    attn_sink,
+                    topk_idxs[:, start : start + chunk_tokens],
+                    softmax_scale,
+                )
+                for start in range(0, M, chunk_tokens)
+            ],
+            dim=1,
+        )
+
+    if B == 1 and M == 1:
+        valid_1d = topk_idxs[0, 0] != -1
+        if not bool(valid_1d.any()):
+            return torch.zeros_like(q)
+        idx_1d = topk_idxs[0, 0]
+        if bool(valid_1d.all()):
+            kv_f32 = kv[0].index_select(0, idx_1d.long()).float()
+        else:
+            kv_f32 = kv[0].index_select(0, idx_1d[valid_1d].long()).float()
+        q_f32 = q[0, 0].float()
+        scores = torch.matmul(q_f32, kv_f32.transpose(0, 1)) * float(softmax_scale)
+        sink = attn_sink.float().view(H, 1)
+        cmax = torch.maximum(scores.amax(dim=-1, keepdim=True), sink)
+        exp_scores = (scores - cmax).exp()
+        denom = exp_scores.sum(dim=-1, keepdim=True) + (sink - cmax).exp()
+        out = (exp_scores / denom.clamp(min=1e-30)).matmul(kv_f32)
+        return out.view(1, 1, H, D).to(out_dtype)
+
+    # ----- Gather KV per query position -----
+"""
+    if old not in source:
+        raise SystemExit("FATAL: sparse_attn_v4.py did not match expected PR650 source")
+    source = source.replace(old, new, 1)
+    path.write_text(source)
+    print(f"applied DSv4 sparse_attn_v4 decode/chunk patch: {path}")
+else:
+    print(f"DSv4 sparse_attn_v4 decode/chunk patch already present: {path}")
+PYEOF
 
     # --no-deps: don't churn the image's pinned ROCm/torch/triton/aiter.
     # --force-reinstall: replace the wheel-installed atom with the editable copy.
@@ -260,14 +464,16 @@ PYEOF
 # there. Set 1k1k explicitly; 8k1k retains the existing 10240 cap that's
 # already running successfully.
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 2304 "
+    MAX_MODEL_LEN_VALUE=2304
 else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
+    MAX_MODEL_LEN_VALUE=10240
 fi
+CALCULATED_MAX_MODEL_LEN=" --max-model-len $MAX_MODEL_LEN_VALUE "
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
+    MAX_MODEL_LEN_VALUE="$EVAL_MAX_MODEL_LEN"
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $MAX_MODEL_LEN_VALUE "
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -282,6 +488,7 @@ start_gpu_monitor
 set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
+export ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS=${ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS:-256}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
 # support yet (deferred to a follow-up PR). max-num-seqs is sized to the
 # client concurrency with a floor at 4 — the ATOM default (512) makes the
@@ -292,6 +499,7 @@ BLOCK_SIZE=${BLOCK_SIZE:-16}
 # deepseek_v4.py means any forward with batch>1 silently corrupts
 # non-slot-0 lanes; eval (gsm8k) at conc>1 is the canary.
 MAX_NUM_SEQS=$(( CONC < 4 ? 4 : CONC ))
+MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-$MAX_MODEL_LEN_VALUE}
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -300,6 +508,7 @@ python3 -m atom.entrypoints.openai_server \
     --block-size $BLOCK_SIZE \
     --enforce-eager \
     --max-num-seqs $MAX_NUM_SEQS \
+    --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS \
     --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
