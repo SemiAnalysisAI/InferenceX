@@ -917,13 +917,11 @@ sanitize_image_filename() {
 #   UV_VENV_DIR     default .venv (inside the cloned repo)
 clone_and_install_srtctl() {
     local repo_url="https://github.com/NVIDIA/srt-slurm.git"
-    # 52e697d (#108 fix(nginx): raise file descriptor limit for nginx workers)
-    # adds an unconditional `ulimit -n 1048576 && nginx` chain that fails with
-    # EPERM on clusters whose container RLIMIT_NOFILE hard limit is below 1M
-    # (CAP_SYS_RESOURCE in a user namespace can't raise the hard rlimit past
-    # what was inherited from slurmd/PAM). Pin to the prior commit until
-    # upstream softens that to `|| true` or makes the bump opt-in.
-    local ref="698590e6486b1febb31f8887b240cf84241ca1db"
+    # Pinned to ishan-rework-nginx tip — gates the nginx ulimit + worker_rlimit_nofile
+    # behind an opt-in `frontend.nginx_raise_ulimit` field (default false). #108's
+    # unconditional `ulimit -n 1048576 && nginx` chain previously crashed clusters
+    # whose container RLIMIT_NOFILE hard limit was below 1M.
+    local ref="425b486ce23c6a68ddb57009998a666c0acd0892"
     local repo_dir="${SRT_REPO_DIR:-srt-slurm}"
     local uv_install_dir="${UV_INSTALL_DIR:-${HOME}/.local/bin}"
     local uv_venv_dir="${UV_VENV_DIR:-.venv}"
