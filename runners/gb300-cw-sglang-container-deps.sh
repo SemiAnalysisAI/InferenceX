@@ -43,6 +43,34 @@ pip install --break-system-packages -e .
 
 echo "Dynamo installed from prebuilt cache ($DYNAMO_HASH)"
 
+# --- NIXL DSv4 state-buffer patch: sglang PR #23773 --------------------------
+# The disagg recipes use NIXL KV transfer. Without this patch, NIXL
+# silently drops auxiliary state buffers (SWA / NSA / Mamba), causing
+# decode-side accuracy to collapse on DSv4-Pro. The patch mirrors what
+# the Mooncake backend already does. See NVIDIA/srt-slurm PR #85 README.
+SGLANG_DIR="${SGLANG_DIR:-/sgl-workspace/sglang}"
+SGLANG_REMOTE="https://github.com/sgl-project/sglang.git"
+SGLANG_PR_NUMBER="23773"
+SGLANG_PR_REF="refs/pull/${SGLANG_PR_NUMBER}/head"
+SGLANG_LOCAL_BRANCH="nixl-dsv4-pr-${SGLANG_PR_NUMBER}"
+
+echo "=== Installing SGLang NIXL DSV4 fix from PR #${SGLANG_PR_NUMBER} ==="
+
+if [ -d "$SGLANG_DIR/.git" ]; then
+    cd "$SGLANG_DIR"
+    git config --global --add safe.directory "$SGLANG_DIR" 2>/dev/null || true
+    if git remote get-url origin >/dev/null 2>&1; then
+        git remote set-url origin "$SGLANG_REMOTE"
+    else
+        git remote add origin "$SGLANG_REMOTE"
+    fi
+    git fetch --depth 1 origin "$SGLANG_PR_REF"
+    git checkout -f -B "$SGLANG_LOCAL_BRANCH" FETCH_HEAD
+    echo "Checked out SGLang PR #${SGLANG_PR_NUMBER} at $(git rev-parse HEAD)"
+else
+    echo "WARNING: $SGLANG_DIR/.git not found; skipping NIXL patch (container may already include fix)"
+fi
+
 # --- API-drift patch: dynamo 1.1.0 vs sglang 0.5.9 --------------------------
 # ai-dynamo at hash 6a159fed (1.1.0-equivalent) calls
 # `engine.async_generate(return_routed_experts=...)`, but the sglang 0.5.9

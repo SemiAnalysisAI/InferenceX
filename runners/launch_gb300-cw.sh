@@ -14,7 +14,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == 
     # NVMe on cw. SRT_SLURM_MODEL_PREFIX matches the model.path alias in
     # benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/.
     export MODEL_PATH="/mnt/vast/models/dsv4/"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    export SRT_SLURM_MODEL_PREFIX="dsv4-pro"
 else
     echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
     exit 1
@@ -150,14 +150,16 @@ fi
 
 git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q2-2026
+git checkout recipes/dsv4-agg-disagg
 
-# Overlay our hand-rolled DSv4 SGLang recipes. NVIDIA/srt-slurm has no
-# upstream sglang DSv4 disagg recipe yet beyond PR #75's 1P1D-TP4
-# entry, so we ship the recipe locally and copy it in here. `cp -rT`
-# overlays onto a possibly-existing upstream stub instead of nesting.
-mkdir -p recipes/sglang/deepseek-v4
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+# Overlay our cw-adapted DSv4 SGLang disagg recipes onto the upstream
+# recipes from PR #85. The upstream recipes at
+# recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp/ don't carry
+# cw-specific fields (dynamo.install, setup_script, extra_mount,
+# sbatch_directives), so we overlay locally-maintained copies that add
+# those. `cp -rT` replaces the upstream files in place.
+mkdir -p recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp
+cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k" recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/stp
 
 # Drop our cache-installer setup_script next to upstream's configs.
 # Recipes reference it via `setup_script: gb300-cw-sglang-container-deps.sh`
@@ -223,7 +225,9 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dsv4-grace-blackwell: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
+  nginx: ${NGINX_SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 # Auto-emission of #SBATCH --segment={total_nodes} is turned off here
 # because each gb300 recipe sets its own segment via sbatch_directives
