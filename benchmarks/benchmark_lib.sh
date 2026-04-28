@@ -892,7 +892,7 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-042026"
+    local dataset="${AGENTIC_HF_DATASET:-semianalysisai/cc-traces-weka-042026}"
     TRACE_SOURCE_FLAG="--hf-dataset $dataset"
     echo "Loading traces from Hugging Face dataset: $dataset"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
