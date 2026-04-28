@@ -76,6 +76,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
     --block-size 256 \
+    --no-enable-prefix-caching \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     "${GMU_ARGS[@]}" \
