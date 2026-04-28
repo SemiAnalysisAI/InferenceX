@@ -81,23 +81,24 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     if [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ]; then
         export NVSHMEM_DISABLE_IB=1
         export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
-        export SGLANG_LOG_FORWARD_ITERS=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
         export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
         if [ "$CONC" = "2048" ]; then
+            export SGLANG_LOG_FORWARD_ITERS=1
+            export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=288
             CUDA_GRAPH_MAX_BS=288
             MAX_RUNNING_REQUESTS=2560
             MEM_FRACTION_STATIC=0.87
             SWA_FULL_TOKENS_RATIO=0.06
             TOKENIZER_WORKER_NUM=4
         else
+            export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
             CUDA_GRAPH_MAX_BS=544
-            MAX_RUNNING_REQUESTS=4608
+            MAX_RUNNING_REQUESTS=4352
             MEM_FRACTION_STATIC=0.835
-            SWA_FULL_TOKENS_RATIO=0.06
+            SWA_FULL_TOKENS_RATIO=0.075
             TOKENIZER_WORKER_NUM=8
         fi
-        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=$CUDA_GRAPH_MAX_BS
         PARALLEL_ARGS=(
             --dp-size "$TP"
             --enable-dp-attention
@@ -108,6 +109,9 @@ if [ "${DP_ATTENTION}" = "true" ]; then
             --tokenizer-worker-num "$TOKENIZER_WORKER_NUM"
             --enable-prefill-delayer
         )
+        if [ "$CONC" = "4096" ]; then
+            PARALLEL_ARGS+=(--decode-log-interval 5)
+        fi
     elif [ "${EP_SIZE}" = "8" ]; then
         export NVSHMEM_DISABLE_IB=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
