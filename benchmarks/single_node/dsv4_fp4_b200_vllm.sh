@@ -42,12 +42,12 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# Mega-MoE backend and the lower GMU only kick in for high-concurrency
-# DP-attn runs (CONC >= 256), per the vLLM v0.20.0 DeepSeek-V4-Pro recipe.
-# All configs share the FULL_AND_PIECEWISE compilation config.
+# Mega-MoE backend and the lower GMU only kick in on the DP-attn path,
+# per the vLLM v0.20.0 DeepSeek-V4-Pro recipe. All configs share the
+# FULL_AND_PIECEWISE compilation config.
 GMU_ARGS=()
 MOE_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ] && [ "${CONC}" -ge 256 ]; then
+if [ "${DP_ATTENTION}" = "true" ]; then
     GMU_ARGS=(--gpu-memory-utilization 0.85)
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
 fi
