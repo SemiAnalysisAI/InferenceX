@@ -1920,6 +1920,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
 
 - config-keys:
+    - dsv4-fp8-mi355x-vllm
+  description:
+    - "Add vLLM DeepSeek-V4-Pro FP8 benchmark for MI355X with AITER-accelerated MLA decode (vllm-project/vllm#40889, stacked on #40871)"
+    - "Base image rocm/atom:rocm7.2.2 (MI355X ROCm 7.2.2, aiter with MLA decode); vLLM rebuilt from PR branch at pinned SHA b3a4a44 at runtime via --no-deps overlay"
+    - "Key flags: --enforce-eager, --moe-backend triton_unfused, --kv-cache-dtype fp8, VLLM_ROCM_USE_AITER=1"
+    - "Search space: TP=8, concurrency 4-64, 1k1k and 8k1k"
+    - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
+ 
+ - config-keys:
     - dsv4-fp4-b300-sglang
   description:
     - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
