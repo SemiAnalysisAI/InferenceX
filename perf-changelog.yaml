@@ -1937,3 +1937,9 @@
     - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
