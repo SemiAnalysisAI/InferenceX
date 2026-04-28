@@ -42,19 +42,14 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# DP-attn switches both the MoE backend and the cudagraph mode per the
-# vLLM v0.20.0 DeepSeek-V4-Pro recipe:
-#   - TP-only / TP+EP (DP_ATTENTION=false): default MoE backend,
-#     compile-config = {"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}
-#   - DP-attn + EP   (DP_ATTENTION=true):  --moe-backend deep_gemm_mega_moe,
-#     compile-config = {"cudagraph_mode": "FULL_AND_PIECEWISE", "custom_ops": ["all"]}
+# Mega-MoE backend and the lower GMU only kick in for high-concurrency
+# DP-attn runs (CONC >= 256), per the vLLM v0.20.0 DeepSeek-V4-Pro recipe.
+# All configs share the FULL_AND_PIECEWISE compilation config.
 GMU_ARGS=()
 MOE_ARGS=()
-COMPILATION_CONFIG='{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}'
-if [ "${DP_ATTENTION}" = "true" ]; then
+if [ "${DP_ATTENTION}" = "true" ] && [ "${CONC}" -ge 256 ]; then
     GMU_ARGS=(--gpu-memory-utilization 0.85)
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-    COMPILATION_CONFIG='{"cudagraph_mode":"FULL_AND_PIECEWISE", "custom_ops":["all"]}'
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
@@ -89,7 +84,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${EP_ARGS[@]}" \
     "${GMU_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
-    --compilation-config "$COMPILATION_CONFIG" \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache=True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \

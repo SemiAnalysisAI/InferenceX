@@ -1957,7 +1957,7 @@
     - dsv4-fp4-b200-vllm
   description:
     - "Pin image to vllm/vllm-openai:v0.20.0-cu130 (was floating deepseekv4-cu130 tag); DeepGEMM is preinstalled in this image"
-    - "Use --attention_config.use_fp4_indexer_cache=True"
-    - "Split compilation-config and MoE backend by DP_ATTENTION per the v0.20.0 recipe: TP-only / TP+EP (DP_ATTENTION=false) -> {\"mode\": 0, \"cudagraph_mode\": \"FULL_DECODE_ONLY\"} with default MoE backend; DP-attn+EP (DP_ATTENTION=true) -> {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} with --moe-backend deep_gemm_mega_moe"
+    - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
+    - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true AND CONC>=256 (the high-throughput DP-attn band) per the v0.20.0 recipe"
     - "Drop --pipeline-parallel-size 1 and --max-cudagraph-capture-size 2048 (no longer in v0.20.0 recipe); keep --no-enable-prefix-caching to match other vLLM B200 scripts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
