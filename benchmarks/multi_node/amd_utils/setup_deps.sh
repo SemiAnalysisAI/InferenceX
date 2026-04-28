@@ -242,43 +242,48 @@ patch_mori_fp8_compat() {
 import re, os, sys
 patched = []
 
-# 1. Patch layer.py: remove multi-line AITER assertion for MoRI
+# Patch layer.py: remove AITER requirement assertion(s) for MoRI
 try:
     import vllm.model_executor.layers.fused_moe.layer as lm
     f = lm.__file__
     src = open(f).read()
-    if "Mori needs to be used with aiter" in src:
+    if "[PATCHED] AITER requirement removed for MoRI-EP + FP8" in src:
+        print("[SETUP] layer.py MoRI-FP8 patch already applied")
+    elif "Mori needs to be used with aiter" in src:
+        # v0.19+: two consecutive assertions inside `if self.moe_config.use_mori_kernels:`
         new = re.sub(
-            r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)",
+            r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)\s*"
+            r"assert not self\.aiter_fmoe_shared_expert_enabled,\s*\([^)]*\)",
             "pass  # [PATCHED] AITER requirement removed for MoRI-EP + FP8",
             src, flags=re.DOTALL)
+        if new == src:
+            # v0.17.1/v0.18.0: only the first assertion existed
+            new = re.sub(
+                r"assert self\.rocm_aiter_fmoe_enabled,\s*\([^)]*Mori needs[^)]*\)",
+                "pass  # [PATCHED] AITER requirement removed for MoRI-EP + FP8",
+                src, flags=re.DOTALL)
         if new != src:
             open(f, "w").write(new)
             patched.append("layer.py")
+        else:
+            print("[SETUP] ERROR: layer.py pattern found but regex had no effect", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print("[SETUP] ERROR: layer.py AITER assertion pattern not found — vLLM API may have changed", file=sys.stderr)
+        sys.exit(1)
 except Exception as e:
-    print(f"[SETUP] WARN patch layer.py: {e}", file=sys.stderr)
+    print(f"[SETUP] ERROR patch layer.py: {e}", file=sys.stderr)
+    sys.exit(1)
 
-# 2. Patch mori_prepare_finalize.py: remove defer_input_quant restriction
-try:
-    import vllm.model_executor.layers.fused_moe.mori_prepare_finalize as mm
-    f = mm.__file__
-    src = open(f).read()
-    if "defer_input_quant" in src:
-        new = re.sub(
-            r"raise NotImplementedError\([^)]*defer_input_quant[^)]*\)",
-            "pass  # [PATCHED] defer_input_quant check removed for MoRI-EP + FP8",
-            src)
-        if new != src:
-            open(f, "w").write(new)
-            patched.append("mori_prepare_finalize.py")
-except Exception as e:
-    print(f"[SETUP] WARN patch mori_pf: {e}", file=sys.stderr)
+# prepare_finalize/mori.py (v0.19+) already handles defer_input_quant correctly
+# (skips FP8 quant when True). No patch needed for that file.
+# Added in 0.18.1: https://github.com/vllm-project/vllm/commit/6a9cceb219fcbd6b1eb540ddfdc77ec160f0e209
 
 if patched:
     print(f"[SETUP] Patched: {chr(44).join(patched)}")
 else:
     print("[SETUP] No MoRI-FP8 patches needed")
-'
+' || exit 1
     _SETUP_INSTALLED+=("MoRI-FP8-patch")
 }
 
@@ -881,7 +886,6 @@ except Exception as e:
 # install_libionic
 # install_mori
 install_amd_quark
-install_mori_proxy_deps
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
