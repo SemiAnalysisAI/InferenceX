@@ -1908,6 +1908,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
 
 - config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "1k1k conc=8192: mega_moe deepep backend with cuda-graph-max-bs 1056, max-running-requests 8224, mem 0.8, swa-ratio 0.3, tokenizer-workers 16"
+    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 entries"
+
+- config-keys:
    - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
