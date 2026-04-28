@@ -7604,7 +7604,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404@sha256:46da022ce07aae43e4ffae844aeab467a223437e071abadf566555699fbf16c3
+  image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200

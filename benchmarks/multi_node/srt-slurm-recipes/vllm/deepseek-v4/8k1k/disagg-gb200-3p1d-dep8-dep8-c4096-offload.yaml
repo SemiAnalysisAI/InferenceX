@@ -9,7 +9,7 @@ name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep8-offload"
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
 #     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
-#   * model.container set to vllm/vllm-openai:v0.20.0-ubuntu2404@sha256:46da022ce07aae43e4ffae844aeab467a223437e071abadf566555699fbf16c3 to
+#   * model.container set to vllm/vllm-openai:v0.20.0-ubuntu2404 to
 #     match nvidia-master.yaml image (which the launch script registers as
 #     the alias key in srtslurm.yaml). Upstream variants ship either the
 #     non-dynamo floating tag or a sha256 pin.
@@ -17,7 +17,7 @@ name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep8-offload"
 #     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.0-ubuntu2404@sha256:46da022ce07aae43e4ffae844aeab467a223437e071abadf566555699fbf16c3"
+  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
   precision: "fp4"
 
 dynamo:
@@ -141,7 +141,7 @@ identity:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
     revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
   container:
-    image: "vllm/vllm-openai:v0.20.0-ubuntu2404@sha256:46da022ce07aae43e4ffae844aeab467a223437e071abadf566555699fbf16c3"
+    image: "vllm/vllm-openai:v0.20.0-ubuntu2404"
   frameworks:
     dynamo: "1.2.0.dev20260426"
     vllm: "0.20.0"
