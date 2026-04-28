@@ -1,11 +1,12 @@
 #!/bin/bash
 export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 
-export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
-# export MODEL_DIR="/root/.cache/huggingface/hub/"
-# export MODEL_PATH="/root/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
+# export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
+# export MODEL_DIR="$HOME/.cache/huggingface/hub"
+# export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
+export MODEL_NAME="gpt-oss-120b"   # key from models_vllm.yaml
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
-export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
+export MODEL_PATH="$HOME/.cache/huggingface/hub/models--openai--gpt-oss-120b/snapshots/b5c939de8f754692c1647ca79fbf85e8c1e70f8a/"
 # export NODE0_ADDR="10.21.9.8"          # this node's IP
 #export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
 export NODE0_ADDR="10.21.9.47"          # this node's IP
@@ -114,6 +115,7 @@ docker run --rm \
     -e UCX_ROCM_IPC_MIN_ZCOPY=0 \
     -e UCX_LOG_LEVEL=warn \
     -e HSA_ENABLE_SDMA=1 \
+    -e NCCL_SOCKET_IFNAME=ens51np0 \
     -e PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300} \
     -e VLLM_MORIIO_CONNECTOR_READ_MODE=${VLLM_MORIIO_CONNECTOR_READ_MODE:-1} \
     -e PYTHONPYCACHEPREFIX=/tmp/pycache \
@@ -131,7 +133,7 @@ docker run --rm \
     -e BENCH_REQUEST_RATE=${BENCH_REQUEST_RATE:-inf} \
     -e TQDM_MININTERVAL=${TQDM_MININTERVAL:-20} \
     --entrypoint /bin/bash \
-    vllm-router-rocm:0.1.0 \
+    vllm/vllm-openai-rocm:nightly-100c7b65e7579c8caf4ee0b04a6410b2796b905c-bnxt \
     -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"
 
 docker rm -f "$ROUTER_CONT_NAME" 2>/dev/null || true

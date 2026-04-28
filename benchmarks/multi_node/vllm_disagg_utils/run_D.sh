@@ -2,9 +2,13 @@
 
 export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
 
-export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
+# export MODEL_NAME="DeepSeek-R1-0528"   # key from models_vllm.yaml
+# export MODEL_DIR="$HOME/.cache/huggingface/hub"
+# export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
+export MODEL_NAME="gpt-oss-120b"   # key from models_vllm.yaml
 export MODEL_DIR="$HOME/.cache/huggingface/hub"
-export MODEL_PATH="$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-R1-0528/snapshots/4236a6af538feda4548eca9ab308586007567f52"
+export MODEL_PATH="$HOME/.cache/huggingface/hub/models--openai--gpt-oss-120b/snapshots/b5c939de8f754692c1647ca79fbf85e8c1e70f8a/"
+# export NODE0_ADDR="10.21.9.8"          # this node's IP
 # export NODE0_ADDR="10.21.9.8"          # prefill (rank-0) node's IP
 # export IPADDRS="10.21.9.8,10.21.9.29"  # all nodes: prefill IPs, then decode IPs
 export NODE0_ADDR="10.21.9.47"          # this node's IP
@@ -100,5 +104,5 @@ docker run --rm \
     -e PREFILL_TP_SIZE=${PREFILL_TP_SIZE:-8} \
     -e DECODE_TP_SIZE=${DECODE_TP_SIZE:-8} \
     --entrypoint /bin/bash \
-    vllm-router-rocm:0.1.0 \
+    vllm/vllm-openai-rocm:nightly-100c7b65e7579c8caf4ee0b04a6410b2796b905c-bnxt \
     -lc "mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && ${WS_PATH}/server.sh 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/server_\$(hostname).log"
