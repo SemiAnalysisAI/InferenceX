@@ -1,44 +1,27 @@
-name: "dsv4-vllm-disagg-gb300-1p1d-dep8-dep16"
+name: "dsv4-vllm-disagg-gb300-14p1d-dep4-dep16"
 
-# GB300 mirror of disagg-gb200-1p1d-dep8-dep16.yaml. Same tuning at FP4
-# (288 GB HBM/GPU on GB300 vs 184 GB on GB200 — extra headroom for KV).
-# Cluster: gb300-cw (2x 18-node racks); job pins to one rack via the
-# explicit sbatch_directives.segment="6" below (cw's srtslurm.yaml turns
-# off srtctl's auto-segment so each recipe owns its segment value).
-#
-# 1k/1k mid-to-high throughput topology. Single prefill worker feeding a
-# wide DP=16 decode handles conc 256-4096 cleanly for 1k prompts.
+# Mirrors NVIDIA/srt-slurm PR #84 (ywang96/gb300-vllm) at SHA
+# 228febcfe9c76347cd619a7622af83ca52ca35a4. Max 8k/1k:
+# 14 prefills (DP=4 each) + 1 wide decode (DP=16). 18 nodes total —
+# fills exactly one cw rack.
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:deepseekv4-cu130"
+  container: "vllm/vllm-openai@sha256:d29a90b13bb9758821839dd810db9679055e8adf7c670df9f0a432f45f2488a5"
   precision: "fp4"
 
 dynamo:
-  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
-  # Install handled by our custom vllm-container-deps.sh, which builds
-  # the dynamo wheel ONCE on /mnt/vast and lets every rank pip-install
-  # from cache. See runners/gb300-cw-vllm-container-deps.sh.
-  install: false
+  version: 1.0.2
+  install: true
 
 setup_script: vllm-container-deps.sh
 
-# Mount /mnt/vast/dynamo_cache into every worker container so each
-# rank can pip-install from the wheel that launch_gb300-cw.sh
-# pre-built there. Without this only /mnt/vast/models/<model> is
-# in scope and our setup script errors out with 'prebuilt cache
-# missing'.
-extra_mount:
-  - "/mnt/vast/dynamo_cache:/mnt/vast/dynamo_cache"
-
-# Pin all 6 nodes to the same rack on cw.
 sbatch_directives:
-  segment: "6"
-  # Use all node memory; cw default was too tight.
+  segment: "18"
   mem: "0"
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "3:00:00"
 
 health_check:
   max_attempts: 1440
@@ -47,11 +30,11 @@ health_check:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 2
+  prefill_nodes: 14
   decode_nodes: 4
-  prefill_workers: 1
+  prefill_workers: 14
   decode_workers: 1
-  gpus_per_prefill: 8
+  gpus_per_prefill: 4
   gpus_per_decode: 16
 
 frontend:
@@ -63,28 +46,31 @@ backend:
   connector: null
 
   prefill_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    CARGO_BUILD_JOBS: "4"
+    VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_DEBUG: "INFO"
-    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
-    VLLM_SERVER_DEV_MODE: "1"
+    NCCL_P2P_LEVEL: NVL
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
 
   decode_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    CARGO_BUILD_JOBS: "4"
+    VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_DEBUG: "INFO"
-    NCCL_DEBUG_SUBSYS: "INIT,BOOTSTRAP,ENV,NET,GRAPH,NVLS"
-    VLLM_SERVER_DEV_MODE: "1"
+    NCCL_P2P_LEVEL: NVL
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
 
   vllm_config:
     prefill:
@@ -93,19 +79,27 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 3072
-      max-num-seqs: 16
-      max-num-batched-tokens: 16384
+      max-model-len: 16384
+      max-num-seqs: 10
+      max-num-batched-tokens: 81920
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
+      safetensors-load-strategy: "prefetch"
+      no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.88
+      gpu-memory-utilization: 0.92
       no-disable-hybrid-kv-cache-manager: true
+      numa-bind: true
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
       enable-sleep-mode: true
 
     decode:
@@ -117,10 +111,11 @@ backend:
       data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 3072
+      max-model-len: 16384
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
+      safetensors-load-strategy: "prefetch"
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -128,12 +123,15 @@ backend:
       gpu-memory-utilization: 0.9
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
       enable-sleep-mode: true
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
-  concurrencies: "128x256x1024x2048x4096"
+  concurrencies: "6144x8192"
   req_rate: "inf"
   use_chat_template: false

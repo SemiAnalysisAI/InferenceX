@@ -1,11 +1,17 @@
 #!/usr/bin/bash
 
 # Launches multi-node Dynamo + vLLM benchmarks on the gb300-cw (CoreWeave)
-# cluster. Mirrors launch_gb200-nv.sh but adjusted for cr's filesystem
+# cluster. Mirrors launch_gb200-nv.sh but adjusted for cw's filesystem
 # layout: /mnt/vast (10T shared VAST PVC) replaces Lustre/NUMA-local NVMe,
-# the SLURM partition is `all`, and srtctl auto-emits `--segment={total_nodes}`
-# to keep each job rack-local (cr is 2x18-node racks, so any of our recipes
-# at ≤18 nodes fits within a single rack).
+# and the SLURM partition is `all`. cw is 2x 18-node racks; srtctl's
+# auto-segment is disabled (use_segment_sbatch_directive: false) and each
+# recipe pins its own segment via sbatch_directives — the largest
+# topology (14p1d-dep4-dep16, 18 nodes) fills exactly one rack.
+#
+# srt-slurm is checked out at NVIDIA/srt-slurm PR #84 head; that PR ships
+# the dynamo 1.0.2 install path + the vLLM patches the new recipes
+# require, so we use upstream's configs/vllm-container-deps.sh and
+# configs/patches/* unchanged (no local overlay).
 
 set -x
 
@@ -45,85 +51,6 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
-# Pre-build dynamo wheel ONCE on a single compute node, BEFORE submitting
-# the main sbatch. The DP+EP path inside sbatch spawns one container per
-# GPU (~60 ranks for the 18-node 7p1d topology), and trying to coordinate
-# a one-time build across that many containers via filesystem locks is
-# unreliable on /mnt/vast (NFS) — flock silently no-ops, mkdir caches
-# negatively, etc. Building once here on a dedicated single-node srun
-# eliminates all per-rank coordination: every worker just pip-installs
-# from the cache (~30 s) and the timing across ranks stays tight.
-DYNAMO_HASH="6a159fedd8e4a1563aa647c31f622aedbf254b5b"
-DYNAMO_CACHE_ROOT="/mnt/vast/dynamo_cache"
-DYNAMO_CACHE_DIR="$DYNAMO_CACHE_ROOT/$DYNAMO_HASH"
-DYNAMO_DONE_MARKER="$DYNAMO_CACHE_DIR/.done"
-mkdir -p "$DYNAMO_CACHE_ROOT"
-
-if [ ! -f "$DYNAMO_DONE_MARKER" ]; then
-    echo "[dynamo-prebuild] cold cache, building wheel + source archive on a single compute node..."
-    # Build into a unique temp dir, then atomically mv into place. Two
-    # concurrent runners may both build; the first to finish the rename
-    # wins, the loser cleans up. Same-directory rename() is atomic on
-    # NFS (unlike flock).
-    TEMP_BUILD=$(mktemp -d "$DYNAMO_CACHE_ROOT/$DYNAMO_HASH.tmp.XXXXXX")
-    # --mem=0: claim full node memory. Default cgroup is much smaller and
-    # the moxcms / dynamo-llm rustc invocations OOM-killed the previous
-    # attempt. CARGO_BUILD_JOBS=8 caps parallelism so peak rustc memory
-    # stays bounded even on a 72-core Grace node, and `-C debuginfo=0`
-    # cuts per-process memory further (default debuginfo=2 from cargo
-    # is what makes the link phase memory-hungry).
-    srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT \
-         --nodes=1 --ntasks=1 --mem=0 --time=00:45:00 \
-         --job-name="${RUNNER_NAME}-prebuild" \
-         --container-image="$SQUASH_FILE" \
-         --no-container-entrypoint --no-container-mount-home \
-         --container-mounts="$DYNAMO_CACHE_ROOT:$DYNAMO_CACHE_ROOT" \
-         bash -c "
-            set -e
-            apt-get update -qq
-            apt-get install -y -qq git curl libclang-dev protobuf-compiler >/dev/null 2>&1
-            if ! command -v cargo &>/dev/null; then
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . \$HOME/.cargo/env
-            fi
-            if ! command -v maturin &>/dev/null; then
-              pip install --break-system-packages maturin
-            fi
-            rm -rf /tmp/dynamo_build
-            mkdir -p /tmp/dynamo_build
-            cd /tmp/dynamo_build
-            git clone https://github.com/ai-dynamo/dynamo.git
-            cd dynamo
-            git checkout $DYNAMO_HASH
-            cd lib/bindings/python/
-            export CARGO_BUILD_JOBS=8
-            export RUSTFLAGS='-C target-cpu=native -C debuginfo=0 --cfg tokio_unstable'
-            maturin build -o '$TEMP_BUILD'
-            cd /tmp/dynamo_build/dynamo
-            tar czf '$TEMP_BUILD/dynamo-source.tar.gz' \
-                --exclude='lib/bindings/python/target' \
-                --exclude='.git' \
-                .
-            touch '$TEMP_BUILD/.done'
-        "
-    if [ -f "$TEMP_BUILD/.done" ]; then
-        # Atomic publish. If another runner already published, mv fails
-        # and we just discard our copy.
-        if mv "$TEMP_BUILD" "$DYNAMO_CACHE_DIR" 2>/dev/null; then
-            echo "[dynamo-prebuild] published cache at $DYNAMO_CACHE_DIR"
-        else
-            echo "[dynamo-prebuild] another runner published first, discarding our copy"
-            rm -rf "$TEMP_BUILD"
-        fi
-    else
-        echo "[dynamo-prebuild] BUILD FAILED — no .done in $TEMP_BUILD" >&2
-        rm -rf "$TEMP_BUILD"
-        exit 1
-    fi
-else
-    echo "[dynamo-prebuild] cache hit at $DYNAMO_CACHE_DIR"
-fi
-
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
@@ -146,19 +73,21 @@ fi
 
 git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout sa-submission-q2-2026
+# Pin to NVIDIA/srt-slurm PR #84 (ywang96/gb300-vllm) head SHA. PR 84
+# carries the configs/patches/* (cumem expandable_segments fix, MegaMoE
+# free_orig, nvlink one-sided bf16 fix, numa-bind hash fix) and the
+# matching configs/vllm-container-deps.sh that wires them up. Released
+# dynamo 1.0.2 wheel + sleep-mode + safetensors prefetch make the
+# prebuild infrastructure unnecessary, so we use upstream's setup
+# script directly — no overlay.
+git fetch origin pull/84/head:pr-84
+git checkout 228febcfe9c76347cd619a7622af83ca52ca35a4
 # Use `cp -rT` so if the upstream branch ever ships a stub
 # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto it
 # rather than nesting (`cp -r src dst` would create
 # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
 mkdir -p recipes/vllm/deepseek-v4
 cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-
-# Replace the upstream stub setup script with our flock-cached dynamo
-# installer. See runners/gb300-cw-vllm-container-deps.sh for why. Used
-# together with `dynamo.install: false` in the gb300 recipes.
-cp "$GITHUB_WORKSPACE/runners/gb300-cw-vllm-container-deps.sh" configs/vllm-container-deps.sh
-chmod +x configs/vllm-container-deps.sh
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
