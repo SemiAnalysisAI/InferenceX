@@ -137,9 +137,6 @@ benchmark:
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
 
 identity:
-  model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro"
-    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
   container:
     image: "vllm/vllm-openai:v0.20.0-ubuntu2404"
   frameworks:
