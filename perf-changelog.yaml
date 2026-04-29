@@ -1830,11 +1830,137 @@
 - config-keys:
     - dsv4-fp4-mi355x-atom
   description:
-    - "Add DeepSeek-V4-Pro FP4 GB200 disaggregated vLLM benchmarks via Dynamo (1k/1k sweep; 8k/1k currently commented out)"
-    - "Container: vllm/vllm-openai:deepseekv4-cu130; model from /mnt/numa1/models/deepseek-v4-pro/ (compute-node-local NVMe)"
-    - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
-    - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM Day-0 marker (single-sequence, TP=8, conc=1)"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post (matches qwen3.5-fp8-mi355x-atom base); ROCm/ATOM#650 overlaid at runtime via pip install --no-deps -e . from a pinned PR SHA (cdbff35) inside the benchmark script"
+    - "triton_kernels is missing from the release image (build-stage path /triton-test/python/triton_kernels/ is cleaned up); the script falls back to ROCm/triton@e491726 (RI3.5.x), which has matmul_ogs.py and routing.py (PR #650 imports both — upstream triton-lang/triton refactored matmul_ogs into matmul.py and removed routing) plus CDNA4MXScaleLayout and a target_info.py compatible with the image's bundled triton"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro (same canonical checkpoint used by dsv4-fp4-b300-vllm); compatibility with PR #650's WeightsMapper not yet verified — first run will tell us"
+    - "Pinned to PR1 limitations: single-sequence kv_cache hardcode, --enforce-eager required, ATOM_USE_TRITON_MOE=1 (aiter fused_moe broken on gfx950)"
+    - "Sweep will expand to TP=4/8 conc 4–256 once ROCm/ATOM PR3 (multi-request) and PR4 (CUDAGraph) land"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1165
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM Day-0 marker (single-sequence, TP=8, conc=1)"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post (matches qwen3.5-fp8-mi355x-atom base); ROCm/ATOM#650 overlaid at runtime via pip install --no-deps -e . from a pinned PR SHA (cdbff35) inside the benchmark script"
+    - "triton_kernels is missing from the release image (build-stage path /triton-test/python/triton_kernels/ is cleaned up); the script falls back to ROCm/triton@e491726 (RI3.5.x), which has matmul_ogs.py and routing.py (PR #650 imports both — upstream triton-lang/triton refactored matmul_ogs into matmul.py and removed routing) plus CDNA4MXScaleLayout and a target_info.py compatible with the image's bundled triton"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro (same canonical checkpoint used by dsv4-fp4-b300-vllm); compatibility with PR #650's WeightsMapper not yet verified — first run will tell us"
+    - "Pinned to PR1 limitations: single-sequence kv_cache hardcode, --enforce-eager required, ATOM_USE_TRITON_MOE=1 (aiter fused_moe broken on gfx950)"
+    - "Sweep will expand to TP=4/8 conc 4–256 once ROCm/ATOM PR3 (multi-request) and PR4 (CUDAGraph) land"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1170
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3 (pinned for deep_gemm transform_weights_for_mega_moe support; same digest as PR #1158)"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EAGLE/MTP flags hardcoded in script: num-steps=3, eagle-topk=1, num-draft-tokens=4"
+    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
+    - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
+    - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166
+
+- config-keys:
+   - dsv4-fp4-b300-vllm
+  description:
+    - "Update search space based on B300 pareto sweep results"
+    - "ISL=1024: TP4 conc 4-128; DP4 (dp-attn) conc 256-4096; DP8 (dp-attn) conc 2048-8192"
+    - "ISL=8192: TP4 conc 4-64; DP4 (dp-attn) conc 128-1024; DP8 (dp-attn) conc 1024-8192"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1155
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Recipe-per-CONC split for DeepSeek-V4-Pro on B300: low-latency (TP=8, EP=1), balanced (TP=4, EP=1) at conc=32, max-throughput (TP=4, EP=4, DP-attn + DeepEP) at conc=512, for both 1k1k and 8k1k"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
+    - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
+  
+- config-keys:
+    - dsv4-fp4-b200-sglang
+  description:
+    - "Two-recipe dispatch for DeepSeek-V4-Pro on B200, selected by DP_ATTENTION knob: low-latency (TP=8, EP=1, flashinfer_mxfp4) for conc 1-32, DP-attention (TP=8, EP=8, DP-attn + DeepEP + mega_moe) for conc 64-{512,1024}. The DP-attention recipe uses identical flags across balanced and max-throughput CONC ranges; only --max-running-requests scales with CONC."
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+    - "Image pinned to lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b"
+    - "Adds SGLANG_OPT_* env knobs (SWA_SPLIT_LEAF_ON_INSERT, USE_JIT_NORM, USE_JIT_INDEXER_METADATA, USE_TOPK_V2, USE_CUSTOM_ALL_REDUCE_V2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1187
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Pass --dsv4 to run_benchmark_serving so MTP benchmarks use the DSv4 chat template (PR #1153)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - Add low-latency configs and remove non-pareto configs
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1193
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Add DeepSeek-V4-Pro single-node B200 vLLM benchmark derived from B200 pareto sweep"
+    - "ISL=1024: TP8 conc 4-128; DP8 (dp-attn) conc 256-4096"
+    - "ISL=8192: TP8 conc 4-32; DP8 (dp-attn) conc 64-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1156
+
+- config-keys:
+   - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3 (pinned for deep_gemm transform_weights_for_mega_moe support; same digest as PR #1158)"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EAGLE/MTP flags hardcoded in script: num-steps=3, eagle-topk=1, num-draft-tokens=4"
+    - "Recipe (MoE backend, chunked-prefill) selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
+    - "Three CONC bands: A=TP8 (1-8), B=TP4 (16-128), C=DP4 dp-attn (64-512); B/C overlap at conc 64,128"
+    - "Configs: 1k1k and 8k1k, no validation.py / launcher / yaml-field changes (knob-free)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
+
+- config-keys:
+    - dsv4-fp8-mi355x-vllm
+  description:
+    - "Add vLLM DeepSeek-V4-Pro FP8 benchmark for MI355X with AITER-accelerated MLA decode (vllm-project/vllm#40889, stacked on #40871)"
+    - "Base image rocm/atom:rocm7.2.2 (MI355X ROCm 7.2.2, aiter with MLA decode); vLLM rebuilt from PR branch at pinned SHA b3a4a44 at runtime via --no-deps overlay"
+    - "Key flags: --enforce-eager, --moe-backend triton_unfused, --kv-cache-dtype fp8, VLLM_ROCM_USE_AITER=1"
+    - "Search space: TP=8, concurrency 4-64, 1k1k and 8k1k"
+    - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
+    - "1k1k conc=512/1024: add mega_moe deepep backend with cuda-graph-max-bs 550, chunked-prefill 16384, max-running-requests 768"
+    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Use ROCm/aiter#2916 mhc_pre device-allocation fix instead of disabling ATOM mhc_pre"
+    - "Patch installed aiter/ops/mhc.py at runtime to allocate mhc_pre intermediates on residual.device, preserving the aiter MHC fast path without rebuilding aiter"
+    - "Remove the ATOM deepseek_v4.py sed workaround that forced mhc_pre to torch fallback"
+    - "Keep dsv4-fp4-mi355x-atom at CONC=1 only; run 24953107645 showed high-concurrency DSv4 ATOM OOMs in PR #650 torch sparse-attention fallbacks before upstream AITER sparse-attention support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1202
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Pin image to vllm/vllm-openai:v0.20.0-cu130 (was floating deepseekv4-cu130 tag); DeepGEMM is preinstalled in this image"
+    - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
+    - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true per the v0.20.0 recipe"
+    - "Drop --pipeline-parallel-size 1; keep --no-enable-prefix-caching and --max-cudagraph-capture-size 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
 
 - config-keys:
     - minimaxm2.5-fp4-mi355x-atom
