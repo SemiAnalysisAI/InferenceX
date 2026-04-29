@@ -472,6 +472,7 @@ async def benchmark(
     disable_tqdm: bool,
     num_warmups: int,
     profile: bool,
+    profile_extra_body: Dict[str, Any],
     selected_percentile_metrics: List[str],
     selected_percentiles: List[str],
     ignore_eos: bool,
@@ -538,7 +539,7 @@ async def benchmark(
                                          api_url=base_url + "/start_profile",
                                          prompt_len=test_prompt_len,
                                          output_len=test_output_len,
-                                         extra_body={"num_steps": 1, "merge_profiles": True, "profile_by_stage": True},
+                                         extra_body=profile_extra_body,
                                          logprobs=logprobs,
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,
@@ -809,6 +810,16 @@ def main(args: argparse.Namespace):
 
     goodput_config_dict = check_goodput_args(args)
 
+    default_profile_extra_body = {
+        "num_steps": 1,
+        "merge_profiles": True,
+        "profile_by_stage": True,
+    }
+    if args.profile_extra_body is not None:
+        profile_extra_body = json.loads(args.profile_extra_body)
+    else:
+        profile_extra_body = default_profile_extra_body
+
     # Avoid GC processing "static" data - reduce pause times.
     gc.collect()
     gc.freeze()
@@ -829,6 +840,7 @@ def main(args: argparse.Namespace):
             disable_tqdm=args.disable_tqdm,
             num_warmups=args.num_warmups,
             profile=args.profile,
+            profile_extra_body=profile_extra_body,
             selected_percentile_metrics=args.percentile_metrics.split(","),
             selected_percentiles=[
                 float(p) for p in args.metric_percentiles.split(",")
@@ -1023,6 +1035,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Use Torch Profiler. The endpoint must be launched with "
         "VLLM_TORCH_PROFILER_DIR to enable profiler.",
+    )
+    parser.add_argument(
+        "--profile-extra-body",
+        type=str,
+        default=None,
+        help="JSON string with extra body parameters for the profile start "
+        "request. If not specified, defaults to "
+        '{\"num_steps\": 1, \"merge_profiles\": true, '
+        '\"profile_by_stage\": true}.',
     )
     parser.add_argument(
         "--save-result",
