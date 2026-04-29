@@ -59,8 +59,8 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_${SQ
 # silently keeps using the broken file. rm + import guarantees a fresh
 # import each CI run and picks up Docker tag updates.
 rm -f "$SQUASH_FILE" "$NGINX_SQUASH_FILE"
-enroot import --arch arm64 -o "$SQUASH_FILE" "docker://$IMAGE"
-enroot import --arch arm64 -o "$NGINX_SQUASH_FILE" "docker://$NGINX_IMAGE"
+enroot import --arch aarch64 -o "$SQUASH_FILE" "docker://$IMAGE"
+enroot import --arch aarch64 -o "$NGINX_SQUASH_FILE" "docker://$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
