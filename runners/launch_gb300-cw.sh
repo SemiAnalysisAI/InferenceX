@@ -72,10 +72,13 @@ git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout "$SRT_SLURM_RECIPES_COMMIT"
 
-# Overlay the local copy of the exact pinned recipes. This keeps the PR
-# self-contained while preserving byte-for-byte recipe content from
-# NVIDIA/srt-slurm at $SRT_SLURM_RECIPES_COMMIT.
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/gb300-fp4" recipes/dsv4-pro/sglang/gb300-fp4
+# Overlay the hand-rolled DSV4 sglang recipes onto the upstream srt-slurm
+# checkout. Mirrors launch_gb200-nv.sh's dynamo-sglang dsv4 branch:
+# destination must be `recipes/sglang/deepseek-v4` because
+# `additional-settings: CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/...`
+# in `.github/configs/nvidia-master.yaml` is what srtctl loads.
+mkdir -p recipes/sglang/deepseek-v4
+cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
