@@ -1928,7 +1928,7 @@
     - "Search space: TP=8, concurrency 4-64, 1k1k and 8k1k"
     - "MI355X runner updated to resolve framework-specific script names (dsv4_fp8_mi355x_vllm.sh) with fallback to generic names"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
- 
+
 - config-keys:
     - dsv4-fp4-b300-sglang
   description:
@@ -1937,3 +1937,65 @@
     - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
     - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Use ROCm/aiter#2916 mhc_pre device-allocation fix instead of disabling ATOM mhc_pre"
+    - "Patch installed aiter/ops/mhc.py at runtime to allocate mhc_pre intermediates on residual.device, preserving the aiter MHC fast path without rebuilding aiter"
+    - "Remove the ATOM deepseek_v4.py sed workaround that forced mhc_pre to torch fallback"
+    - "Keep dsv4-fp4-mi355x-atom at CONC=1 only; run 24953107645 showed high-concurrency DSv4 ATOM OOMs in PR #650 torch sparse-attention fallbacks before upstream AITER sparse-attention support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1202
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Pin image to vllm/vllm-openai:v0.20.0-cu130 (was floating deepseekv4-cu130 tag); DeepGEMM is preinstalled in this image"
+    - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
+    - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true per the v0.20.0 recipe"
+    - "Drop --pipeline-parallel-size 1; keep --no-enable-prefix-caching and --max-cudagraph-capture-size 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
+
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-atom
+  description:
+    - "Add MiniMax-M2.5 MXFP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
+    - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
+  
+- config-keys:  
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
+    - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
+    - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add GB200 Dynamo vLLM MegaMOE max-throughput recipe at conc=4096"
+    - "Topology matches max-tpt: 3 prefill DEP8 workers and 1 decode DEP8 worker with dedicated NATS/etcd"
+    - "Uses deep_gemm_mega_moe on prefill/decode, TORCH_SYMMMEM=NVSHMEM, and no offload"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add GB200 Dynamo vLLM low-middle curve recipe at conc=256/512"
+    - "Topology: 1 prefill DEP8 worker and 4 decode TP8 workers with dedicated NATS/etcd"
+    - "Mirrors the historical 1P4D DEP8/TP8 offload point from srt-slurm aflowers/vllm-gb200-v0.20.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Add conc=8192 recipe for 1k1k: deepep mega_moe backend with cuda-graph-max-bs 1088, max-running-requests 8192, mem-fraction-static 0.80, swa-full-tokens-ratio 0.3, tokenizer-worker-num 16"
+    - "conc=8192 enables SGLANG_OPT_USE_ONLINE_COMPRESS=1 and --stream-interval 30"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1209

@@ -1,10 +1,10 @@
-name: "dsv4-vllm-disagg-gb200-2p1d-dep8-dep8-offload"
+name: "svf-vllm-disagg-gb200-low-latency"
 
-# Mirrored from NVIDIA/srt-slurm aflowers/gb200-dsv4-recipes branch (PR #77):
-#   recipes/vllm/deepseek-v4-pro-sa/8k1k/disagg-gb200-2p1d-dep8-dep8-c4096-offload.yaml
+# Mirrored from NVIDIA/srt-slurm aflowers/vllm-gb200-v0.20.0 branch:
+#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-low-latency.yaml
 #
-# Topology: 2 prefill (DEP=8 each) + 1 decode (DEP=8). 6 nodes.
-# c4096-tuned variant (decode max-num-seqs=512).
+# Topology: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with a
+# dedicated NATS/etcd infra node. Single-concurrency point for low latency.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -35,12 +35,16 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 4
+  prefill_nodes: 2
   decode_nodes: 2
-  prefill_workers: 2
+  prefill_workers: 1
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -109,15 +113,15 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
+#      data-parallel-size: 8
+#      data-parallel-rpc-port: 13345
+#      enable-expert-parallel: true
       max-model-len: 16384
-      max-num-seqs: 512
-      max-cudagraph-capture-size: 512
-      max-num-batched-tokens: 512
+      max-num-seqs: 256
+      max-cudagraph-capture-size: 256
+      max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -136,10 +140,9 @@ benchmark:
   type: "custom"
   command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
   env:
-    MODEL_NAME: "deepseek-ai/DeepSeek-V4-Pro"
     PREFILL_GPUS: "8"
     DECODE_GPUS: "8"
-    TOTAL_GPUS: "24"
+    TOTAL_GPUS: "16"
     DSV4: "true"
 
 identity:

@@ -1,25 +1,28 @@
-name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep16"
+name: "svf-vllm-disagg-gb200-max-tpt"
 
-# 1k/1k high-throughput topology: 3 prefill workers (DP=8) feeding a single
-# wide decode (DP=16). 10 nodes total. Sized for conc 4096-8192 — at those
-# concurrencies a single prefill worker (the 1p1d-dep8-dep16 sibling)
-# becomes the bottleneck since 1k prefill arrival rate ~200-300 req/s
-# exceeds what one DP=8 worker can sustain.
+# Mirrored from NVIDIA/srt-slurm aflowers/vllm-gb200-v0.20.0 branch:
+#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-max-tpt.yaml
 #
-# Decode capacity:
-#   max-num-seqs: 1024 with DP=16 -> 16384 total simultaneous slots, which
-#   leaves headroom over the conc=8192 working set (per-rank avg 512).
-#   max-cudagraph-capture-size kept at 512: per-rank batch at conc=8192 is
-#   ~512 so cudagraphs still apply at steady state.
-
+# Topology: 3 prefill (DEP=8 each) + 1 decode (DEP=8). 9 nodes total with a
+# dedicated NATS/etcd infra node. Max-throughput point at concurrency 4096.
+#
+# Local deltas vs upstream:
+#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
+#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
+#   * model.container set to vllm/vllm-openai:v0.20.0-ubuntu2404 to
+#     match nvidia-master.yaml image (which the launch script registers as
+#     the alias key in srtslurm.yaml). Upstream variants ship either the
+#     non-dynamo floating tag or a sha256 pin.
+#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
+#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:deepseekv4-cu130"
+  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
   precision: "fp4"
 
 dynamo:
-  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
   install: true
+  wheel: "1.2.0.dev20260426"
 
 setup_script: vllm-container-deps.sh
 
@@ -29,25 +32,25 @@ slurm:
 health_check:
   max_attempts: 1440
   interval_seconds: 10
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 6
-  decode_nodes: 4
+  decode_nodes: 2
   prefill_workers: 3
   decode_workers: 1
   gpus_per_prefill: 8
-  gpus_per_decode: 16
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
 
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-
 backend:
   type: vllm
   connector: null
-
   prefill_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
@@ -55,7 +58,15 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
-
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
   decode_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
@@ -63,7 +74,13 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
-
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -75,30 +92,36 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 3072
+      max-model-len: 16384
       max-num-seqs: 16
-      max-num-batched-tokens: 16384
+      max-num-batched-tokens: 32768
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.88
+      gpu-memory-utilization: 0.8
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-
+      numa-bind: true
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
+      # offload-params: "w13_weight w2_weight w13_weight_scale w2_weight_scale wq_b wo_a wo_b shared_experts"
+      tokenizer-mode: deepseek_v4
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 16
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 3072
-      max-num-seqs: 1024
+      max-model-len: 16384
+      max-num-seqs: 512
       max-cudagraph-capture-size: 512
-      max-num-batched-tokens: 1024
+      max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -107,7 +130,7 @@ backend:
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-
+      tokenizer-mode: deepseek_v4
 # Bench client lives in this repo; mounted into the bench container at
 # /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
 container_mounts:
@@ -118,6 +141,13 @@ benchmark:
   command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
   env:
     PREFILL_GPUS: "8"
-    DECODE_GPUS: "16"
-    TOTAL_GPUS: "40"
-    USE_CHAT_TEMPLATE: "false"
+    DECODE_GPUS: "8"
+    TOTAL_GPUS: "32"
+    DSV4: "true"
+
+identity:
+  container:
+    image: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.20.0"

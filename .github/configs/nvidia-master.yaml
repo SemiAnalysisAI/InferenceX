@@ -1493,7 +1493,7 @@ dsv4-fp4-b200-sglang:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1668,6 +1668,7 @@ dsv4-fp4-b300-sglang:
     - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
     - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
   - isl: 8192
     osl: 1024
     search-space:
@@ -2324,6 +2325,27 @@ dsv4-fp4-b300-vllm:
     - { tp: 8, conc-start: 1, conc-end: 64 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+
+dsv4-fp4-b300-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+    - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
@@ -3195,7 +3217,7 @@ dsr1-fp8-h100-dynamo-trt:
     # https://github.com/InferenceMAX/InferenceMAX/actions/runs/21769314582/job/62813105509
     # - spec-decoding: "mtp"
     #   conc-list: [78]
-    #   recipe: "dsr1/trtllm/h100-fp8/8k1k/disagg/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
+    #   recipe: "trtllm/h100-fp8/8k1k/mtp/ctx1_gen2_tep16_batch32_eplb0_mtp3.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3494,7 +3516,7 @@ dsr1-fp8-h100-dynamo-sglang:
     search-space:
     # # STP: Max throughput TEP (1 prefill, 2 decode)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-    #   recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/stp/h100-fp8-1p2d-max-tp.yaml"
+    #   recipe: "h100/1k1k/stp/h100-fp8-1p2d-max-tp.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3507,7 +3529,7 @@ dsr1-fp8-h100-dynamo-sglang:
     #     dp-attn: false
     # # STP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64]
-    #   recipe: "dsr1/sglang/h100-fp8/1k1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
+    #   recipe: "h100/1k1k/stp/h100-fp8-1p1d-max-dep.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3551,7 +3573,7 @@ dsr1-fp8-h100-dynamo-sglang:
     search-space:
     # # STP: Max throughput TEP (1 prefill, 1 decode)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-    #   recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/stp/h100-fp8-1p1d-max-tp.yaml"
+    #   recipe: "h100/8k1k/stp/h100-fp8-1p1d-max-tp.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -3564,7 +3586,7 @@ dsr1-fp8-h100-dynamo-sglang:
     #     dp-attn: false
     # # STP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
     # - conc-list: [1, 2, 4, 8, 16, 32, 64]
-    #   recipe: "dsr1/sglang/h100-fp8/8k1k/disagg/stp/h100-fp8-1p1d-max-dep.yaml"
+    #   recipe: "h100/8k1k/stp/h100-fp8-1p1d-max-dep.yaml"
     #   prefill:
     #     num-worker: 1
     #     tp: 16
@@ -6886,7 +6908,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
         dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
@@ -6895,64 +6917,17 @@ dsv4-fp4-gb200-dynamo-vllm:
   multinode: true
   disagg: true
   seq-len-configs:
-  # 1k/1k — extrapolated from kimi-k2.5 1k/1k topologies, scaled to DSV4-Pro's
-  # DP>=8 constraint. No upstream NVIDIA reference for DSV4-Pro vLLM disagg
-  # at this seq-len yet (PR #67 only publishes 8k/1k).
-  - isl: 1024
-    osl: 1024
-    search-space:
-    # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-    # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch
-    # 1p1d-dep8-tep8.yaml (offload + numa-bind stripped — see recipe header).
-    - conc-list: [1, 4, 8, 16, 32, 64]
-      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 1
-        dp-attn: false
-    # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
-    # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
-    - conc-list: [128, 256, 1024, 2048, 4096]
-      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-1p1d-dep8-dep16.yaml"
-      prefill:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-    # High throughput: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes.
-    # The 4096 overlap with the 1p1d block gives a crossover point. 8192
-    # would saturate 1p1d's prefill, so this topology takes over there.
-    - conc-list: [4096, 8192]
-      recipe: "dsv4/vllm/gb200-fp4/1k1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
-      prefill:
-        num-worker: 3
-        tp: 8
-        ep: 8
-        dp-attn: true
-      decode:
-        num-worker: 1
-        tp: 16
-        ep: 16
-        dp-attn: true
-
   - isl: 8192
     osl: 1024
     search-space:
-    # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-    # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch.
-    - conc-list: [1, 4, 8, 16, 32, 64]
-      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-1p1d-dep8-tep8.yaml"
+    # Validated 8k/1k points mirrored from NVIDIA/srt-slurm
+    # aflowers/vllm-gb200-v0.20.0 history. conc-list values match each
+    # recipe's benchmark.concurrencies.
+
+    # Low latency: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with
+    # a dedicated NATS/etcd infra node.
+    - conc-list: [1]
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-low-latency.yaml"
       prefill:
         num-worker: 1
         tp: 8
@@ -6963,9 +6938,41 @@ dsv4-fp4-gb200-dynamo-vllm:
         tp: 8
         ep: 1
         dp-attn: false
-    # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
-    - conc-list: [512, 1024]
-      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-3p1d-dep8-dep16.yaml"
+
+    # Low-middle curve: 1 prefill (DEP=8) + 4 decode (TP=8). 11 nodes total
+    # with a dedicated NATS/etcd infra node.
+    - conc-list: [256, 512]
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-low-middle-curve.yaml"
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+      decode:
+        num-worker: 4
+        tp: 8
+        ep: 1
+        dp-attn: false
+
+    # Mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes total with
+    # a dedicated NATS/etcd infra node.
+    - conc-list: [256]
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-mid-curve.yaml"
+      prefill:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+
+    # Max throughput: 3 prefill (DEP=8 each) + 1 decode (DEP=8). 9 nodes
+    # total with a dedicated NATS/etcd infra node.
+    - conc-list: [4096]
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-max-tpt.yaml"
       prefill:
         num-worker: 3
         tp: 8
@@ -6973,20 +6980,21 @@ dsv4-fp4-gb200-dynamo-vllm:
         dp-attn: true
       decode:
         num-worker: 1
-        tp: 16
-        ep: 16
+        tp: 8
+        ep: 8
         dp-attn: true
-    # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
-    # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
-    - conc-list: [4096, 8192]
-      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-7p1d-dep8-dep16.yaml"
+
+    # MegaMOE max throughput: same 3 prefill (DEP=8 each) + 1 decode (DEP=8)
+    # shape, but uses deep_gemm_mega_moe on both workers and disables offload.
+    - conc-list: [4096]
+      recipe: "dsv4/vllm/gb200-fp4/8k1k/disagg/stp/disagg-gb200-max-tpt-megamoe.yaml"
       prefill:
-        num-worker: 7
+        num-worker: 3
         tp: 8
         ep: 8
         dp-attn: true
       decode:
         num-worker: 1
-        tp: 16
-        ep: 16
+        tp: 8
+        ep: 8
         dp-attn: true
