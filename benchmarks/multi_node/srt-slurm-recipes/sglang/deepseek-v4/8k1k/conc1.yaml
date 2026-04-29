@@ -1,4 +1,4 @@
-name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
+name: "conc1"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -11,13 +11,25 @@ name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
 # wideep [0] override and lifts `benchmark` back out — same operational
 # values, schema the pinned srtctl will accept.
 #
-# Other adjustments back to the InferenceX cluster shape: gpu_type=gb200
-# (matrix runs on gb200-nv runners, not gb300), container & model.path
-# restored to the aliases mapped in launch_gb200-nv.sh's srtslurm.yaml
-# (`lmsysorg/sglang:deepseek-v4-grace-blackwell` and `deepseek-v4-pro`),
-# slurm.partition + sbatch_directives + extra_mount + nginx_container
-# dropped (they reference paths/partitions that exist only on the PR
-# author's gb300 cluster).
+# Other adjustments back to the InferenceX cluster shape: container &
+# model.path restored to the aliases mapped in launch_gb300.sh's
+# srtslurm.yaml (`lmsysorg/sglang:deepseek-v4-grace-blackwell` and
+# `deepseek-v4-pro`); `dynamo.install: true` added so the container
+# (which has no dynamo baked in) installs from the pinned hash.
+#
+# Cluster-specific items NOT inlined (require InferenceX-side equivalents):
+#   - slurm.partition (yangminl's gb300-cw uses `hpc-mid`)
+#   - frontend.nginx_container (yangminl's `nginx-1.27.4.sqsh` path)
+#   - extra_mount: yangminl/sglang-patched/sglang. Earlier diff analysis
+#     showed only `expert_location_dispatch.py` topk_ids int32 cast is an
+#     active runtime diff vs container sglang; other patched files are
+#     env-gated dead code under the same SGLANG_OPT_* flags this yaml
+#     already sets.
+#
+# DG-related env intentionally diverged (DG cache path is host-specific):
+#   - SGLANG_DG_CACHE_DIR=/configs/deepgemm_cache (yangminl host)
+#   - SGLANG_JIT_DEEPGEMM_PRECOMPILE=0 (yangminl uses prebuilt cache)
+#   This yaml uses SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 instead.
 
 model:
   path: "deepseek-v4-pro"
@@ -32,7 +44,7 @@ dynamo:
   install: true
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "03:00:00"
 
 # Match yangminl's working all-dynamo.yaml on the same gb300-cw cluster:
 #   cpus-per-task=144  — without this slurm hands out 1 CPU/task, which
@@ -46,25 +58,22 @@ sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
 
-health_check:
-  max_attempts: 1440
-  interval_seconds: 10
-
-# Topology: 2 prefill (TP=4 / DP=4 / EP=4 / 1 node each) + 1 decode
-# (TP=8 / DP=8 / EP=8 / 2 nodes). 3 nodes total.
+# Topology: 7 prefill (TP=4 / DP=4 / EP=4 / 1 node each) + 1 decode
+# (TP=8 / DP=8 / EP=8 / 2 nodes). 9 nodes total.
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 2
-  decode_nodes: 2
-  prefill_workers: 2
-  decode_workers: 1
+  prefill_nodes: 1
+  prefill_workers: 1
   gpus_per_prefill: 4
-  gpus_per_decode: 8
+  decode_nodes: 1
+  decode_workers: 1
+  gpus_per_decode: 4
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: false
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
 
 backend:
   type: sglang
@@ -75,18 +84,9 @@ backend:
     SGLANG_ENABLE_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
     SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -94,10 +94,6 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
-    SGLANG_LOG_FORWARD_ITERS: "1"
-    SGLANG_LOG_MS: "1"
-    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
 
   decode_environment:
     PYTHONUNBUFFERED: "1"
@@ -105,17 +101,9 @@ backend:
     SGLANG_ENABLE_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
     SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1152"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -123,31 +111,25 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
-    SGLANG_LOG_FORWARD_ITERS: "1"
-    SGLANG_LOG_MS: "1"
-    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
     # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
     # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
     prefill:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
       trust-remote-code: true
-      watchdog-timeout: 86400
-      skip-tokenizer-init: true
-      stream-interval: 30
-
-      tensor-parallel-size: 4
-      data-parallel-size: 4
-      expert-parallel-size: 4
-
-      enable-dp-attention: true
-      moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      disable-radix-cache: true
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
+
+      tensor-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
 
       mem-fraction-static: 0.90
       max-running-requests: 512
@@ -156,35 +138,30 @@ backend:
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
       trust-remote-code: true
-      watchdog-timeout: 86400
-      skip-tokenizer-init: true
-      stream-interval: 30
-
-      # Wideep decode shape (zip_override [0] from PR #1213, inlined).
-      tensor-parallel-size: 8
-      data-parallel-size: 8
-      expert-parallel-size: 8
-
-      enable-dp-attention: true
-      enable-dp-lm-head: true
-
-      moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      disable-radix-cache: true
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
 
-      mem-fraction-static: 0.94
-      swa-full-tokens-ratio: 0.15
+      tensor-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+
+      mem-fraction-static: 0.9
+      max-running-requests: 1024
+      cuda-graph-max-bs:    512
+      swa-full-tokens-ratio: 0.1
       context-length: 16384
-      max-running-requests: 9216
-      cuda-graph-max-bs: 1152
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "64"
+  concurrencies: "1"
   req_rate: "inf"
   use_chat_template: false

@@ -1,4 +1,4 @@
-name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
+name: "conc16384"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -63,12 +63,12 @@ sbatch_directives:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 7
-  decode_nodes: 2
-  prefill_workers: 7
-  decode_workers: 1
+  prefill_nodes: 14
+  prefill_workers: 14
   gpus_per_prefill: 4
-  gpus_per_decode: 8
+  decode_nodes: 4
+  decode_workers: 1
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -145,7 +145,7 @@ backend:
       trust-remote-code: true
       watchdog-timeout: 86400
       skip-tokenizer-init: true
-      stream-interval: 30
+      stream-interval: 60
 
       tensor-parallel-size: 4
       data-parallel-size: 4
@@ -168,15 +168,7 @@ backend:
       trust-remote-code: true
       watchdog-timeout: 86400
       skip-tokenizer-init: true
-      stream-interval: 30
-
-      # Wideep decode shape (zip_override [0] from PR #1213, inlined).
-      tensor-parallel-size: 8
-      data-parallel-size: 8
-      expert-parallel-size: 8
-
-      enable-dp-attention: true
-      enable-dp-lm-head: true
+      stream-interval: 60
 
       moe-a2a-backend: "deepep"
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
@@ -187,29 +179,21 @@ backend:
       mem-fraction-static: 0.94
       swa-full-tokens-ratio: 0.15
       context-length: 16384
-      max-running-requests: 9216
+      tensor-parallel-size: 16
+      data-parallel-size: 16
+      expert-parallel-size: 16
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-a2a-backend: deepep
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      max-running-requests: 18432
       cuda-graph-max-bs: 1152
 
+
 benchmark:
-  type: "custom"
-  # Mirror yangminl's gb300-cw 8k1k_hightpt[0] bench (job 564):
-  #   concurrency=4096, rate=48, num-prompts=40960, num-warmups=512,
-  #   random-num-workers=96. Uses upstream SemiAnalysisAI/InferenceX
-  #   benchmark_serving.py at the same flags so this matches the
-  #   reference run's request shape.
-  command: |
-    set -e
-    REPO=/configs/upstream-sa-bench/InferenceX
-    [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
-    cd "$REPO/utils/bench_serving"
-    python3 benchmark_serving.py \
-      --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
-      --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
-      --dataset-name random \
-      --random-input-len 8192 --random-output-len 1024 --random-range-ratio 0.8 \
-      --random-num-workers 96 \
-      --num-prompts 40960 --max-concurrency 4096 --request-rate 48 \
-      --num-warmups 512 \
-      --ignore-eos --trust-remote-code \
-      --percentile-metrics ttft,tpot,itl,e2el \
-      --save-result --result-dir /logs --result-filename results.json
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "16384"
+  req_rate: "inf"
+  use_chat_template: false
