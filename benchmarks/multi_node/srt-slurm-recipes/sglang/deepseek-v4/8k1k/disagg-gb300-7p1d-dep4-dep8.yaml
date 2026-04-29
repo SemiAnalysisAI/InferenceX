@@ -1,0 +1,187 @@
+name: "dsv4-sglang-disagg-gb300-7p1d-dep4-dep8"
+
+# 8k/1k high-throughput topology for DeepSeek-V4-Pro on GB300.
+#
+# Derived from Job 564 on the gb300-cw cluster (yangminl@slurm-login-0,
+# 2026-04-28). That run achieved 358,890 total_token_throughput
+# (9,969 tok/s/gpu) on 9 GB300 nodes (36 GPUs) with the patched sglang
+# container + DeepEP disaggregated inference.
+#
+# Topology: 7 prefill workers (TP=4 / DP=4 / EP=4, 1 node each) +
+# 1 decode worker (TP=8 / DP=8 / EP=8 "wideep", spanning 2 nodes).
+# 9 nodes / 36 GPUs total.
+#
+# Cluster-specific items removed from the original config:
+#   - slurm.partition (original: hpc-mid)
+#   - frontend.nginx_container (original: /mnt/home/yangminl/containers/nginx-1.27.4.sqsh)
+#   - extra_mount (original: /mnt/home/yangminl/sglang-patched/sglang)
+#   - SGLANG_DG_CACHE_DIR, SGLANG_JIT_DEEPGEMM_PRECOMPILE (host-specific
+#     deepgemm cache); replaced with SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
+  precision: "fp4"
+
+dynamo:
+  hash: "9d3c913d300eb368cda28b3f98a23a5762621e0d"
+  install: true
+
+slurm:
+  time_limit: "03:00:00"
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 7
+  prefill_workers: 7
+  decode_nodes: 2
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+
+  decode_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1152"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+    # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
+    # is single-node only and corrupts results in 2-node decode setups.
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 30
+
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+
+      enable-dp-attention: true
+      moe-a2a-backend: "deepep"
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: mooncake
+
+      mem-fraction-static: 0.90
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 32768
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 30
+
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+
+      moe-a2a-backend: "deepep"
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: mooncake
+
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.15
+      context-length: 16384
+      max-running-requests: 9216
+      cuda-graph-max-bs: 1152
+
+benchmark:
+  type: "custom"
+  command: |
+    set -e
+    REPO=/configs/upstream-sa-bench/InferenceX
+    [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
+    cd "$REPO/utils/bench_serving"
+    python3 benchmark_serving.py \
+      --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+      --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+      --dataset-name random \
+      --random-input-len 8192 --random-output-len 1024 --random-range-ratio 0.8 \
+      --random-num-workers 96 \
+      --num-prompts 40960 --max-concurrency 4096 --request-rate 48 \
+      --num-warmups 512 \
+      --ignore-eos --trust-remote-code \
+      --percentile-metrics ttft,tpot,itl,e2el \
+      --save-result --result-dir /logs --result-filename results.json

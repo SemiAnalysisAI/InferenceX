@@ -7723,3 +7723,34 @@ dsv4-fp4-gb200-dynamo-vllm:
         tp: 8
         ep: 8
         dp-attn: true
+
+dsv4-fp4-gb300-dynamo-sglang:
+  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-cw
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Max throughput: 7 prefills (TP=4 / DP=4 / EP=4) + 1 decode
+    # (TP=8 / DP=8 / EP=8 wideep). 9 nodes.
+    # Reference: Job 564 on gb300-cw — 358,890 total_token_throughput
+    # (9,969 tok/s/gpu).
+    - conc-list: [4096]
+      prefill:
+        num-worker: 7
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-7p1d-dep4-dep8.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
