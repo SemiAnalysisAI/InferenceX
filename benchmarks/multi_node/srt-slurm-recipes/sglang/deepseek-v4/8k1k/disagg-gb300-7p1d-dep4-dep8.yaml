@@ -1,4 +1,4 @@
-name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
+name: "dsv4-pro-gb300-fp4_8k1k_hightpt_0"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -11,13 +11,25 @@ name: "dsv4-sglang-disagg-gb200-7p1d-dep8-dep16"
 # wideep [0] override and lifts `benchmark` back out — same operational
 # values, schema the pinned srtctl will accept.
 #
-# Other adjustments back to the InferenceX cluster shape: gpu_type=gb200
-# (matrix runs on gb200-nv runners, not gb300), container & model.path
-# restored to the aliases mapped in launch_gb200-nv.sh's srtslurm.yaml
-# (`lmsysorg/sglang:deepseek-v4-grace-blackwell` and `deepseek-v4-pro`),
-# slurm.partition + sbatch_directives + extra_mount + nginx_container
-# dropped (they reference paths/partitions that exist only on the PR
-# author's gb300 cluster).
+# Other adjustments back to the InferenceX cluster shape: container &
+# model.path restored to the aliases mapped in launch_gb300.sh's
+# srtslurm.yaml (`lmsysorg/sglang:deepseek-v4-grace-blackwell` and
+# `deepseek-v4-pro`); `dynamo.install: true` added so the container
+# (which has no dynamo baked in) installs from the pinned hash.
+#
+# Cluster-specific items NOT inlined (require InferenceX-side equivalents):
+#   - slurm.partition (yangminl's gb300-cw uses `hpc-mid`)
+#   - frontend.nginx_container (yangminl's `nginx-1.27.4.sqsh` path)
+#   - extra_mount: yangminl/sglang-patched/sglang. Earlier diff analysis
+#     showed only `expert_location_dispatch.py` topk_ids int32 cast is an
+#     active runtime diff vs container sglang; other patched files are
+#     env-gated dead code under the same SGLANG_OPT_* flags this yaml
+#     already sets.
+#
+# DG-related env intentionally diverged (DG cache path is host-specific):
+#   - SGLANG_DG_CACHE_DIR=/configs/deepgemm_cache (yangminl host)
+#   - SGLANG_JIT_DEEPGEMM_PRECOMPILE=0 (yangminl uses prebuilt cache)
+#   This yaml uses SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 instead.
 
 model:
   path: "deepseek-v4-pro"
@@ -32,7 +44,7 @@ dynamo:
   install: true
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "03:00:00"
 
 # Match yangminl's working all-dynamo.yaml on the same gb300-cw cluster:
 #   cpus-per-task=144  — without this slurm hands out 1 CPU/task, which
@@ -45,10 +57,6 @@ slurm:
 sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
-
-health_check:
-  max_attempts: 1440
-  interval_seconds: 10
 
 # Topology: 7 prefill (TP=4 / DP=4 / EP=4 / 1 node each) + 1 decode
 # (TP=8 / DP=8 / EP=8 / 2 nodes). 9 nodes total.
@@ -64,7 +72,8 @@ resources:
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: false
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
 
 backend:
   type: sglang
