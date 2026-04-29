@@ -28,7 +28,7 @@ nvidia-smi
 CALIBRATE_SCRIPT="$(dirname "$0")/../gpu_calibrate.py"
 if [ -f "$CALIBRATE_SCRIPT" ]; then
     echo "=== Running GPU calibration ==="
-    torchrun --nproc_per_node=auto "$CALIBRATE_SCRIPT" --output "$PWD/gpu_calibrate.csv"
+    python -m torch.distributed.run --nproc_per_node=auto "$CALIBRATE_SCRIPT" --output "$PWD/gpu_calibrate.csv"
     echo "=== GPU calibration done ==="
 fi
 
