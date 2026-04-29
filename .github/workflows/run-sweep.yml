@@ -180,6 +180,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: ${{ matrix.config.run-eval }}
+            slurm-time-limit: ${{ matrix.config.slurm-time-limit }}
 
     sweep-single-node-8k1k:
         needs: setup
@@ -222,6 +223,7 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+            slurm-time-limit: ${{ matrix.config.slurm-time-limit }}
 
     sweep-multi-node-evals:
         needs: setup

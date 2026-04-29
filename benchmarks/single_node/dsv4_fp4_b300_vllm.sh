@@ -42,6 +42,14 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+# Mega-MoE backend and the lower GMU only kick in on the DP-attn path,
+# per the vLLM v0.20.0 DeepSeek-V4-Pro recipe.
+GMU_ARGS=()
+MOE_ARGS=()
+if [ "${DP_ATTENTION}" = "true" ]; then
+    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+fi
+
 if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=2048
 else
@@ -49,9 +57,6 @@ else
 fi
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
-if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ]; then
-    BENCHMARK_MAX_MODEL_LEN=4096
-fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
@@ -73,6 +78,8 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --block-size 256 \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
+    "${GMU_ARGS[@]}" \
+    "${MOE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \

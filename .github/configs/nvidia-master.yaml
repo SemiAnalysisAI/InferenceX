@@ -2515,13 +2515,14 @@ dsv4-fp8-h200-vllm:
 # field, so dp-attn=true is used as the existing vLLM script switch for DP4
 # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
   precision: fp4
   framework: vllm
   multinode: false
+  slurm-time-limit: 300
   seq-len-configs:
   - isl: 1024
     osl: 1024
@@ -2537,7 +2538,7 @@ dsv4-fp4-b300-vllm:
     - { tp: 4, conc-start: 1, conc-end: 64 }
     - { tp: 8, conc-start: 1, conc-end: 64 }
     - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 4096 }
 
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.20.0-cu130
