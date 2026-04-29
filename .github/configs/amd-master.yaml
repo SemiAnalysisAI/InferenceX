@@ -412,7 +412,7 @@ kimik2.5-int4-mi300x-vllm:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:v0.19.0
+  image: vllm/vllm-openai-rocm:v0.20.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x
@@ -430,7 +430,7 @@ kimik2.5-int4-mi355x-vllm-mtp:
     - { tp: 4, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-mi300x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:v0.19.0
+  image: vllm/vllm-openai-rocm:v0.20.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi300x
@@ -448,7 +448,7 @@ kimik2.5-int4-mi300x-vllm-mtp:
     - { tp: 4, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-mi325x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:v0.19.0
+  image: vllm/vllm-openai-rocm:v0.20.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x

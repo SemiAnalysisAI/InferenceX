@@ -39,6 +39,7 @@ python3 -m pip install --no-cache-dir aiohttp transformers numpy tqdm huggingfac
 
 
 set -x
+export VLLM_USE_V2_MODEL_RUNNER=1 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_RMSNORM=0
@@ -46,7 +47,7 @@ export VLLM_SPEC_CONFIG="${VLLM_SPEC_CONFIG:-{\"model\": \"nvidia/Kimi-K2.5-Thin
 
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.8 \
+--gpu-memory-utilization 0.9 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=64 \
 --trust-remote-code \
@@ -82,5 +83,3 @@ fi
 # Stop GPU monitoring
 stop_gpu_monitor
 set +x
-
-
