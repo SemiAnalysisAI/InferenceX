@@ -33,7 +33,18 @@ export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 NGINX_IMAGE="nginx:1.27.4"
-SRT_SLURM_RECIPES_COMMIT="9d75f82acec163594658a440f39dd7f1bd35bd16"
+# Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
+# (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
+# generation). The single-threaded random prompt generator in the
+# upstream sa-bench dominates bench startup on the 7p1d/conc=8192
+# sweep (~50 min for the main pass alone before the first HTTP
+# request leaves the client). The fork bumps that to ~1 min via
+# multiprocessing.Pool with `--random-num-workers 48`.
+#
+# TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
+# (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
+SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
+SRT_SLURM_RECIPES_COMMIT="8094cfb1db7cad76fbf9ecb41c0c7e662dad301e"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
 # `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
@@ -90,7 +101,7 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+git clone "$SRT_SLURM_RECIPES_REPO" "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout "$SRT_SLURM_RECIPES_COMMIT"
 
