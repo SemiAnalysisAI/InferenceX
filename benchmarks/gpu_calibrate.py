@@ -356,6 +356,110 @@ def run_matmul_benchmark(args, sysinfo):
 
 
 # ---------------------------------------------------------------------------
+# Per-GPU matmul benchmark (all GPUs in parallel)
+# ---------------------------------------------------------------------------
+
+# Representative shapes for per-GPU comparison (keep it fast)
+PER_GPU_SHAPES = [
+    (4096, 4096, 4096),
+    (8192, 8192, 8192),
+]
+PER_GPU_DTYPES = ["bfloat16", "fp8_e4m3", "nvfp4"]
+
+
+def run_per_gpu_matmul(args, sysinfo, rank, local_rank, world_size):
+    """Each rank benchmarks its own GPU, then rank 0 collects and prints comparison."""
+    device = f"cuda:{local_rank}"
+    torch.cuda.set_device(device)
+
+    available = {d[0] for d in detect_dtypes()}
+    my_results = []
+
+    for dtype_name in PER_GPU_DTYPES:
+        if dtype_name not in available:
+            continue
+        for M, N, K in PER_GPU_SHAPES:
+            if not _shape_valid_for_dtype(M, N, K, dtype_name):
+                continue
+            try:
+                avg_ms, tflops = bench_matmul(M, N, K, dtype_name, args.iters, args.warmup, device=device)
+                my_results.append({
+                    "gpu_id": local_rank,
+                    "dtype": dtype_name,
+                    "M": M, "N": N, "K": K,
+                    "time_ms": avg_ms,
+                    "tflops": tflops,
+                })
+            except Exception:
+                my_results.append({
+                    "gpu_id": local_rank,
+                    "dtype": dtype_name,
+                    "M": M, "N": N, "K": K,
+                    "time_ms": -1,
+                    "tflops": -1,
+                })
+
+    # Gather all results to rank 0
+    all_gpu_results = [None] * world_size
+    dist.all_gather_object(all_gpu_results, my_results)
+
+    csv_results = []
+    if rank == 0:
+        # Flatten
+        flat = []
+        for gpu_results in all_gpu_results:
+            flat.extend(gpu_results)
+
+        # Print comparison table per (dtype, shape)
+        print("\n" + "=" * 60)
+        print("=== Per-GPU Matmul Comparison ===")
+        print(f"    iters={args.iters}, warmup={args.warmup}")
+        print("=" * 60)
+
+        for dtype_name in PER_GPU_DTYPES:
+            dtype_rows = [r for r in flat if r["dtype"] == dtype_name and r["tflops"] > 0]
+            if not dtype_rows:
+                continue
+            shapes_in_dtype = sorted(set((r["M"], r["N"], r["K"]) for r in dtype_rows))
+            for M, N, K in shapes_in_dtype:
+                shape_rows = [r for r in dtype_rows if r["M"] == M and r["N"] == N and r["K"] == K]
+                shape_rows.sort(key=lambda r: r["gpu_id"])
+                tflops_vals = [r["tflops"] for r in shape_rows]
+                mean_t = sum(tflops_vals) / len(tflops_vals)
+                min_t = min(tflops_vals)
+                max_t = max(tflops_vals)
+                spread_pct = (max_t - min_t) / mean_t * 100 if mean_t > 0 else 0
+
+                print(f"\n--- {dtype_name} M={M} N={N} K={K} ---")
+                header = "  " + "  ".join(f"{'GPU'+str(r['gpu_id']):>10s}" for r in shape_rows)
+                values = "  " + "  ".join(f"{r['tflops']:>10.1f}" for r in shape_rows)
+                print(header)
+                print(values + "  TFLOPS")
+                flag = " <<<" if spread_pct > 5 else ""
+                print(f"  mean={mean_t:.1f}  min={min_t:.1f}  max={max_t:.1f}  spread={spread_pct:.1f}%{flag}")
+
+                # CSV rows
+                for r in shape_rows:
+                    csv_results.append({
+                        "test_type": "matmul_per_gpu",
+                        "dtype": dtype_name,
+                        "M": M, "N": N, "K": K,
+                        "size_bytes": "",
+                        "time_ms": f"{r['time_ms']:.4f}",
+                        "tflops": f"{r['tflops']:.2f}",
+                        "busbw_gbps": "",
+                        "algobw_gbps": "",
+                        **sysinfo,
+                        "gpu_id": r["gpu_id"],
+                        "mode": "matmul_per_gpu",
+                        "iters": args.iters,
+                        "warmup": args.warmup,
+                    })
+
+    return csv_results
+
+
+# ---------------------------------------------------------------------------
 # AllReduce benchmark
 # ---------------------------------------------------------------------------
 
@@ -530,7 +634,7 @@ def print_summary(matmul_results, allreduce_results, sysinfo):
 CSV_COLUMNS = [
     "test_type", "dtype", "M", "N", "K", "size_bytes",
     "time_ms", "tflops", "busbw_gbps", "algobw_gbps",
-    "hostname", "gpu_name", "gpu_count", "cuda_capability",
+    "hostname", "gpu_name", "gpu_id", "gpu_count", "cuda_capability",
     "torch_version", "cuda_version", "nccl_version", "driver",
     "mode", "iters", "warmup", "timestamp",
 ]
@@ -595,6 +699,11 @@ def main():
             dist.barrier()
     else:
         matmul_results = []
+
+    # --- Per-GPU Matmul (all ranks in parallel) ---
+    if not args.allreduce_only and is_distributed:
+        per_gpu_results = run_per_gpu_matmul(args, sysinfo, rank, local_rank, world_size)
+        all_results.extend(per_gpu_results)
 
     # --- AllReduce ---
     if not args.matmul_only:
