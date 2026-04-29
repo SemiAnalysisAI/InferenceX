@@ -42,25 +42,32 @@ SRT_SLURM_RECIPES_COMMIT="9d75f82acec163594658a440f39dd7f1bd35bd16"
 SQUASH_DIR="/mnt/vast/squash_dupe"
 mkdir -p "$SQUASH_DIR"
 # Compute nodes (slurm-gb300-138-*, slurm-gb300-139-*) are aarch64; the
-# CI runner pod that performs `enroot import` is x86. Without --arch,
-# enroot pulls the host (amd64) manifest and produces a sqsh that pyxis
-# on the compute node rejects with "Invalid image format". Force enroot
-# to pull the arm64 manifest so the cached sqsh is portable to compute
-# nodes. The `_${RUNNER_NAME}_arm64` suffix scopes the cache per runner
-# (gb300-cw_0..3) so concurrent matrix jobs don't rm+import the same
-# file and corrupt each other's downloads.
-SQUASH_TAG="${RUNNER_NAME:-default}_arm64"
-SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')_${SQUASH_TAG}.sqsh"
-NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_${SQUASH_TAG}.sqsh"
+# image `lmsysorg/sglang:deepseek-v4-grace-blackwell` is published as
+# arm64-only. The CI runner pod is x86_64 and (a) cannot run
+# `enroot import` for the arm64 manifest because `enroot-aufs2ovlfs`
+# needs CAP_SYS_ADMIN that the pod lacks ("Operation not permitted"),
+# and (b) even with `--arch aarch64` the conversion still fails on x86.
+# Per `https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780`
+# the import has to be dispatched to an arm64 compute node via srun.
+# To keep CI self-contained we instead pin to the pre-staged arm64 sqsh
+# under /mnt/vast/squash_dupe/ (refreshed manually by running that gist
+# script when the docker tag is updated). Filename suffix `_arm64`
+# distinguishes the working arm64 sqsh from any stale amd64 shadow.
+SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
+NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
 
-# Always rebuild the squash from scratch — `enroot import` aborts with
-# `[ERROR] File already exists` when targeting an existing path, so
-# leaving a stale (interrupted import / pre-update tag) sqsh in place
-# silently keeps using the broken file. rm + import guarantees a fresh
-# import each CI run and picks up Docker tag updates.
-rm -f "$SQUASH_FILE" "$NGINX_SQUASH_FILE"
-enroot import --arch aarch64 -o "$SQUASH_FILE" "docker://$IMAGE"
-enroot import --arch aarch64 -o "$NGINX_SQUASH_FILE" "docker://$NGINX_IMAGE"
+if [[ ! -f "$SQUASH_FILE" ]]; then
+    echo "ERROR: pre-staged arm64 sqsh missing: $SQUASH_FILE" >&2
+    echo "Refresh it on a GB300 compute node via the script in the gist:" >&2
+    echo "  https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780" >&2
+    exit 1
+fi
+if [[ ! -f "$NGINX_SQUASH_FILE" ]]; then
+    echo "ERROR: pre-staged arm64 nginx sqsh missing: $NGINX_SQUASH_FILE" >&2
+    echo "Run on an aarch64 host:" >&2
+    echo "  enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE" >&2
+    exit 1
+fi
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
