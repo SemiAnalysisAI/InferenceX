@@ -1,0 +1,150 @@
+name: "dsv4-vllm-disagg-gb300-1p1d-dep4-dep4"
+
+# Mirrors NVIDIA/srt-slurm PR #84 (ywang96/gb300-vllm) at SHA
+# 228febcfe9c76347cd619a7622af83ca52ca35a4. Mid 8k/1k:
+# 1 prefill (DP=4 on 1 node) + 1 decode (DP=4 on 1 node). 2 nodes total.
+# Decode shifts from TP=4 (low conc) to DP=4+EP at conc 256/512 to keep
+# the wide MoE expert spread tight.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai@sha256:d29a90b13bb9758821839dd810db9679055e8adf7c670df9f0a432f45f2488a5"
+  precision: "fp4"
+
+dynamo:
+  # PyPI's stable ai-dynamo 1.0.2 imports `vllm.inputs.data` which vllm-project/vllm#35182
+  # (2026-03-26) deleted; this container is post-deletion. The fix shipped in
+  # 1.2.0.dev wheels but PR #84's DynamoConfig has no wheel: field. Skip srtctl's
+  # install — launch_gb300-cw.sh stages 1.2.0.dev20260426 wheels and pip-installs them
+  # via the appended vllm-container-deps.sh hook.
+  install: false
+
+setup_script: vllm-container-deps.sh
+
+sbatch_directives:
+  segment: "2"
+  mem: "0"
+
+slurm:
+  time_limit: "3:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  prefill_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: NVL
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+  decode_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: NVL
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-model-len: 16384
+      max-num-seqs: 10
+      max-num-batched-tokens: 81920
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      safetensors-load-strategy: "prefetch"
+      no-async-scheduling: true
+      block-size: 256
+      gpu-memory-utilization: 0.91
+      no-disable-hybrid-kv-cache-manager: true
+      # numa-bind disabled on cw. SLURM's job-step cgroup constrains the
+      # worker's cpuset.cpus to a subset that doesn't include the CPUs of any
+      # one Grace NUMA node, so vLLM's sched_setaffinity(NUMA-N) returns EINVAL
+      # and the engine subprocess dies before model load. vLLM's auto-detect
+      # (vllm/utils/numa_utils.py:_is_auto_numa_available) bails on this case,
+      # but explicit numa-bind-nodes forces past the guard. Re-enable once cw
+      # relaxes the cgroup CPU mask for our jobs (or we add `--cpu-bind=none`
+      # to srtctl's srun).
+      numa-bind: false
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
+      enable-sleep-mode: true
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      max-model-len: 16384
+      max-num-seqs: 128
+      max-cudagraph-capture-size: 128
+      max-num-batched-tokens: 128
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      enable-sleep-mode: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "256x512"
+  req_rate: "inf"
+  use_chat_template: false

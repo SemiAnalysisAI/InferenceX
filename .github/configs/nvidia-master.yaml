@@ -7723,3 +7723,96 @@ dsv4-fp4-gb200-dynamo-vllm:
         tp: 8
         ep: 8
         dp-attn: true
+
+dsv4-fp4-gb300-dynamo-vllm:
+  image: vllm/vllm-openai@sha256:d29a90b13bb9758821839dd810db9679055e8adf7c670df9f0a432f45f2488a5
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-cw
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  # Mirrors NVIDIA/srt-slurm PR #84 (ywang96/gb300-vllm) at SHA
+  # 228febcfe9c76347cd619a7622af83ca52ca35a4. 8k/1k only — PR 84
+  # publishes 5 recipes spanning low-conc (TP=4 decode) → mid (DP=4/8
+  # decode + DP=4 prefill workers) → max (14p1d-dep4-dep16, 18 nodes).
+  # Each recipe rack-pins via its own sbatch_directives.segment.
+  seq-len-configs:
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # Low-conc / interactivity: 1 prefill (DP=4 + EP) + 1 decode (TP=4).
+    # 2 nodes total. Decode is plain TP, no EP/DP.
+    - conc-list: [4, 8, 16, 32, 64, 128, 256]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-tp4-c4-c8-c32-c64-c128-c256.yaml"
+      decode:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+    # Mid-low: 1 prefill (DP=4) + 1 decode (DP=4 + EP). 2 nodes total.
+    # Decode swings to DP+EP at conc 256/512 to spread the MoE experts.
+    - conc-list: [256, 512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep4-c512.yaml"
+      decode:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+    # Mid-high: 6 prefills (DP=4 each) + 1 decode (DP=8 + EP). 10 nodes
+    # per upstream resources block (decode_nodes:4 verbatim from PR 84).
+    - conc-list: [1024, 2048]
+      prefill:
+        num-worker: 6
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-6p1d-dep4-dep8-32-c2048.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # High: 12 prefills (DP=4 each) + 1 wide decode (DP=16 + EP). 16 nodes.
+    - conc-list: [3072, 4096]
+      prefill:
+        num-worker: 12
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-12p1d-dep4-dep16-56-c4096.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    # Max: 14 prefills (DP=4 each) + 1 wide decode (DP=16 + EP). 18 nodes
+    # — fills exactly one cw rack.
+    - conc-list: [6144, 8192]
+      prefill:
+        num-worker: 14
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-14p1d-dep4-dep16-72-c8192.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true

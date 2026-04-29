@@ -1930,6 +1930,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 sweep on cluster gb300-cw (CoreWeave; 2x 18-node racks)"
+    - "Mirrors NVIDIA/srt-slurm PR #84 (ywang96/gb300-vllm) at SHA 228febcf. 5 recipes spanning 8k/1k from c=4 to c=8192: 1p1d-dep4-tp4 (low conc), 1p1d-dep4-dep4 (c512), 6p1d-dep4-dep8 (c2048), 12p1d-dep4-dep16 (c4096), 14p1d-dep4-dep16 (c8192, 18 nodes)"
+    - "Container pinned to vllm/vllm-openai@sha256:d29a90b1... (cu130 + DSV4). Dynamo via published v1.0.2 wheel (install: true). Per-worker tuning: numa-bind, safetensors-load-strategy: prefetch, weight offload (group-size 3), enable-ep-weight-filter, enable-sleep-mode, all2all-backend: flashinfer_nvlink_one_sided on decode, PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True on prefill"
+    - "vLLM patches (auto-applied by upstream configs/vllm-container-deps.sh): cumem expandable_segments fix, MegaMoE free-orig (vllm-project/vllm#40860 backport), nvlink one-sided bf16 fix, numa-bind hash fix"
+    - "New runners group gb300-cw (gb300-cw_0/1) and launch_gb300-cw.sh: SLURM partition `all`, model staging at /mnt/vast/models/dsv4/, squash files at /mnt/vast/squash/. Each recipe rack-pins via sbatch_directives.segment (cw's srtslurm.yaml turns off srtctl auto-segment)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1150
+
+- config-keys:
     - dsv4-fp4-b300-sglang
   description:
     - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
