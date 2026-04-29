@@ -2510,6 +2510,27 @@ dsv4-fp8-h200-vllm:
     search-space:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
 
+# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.0-cu130 image
+# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+dsv4-fp8-h200-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
 # pareto sweep. The single-node schema has no explicit data-parallel-size
 # field, so dp-attn=true is used as the existing vLLM script switch for DP4
