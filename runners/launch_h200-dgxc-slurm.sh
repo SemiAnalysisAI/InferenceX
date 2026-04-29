@@ -286,13 +286,27 @@ else
         fi
     "
 
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    BENCH_BASE="benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+        BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
+    fi
+
+    if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_h200$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt')$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp').sh
+        bash $BENCH_SCRIPT
 
     scancel $JOB_ID
 

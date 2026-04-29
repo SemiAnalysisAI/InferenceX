@@ -4,8 +4,13 @@ export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
-FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+BENCH_BASE="benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200"
+BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+if [[ ! -f "$BENCH_SCRIPT" ]]; then
+    LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
+fi
 
 PARTITION="h200"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -38,13 +43,19 @@ else
     CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
 fi
 
+if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+    CONTAINER_MOUNT_DIR=/ix
+else
+    CONTAINER_MOUNT_DIR=/workspace
+fi
+
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-mount-home \
---container-workdir=/workspace/ \
+--container-workdir=$CONTAINER_MOUNT_DIR/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+bash $BENCH_SCRIPT
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID
