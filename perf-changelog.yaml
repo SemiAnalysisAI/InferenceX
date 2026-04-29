@@ -1920,15 +1920,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1180
 
 - config-keys:
-<<<<<<< gb300-1k1k-sglang
-    - dsv4-fp4-gb300-dynamo-sglang
-  description:
-    - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
-    - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 (gb300-cw compute nodes are aarch64)"
-    - "Topology: 1 prefill worker + 3 decode workers, TP=8, MXFP4 MoE kernels, NIXL KV transfer"
-    - "Recipes copied exactly from NVIDIA/srt-slurm recipes/dsv4-pro/sglang/gb200-fp4 at commit 9d75f82acec163594658a440f39dd7f1bd35bd16"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1169
-=======
     - dsv4-fp8-mi355x-vllm
   description:
     - "Add vLLM DeepSeek-V4-Pro FP8 benchmark for MI355X with AITER-accelerated MLA decode (vllm-project/vllm#40889, stacked on #40871)"
@@ -1978,4 +1969,12 @@
     - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
     - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
->>>>>>> main
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 (gb300-cw compute nodes are aarch64)"
+    - "Topology: 1 prefill worker + 3 decode workers, TP=8, MXFP4 MoE kernels, NIXL KV transfer"
+    - "Recipes copied exactly from NVIDIA/srt-slurm recipes/dsv4-pro/sglang/gb200-fp4 at commit 9d75f82acec163594658a440f39dd7f1bd35bd16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1169
