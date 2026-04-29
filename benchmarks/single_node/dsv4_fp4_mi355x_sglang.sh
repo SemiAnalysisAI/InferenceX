@@ -64,11 +64,14 @@ else:
     print(f"No patch needed: model_type is {config.get('model_type')!r}")
 PYEOF
 
-# DSv4-specific SGLang env vars (from sgl-project/sglang#23608). FP4-experts
-# path mirrors python/run_dsv4.sh on the amd/deepseek_v4 branch:
+# DSv4 FP4-experts path. Mirrors the active path of python/run_dsv4.sh on
+# the amd/deepseek_v4 branch at SGL_PR_SHA:
 #   SGLANG_DSV4_FP4_EXPERTS=True   -> route experts through the FP4 kernels
-#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> required to apply swiglu_limit clamp in
-#                                    fused_moe_triton on the FP4 path
+#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter (gating
+#                                    switch added in commit 33de1e64);
+#                                    also enables swiglu_limit clamp in the
+#                                    triton MoE fallback path.
+export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
