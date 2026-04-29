@@ -100,6 +100,13 @@ backend:
       gpu-memory-utilization: 0.91
       no-disable-hybrid-kv-cache-manager: true
       numa-bind: true
+      # Auto-detect (vllm/utils/numa_utils.py:_is_auto_numa_available) fails on
+      # cw because the enroot container lacks cap_sys_nice — _can_set_mempolicy()
+      # returns False, get_auto_numa_nodes() returns None, and the worker raises
+      # "NUMA binding was requested, but vLLM could not detect ... topology".
+      # Pin explicitly: each Grace-Blackwell pair is its own NUMA node, so GPU N
+      # binds to NUMA node N on a 4-GPU host.
+      numa-bind-nodes: [0, 1, 2, 3]
       offload-group-size: 3
       offload-num-in-group: 1
       offload-prefetch-step: 2
