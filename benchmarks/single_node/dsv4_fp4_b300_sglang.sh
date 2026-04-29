@@ -159,6 +159,7 @@ else
         --moe-runner-backend flashinfer_mxfp4
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
+        --enable-prefill-delayer
     )
 fi
 
