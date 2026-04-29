@@ -1877,7 +1877,7 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
-  
+
 - config-keys:
     - dsv4-fp4-b200-sglang
   description:
@@ -1985,3 +1985,12 @@
     - "Topology: 1 prefill DEP8 worker and 4 decode TP8 workers with dedicated NATS/etcd"
     - "Mirrors the historical 1P4D DEP8/TP8 offload point from srt-slurm aflowers/vllm-gb200-v0.20.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 Dynamo SGLang disaggregated multinode configuration"
+    - "Image: lmsysorg/sglang:deepseek-v4-grace-blackwell_arm64 (gb300-cw compute nodes are aarch64)"
+    - "Topology: 1 prefill worker + 3 decode workers, TP=8, MXFP4 MoE kernels, NIXL KV transfer"
+    - "Recipes copied exactly from NVIDIA/srt-slurm recipes/dsv4-pro/sglang/gb200-fp4 at commit 9d75f82acec163594658a440f39dd7f1bd35bd16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1169
