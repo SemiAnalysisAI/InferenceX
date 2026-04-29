@@ -11,8 +11,12 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: 1.0.2
-  install: true
+  # PyPI's stable ai-dynamo 1.0.2 imports `vllm.inputs.data` which vllm-project/vllm#35182
+  # (2026-03-26) deleted; this container is post-deletion. The fix shipped in
+  # 1.2.0.dev wheels but PR #84's DynamoConfig has no wheel: field. Skip srtctl's
+  # install — launch_gb300-cw.sh stages 1.2.0.dev20260426 wheels and pip-installs them
+  # via the appended vllm-container-deps.sh hook.
+  install: false
 
 setup_script: vllm-container-deps.sh
 

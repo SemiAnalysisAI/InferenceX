@@ -97,6 +97,80 @@ git checkout 228febcfe9c76347cd619a7622af83ca52ca35a4
 mkdir -p recipes/vllm/deepseek-v4
 cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 
+# ─── Stage ai-dynamo dev wheels for in-container install ─────────────────────
+# Stable ai-dynamo 1.0.2 imports vllm.inputs.data, which vllm-project/vllm#35182
+# (2026-03-26) deleted; this container is post-deletion. The fix shipped in
+# 1.2.0.dev wheels but PR #84's DynamoConfig has no wheel: field, so we can't
+# tell srtctl to install them directly. Instead we set dynamo.install: false in
+# every gb300 recipe and append a pip install to the upstream
+# configs/vllm-container-deps.sh — which srtctl runs in each worker container
+# before launching dynamo.vllm.
+#
+# Wheels are staged on /mnt/vast (shared aarch64-readable NFS) once per version
+# and re-symlinked into srt-slurm/configs/dynamo-wheels/<version>/ each run, so
+# they end up at /configs/dynamo-wheels/<version>/ inside the container.
+DYNAMO_DEV_VERSION="1.2.0.dev20260426"
+DYNAMO_WHEEL_CACHE="/mnt/vast/dynamo-wheels/${DYNAMO_DEV_VERSION}"
+DYNAMO_WHEEL_LOCK="/mnt/vast/dynamo-wheels/${DYNAMO_DEV_VERSION}.lock"
+mkdir -p "$(dirname "$DYNAMO_WHEEL_CACHE")"
+
+# mkdir-as-lock — flock is unreliable on this VAST mount per prior runs.
+# First runner to win the mkdir downloads; others spin until the cache is ready.
+if mkdir "$DYNAMO_WHEEL_LOCK" 2>/dev/null; then
+    trap 'rmdir "$DYNAMO_WHEEL_LOCK" 2>/dev/null || true' EXIT
+    if [ ! -f "${DYNAMO_WHEEL_CACHE}/.complete" ]; then
+        echo "Staging ai-dynamo ${DYNAMO_DEV_VERSION} aarch64 wheels to ${DYNAMO_WHEEL_CACHE}..."
+        rm -rf "$DYNAMO_WHEEL_CACHE"
+        mkdir -p "$DYNAMO_WHEEL_CACHE"
+        # Runner pod is x86 but compute nodes are aarch64, so force --platform.
+        # --pre is required: dev wheels aren't picked up otherwise.
+        python3 -m pip download \
+            --no-deps --pre --only-binary=:all: \
+            --implementation cp --python-version 3.12 \
+            --platform manylinux_2_28_aarch64 --platform manylinux2014_aarch64 \
+            --extra-index-url https://pypi.nvidia.com \
+            --dest "$DYNAMO_WHEEL_CACHE" \
+            "ai-dynamo-runtime==${DYNAMO_DEV_VERSION}" \
+            "ai-dynamo==${DYNAMO_DEV_VERSION}"
+        touch "${DYNAMO_WHEEL_CACHE}/.complete"
+    fi
+    trap - EXIT
+    rmdir "$DYNAMO_WHEEL_LOCK" 2>/dev/null || true
+else
+    echo "Another runner is staging ai-dynamo ${DYNAMO_DEV_VERSION}; waiting..."
+    while [ -d "$DYNAMO_WHEEL_LOCK" ] && [ ! -f "${DYNAMO_WHEEL_CACHE}/.complete" ]; do
+        sleep 5
+    done
+fi
+
+if [ ! -f "${DYNAMO_WHEEL_CACHE}/.complete" ]; then
+    echo "ERROR: ai-dynamo wheel cache at ${DYNAMO_WHEEL_CACHE} is missing the .complete marker — staging failed." >&2
+    exit 1
+fi
+
+# Surface the cache to the container at /configs/dynamo-wheels/<version>/.
+mkdir -p configs/dynamo-wheels
+ln -sfn "$DYNAMO_WHEEL_CACHE" "configs/dynamo-wheels/${DYNAMO_DEV_VERSION}"
+
+# Append the pip install to upstream's vllm-container-deps.sh. The recipe sets
+# dynamo.install: false so srtctl emits no install line; this hook installs
+# from the wheel cache instead. --no-index keeps pip off the network entirely.
+cat >> configs/vllm-container-deps.sh <<EOF
+
+# ─── Local dynamo install (added by runners/launch_gb300-cw.sh) ─────────────
+# Install ai-dynamo ${DYNAMO_DEV_VERSION} from staged wheels. We do this here
+# rather than via srtctl's DynamoConfig.get_install_commands because PR #84's
+# schema only knows about \`version\` (PyPI) and \`hash\`/\`top_of_tree\` (source
+# build). The 1.2.0.dev wheels are pre-release on pypi.nvidia.com; --no-index
+# forces pip off the network so worker startup is offline-deterministic.
+echo "Installing ai-dynamo ${DYNAMO_DEV_VERSION} from /configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/..."
+pip install --break-system-packages --quiet --no-deps --no-index \\
+    --find-links "/configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/" \\
+    "ai-dynamo-runtime==${DYNAMO_DEV_VERSION}" \\
+    "ai-dynamo==${DYNAMO_DEV_VERSION}"
+echo "ai-dynamo ${DYNAMO_DEV_VERSION} installed"
+EOF
+
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
 # Runner pod is x86 but compute nodes are aarch64, and /mnt/home is shared
