@@ -2,7 +2,7 @@
 
 # DeepSeek-V4-Pro H200 vLLM MTP variant of the recipe at
 # https://vllm.ai/blog/deepseek-v4. Mirrors dsv4_fp8_h200.sh but adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":2}' and
+# --speculative-config '{"method":"mtp","num_speculative_tokens":1}' and
 # routes prompts through chat-formatted encoding via --dsv4 (required for
 # meaningful MTP acceptance numbers per AGENTS.md).
 
@@ -32,6 +32,11 @@ PORT=${PORT:-8888}
 # 600s. Give it an hour to load.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
+# Skip the cudagraph-memory estimator during the worker memory profiling
+# phase — it overestimates and pushes us over the GPU memory budget on
+# H200 + MTP, even though the actual cudagraph capture works fine.
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN_ARG="--max-model-len $EVAL_MAX_MODEL_LEN"
@@ -59,7 +64,7 @@ $MAX_MODEL_LEN_ARG \
 --max-num-batched-tokens 512 \
 --no-enable-flashinfer-autotune \
 --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
---speculative-config '{"method":"mtp","num_speculative_tokens":2}' \
+--speculative-config '{"method":"mtp","num_speculative_tokens":1}' \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
