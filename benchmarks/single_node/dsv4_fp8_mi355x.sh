@@ -18,9 +18,12 @@ fi
 hf download "$MODEL"
 
 # Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
-# rocm/sgl-dev:deepseek-v4-mi35x image ships with. The image's sglang is
-# moving fast and we want a reproducible pin per benchmark run. Bump
-# SGL_PR_SHA when the branch advances.
+# rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428 image ships with. We
+# stay on the rocm700 (ROCm 7.0.0a) line because rocm720 hit
+# hipErrorInvalidConfiguration on use_symmetric_memory-allocated dp_attention
+# buffers (RCCL symmetric-memory bug; SGLANG_USE_ROCM700A WA only covers the
+# cuda-graph path, not eager mode that we use via --disable-cuda-graph).
+# Bump SGL_PR_SHA when the branch advances.
 SGL_PR_SHA="18afbf151a2992b06a089191769b299629ed73dd"
 SGL_PR_DIR="/tmp/sglang-amd-dsv4"
 

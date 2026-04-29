@@ -1497,7 +1497,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=1"
 
 dsv4-fp8-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-deepseek-v4-mi35x
+  image: rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1520,7 +1520,7 @@ dsv4-fp8-mi355x-sglang:
 # and uses the bf16 DeepSeek-V4-Pro checkpoint (FP4 quantization is applied
 # at expert-runtime by sglang).
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-deepseek-v4-mi35x
+  image: rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x

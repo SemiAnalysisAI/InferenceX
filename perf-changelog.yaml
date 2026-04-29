@@ -2012,7 +2012,7 @@
     - dsv4-fp4-mi355x-sglang
   description:
     - "Pin sglang at runtime to amd/deepseek_v4 branch SHA 18afbf15 via clone+reinstall in the benchmark scripts"
-    - "Bump dsv4-fp8-mi355x-sglang image to rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
+    - "Bump dsv4-fp8-mi355x-sglang image to rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428"
     - "Switch dsv4-fp8-mi355x-sglang model from sgl-project/DeepSeek-V4-Pro-FP8 to deepseek-ai/DeepSeek-V4-Pro"
     - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 in dsv4_fp8_mi355x.sh so FP8 MoE dispatches through aiter (matches branch run_dsv4.sh after FP4 Models commit 33de1e64)"
     - "Add SGLANG_REASONING_EFFORT=max to both scripts"
