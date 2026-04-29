@@ -124,6 +124,7 @@ backend:
       max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
