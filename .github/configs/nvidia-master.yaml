@@ -1975,6 +1975,10 @@ qwen3.5-bf16-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-bf16-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
@@ -2072,6 +2076,10 @@ glm5-fp8-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 glm5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
@@ -2579,6 +2587,10 @@ dsv4-fp8-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
   # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
   # pareto sweep. The single-node schema has no explicit data-parallel-size
@@ -3778,6 +3790,10 @@ minimaxm2.5-fp8-b200-vllm:
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 512 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing

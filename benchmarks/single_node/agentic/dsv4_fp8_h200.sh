@@ -2,7 +2,9 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for DSR1 FP4 on B200 using SGLang.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro FP8 on H200 using vLLM.
+# Uses the cu129 image; H200 has no FP4 path so the FP4 indexer cache flag
+# is omitted. Max-model-len pinned at 800k per the recipe.
 #
 # Required env vars:
 #   MODEL, TP, CONC, RESULT_DIR
@@ -16,8 +18,9 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-EP_SIZE=${EP_SIZE:-1}
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-5}
+if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+    MAX_MODEL_LEN=800000
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -30,35 +33,37 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
-# ---- Start SGLang server ----------------------------------------------------
+# DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
+export VLLM_ENGINE_READY_TIMEOUT_S=3600
+
+# ---- Start vLLM server ------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-echo "Starting SGLang server..."
-export TORCH_CUDA_ARCH_LIST="10.0"
+echo "Starting vLLM server..."
 export PYTHONNOUSERSITE=1
 
-python3 -m sglang.launch_server \
---model-path $MODEL \
+# Per recipe: EP + DP=8 (no --tensor-parallel-size). TP from search space is
+# used for GPU allocation by the runner and as the DP size.
+vllm serve $MODEL \
 --host 0.0.0.0 \
 --port $PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP \
---data-parallel-size=1 \
---cuda-graph-max-bs $CONC \
---max-running-requests $CONC \
---mem-fraction-static 0.85 \
---kv-cache-dtype fp8_e4m3 \
---chunked-prefill-size 16384 \
---ep-size $EP_SIZE \
---quantization modelopt_fp4 \
---enable-flashinfer-allreduce-fusion \
---scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem \
---attention-backend trtllm_mla \
---moe-runner-backend flashinfer_trtllm \
---stream-interval 10 \
---enable-metrics > "$SERVER_LOG" 2>&1 &
+--kv-cache-dtype fp8 \
+--block-size 256 \
+--no-enable-prefix-caching \
+--enable-expert-parallel \
+--data-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
+--gpu-memory-utilization 0.95 \
+--max-num-seqs $CONC \
+--max-num-batched-tokens 512 \
+--no-enable-flashinfer-autotune \
+--compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+--tokenizer-mode deepseek_v4 \
+--tool-call-parser deepseek_v4 \
+--enable-auto-tool-choice \
+--reasoning-parser deepseek_v4 > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
