@@ -4045,7 +4045,7 @@ dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
-  runner: gb200
+  runner: gb200-p1
   precision: fp4
   framework: dynamo-trt
   multinode: true
@@ -4400,22 +4400,70 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
 
     agentic-coding:
-    - duration: 300
+    - duration: 1800
       search-space:
+      # 1P×TP8/DEP + 1D×TP8/DEP — 4 nodes total. Anchors low concurrency.
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx1_gen1_dep8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 2P×TP8/DEP + 1D×TP8/DEP — 6 nodes. Mid Pareto.
+      - spec-decoding: "none"
+        conc-list: [ 4, 8, 16, 32, 64 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx2_gen1_dep8_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 5P×TP8/DEP + 1D×TP8/DEP — 12 nodes. Existing high-throughput recipe.
+      - spec-decoding: "none"
+        conc-list: [ 16, 32, 64, 128, 256, 512 ]
         prefill:
           num-worker: 5
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml
           - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx10_gen1_dep16_60k150.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 8
+          dp-attn: true
+
+      # 5P×TP8/DEP + 1D×TP16/DEP — 14 nodes. Bigger decode for max throughput.
+      - spec-decoding: "none"
+        conc-list: [ 64, 128, 256, 512, 1024 ]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/gb200-fp4/agentic/ctx5_gen1_dep16_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
 
@@ -5298,7 +5346,7 @@ dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8-cu130"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
-  runner: gb200
+  runner: gb200-p1
   precision: fp4
   framework: dynamo-sglang
   multinode: true
@@ -5410,8 +5458,9 @@ dsr1-fp4-gb200-dynamo-sglang:
           dp-attn: true
 
     agentic-coding:
-    - duration: 300
+    - duration: 1800
       search-space:
+      # 1P×TP1/PP4 + 1D×TP4 — 5 nodes. Existing min-TTFT recipe.
       - spec-decoding: "none"
         conc-list: [ 1, 2, 4, 8, 16, 32 ]
         prefill:
@@ -5420,8 +5469,23 @@ dsr1-fp4-gb200-dynamo-sglang:
           ep: 1
           dp-attn: false
           additional-settings:
-          # https://github.com/cquil11/srt-slurm-nv/blob/cam/sa-submission-q2-2026/recipes/gb200-fp4/agentic/minttft-ctx1_pp4_gen1_tp4_128k_agentic.yaml
           - "CONFIG_FILE=recipes/gb200-fp4/agentic/minttft-ctx1_pp4_gen1_tp4_128k_agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+      # 1P×TP4 + 1D×TP4 — 2 nodes. Simpler 1P1D for low-mid concurrency.
+      - spec-decoding: "none"
+        conc-list: [ 1, 4, 8, 16, 32, 64 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb200-fp4/agentic/ctx1_gen1_tp4_128k_agentic.yaml"
         decode:
           num-worker: 1
           tp: 4
