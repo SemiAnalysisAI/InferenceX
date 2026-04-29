@@ -41,11 +41,26 @@ SRT_SLURM_RECIPES_COMMIT="9d75f82acec163594658a440f39dd7f1bd35bd16"
 # old /mnt/vast/squash dir contains '+'-separated files from prior runs.
 SQUASH_DIR="/mnt/vast/squash_dupe"
 mkdir -p "$SQUASH_DIR"
-SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# Compute nodes (slurm-gb300-138-*, slurm-gb300-139-*) are aarch64; the
+# CI runner pod that performs `enroot import` is x86. Without --arch,
+# enroot pulls the host (amd64) manifest and produces a sqsh that pyxis
+# on the compute node rejects with "Invalid image format". Force enroot
+# to pull the arm64 manifest so the cached sqsh is portable to compute
+# nodes. The `_${RUNNER_NAME}_arm64` suffix scopes the cache per runner
+# (gb300-cw_0..3) so concurrent matrix jobs don't rm+import the same
+# file and corrupt each other's downloads.
+SQUASH_TAG="${RUNNER_NAME:-default}_arm64"
+SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')_${SQUASH_TAG}.sqsh"
+NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_${SQUASH_TAG}.sqsh"
 
-enroot import -o $SQUASH_FILE docker://$IMAGE
-enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+# Always rebuild the squash from scratch — `enroot import` aborts with
+# `[ERROR] File already exists` when targeting an existing path, so
+# leaving a stale (interrupted import / pre-update tag) sqsh in place
+# silently keeps using the broken file. rm + import guarantees a fresh
+# import each CI run and picks up Docker tag updates.
+rm -f "$SQUASH_FILE" "$NGINX_SQUASH_FILE"
+enroot import --arch arm64 -o "$SQUASH_FILE" "docker://$IMAGE"
+enroot import --arch arm64 -o "$NGINX_SQUASH_FILE" "docker://$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
