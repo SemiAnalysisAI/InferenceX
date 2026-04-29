@@ -1971,6 +1971,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add GB200 Dynamo vLLM MegaMOE max-throughput recipe at conc=4096"
+    - "Topology matches max-tpt: 3 prefill DEP8 workers and 1 decode DEP8 worker with dedicated NATS/etcd"
+    - "Uses deep_gemm_mega_moe on prefill/decode, TORCH_SYMMMEM=NVSHMEM, and no offload"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add GB200 Dynamo vLLM low-middle curve recipe at conc=256/512"
+    - "Topology: 1 prefill DEP8 worker and 4 decode TP8 workers with dedicated NATS/etcd"
+    - "Mirrors the historical 1P4D DEP8/TP8 offload point from srt-slurm aflowers/vllm-gb200-v0.20.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
+  
+- config-keys:
     - dsv4-fp4-b300-vllm
   description:
     - "Change image to vllm/vllm-openai:v0.20.0-cu130"
