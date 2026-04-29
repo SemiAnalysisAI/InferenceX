@@ -38,11 +38,13 @@ start_gpu_monitor
 
 set -x
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MLA=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
---block-size=64 \
+--block-size=1 \
 --trust-remote-code \
 --no-enable-prefix-caching \
 --max-num-seqs 256 \

@@ -24,6 +24,8 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -40,9 +42,10 @@ vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
 --block-size=32 \
---disable-log-requests \
 --no-enable-prefix-caching \
+--attention-backend "ROCM_AITER_FA" \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
