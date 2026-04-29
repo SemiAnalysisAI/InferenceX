@@ -9,7 +9,7 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
 # with multiple inference engines can coexist; fall back to the historical
 # name without an engine suffix (`_trt` for trt, bare for everyone else).
-BENCH_BASE="benchmarks/single_node/${MODEL_CODE}_${PRECISION}_b200"
+BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${MODEL_CODE}_${PRECISION}_b200"
 BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
 if [[ ! -f "$BENCH_SCRIPT" ]]; then
     BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
