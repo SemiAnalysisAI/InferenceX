@@ -49,7 +49,7 @@ fi
 GMU_ARGS=()
 MOE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    GMU_ARGS=(--gpu-memory-utilization 0.85)
+    GMU_ARGS=(--gpu-memory-utilization 0.95)
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
 fi
 
