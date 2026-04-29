@@ -272,7 +272,10 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # gpu-10 and gpu-15 currently have stale CUDA contexts (NCCL "unhandled cuda error"
+    # during sglang scheduler init) and full filesystems (HuggingFace CAS download fails
+    # with "No space left on device"). Exclude until sa-shared admins clean those nodes up.
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME" --exclude=gpu-10,gpu-15
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file
