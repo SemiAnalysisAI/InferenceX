@@ -78,7 +78,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     # ep=8 in the yaml signals the mega_moe deepep backend; check high-conc
     # recipes first (they also have ep=8) so they aren't shadowed by the
     # medium-conc EP_SIZE=8 branch below.
-    if [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ] || [ "$CONC" = "8192" ]; then
+    if [ "$CONC" = "2048" ] || [ "$CONC" = "4096" ] || [ "$CONC" = "8192" ] || [ "$CONC" = "12288" ]; then
         export NVSHMEM_DISABLE_IB=1
         export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
         export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
@@ -98,12 +98,21 @@ if [ "${DP_ATTENTION}" = "true" ]; then
             MEM_FRACTION_STATIC=0.835
             SWA_FULL_TOKENS_RATIO=0.075
             TOKENIZER_WORKER_NUM=8
-        else
+        elif [ "$CONC" = "8192" ]; then
             export SGLANG_OPT_USE_ONLINE_COMPRESS=1
             export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8256
             CUDA_GRAPH_MAX_BS=1088
             MAX_RUNNING_REQUESTS=8192
             MEM_FRACTION_STATIC=0.80
+            SWA_FULL_TOKENS_RATIO=0.3
+            TOKENIZER_WORKER_NUM=16
+        else
+            export SGLANG_LOG_FORWARD_ITERS=1
+            export SGLANG_OPT_USE_ONLINE_COMPRESS=1
+            export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8256
+            CUDA_GRAPH_MAX_BS=1600
+            MAX_RUNNING_REQUESTS=12288
+            MEM_FRACTION_STATIC=0.72
             SWA_FULL_TOKENS_RATIO=0.3
             TOKENIZER_WORKER_NUM=16
         fi
@@ -117,10 +126,10 @@ if [ "${DP_ATTENTION}" = "true" ]; then
             --tokenizer-worker-num "$TOKENIZER_WORKER_NUM"
             --enable-prefill-delayer
         )
-        if [ "$CONC" = "4096" ]; then
+        if [ "$CONC" = "4096" ] || [ "$CONC" = "12288" ]; then
             PARALLEL_ARGS+=(--decode-log-interval 5)
         fi
-        if [ "$CONC" = "8192" ]; then
+        if [ "$CONC" = "8192" ] || [ "$CONC" = "12288" ]; then
             PARALLEL_ARGS+=(--stream-interval 30)
         fi
     elif [ "${EP_SIZE}" = "8" ]; then
