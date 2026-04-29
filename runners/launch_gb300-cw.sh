@@ -134,6 +134,12 @@ srtctl_root: "${SRTCTL_ROOT}"
 model_paths:
   dspro: "${MODEL_PATH}"
   dsv4-pro: "${MODEL_PATH}"
+  # Our hand-rolled DSV4 sglang recipes use `model.path: deepseek-v4-pro`
+  # (matches the alias in launch_gb200-nv.sh's srtslurm.yaml). Without
+  # this entry srtctl preflight rejects with "Model 'deepseek-v4-pro'
+  # is not a local model path and is not defined in srtslurm.yaml
+  # model_paths".
+  deepseek-v4-pro: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
