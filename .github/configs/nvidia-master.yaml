@@ -2083,7 +2083,8 @@ glm5-fp8-b200-sglang:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      # sglang manages its own KV eviction via radix cache, so just sweep concurrency on offloading=none
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
@@ -2395,7 +2396,8 @@ kimik2.5-int4-b200-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, offloading: cpu,  conc-list: [32, 64, 96, 128] }
 
 kimik2.5-int4-h200-vllm:
   image: vllm/vllm-openai:v0.16.0
@@ -2439,8 +2441,12 @@ kimik2.5-fp4-b200-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
+      # offloading=none: GPU-only KV; covers low/mid concurrency where HBM holds the working set
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # offloading=cpu: CPU host KV offload; covers high concurrency that exceeds HBM (overlap at 64)
+      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu,  conc-list: [128, 192, 256] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -3781,6 +3787,8 @@ gptoss-fp4-b200-vllm:
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
+      - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
@@ -3807,6 +3815,7 @@ minimaxm2.5-fp8-b200-vllm:
     - duration: 1800
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
