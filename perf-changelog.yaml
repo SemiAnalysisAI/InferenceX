@@ -1724,8 +1724,8 @@
   description:
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
-  
-- config-keys:  
+
+- config-keys:
     - glm5.1-fp4-mi355x-atom
   description:
     - "Add GLM-5.1 MXFP4 single-node MI355X ATOM benchmark"
