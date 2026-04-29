@@ -1930,7 +1930,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
 
 - config-keys:
-<<<<<<< dsv4-fp4-gb300-dynamo-vllm-disagg
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 sweep on cluster gb300-cw (CoreWeave; 2x 18-node racks)"
@@ -1939,7 +1938,8 @@
     - "vLLM patches (auto-applied by upstream configs/vllm-container-deps.sh): cumem expandable_segments fix, MegaMoE free-orig (vllm-project/vllm#40860 backport), nvlink one-sided bf16 fix, numa-bind hash fix"
     - "New runners group gb300-cw (gb300-cw_0/1) and launch_gb300-cw.sh: SLURM partition `all`, model staging at /mnt/vast/models/dsv4/, squash files at /mnt/vast/squash/. Each recipe rack-pins via sbatch_directives.segment (cw's srtslurm.yaml turns off srtctl auto-segment)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1150
-=======
+
+- config-keys:
     - dsv4-fp4-b300-sglang
   description:
     - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
@@ -1979,4 +1979,3 @@
     - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
     - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
->>>>>>> main
