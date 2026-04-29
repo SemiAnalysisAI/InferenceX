@@ -62,10 +62,10 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/data/home/sa-shared/sqsh/vllm_vllm-openai_deepseekv4-cu130.sqsh"
+SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-# enroot import -o $SQUASH_FILE docker://$IMAGE
+enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -143,7 +143,7 @@ fi
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    git checkout aflowers/vllm-gb200-v0.20.0
     # Use `cp -rT` so if the upstream branch ever ships a stub
     # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto
     # it rather than nesting (`cp -r src dst` would create
