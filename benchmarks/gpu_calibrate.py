@@ -356,105 +356,158 @@ def run_matmul_benchmark(args, sysinfo):
 
 
 # ---------------------------------------------------------------------------
-# Per-GPU matmul benchmark (all GPUs in parallel)
+# Per-GPU matmul benchmark (serial: one GPU at a time)
 # ---------------------------------------------------------------------------
 
-# Representative shapes for per-GPU comparison (keep it fast)
+# Representative shapes for per-GPU comparison
 PER_GPU_SHAPES = [
+    (1024, 1024, 1024),
     (4096, 4096, 4096),
     (8192, 8192, 8192),
+    (16384, 16384, 16384),
 ]
-PER_GPU_DTYPES = ["bfloat16", "fp8_e4m3", "nvfp4"]
+PER_GPU_DTYPES = ["bfloat16", "fp8_e4m3", "mxfp8", "nvfp4"]
+
+# Short labels for the consolidated table
+PER_GPU_DTYPE_SHORT = {
+    "bfloat16": "BF16",
+    "fp8_e4m3": "FP8",
+    "mxfp8": "MXFP8",
+    "nvfp4": "NVFP4",
+}
 
 
-def run_per_gpu_matmul(args, sysinfo, rank, local_rank, world_size):
-    """Each rank benchmarks its own GPU, then rank 0 collects and prints comparison."""
+def run_per_gpu_matmul_serial(args, sysinfo, rank, local_rank, world_size):
+    """Benchmark each GPU one at a time using barrier-based serialization.
+
+    Under torchrun, each rank owns one GPU. Ranks take turns: only the
+    active rank runs matmul while all others wait at a barrier. This
+    avoids cross-process GPU contention and power/thermal throttling.
+    """
     device = f"cuda:{local_rank}"
     torch.cuda.set_device(device)
+    is_distributed = dist.is_initialized()
 
     available = {d[0] for d in detect_dtypes()}
-    my_results = []
 
+    # Build test list: (dtype, M, N, K)
+    tests = []
     for dtype_name in PER_GPU_DTYPES:
         if dtype_name not in available:
             continue
         for M, N, K in PER_GPU_SHAPES:
             if not _shape_valid_for_dtype(M, N, K, dtype_name):
                 continue
-            try:
-                avg_ms, tflops = bench_matmul(M, N, K, dtype_name, args.iters, args.warmup, device=device)
-                my_results.append({
-                    "gpu_id": local_rank,
-                    "dtype": dtype_name,
-                    "M": M, "N": N, "K": K,
-                    "time_ms": avg_ms,
-                    "tflops": tflops,
-                })
-            except Exception:
-                my_results.append({
-                    "gpu_id": local_rank,
-                    "dtype": dtype_name,
-                    "M": M, "N": N, "K": K,
-                    "time_ms": -1,
-                    "tflops": -1,
-                })
+            tests.append((dtype_name, M, N, K))
 
-    # Gather all results to rank 0
-    all_gpu_results = [None] * world_size
-    dist.all_gather_object(all_gpu_results, my_results)
+    if not tests:
+        return []
+
+    # Each rank stores its own results
+    my_results = {}  # (dtype, M, N, K) -> {"tflops": ..., "time_ms": ...}
+
+    if rank == 0:
+        print("\n" + "=" * 70)
+        print("=== Per-GPU Matmul (Serial, one GPU at a time) ===")
+        print(f"    GPUs={world_size}, iters={args.iters}, warmup={args.warmup}")
+        print("=" * 70)
+
+    # Serial execution: each GPU takes its turn
+    for active_rank in range(world_size):
+        if is_distributed:
+            dist.barrier()
+
+        if rank == active_rank:
+            if rank == 0:
+                print(f"\n  Testing GPU {local_rank} ...", end="", flush=True)
+            for dtype_name, M, N, K in tests:
+                try:
+                    avg_ms, tflops = bench_matmul(
+                        M, N, K, dtype_name, args.iters, args.warmup, device=device
+                    )
+                    my_results[(dtype_name, M, N, K)] = {"tflops": tflops, "time_ms": avg_ms}
+                except Exception:
+                    my_results[(dtype_name, M, N, K)] = {"tflops": -1, "time_ms": -1}
+            if rank == 0:
+                print(" done", flush=True)
+
+    # Synchronize before gathering
+    if is_distributed:
+        dist.barrier()
+
+    # Gather results to rank 0
+    if is_distributed:
+        all_results_list = [None] * world_size
+        dist.all_gather_object(all_results_list, my_results)
+    else:
+        all_results_list = [my_results]
 
     csv_results = []
     if rank == 0:
-        # Flatten
-        flat = []
-        for gpu_results in all_gpu_results:
-            flat.extend(gpu_results)
+        # Print progress for non-zero GPUs (they couldn't print during their turn)
+        for g in range(1, world_size):
+            print(f"\n  Testing GPU {g} ... done", flush=True)
 
-        # Print comparison table per (dtype, shape)
-        print("\n" + "=" * 60)
-        print("=== Per-GPU Matmul Comparison ===")
-        print(f"    iters={args.iters}, warmup={args.warmup}")
-        print("=" * 60)
+        num_gpus = world_size if is_distributed else torch.cuda.device_count()
+        gpu_ids = list(range(num_gpus))
+        col_w = 8
 
-        for dtype_name in PER_GPU_DTYPES:
-            dtype_rows = [r for r in flat if r["dtype"] == dtype_name and r["tflops"] > 0]
-            if not dtype_rows:
-                continue
-            shapes_in_dtype = sorted(set((r["M"], r["N"], r["K"]) for r in dtype_rows))
-            for M, N, K in shapes_in_dtype:
-                shape_rows = [r for r in dtype_rows if r["M"] == M and r["N"] == N and r["K"] == K]
-                shape_rows.sort(key=lambda r: r["gpu_id"])
-                tflops_vals = [r["tflops"] for r in shape_rows]
-                mean_t = sum(tflops_vals) / len(tflops_vals)
-                min_t = min(tflops_vals)
-                max_t = max(tflops_vals)
-                spread_pct = (max_t - min_t) / mean_t * 100 if mean_t > 0 else 0
+        # Consolidated table
+        print("\n" + "-" * 70)
+        row_label_w = 20
+        header = f"  {'Test':<{row_label_w}s}" + "".join(f"{'GPU'+str(g):>{col_w}s}" for g in gpu_ids)
+        header += f"  {'mean':>7s} {'spread':>7s}"
+        print(header)
+        print("  " + "-" * (row_label_w + col_w * num_gpus + 16))
 
-                print(f"\n--- {dtype_name} M={M} N={N} K={K} ---")
-                header = "  " + "  ".join(f"{'GPU'+str(r['gpu_id']):>10s}" for r in shape_rows)
-                values = "  " + "  ".join(f"{r['tflops']:>10.1f}" for r in shape_rows)
-                print(header)
-                print(values + "  TFLOPS")
-                flag = " <<<" if spread_pct > 5 else ""
-                print(f"  mean={mean_t:.1f}  min={min_t:.1f}  max={max_t:.1f}  spread={spread_pct:.1f}%{flag}")
+        for dtype_name, M, N, K in tests:
+            short = PER_GPU_DTYPE_SHORT.get(dtype_name, dtype_name)
+            label = f"{short} {M}x{K}"
 
-                # CSV rows
-                for r in shape_rows:
-                    csv_results.append({
-                        "test_type": "matmul_per_gpu",
-                        "dtype": dtype_name,
-                        "M": M, "N": N, "K": K,
-                        "size_bytes": "",
-                        "time_ms": f"{r['time_ms']:.4f}",
-                        "tflops": f"{r['tflops']:.2f}",
-                        "busbw_gbps": "",
-                        "algobw_gbps": "",
-                        **sysinfo,
-                        "gpu_id": r["gpu_id"],
-                        "mode": "matmul_per_gpu",
-                        "iters": args.iters,
-                        "warmup": args.warmup,
-                    })
+            vals = []
+            for g in gpu_ids:
+                entry = all_results_list[g].get((dtype_name, M, N, K), {})
+                vals.append(entry.get("tflops", -1))
+
+            valid = [v for v in vals if v > 0]
+            if valid:
+                mean_t = sum(valid) / len(valid)
+                spread_pct = (max(valid) - min(valid)) / mean_t * 100
+            else:
+                mean_t = 0
+                spread_pct = 0
+
+            row = f"  {label:<{row_label_w}s}"
+            for v in vals:
+                if v > 0:
+                    row += f"{v:>{col_w}.0f}"
+                else:
+                    row += f"{'FAIL':>{col_w}s}"
+            flag = " <<<" if spread_pct > 5 else ""
+            row += f"  {mean_t:>7.0f} {spread_pct:>6.1f}%{flag}"
+            print(row)
+
+            # CSV rows
+            for g in gpu_ids:
+                entry = all_results_list[g].get((dtype_name, M, N, K), {})
+                csv_results.append({
+                    "test_type": "matmul_per_gpu",
+                    "dtype": dtype_name,
+                    "M": M, "N": N, "K": K,
+                    "size_bytes": "",
+                    "time_ms": f"{entry.get('time_ms', -1):.4f}",
+                    "tflops": f"{entry.get('tflops', -1):.2f}",
+                    "busbw_gbps": "",
+                    "algobw_gbps": "",
+                    **sysinfo,
+                    "gpu_id": g,
+                    "mode": "matmul_per_gpu",
+                    "iters": args.iters,
+                    "warmup": args.warmup,
+                })
+
+        print("  " + "-" * (row_label_w + col_w * num_gpus + 16))
+        print(f"  (TFLOPS, spread > 5% marked <<<)")
 
     return csv_results
 
@@ -700,9 +753,9 @@ def main():
     else:
         matmul_results = []
 
-    # --- Per-GPU Matmul (all ranks in parallel) ---
+    # --- Per-GPU Matmul (serial, one GPU at a time) ---
     if not args.allreduce_only and is_distributed:
-        per_gpu_results = run_per_gpu_matmul(args, sysinfo, rank, local_rank, world_size)
+        per_gpu_results = run_per_gpu_matmul_serial(args, sysinfo, rank, local_rank, world_size)
         all_results.extend(per_gpu_results)
 
     # --- AllReduce ---
