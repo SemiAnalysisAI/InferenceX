@@ -1727,6 +1727,29 @@ dsv4-fp4-b200-vllm:
     - { tp: 8, conc-start: 1, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
+# MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+dsv4-fp4-b200-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: vllm
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - { tp: 8, ep: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 4096, spec-decoding: mtp }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024, spec-decoding: mtp }
+
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.

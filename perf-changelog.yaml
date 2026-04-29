@@ -2006,3 +2006,9 @@
     - "Change image to vllm/vllm-openai:v0.20.0-cu130"
     - "Use Mega MoE for DEP configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B200"
+  pr-link: TBD
