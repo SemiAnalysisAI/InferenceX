@@ -44,7 +44,7 @@ NGINX_IMAGE="nginx:1.27.4"
 # TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
 # (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
 SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
-SRT_SLURM_RECIPES_COMMIT="8094cfb1db7cad76fbf9ecb41c0c7e662dad301e"
+SRT_SLURM_RECIPES_COMMIT="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
 # `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
