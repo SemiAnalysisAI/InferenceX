@@ -27,6 +27,13 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+VLLM_BLOCK_SIZE=16
+
+if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+    VLLM_BLOCK_SIZE=32
+    echo "Disabling shuffle KV cache layout and using block size 32 for TP8/EP8."
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -52,7 +59,7 @@ $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
---block-size=32 \
+--block-size=$VLLM_BLOCK_SIZE \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
 --trust-remote-code > $SERVER_LOG 2>&1 &
