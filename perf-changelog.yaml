@@ -1975,3 +1975,4 @@
   description:
     - "Change image to vllm/vllm-openai:v0.20.0-cu130"
     - "Use Mega MoE for DEP configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
