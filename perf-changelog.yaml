@@ -1993,4 +1993,4 @@
     - "Image: vllm/vllm-openai:v0.20.0-cu130"
     - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE-style speculative decoding regresses acceptance on raw random tokens"
     - "Search space mirrors the non-MTP H200 entry: TP=8, EP=8, DP-attn=true, CONC 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1222
