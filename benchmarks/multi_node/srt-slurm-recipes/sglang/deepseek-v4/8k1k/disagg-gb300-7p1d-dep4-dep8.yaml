@@ -170,9 +170,25 @@ backend:
       cuda-graph-max-bs: 1152
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: "8192"
-  req_rate: "inf"
-  use_chat_template: false
+  type: "custom"
+  # Mirror yangminl's gb300-cw 8k1k_hightpt[0] bench (job 564):
+  #   concurrency=4096, rate=48, num-prompts=40960, num-warmups=512,
+  #   random-num-workers=96. Uses upstream SemiAnalysisAI/InferenceX
+  #   benchmark_serving.py at the same flags so this matches the
+  #   reference run's request shape.
+  command: |
+    set -e
+    REPO=/configs/upstream-sa-bench/InferenceX
+    [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
+    cd "$REPO/utils/bench_serving"
+    python3 benchmark_serving.py \
+      --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+      --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+      --dataset-name random \
+      --random-input-len 8192 --random-output-len 1024 --random-range-ratio 0.8 \
+      --random-num-workers 96 \
+      --num-prompts 40960 --max-concurrency 4096 --request-rate 48 \
+      --num-warmups 512 \
+      --ignore-eos --trust-remote-code \
+      --percentile-metrics ttft,tpot,itl,e2el \
+      --save-result --result-dir /logs --result-filename results.json
