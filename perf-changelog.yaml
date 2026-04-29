@@ -1977,3 +1977,4 @@
     - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
     - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true per the v0.20.0 recipe"
     - "Drop --pipeline-parallel-size 1; keep --no-enable-prefix-caching and --max-cudagraph-capture-size 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1220
