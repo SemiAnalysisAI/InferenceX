@@ -1999,3 +1999,10 @@
     - "Add conc=8192 recipe for 1k1k: deepep mega_moe backend with cuda-graph-max-bs 1088, max-running-requests 8192, mem-fraction-static 0.80, swa-full-tokens-ratio 0.3, tokenizer-worker-num 16"
     - "conc=8192 enables SGLANG_OPT_USE_ONLINE_COMPRESS=1 and --stream-interval 30"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1209
+  
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - "Change image to vllm/vllm-openai:v0.20.0-cu130"
+    - "Use Mega MoE for DEP configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
