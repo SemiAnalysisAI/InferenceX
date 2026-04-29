@@ -1930,6 +1930,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1188
 
 - config-keys:
+<<<<<<< dsv4-fp4-gb300-dynamo-vllm-disagg
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 sweep on cluster gb300-cw (CoreWeave; 2x 18-node racks)"
@@ -1938,3 +1939,44 @@
     - "vLLM patches (auto-applied by upstream configs/vllm-container-deps.sh): cumem expandable_segments fix, MegaMoE free-orig (vllm-project/vllm#40860 backport), nvlink one-sided bf16 fix, numa-bind hash fix"
     - "New runners group gb300-cw (gb300-cw_0/1) and launch_gb300-cw.sh: SLURM partition `all`, model staging at /mnt/vast/models/dsv4/, squash files at /mnt/vast/squash/. Each recipe rack-pins via sbatch_directives.segment (cw's srtslurm.yaml turns off srtctl auto-segment)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1150
+=======
+    - dsv4-fp4-b300-sglang
+  description:
+    - "conc=2048/4096: mega_moe deepep backend; conc=2048 cuda-graph-max-bs 288, mem 0.87; conc=4096 cuda-graph-max-bs 544, mem 0.835, swa-ratio 0.075, tokenizer-workers 8"
+    - "1k1k conc=512/1024: add mega_moe deepep backend with cuda-graph-max-bs 550, chunked-prefill 16384, max-running-requests 768"
+    - "ep=8 naming convention in yaml distinguishes mega_moe from existing flashinfer_mxfp4 ep=4 entries"
+    - "Recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1179
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Use ROCm/aiter#2916 mhc_pre device-allocation fix instead of disabling ATOM mhc_pre"
+    - "Patch installed aiter/ops/mhc.py at runtime to allocate mhc_pre intermediates on residual.device, preserving the aiter MHC fast path without rebuilding aiter"
+    - "Remove the ATOM deepseek_v4.py sed workaround that forced mhc_pre to torch fallback"
+    - "Keep dsv4-fp4-mi355x-atom at CONC=1 only; run 24953107645 showed high-concurrency DSv4 ATOM OOMs in PR #650 torch sparse-attention fallbacks before upstream AITER sparse-attention support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1202
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1210
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Pin image to vllm/vllm-openai:v0.20.0-cu130 (was floating deepseekv4-cu130 tag); DeepGEMM is preinstalled in this image"
+    - "Use --attention_config.use_fp4_indexer_cache=True and --compilation-config {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"custom_ops\": [\"all\"]} for all configs"
+    - "Gate --moe-backend deep_gemm_mega_moe and --gpu-memory-utilization 0.85 on DP_ATTENTION=true per the v0.20.0 recipe"
+    - "Drop --pipeline-parallel-size 1; keep --no-enable-prefix-caching and --max-cudagraph-capture-size 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
+    - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
+    - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
+>>>>>>> main

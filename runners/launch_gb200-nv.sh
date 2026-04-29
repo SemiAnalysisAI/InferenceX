@@ -143,7 +143,7 @@ fi
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    git checkout aflowers/vllm-gb200-v0.20.0
     # Use `cp -rT` so if the upstream branch ever ships a stub
     # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto
     # it rather than nesting (`cp -r src dst` would create
