@@ -1747,8 +1747,10 @@ dsv4-fp4-b200-vllm-mtp:
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024, spec-decoding: mtp }
+    # 8k/1k TP=8 caps at conc=16 (not 32) to avoid OOM observed at conc=32:
+    # https://github.com/SemiAnalysisAI/InferenceX/actions/runs/25134892257/job/73670854021
+    - { tp: 8, conc-start: 1, conc-end: 16, spec-decoding: mtp }
+    - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
