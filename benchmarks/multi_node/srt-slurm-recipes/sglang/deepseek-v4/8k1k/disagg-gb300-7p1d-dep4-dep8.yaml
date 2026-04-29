@@ -34,6 +34,12 @@ dynamo:
 slurm:
   time_limit: "8:00:00"
 
+# Without cpus-per-task slurm gives 1 CPU/task; the dynamo cold source
+# build (~500 rust crates including ravif/exr/zip) is otherwise serial
+# and takes 30+ min. Match yangminl's all-dynamo.yaml which uses 144.
+sbatch_directives:
+  cpus-per-task: "144"
+
 health_check:
   max_attempts: 1440
   interval_seconds: 10
