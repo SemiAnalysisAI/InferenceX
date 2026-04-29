@@ -2019,6 +2019,10 @@ qwen3.5-fp8-b200-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
       - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
