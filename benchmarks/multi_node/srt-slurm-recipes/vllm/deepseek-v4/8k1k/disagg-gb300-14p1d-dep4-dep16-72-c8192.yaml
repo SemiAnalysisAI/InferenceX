@@ -98,14 +98,15 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.92
       no-disable-hybrid-kv-cache-manager: true
-      numa-bind: true
-      # Auto-detect (vllm/utils/numa_utils.py:_is_auto_numa_available) fails on
-      # cw because the enroot container lacks cap_sys_nice — _can_set_mempolicy()
-      # returns False, get_auto_numa_nodes() returns None, and the worker raises
-      # "NUMA binding was requested, but vLLM could not detect ... topology".
-      # Pin explicitly: each Grace-Blackwell pair is its own NUMA node, so GPU N
-      # binds to NUMA node N on a 4-GPU host.
-      numa-bind-nodes: [0, 1, 2, 3]
+      # numa-bind disabled on cw. SLURM's job-step cgroup constrains the
+      # worker's cpuset.cpus to a subset that doesn't include the CPUs of any
+      # one Grace NUMA node, so vLLM's sched_setaffinity(NUMA-N) returns EINVAL
+      # and the engine subprocess dies before model load. vLLM's auto-detect
+      # (vllm/utils/numa_utils.py:_is_auto_numa_available) bails on this case,
+      # but explicit numa-bind-nodes forces past the guard. Re-enable once cw
+      # relaxes the cgroup CPU mask for our jobs (or we add `--cpu-bind=none`
+      # to srtctl's srun).
+      numa-bind: false
       offload-group-size: 3
       offload-num-in-group: 1
       offload-prefetch-step: 2
