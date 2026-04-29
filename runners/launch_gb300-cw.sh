@@ -140,6 +140,20 @@ fi
 echo "Configs available at: $SRT_REPO_DIR/"
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
+
+# Persistent cluster-wide cache for `dynamo: hash:` source builds. The
+# upstream cache root (_DYNAMO_CACHE_ROOT in srtctl/core/schema.py) is
+# `/configs/dynamo-wheels`; without an override that dir lives inside
+# `srt-slurm/configs`, which the launcher wipes via `rm -rf` every CI
+# run, so each run does a cold ~10-20 min rust+pyo3 build. Stage the
+# cache on /mnt/vast (NFS, shared by all gb300-cw_N runners) and have
+# srtctl bind-mount it over `/configs/dynamo-wheels` via the cluster
+# `default_mounts` setting. flock inside srtctl serializes cold-cache
+# builds across concurrent matrix jobs.
+DYNAMO_WHEELS_CACHE_HOST="/mnt/vast/dynamo-wheels-cache"
+mkdir -p "$DYNAMO_WHEELS_CACHE_HOST"
+mkdir -p configs/dynamo-wheels
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300-CW (SGLang)
@@ -152,6 +166,9 @@ gpus_per_node: 4
 network_interface: ""
 
 srtctl_root: "${SRTCTL_ROOT}"
+
+default_mounts:
+  ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
 
 model_paths:
   dspro: "${MODEL_PATH}"
@@ -175,6 +192,12 @@ containers:
 # cluster-level setting, not a recipe overlay; the copied recipe files
 # stay byte-identical to the pinned upstream commit.
 use_segment_sbatch_directive: true
+# Cluster-wide bash preamble — runs before every container srun. Raises
+# NOFILE so the dynamo frontend / sglang servers can accept high
+# concurrency (8192 in the 7p1d sweep) without EMFILE / "too many open
+# files". Mirrors what `yangminl@slurm-login-0:~/srt-slurm/srtslurm.yaml`
+# already uses for manual runs on this cluster.
+default_bash_preamble: "ulimit -n 1048576 && ulimit -a"
 EOF
 
 echo "Generated srtslurm.yaml:"
