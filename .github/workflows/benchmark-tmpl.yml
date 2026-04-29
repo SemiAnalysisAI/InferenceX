@@ -67,11 +67,6 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
-      slurm-time-limit:
-        description: "Slurm --time value in minutes for the salloc in the launcher. Empty string lets the launcher use its built-in default."
-        required: false
-        type: string
-        default: ''
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -94,7 +89,6 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
-  SLURM_TIME_LIMIT: ${{ inputs.slurm-time-limit }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

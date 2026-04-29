@@ -2522,7 +2522,6 @@ dsv4-fp4-b300-vllm:
   precision: fp4
   framework: vllm
   multinode: false
-  slurm-time-limit: 300
   seq-len-configs:
   - isl: 1024
     osl: 1024

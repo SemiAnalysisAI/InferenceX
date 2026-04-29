@@ -56,9 +56,6 @@ class Fields(Enum):
     EVAL_ONLY = 'eval-only'
     EVAL_CONC = 'eval-conc'
 
-    # Optional master-config knobs
-    SLURM_TIME_LIMIT = 'slurm-time-limit'
-
 
 """
     Below is the validation logic for the OUTPUT of utils/matrix_logic/generate_sweep_configs.py, i.e., 
@@ -95,8 +92,6 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
-    slurm_time_limit: Optional[int] = Field(
-        default=None, alias=Fields.SLURM_TIME_LIMIT.value)
 
 
 class WorkerConfig(BaseModel):
@@ -277,8 +272,6 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: bool = Field(default=False)
-    slurm_time_limit: Optional[int] = Field(
-        default=None, alias=Fields.SLURM_TIME_LIMIT.value)
     seq_len_configs: List[SingleNodeSeqLenConfig] = Field(
         alias=Fields.SEQ_LEN_CONFIGS.value)
 

@@ -357,7 +357,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                                Fields.SLURM_TIME_LIMIT.value: val.get(Fields.SLURM_TIME_LIMIT.value),
                             }
 
                             if ep is not None:
@@ -532,7 +531,6 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.EXP_NAME.value: f"{model_code}_test",
                     Fields.DISAGG.value: disagg,
                     Fields.RUN_EVAL.value: False,
-                    Fields.SLURM_TIME_LIMIT.value: val.get(Fields.SLURM_TIME_LIMIT.value),
                 }
                 matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
@@ -673,7 +671,6 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,
-                            Fields.SLURM_TIME_LIMIT.value: val.get(Fields.SLURM_TIME_LIMIT.value),
                         }
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
