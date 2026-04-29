@@ -1993,7 +1993,5 @@
     - "Add GB200 Dynamo vLLM MegaMOE high-throughput recipe at 2P/1D DEP8 conc=4096"
     - "Add GB200 Dynamo vLLM MegaMOE mid-curve recipe at 1P/1D DEP8 conc=256/512/1024"
     - "Remove the old no-MegaMOE max-tpt recipe from the GB200 Dynamo vLLM matrix"
-    - "Disable FlashInfer autotune on decode workers to match the srt-slurm accuracy-stability fix"
+    - "Disable FlashInfer autotune on GB200 decode workers for accuracy stability, matching the srt-slurm recipe fix"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1223
-
-# Rerun PR 1223 sweep.
