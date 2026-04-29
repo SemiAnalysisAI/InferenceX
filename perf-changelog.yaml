@@ -2011,4 +2011,4 @@
     - dsv4-fp4-b200-vllm-mtp
   description:
     - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B200"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1230
