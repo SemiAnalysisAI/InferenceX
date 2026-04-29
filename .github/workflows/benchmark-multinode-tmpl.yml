@@ -171,6 +171,9 @@ jobs:
           set -x
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+          rm -f multinode_server_logs.tar.gz
+          rm -rf LOGS
+          rm -f ${RESULT_FILENAME}_*.json agg_${RESULT_FILENAME}_*.json
 
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true

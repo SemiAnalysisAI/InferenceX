@@ -7,6 +7,19 @@
 
 set -x
 
+archive_server_logs() {
+    if [ -n "${LOGS_DIR:-}" ] && [ -d "$LOGS_DIR" ]; then
+        local workspace="${GITHUB_WORKSPACE:-$(pwd)}"
+        echo "Archiving server logs from $LOGS_DIR"
+        rm -rf "$workspace/LOGS"
+        cp -r "$LOGS_DIR" "$workspace/LOGS" || true
+        tar czf "$workspace/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . || true
+    fi
+}
+
+trap 'status=$?; archive_server_logs; exit $status' EXIT
+trap 'echo "Received termination signal"; exit 143' INT TERM
+
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on the shared VAST mount; no compute-node-local
     # NVMe on cw. The exact upstream recipes refer to this model as
@@ -167,6 +180,19 @@ else
     mv "$TMP_CONFIG_FILE" "$CONFIG_FILE"
 fi
 
+# CoreWeave needs explicit CPU and memory allocation for srt-slurm SGLang
+# jobs. Apply this only to the cloned runtime copy so the committed
+# NVIDIA recipe files stay byte-identical to the pinned source.
+if ! grep -q '^sbatch_directives:' "$CONFIG_FILE"; then
+    {
+        echo ""
+        echo "# CoreWeave runtime-only Slurm resource directives."
+        echo "sbatch_directives:"
+        echo '  cpus-per-task: "144"'
+        echo '  mem: "0"'
+    } >> "$CONFIG_FILE"
+fi
+
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
@@ -214,8 +240,7 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    archive_server_logs
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
