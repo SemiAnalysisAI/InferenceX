@@ -1707,7 +1707,7 @@ dsv4-fp4-b200-sglang:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
