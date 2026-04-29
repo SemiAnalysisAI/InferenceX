@@ -1969,3 +1969,11 @@
     - "Keeps the three validated 8k/1k points: low-latency 1P/1D TP8 conc=1, mid-curve 1P/1D DEP8 conc=256, and max-tpt 3P/1D DEP8 conc=4096"
     - "All three recipes run NATS/etcd on a dedicated infra node and use compute-node local NVMe model weights via /mnt/numa1/models/deepseek-v4-pro/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1163
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Add GB200 Dynamo vLLM MegaMOE max-throughput recipe at conc=4096"
+    - "Topology matches max-tpt: 3 prefill DEP8 workers and 1 decode DEP8 worker with dedicated NATS/etcd"
+    - "Uses deep_gemm_mega_moe on prefill/decode, TORCH_SYMMMEM=NVSHMEM, and no offload"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1218
