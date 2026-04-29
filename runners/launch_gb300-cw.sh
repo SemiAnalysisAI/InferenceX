@@ -148,13 +148,22 @@ if [ ! -f "${DYNAMO_WHEEL_CACHE}/.complete" ]; then
     exit 1
 fi
 
-# Surface the cache to the container at /configs/dynamo-wheels/<version>/.
+# Surface the cache to the container at /configs/dynamo-wheels/<version>/. Must be a
+# real directory copy, not a symlink — only srt-slurm/configs is bind-mounted
+# into the worker container, so a symlink whose target is /mnt/vast/... dangles
+# from inside the container and pip's --find-links silently turns into "no such
+# location" (which then falls through to a network lookup that --no-index blocks).
 mkdir -p configs/dynamo-wheels
-ln -sfn "$DYNAMO_WHEEL_CACHE" "configs/dynamo-wheels/${DYNAMO_DEV_VERSION}"
+rm -rf "configs/dynamo-wheels/${DYNAMO_DEV_VERSION}"
+mkdir -p "configs/dynamo-wheels/${DYNAMO_DEV_VERSION}"
+cp "${DYNAMO_WHEEL_CACHE}"/*.whl "configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/"
 
 # Append the pip install to upstream's vllm-container-deps.sh. The recipe sets
 # dynamo.install: false so srtctl emits no install line; this hook installs
 # from the wheel cache instead. --no-index keeps pip off the network entirely.
+# Drop --quiet and fail loudly if pip exits non-zero — upstream's script has
+# no `set -e`, so silent failure here propagates as "module not found" much
+# later when the worker tries `python3 -m dynamo.vllm`.
 cat >> configs/vllm-container-deps.sh <<EOF
 
 # ─── Local dynamo install (added by runners/launch_gb300-cw.sh) ─────────────
@@ -164,10 +173,14 @@ cat >> configs/vllm-container-deps.sh <<EOF
 # build). The 1.2.0.dev wheels are pre-release on pypi.nvidia.com; --no-index
 # forces pip off the network so worker startup is offline-deterministic.
 echo "Installing ai-dynamo ${DYNAMO_DEV_VERSION} from /configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/..."
-pip install --break-system-packages --quiet --no-deps --no-index \\
+ls -la "/configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/" >&2
+if ! pip install --break-system-packages --no-deps --no-index \\
     --find-links "/configs/dynamo-wheels/${DYNAMO_DEV_VERSION}/" \\
     "ai-dynamo-runtime==${DYNAMO_DEV_VERSION}" \\
-    "ai-dynamo==${DYNAMO_DEV_VERSION}"
+    "ai-dynamo==${DYNAMO_DEV_VERSION}"; then
+    echo "ERROR: ai-dynamo ${DYNAMO_DEV_VERSION} install from /configs/dynamo-wheels/ failed" >&2
+    exit 1
+fi
 echo "ai-dynamo ${DYNAMO_DEV_VERSION} installed"
 EOF
 
