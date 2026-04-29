@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 export PORT=8888
 
@@ -8,7 +10,7 @@ FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="h200"
-SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/mnt/vast/gharunner/squash/$(sanitize_image_filename "$IMAGE").sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 set -x

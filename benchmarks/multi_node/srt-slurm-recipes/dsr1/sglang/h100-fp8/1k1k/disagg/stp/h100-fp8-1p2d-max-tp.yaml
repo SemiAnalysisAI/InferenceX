@@ -1,0 +1,109 @@
+name: "h100-fp8-1p2d-max-tp"
+
+model:
+  path: "dsr1-fp8"
+  container: "lmsysorg/sglang:v0.5.8-cu130"
+  precision: "fp8"
+
+resources:
+  gpu_type: "h100"
+  prefill_nodes: 2
+  prefill_workers: 1
+  decode_nodes: 4
+  decode_workers: 2
+  gpus_per_node: 8
+
+frontend:
+  nginx_container: nginx-sqsh
+
+backend:
+
+  # Prefill-specific environment variables
+  prefill_environment:
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+
+  # Decode-specific environment variables
+  decode_environment:
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+
+  sglang_config:
+    prefill:
+      # Model configuration
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      model-path: "/model/"
+      skip-tokenizer-init: true
+      trust-remote-code: true
+      watchdog-timeout: 1000000
+
+      # Parallelism
+      tp-size: 16
+      dp-size: 1
+      ep-size: 1 
+      enable-dp-attention: false
+
+      # KV cache and attention
+      attention-backend: "flashinfer"
+
+      # Radix cache disabled
+      disable-radix-cache: true
+
+      # Other flags
+      max-running-requests: 2
+
+      # Prefill-specific mode
+      disaggregation-bootstrap-port: 30001
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: nixl
+
+      # Memory and token limits
+      mem-fraction-static: 0.6
+      max-prefill-tokens: 2048
+      chunked-prefill-size: 2048
+
+      # Request handling
+      load-balance-method: "round_robin"
+
+    decode:
+      # Model configuration
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      model-path: "/model/"
+      skip-tokenizer-init: true
+      trust-remote-code: true
+      watchdog-timeout: 1000000
+
+      # Parallelism
+      tp-size: 16
+      dp-size: 1
+      ep-size: 1
+      enable-dp-attention: false
+
+      # KV cache and attention
+      attention-backend: "flashinfer"
+
+      # Other flags
+      disable-radix-cache: true
+      stream-interval: 1
+
+      # Disagg
+      disaggregation-bootstrap-port: 30001
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: nixl
+
+      # Memory and token limits
+      mem-fraction-static: 0.9
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
+benchmark:
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    MODEL_NAME: "deepseek-ai/DeepSeek-R1"
+    PREFILL_GPUS: "16"
+    DECODE_GPUS: "16"
+    TOTAL_GPUS: "48"

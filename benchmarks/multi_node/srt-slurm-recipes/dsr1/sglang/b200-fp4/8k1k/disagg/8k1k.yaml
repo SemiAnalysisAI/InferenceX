@@ -1,0 +1,351 @@
+# B200-FP4 8k1k — STP and MTP in one file
+#
+# Three modes distinguished by override key names:
+#   override_stp_tp4 / override_mtp_tp4:  TP4 prefill (DP=1, EP=1) — low-latency single-node
+#   zip_override_stp_lowlat / zip_override_mtp_lowlat:  dep4 prefill + tep8 decode (DP=1)
+#   override_stp_maxtpt_7p2d / override_mtp_maxtpt_7p2d:  dep4 prefill + dep8 decode, 7p2d
+#   override_mtp_maxtpt_4p1d:  MTP-only 4p1d, no frontends, env-var FP4 backend
+#
+# Usage:
+#   srtctl apply  -f recipes/b200-fp4/8k1k.yaml                              # all 11 variants
+#   srtctl apply  -f recipes/b200-fp4/8k1k.yaml:*stp*                        # all STP variants
+#   srtctl apply  -f recipes/b200-fp4/8k1k.yaml:*mtp*                        # all MTP variants
+#   srtctl apply  -f recipes/b200-fp4/8k1k.yaml:override_stp_tp4             # STP tp4 only
+#   srtctl apply  -f recipes/b200-fp4/8k1k.yaml:zip_override_stp_lowlat[0]   # STP 1p1d only
+#   srtctl dry-run -f recipes/b200-fp4/8k1k.yaml                             # preview
+
+base:
+  name: "b200-fp4-stp-8k1k"
+
+  dynamo:
+    version: 0.8.1
+
+  model:
+    path: "dsr1"
+    container: "dynamo-sglang"
+    precision: "fp4"
+
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: true
+    num_additional_frontends: 4
+
+  resources:
+    gpu_type: "b200"
+    prefill_nodes: 1
+    prefill_workers: 1
+    gpus_per_prefill: 4
+    decode_nodes: 1
+    decode_workers: 1
+    gpus_per_node: 8
+
+  backend:
+    prefill_environment:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      DYN_REQUEST_PLANE: nats
+    decode_environment:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      DYN_REQUEST_PLANE: nats
+    sglang_config:
+      prefill:
+        # Model configuration
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        # Disaggregation mode
+        disaggregation-mode: "prefill"
+        disaggregation-transfer-backend: nixl
+
+        # Memory and token limits
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 9600
+        max-running-requests: 512
+        disable-cuda-graph: true
+
+        # Parallelism
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+
+        # Attention
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        # MoE
+        moe-runner-backend: "flashinfer_trtllm"
+        moe-dense-tp-size: 1
+        fp4-gemm-backend: "flashinfer_trtllm"
+
+        # Other flags
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+      decode:
+        # Model configuration
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        # Disaggregation mode
+        disaggregation-mode: "decode"
+        disaggregation-transfer-backend: nixl
+
+        # Memory and token limits
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 9600
+        max-running-requests: 512
+        cuda-graph-max-bs: 512
+
+        # Parallelism
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+
+        # Attention
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        # MoE
+        moe-runner-backend: "flashinfer_trtllm"
+        fp4-gemm-backend: "flashinfer_trtllm"
+
+        # Other flags
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+  health_check:
+    max_attempts: 360
+    interval_seconds: 10
+
+  benchmark:
+    type: "sa-bench"
+    isl: 8192
+    osl: 1024
+    req_rate: "inf"
+
+
+# STP TP4 prefill mode: TP4 (DP=1, EP=1) instead of dep4 — low-latency single-node
+override_stp_tp4:
+  name: "b200-fp4-stp-low-latency-tp4-1p-tp8-1d"
+  frontend:
+    num_additional_frontends: 2
+  backend:
+    sglang_config:
+      prefill:
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-dp-attention: null
+        enable-dp-lm-head: null
+      decode:
+        expert-parallel-size: 1
+  benchmark:
+    concurrencies: "4x8x16x64"
+
+
+# MTP TP4 prefill mode: same as STP tp4 but adds EAGLE speculative decoding
+override_mtp_tp4:
+  name: "b200-fp4-mtp-low-latency-tp4-1p-tp8-1d"
+  frontend:
+    num_additional_frontends: 2
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      prefill:
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-dp-attention: null
+        enable-dp-lm-head: null
+      decode:
+        expert-parallel-size: 1
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: "4x8x16x64"
+
+
+# STP low-latency: dep4 prefill + tep8 decode (DP=1), scale sweep 1p1d/1p5d/2p5d
+zip_override_stp_lowlat:
+  name:
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-1d"
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-5d"
+    - "b200-fp4-stp-low-latency-dep4-2p-tep8-5d"
+  resources:
+    prefill_nodes: [1, 1, 2]
+    prefill_workers: [1, 1, 2]
+    decode_nodes: [1, 5, 5]
+    decode_workers: [1, 5, 5]
+  benchmark:
+    concurrencies: ["64x128", "8", "4x128"]
+
+
+# MTP low-latency: same scales as STP, adds EAGLE speculative decoding
+zip_override_mtp_lowlat:
+  name:
+    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-1d"
+    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-5d"
+    - "b200-fp4-mtp-low-latency-dep4-2p-tep8-5d"
+  resources:
+    prefill_nodes: [1, 1, 2]
+    prefill_workers: [1, 1, 2]
+    decode_nodes: [1, 5, 5]
+    decode_workers: [1, 5, 5]
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      decode:
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: ["64x128", "8", "4x128"]
+
+
+# STP max-throughput 7p2d: dep4 prefill + dep8 decode, flashinfer_cutlass backend
+override_stp_maxtpt_7p2d:
+  name: "b200-fp4-stp-max-tpt-dep4-7p-dep8-2d"
+  resources:
+    prefill_nodes: 7
+    prefill_workers: 7
+    decode_nodes: 2
+    decode_workers: 2
+  backend:
+    decode_environment:
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+    sglang_config:
+      prefill:
+        max-prefill-tokens: 65536
+        chunked-prefill-size: 65536
+        max-running-requests: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"
+      decode:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: 2048
+        cuda-graph-max-bs: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"
+  benchmark:
+    concurrencies: "1024x2048"
+
+
+# MTP max-throughput 7p2d: same as STP but adds EAGLE speculative decoding
+override_mtp_maxtpt_7p2d:
+  name: "b200-fp4-mtp-max-tpt-dep4-7p-dep8-2d"
+  resources:
+    prefill_nodes: 7
+    prefill_workers: 7
+    decode_nodes: 2
+    decode_workers: 2
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      prefill:
+        max-prefill-tokens: 65536
+        chunked-prefill-size: 65536
+        max-running-requests: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"
+      decode:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: 2048
+        cuda-graph-max-bs: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: "1024x2048"
+
+
+# MTP-only: 4p1d, no frontends, SGLANG_FLASHINFER_FP4_GEMM_BACKEND env var (fp4-gemm-backend: null
+# removes the sglang_config key), mem-fraction=0.75 for decode
+override_mtp_maxtpt_4p1d:
+  name: "b200-fp4-mtp-max-tpt-dep4-4p-dep8-1d"
+  dynamo: null
+  frontend: null
+  resources:
+    prefill_nodes: 4
+    prefill_workers: 4
+    decode_nodes: 1
+    decode_workers: 1
+  backend:
+    prefill_environment:
+      SGLANG_ENABLE_SPEC_V2: "1"
+    decode_environment:
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
+      SGLANG_ENABLE_SPEC_V2: "1"
+    sglang_config:
+      prefill:
+        max-running-requests: 1024
+        fp4-gemm-backend: null
+      decode:
+        mem-fraction-static: 0.75
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: 1024
+        cuda-graph-max-bs: 1024
+        fp4-gemm-backend: null
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: "1024"

@@ -206,6 +206,13 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
+    # Optional --tokenizer / --endpoint pass-throughs for the multi-node
+    # srt_bench.sh. --tokenizer points the bench at the /model auto-mount
+    # (avoids relying on --model being a HF-resolvable id). --endpoint lets
+    # recipes target /v1/chat/completions when chat-template-only request
+    # paths are required.
+    local tokenizer=""
+    local endpoint=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -268,6 +275,14 @@ run_benchmark_serving() {
                 ;;
             --server-pid)
                 server_pid="$2"
+                shift 2
+                ;;
+            --tokenizer)
+                tokenizer="$2"
+                shift 2
+                ;;
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
             *)
@@ -356,7 +371,15 @@ run_benchmark_serving() {
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
     )
-    
+
+    # Optional pass-throughs.
+    if [[ -n "$tokenizer" ]]; then
+        benchmark_cmd+=(--tokenizer "$tokenizer")
+    fi
+    if [[ -n "$endpoint" ]]; then
+        benchmark_cmd+=(--endpoint "$endpoint")
+    fi
+
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
@@ -861,4 +884,73 @@ run_eval() {
         fi
     fi
     return $eval_rc
+}
+
+# --------------------------------
+# Container helpers
+# --------------------------------
+
+# Sanitize a container image reference (e.g. "lmsysorg/sglang:v0.5.8-cu130")
+# into a filename-safe slug by replacing /, :, @, # with the chosen separator.
+# Defaults to '_' (most clusters); pass '+' for clusters that adopted that
+# convention for their squash-file directory.
+sanitize_image_filename() {
+    local image="$1"
+    local sep="${2:-_}"
+    echo "$image" | sed "s|[/:@#]|${sep}|g"
+}
+
+# --------------------------------
+# srt-slurm helpers
+# --------------------------------
+
+# Clone srt-slurm and install `srtctl` into a uv venv. After this returns
+# successfully, cwd is the cloned repo and the venv is active. Idempotent on
+# uv: skips re-curl if the binary is already present at $UV_INSTALL_DIR.
+#
+# The srt-slurm commit is pinned (not env-var overridable) so every benchmark
+# run uses the exact same srtctl. To bump it, edit the `ref=` line below.
+#
+# All other inputs are env vars (set before calling); all are optional:
+#   SRT_REPO_DIR    default srt-slurm (relative to current cwd)
+#   UV_INSTALL_DIR  default $HOME/.local/bin (uv's own default)
+#   UV_VENV_DIR     default .venv (inside the cloned repo)
+clone_and_install_srtctl() {
+    local repo_url="https://github.com/NVIDIA/srt-slurm.git"
+    # Pinned to NVIDIA/srt-slurm@main — currently 1372a10. Includes:
+    #   * #110 nginx-rework-ulimit: gates `ulimit -n 1048576` + worker_rlimit_nofile
+    #     behind opt-in `frontend.nginx_raise_ulimit` (we don't opt in).
+    #   * #111 srun command line log demoted INFO -> DEBUG (5KB fingerprint
+    #     heredoc no longer dominates orchestrator log).
+    local ref="1372a10c493e3fd757f342d8516a5a91c30fe6ce"
+    local repo_dir="${SRT_REPO_DIR:-srt-slurm}"
+    local uv_install_dir="${UV_INSTALL_DIR:-${HOME}/.local/bin}"
+    local uv_venv_dir="${UV_VENV_DIR:-.venv}"
+
+    echo "Cloning ${repo_url}@${ref} into ${repo_dir}..."
+    rm -rf "$repo_dir"
+    git clone "$repo_url" "$repo_dir"
+    cd "$repo_dir" || return 1
+    git checkout "$ref"
+
+    echo "Installing uv + srtctl into venv at ${uv_venv_dir}..."
+    export UV_INSTALL_DIR="$uv_install_dir"
+    mkdir -p "$uv_install_dir"
+    if ! [ -x "$uv_install_dir/uv" ]; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    export PATH="$uv_install_dir:$PATH"
+    # uv's installer drops an `env` script next to the binary; source it so
+    # PATH/PS1 changes pick up in shells that don't re-read the env.
+    [ -f "$uv_install_dir/env" ] && source "$uv_install_dir/env"
+
+    uv venv "$uv_venv_dir"
+    # shellcheck disable=SC1091
+    source "$uv_venv_dir/bin/activate"
+    uv pip install -e .
+
+    if ! command -v srtctl &> /dev/null; then
+        echo "Error: Failed to install srtctl" >&2
+        return 1
+    fi
 }

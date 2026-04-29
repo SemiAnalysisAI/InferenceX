@@ -1,0 +1,189 @@
+name: "gb200-fp4-1k1k-mid-curve"
+
+dynamo:
+  version: 0.8.1
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 9
+  nginx_container: nginx-sqsh
+
+model:
+  path: "dsr1-fp4"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+resources:
+  gpu_type: "gb200"
+  prefill_nodes: 4
+  decode_nodes: 8
+  prefill_workers: 4
+  decode_workers: 1
+  gpus_per_node: 4
+
+backend:
+
+  # Prefill-specific environment variables
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_NVFP4_CKPT_FP8_GEMM_IN_ATTN: "1"
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    MC_TE_METRIC: "true"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+
+  # Decode-specific environment variables
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_NVFP4_CKPT_FP8_GEMM_IN_ATTN: "1"
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    MC_TE_METRIC: "true"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_MOE_NVFP4_DISPATCH: "1"
+
+  sglang_config:
+    prefill:
+      # Model configuration
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      trust-remote-code: true
+
+      # KV cache and attention
+      kv-cache-dtype: "fp8_e4m3"
+      attention-backend: "trtllm_mla"
+
+      # Quantization
+      quantization: "modelopt_fp4"
+      moe-runner-backend: "flashinfer_cutlass"
+
+      # Radix cache disabled
+      disable-radix-cache: true
+      disable-chunked-prefix-cache: true
+
+      # Other flags
+      stream-interval: 50
+      decode-log-interval: 1000
+      watchdog-timeout: 1000000
+      context-length: 2176
+      disable-shared-experts-fusion: true
+      eplb-algorithm: "deepseek"
+      disaggregation-bootstrap-port: 30001
+
+      # Prefill-specific mode
+      disaggregation-mode: "prefill"
+
+      # Memory and token limits
+      mem-fraction-static: 0.84
+      max-total-tokens: 131072
+      max-prefill-tokens: 32768
+      chunked-prefill-size: 65536
+      enable-single-batch-overlap: true
+
+      # Request handling
+      max-running-requests: 30000
+      load-balance-method: "round_robin"
+
+      # Performance optimizations
+      disable-cuda-graph: true
+      enable-dp-attention: true
+      fp4-gemm-backend: "flashinfer_cutlass"
+      disaggregation-transfer-backend: nixl
+
+      # Parallelism
+      tp-size: 4
+      dp-size: 4
+      ep-size: 4
+
+    decode:
+      # Model configuration
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      trust-remote-code: true
+
+      # KV cache and attention
+      kv-cache-dtype: "fp8_e4m3"
+      attention-backend: "trtllm_mla"
+
+      # Quantization
+      quantization: "modelopt_fp4"
+      moe-runner-backend: "flashinfer_cutedsl"
+
+      # Radix cache disabled
+      disable-radix-cache: true
+      disable-chunked-prefix-cache: true
+
+      # Other flags
+      stream-interval: 50
+      decode-log-interval: 1000
+      watchdog-timeout: 1000000
+      context-length: 2176
+      disable-shared-experts-fusion: true
+      eplb-algorithm: "deepseek"
+      disaggregation-bootstrap-port: 30001
+
+      # Decode-specific mode
+      disaggregation-mode: "decode"
+
+      # Memory and token limits
+      mem-fraction-static: 0.83
+      max-total-tokens: 3122380
+      chunked-prefill-size: 786432
+
+      # Request handling
+      max-running-requests: 67584
+
+      # DeepEP configuration
+      moe-a2a-backend: "deepep"
+      deepep-mode: "low_latency"
+      ep-dispatch-algorithm: "static"
+      ep-num-redundant-experts: 32
+
+      # CUDA graphs (extensive batch size list)
+      cuda-graph-bs: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 1024]
+      num-reserved-decode-tokens: 112
+
+      # Additional decode optimizations
+      moe-dense-tp-size: 1
+      enable-dp-lm-head: true
+      prefill-round-robin-balance: true
+      enable-dp-attention: true
+      disaggregation-transfer-backend: nixl
+      fp4-gemm-backend: "flashinfer_cutlass"
+
+      # Parallelism
+      tp-size: 32
+      dp-size: 32
+      ep-size: 32
+
+# Bench client lives in this repo; mounted into the bench container at
+# /infmax-workspace. See benchmarks/multi_node/srt_bench.sh for the env contract.
+container_mounts:
+  "$INFMAX_WORKSPACE": "/infmax-workspace"
+
+benchmark:
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+  env:
+    MODEL_NAME: "deepseek-ai/DeepSeek-R1"
+    PREFILL_GPUS: "4"
+    DECODE_GPUS: "32"
+    TOTAL_GPUS: "48"

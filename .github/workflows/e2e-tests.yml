@@ -102,6 +102,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            recipe: ${{ matrix.config.recipe }}
             run-eval: false
             ref: ${{ inputs.ref }}
 
@@ -141,6 +142,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            recipe: ${{ matrix.config.recipe }}
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config.eval-conc }}

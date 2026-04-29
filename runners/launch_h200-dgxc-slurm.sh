@@ -4,6 +4,8 @@
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -33,29 +35,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
-    SRT_REPO_DIR="srt-slurm"
-    if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
-        rm -rf "$SRT_REPO_DIR"
-    fi
-
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-
-    echo "Installing srtctl..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
-
-    uv venv
-    source .venv/bin/activate
-    uv pip install -e .
-
-    if ! command -v srtctl &> /dev/null; then
-        echo "Error: Failed to install srtctl"
-        exit 1
-    fi
+    clone_and_install_srtctl || exit 1
 
     echo "Configs available at: $SRT_REPO_DIR/"
 
@@ -64,12 +44,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # SGLang container mapping
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        SQUASH_FILE="/data/containers/$(sanitize_image_filename "$IMAGE" +).sqsh"
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+        SQUASH_FILE="/data/containers/$(sanitize_image_filename "${IMAGE#nvcr.io/}" +).sqsh"
     fi
 
     export ISL="$ISL"
@@ -119,7 +99,7 @@ EOF
     echo "Submitting job with srtctl..."
 
     if [[ -z "$CONFIG_FILE" ]]; then
-        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a 'recipe:' field on the search-space entry (resolved by benchmark-multinode-tmpl.yml)." >&2
         echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
         exit 1
     fi
@@ -262,7 +242,7 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/gharunners/containers/$(sanitize_image_filename "$IMAGE").sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')

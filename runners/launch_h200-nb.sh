@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 export HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 export PORT=8888
 
@@ -12,7 +14,7 @@ PARTITION="main"
 set -x
 srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
---container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER} \
+--container-name=$(sanitize_image_filename "$IMAGE")-${USER} \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --container-remap-root \
 --container-writable \

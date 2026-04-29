@@ -4,6 +4,8 @@
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 
+source "$(dirname "$0")/../benchmarks/benchmark_lib.sh"
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -30,35 +32,14 @@ else
     exit 1
 fi
 
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
-
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR" || exit 1
-git checkout sa-submission-q2-2026
-
-echo "Installing srtctl..."
-export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$UV_INSTALL_DIR:$PATH"
-
-uv venv "$GITHUB_WORKSPACE/.venv"
-source "$GITHUB_WORKSPACE/.venv/bin/activate"
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
+UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin" \
+UV_VENV_DIR="$GITHUB_WORKSPACE/.venv" \
+    clone_and_install_srtctl || exit 1
 
 # Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
-SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/data/squash/$(sanitize_image_filename "$IMAGE").sqsh"
+NGINX_SQUASH_FILE="/data/squash/$(sanitize_image_filename "$NGINX_IMAGE").sqsh"
 
 # Import containers via enroot
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
@@ -108,7 +89,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 echo "Submitting job with srtctl..."
 
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a 'recipe:' field on the search-space entry (resolved by benchmark-multinode-tmpl.yml)." >&2
     echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
     exit 1
 fi
@@ -258,7 +239,7 @@ else
     elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
         export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
-    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(sanitize_image_filename "$IMAGE").sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical

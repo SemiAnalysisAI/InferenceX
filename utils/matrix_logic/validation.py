@@ -1,9 +1,16 @@
+from pathlib import Path
+
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, model_validator
 from typing import List, Optional, Union, Literal
 from enum import Enum
 
 import pprint
 import yaml
+
+# Repo-relative root for first-class srt-slurm recipes referenced by the
+# `recipe:` field on multi-node search-space entries. Resolved against the
+# repository root (parent of utils/) so callers can run from any cwd.
+RECIPES_ROOT = Path(__file__).resolve().parents[2] / "benchmarks" / "multi_node" / "srt-slurm-recipes"
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -44,6 +51,7 @@ class Fields(Enum):
     BATCH_SIZE = 'batch-size'
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
+    RECIPE = 'recipe'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -131,6 +139,11 @@ class MultiNodeMatrixEntry(BaseModel):
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    # Path under benchmarks/multi_node/srt-slurm-recipes/ identifying the
+    # srt-slurm recipe to dispatch. May carry an `:override[N]` suffix that the
+    # launcher strips before resolving the file on disk. Optional because not
+    # every multi-node config uses srt-slurm.
+    recipe: Optional[str] = None
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
@@ -234,10 +247,30 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(
         default=None, alias=Fields.CONC_LIST.value)
+    # First-class srt-slurm recipe reference. Path is relative to
+    # benchmarks/multi_node/srt-slurm-recipes/ and may carry an
+    # `:override[N]` suffix to select an in-yaml override section.
+    recipe: Optional[str] = None
 
     @model_validator(mode='after')
     def validate_conc_fields(self):
         return _validate_conc_fields(self)
+
+    @model_validator(mode='after')
+    def validate_recipe_exists(self):
+        if self.recipe is None:
+            return self
+        # Strip `:override[...]` suffix used by sglang-style recipes that
+        # carry multiple override sections in one file.
+        recipe_path = self.recipe.split(':', 1)[0]
+        full_path = RECIPES_ROOT / recipe_path
+        if not full_path.is_file():
+            raise ValueError(
+                f"Recipe file not found: '{self.recipe}' "
+                f"(resolved to '{full_path}'). "
+                f"Recipes must live under benchmarks/multi_node/srt-slurm-recipes/."
+            )
+        return self
 
 
 class SingleNodeSeqLenConfig(BaseModel):
