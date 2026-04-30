@@ -60,6 +60,8 @@ export AITER_LOG_LEVEL=WARNING
 #   * sunway513/aiter@e450e4d adds DSv4 FP4 MoE tuned rows that route
 #     eligible token counts to FlyDSL FP4 MoE kernels instead of default CK
 #     heuristics when the image has the optional flydsl package.
+#   * Oseltamivir/aiter@083a837 adds DSv4 sparse MQA sink and Indexer
+#     scorer/top-k Triton ops so ATOM can avoid the PR650 Torch fallback.
 #
 # The open performance PRs cherry-pick cleanly over the pinned main SHA as
 # of 2026-04-29.
@@ -78,6 +80,10 @@ if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
     AITER_DSV4_TUNED_FMOE_REPO=${AITER_DSV4_TUNED_FMOE_REPO:-https://github.com/sunway513/aiter.git}
     AITER_DSV4_TUNED_FMOE_SHA=${AITER_DSV4_TUNED_FMOE_SHA:-e450e4deb992c5ecd9db5ef5ef79f1d40208bc9c}
     AITER_DSV4_TUNED_FMOE_PATH=${AITER_DSV4_TUNED_FMOE_PATH:-aiter/configs/model_configs/dsv4_fp4_tuned_fmoe.csv}
+    AITER_DSV4_SPARSE_INDEXER=${AITER_DSV4_SPARSE_INDEXER:-1}
+    AITER_DSV4_SPARSE_INDEXER_REPO=${AITER_DSV4_SPARSE_INDEXER_REPO:-https://github.com/Oseltamivir/aiter.git}
+    AITER_DSV4_SPARSE_INDEXER_REF=${AITER_DSV4_SPARSE_INDEXER_REF:-dsv4-sparse-indexer}
+    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-083a837de5c44080b18b18682f2e7f611717a06b}
 
     rm -rf "$AITER_PERF_DIR"
     git clone --filter=blob:none "$AITER_PERF_REPO" "$AITER_PERF_DIR"
@@ -102,6 +108,41 @@ if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
             git show "FETCH_HEAD:$AITER_DSV4_TUNED_FMOE_PATH" > "$AITER_DSV4_TUNED_FMOE_PATH"
             grep -q '7168,512,385,6,ActivationType.Silu' "$AITER_DSV4_TUNED_FMOE_PATH" \
                 || { echo "FATAL: DSv4 FP4 tuned fMoE rows not found in $AITER_DSV4_TUNED_FMOE_PATH"; exit 1; }
+        fi
+
+        if [ "$AITER_DSV4_SPARSE_INDEXER" = "1" ]; then
+            git fetch --depth=1 "$AITER_DSV4_SPARSE_INDEXER_REPO" "$AITER_DSV4_SPARSE_INDEXER_REF"
+            test "$(git rev-parse FETCH_HEAD)" = "$AITER_DSV4_SPARSE_INDEXER_SHA"
+            for file_path in \
+                aiter/ops/triton/_triton_kernels/attention/dsv4_indexer.py \
+                aiter/ops/triton/_triton_kernels/attention/sparse_mqa_sink.py \
+                aiter/ops/triton/attention/dsv4_indexer.py \
+                aiter/ops/triton/attention/sparse_mqa_sink.py \
+                op_tests/test_dsv4_indexer.py \
+                op_tests/test_sparse_mqa_sink.py
+            do
+                mkdir -p "$(dirname "$file_path")"
+                git show "FETCH_HEAD:$file_path" > "$file_path"
+            done
+            python3 - <<'PYEOF'
+from pathlib import Path
+
+path = Path("aiter/ops/triton/__init__.py")
+source = path.read_text()
+needle = '    "prefill_attention": "attention.prefill_attention",\n'
+insert = '    "dsv4_indexer": "attention.dsv4_indexer",\n    "sparse_mqa_sink": "attention.sparse_mqa_sink",\n'
+if '"dsv4_indexer": "attention.dsv4_indexer"' not in source:
+    if needle not in source:
+        raise SystemExit("FATAL: aiter triton __init__.py missing attention map anchor")
+    source = source.replace(needle, needle + insert, 1)
+elif '"sparse_mqa_sink": "attention.sparse_mqa_sink"' not in source:
+    source = source.replace(
+        '    "dsv4_indexer": "attention.dsv4_indexer",\n',
+        insert,
+        1,
+    )
+path.write_text(source)
+PYEOF
         fi
 
         if [ ! -d 3rdparty/composable_kernel/include ]; then
@@ -142,6 +183,12 @@ required = {
     ).exists(),
     "MXFP4 scaleN_pad fix": "scaleN_pad" in fp4_utils,
     "DSv4 FP4 tuned fMoE config": dsv4_tuned_fmoe is None or dsv4_tuned_fmoe.exists(),
+    "DSv4 sparse MQA sink Triton op": (
+        root / "ops" / "triton" / "attention" / "sparse_mqa_sink.py"
+    ).exists(),
+    "DSv4 Indexer Triton op": (
+        root / "ops" / "triton" / "attention" / "dsv4_indexer.py"
+    ).exists(),
 }
 missing = [name for name, ok in required.items() if not ok]
 if missing:
@@ -181,22 +228,25 @@ else
     echo "WARN: AITER_DSV4_PERF_STACK=0; using image-provided aiter"
 fi
 
-# Apply ROCm/ATOM#650 (DSv4 PR1 skeleton) over the image's wheel-installed
-# atom. The chosen base image ships atom as a built wheel, not editable, so
-# we overlay an editable install from the PR branch at a pinned SHA. Bump
-# this SHA when the PR moves; do not track the branch tip (the run becomes
-# a moving target if the branch is force-pushed).
-ATOM_PR_SHA="af17eb89ceb6370b0c1724aef3bf938e6baedecd"
+# Apply an ATOM DSv4 overlay over the image's wheel-installed atom. The default
+# fork commit is ROCm/ATOM#650 at af17eb8 plus the local multi-request cache-slot
+# fix and AITER sparse_attn/Indexer dispatch below. Keep ATOM_PR_* overridable so
+# this can be pointed back at ROCm/ATOM#650 while debugging upstream movement.
+ATOM_PR_REPO=${ATOM_PR_REPO:-https://github.com/Oseltamivir/ATOM.git}
+ATOM_PR_REF=${ATOM_PR_REF:-dsv4-aiter-sparse-indexer}
+ATOM_PR_SHA=${ATOM_PR_SHA:-0ddf9a9a7919631a9a89073d624bd25b16014f17}
 export ATOM_PR_DIR="/tmp/atom-pr650"
 
 if [ ! -d "$ATOM_PR_DIR/.git" ]; then
-    git clone --filter=blob:none https://github.com/ROCm/ATOM.git "$ATOM_PR_DIR"
+    git clone --filter=blob:none "$ATOM_PR_REPO" "$ATOM_PR_DIR"
 fi
 (
     cd "$ATOM_PR_DIR"
+    git remote set-url origin "$ATOM_PR_REPO"
     # Try a targeted fetch first (fast); fall back to fetching the PR ref if
     # the server doesn't allow fetching the SHA directly.
     git fetch --depth=1 origin "$ATOM_PR_SHA" 2>/dev/null \
+        || git fetch --depth=1 origin "$ATOM_PR_REF" 2>/dev/null \
         || git fetch --depth=1 origin pull/650/head
     git checkout --force "$ATOM_PR_SHA"
     test "$(git rev-parse HEAD)" = "$ATOM_PR_SHA"
@@ -208,12 +258,8 @@ fi
         || { echo "FATAL: ATOM DSv4 mhc_pre aiter hook not found"; exit 1; }
 
     # ROCm/ATOM#650 sparse_attn_v4.py is a correctness-first torch fallback.
-    # Add two local mitigations while we wait for a serving-compatible AITER
-    # sparse-attention kernel:
-    #   1. chunk prefill over the M dimension to keep temporary scores under
-    #      memory pressure, making higher-conc experiments less likely to OOM;
-    #   2. use a B=1,M=1 decode fast path that avoids the fallback's large
-    #      broadcast/mask/concat intermediates on every generated token.
+    # Route DSv4 sparse MQA through the forked AITER Triton kernel first. Keep
+    # the old chunk/decode mitigations only as an explicit fallback path.
     python3 - <<'PYEOF'
 from pathlib import Path
 
@@ -233,6 +279,53 @@ if marker not in source:
 """
     new = """    out_dtype = q.dtype
     device = q.device
+
+    if os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN", "1") == "1" and q.is_cuda:
+        try:
+            from aiter.ops.triton.attention.sparse_mqa_sink import sparse_mqa_sink
+
+            block_size = int(
+                os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_SIZE", "128")
+                or "128"
+            )
+            q_flat = q.reshape(B * M, H, D).contiguous()
+            topk_flat = topk_idxs.reshape(B * M, K).contiguous().int()
+            num_blocks = (N + block_size - 1) // block_size
+            padded_n = num_blocks * block_size
+            if padded_n != N:
+                kv_padded = kv.new_zeros((B, padded_n, D))
+                kv_padded[:, :N] = kv
+            else:
+                kv_padded = kv.contiguous()
+            kv_blocks = (
+                kv_padded.view(B, num_blocks, block_size, D)
+                .reshape(B * num_blocks, block_size, D)
+                .contiguous()
+            )
+            block_table = torch.arange(
+                B * num_blocks, device=device, dtype=torch.int32
+            ).view(B, num_blocks)
+            cu_seqlens_q = torch.arange(
+                0, (B + 1) * M, M, device=device, dtype=torch.int32
+            )
+            seqused_k = torch.full((B,), N, device=device, dtype=torch.int32)
+            out = torch.empty_like(q_flat)
+            sparse_mqa_sink(
+                q_flat,
+                kv_blocks,
+                out,
+                cu_seqlens_q,
+                seqused_k,
+                float(softmax_scale),
+                topk_flat,
+                block_table,
+                attn_sink.float().contiguous(),
+            )
+            return out.view(B, M, H, D).to(out_dtype)
+        except Exception as exc:
+            if os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_STRICT", "1") == "1":
+                raise
+            print(f"WARN: AITER DSv4 sparse_attn failed, falling back to Torch: {exc!r}")
 
     chunk_tokens = int(os.environ.get("ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS", "0") or "0")
     if B == 1 and chunk_tokens > 0 and M > chunk_tokens:
@@ -274,9 +367,9 @@ if marker not in source:
         raise SystemExit("FATAL: sparse_attn_v4.py did not match expected PR650 source")
     source = source.replace(old, new, 1)
     path.write_text(source)
-    print(f"applied DSv4 sparse_attn_v4 decode/chunk patch: {path}")
+    print(f"applied DSv4 sparse_attn_v4 AITER/decode/chunk patch: {path}")
 else:
-    print(f"DSv4 sparse_attn_v4 decode/chunk patch already present: {path}")
+    print(f"DSv4 sparse_attn_v4 AITER/decode/chunk patch already present: {path}")
 PYEOF
 
     # Local multi-request overlay for ROCm/ATOM#650. ATOM's scheduler passes
@@ -287,6 +380,7 @@ PYEOF
     # MoE/FFN layer-by-layer. This fixes correctness for CONC>1 and avoids the
     # worst all-layers-per-request loop until upstream vectorizes the DSv4
     # sparse-attention/cache path.
+    if ! grep -q 'def forward_batched' atom/models/deepseek_v4.py; then
     sed 's/^$/ /' <<'PATCH' | git apply --recount
 diff --git a/atom/model_engine/llm_engine.py b/atom/model_engine/llm_engine.py
 index 8de9532..ddde446 100644
@@ -879,6 +973,101 @@ index 46cf1b0..0d84c78 100644
      def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
          # In V4, the LM head is fused into DeepseekV4Model.forward (it consumes
 PATCH
+    else
+        echo "ATOM DSv4 multi-request overlay already present: atom/models/deepseek_v4.py"
+    fi
+
+    # Replace the Indexer's [S,H,T] Torch scorer/topk with the forked AITER
+    # scorer. For 1k1k, the op takes its dense causal fast path and skips
+    # scoring entirely because every committed compressed entry is selected.
+    python3 - <<'PYEOF'
+from pathlib import Path
+
+path = Path("atom/models/deepseek_v4.py")
+source = path.read_text()
+marker = "ATOM_DSV4_AITER_INDEXER"
+if marker not in source:
+    old = """        # ----- Index score -----
+        index_score = torch.einsum(
+            "bshd,btd->bsht", q, self.kv_cache[slot, : end_pos // ratio]
+        )
+        index_score = (index_score.relu_() * weights.unsqueeze(-1)).sum(dim=2)
+
+        # ----- Top-k selection over compressed positions -----
+        if start_pos == 0:
+            mask = (
+                torch.arange(seqlen // ratio, device=x.device).repeat(seqlen, 1)
+                >= torch.arange(1, seqlen + 1, device=x.device).unsqueeze(1) // ratio
+            )
+            index_score = index_score + torch.where(mask, float("-inf"), 0.0)
+        topk_idxs = index_score.topk(min(self.index_topk, end_pos // ratio), dim=-1)[1]
+        if start_pos == 0:
+            mask = (
+                topk_idxs
+                >= torch.arange(1, seqlen + 1, device=x.device).unsqueeze(1) // ratio
+            )
+            topk_idxs = torch.where(mask, -1, topk_idxs + offset)
+        else:
+            topk_idxs = topk_idxs + offset
+        return topk_idxs
+"""
+    new = """        # ----- Index score / top-k selection over compressed positions -----
+        n_committed = end_pos // ratio
+        if n_committed <= 0:
+            return torch.empty(1, seqlen, 0, dtype=torch.int32, device=x.device)
+
+        if os.environ.get("ATOM_DSV4_AITER_INDEXER", "1") == "1" and q.is_cuda:
+            try:
+                from aiter.ops.triton.attention.dsv4_indexer import dsv4_indexer_topk
+
+                positions = torch.arange(
+                    start_pos, end_pos, device=x.device, dtype=torch.int64
+                )
+                topk_idxs = dsv4_indexer_topk(
+                    q.squeeze(0),
+                    self.kv_cache[slot, :n_committed].squeeze(0),
+                    weights.squeeze(0),
+                    positions,
+                    self.index_topk,
+                    offset,
+                    ratio=ratio,
+                )
+                return topk_idxs.unsqueeze(0)
+            except Exception as exc:
+                if os.environ.get("ATOM_DSV4_AITER_INDEXER_STRICT", "1") == "1":
+                    raise
+                print(f"WARN: AITER DSv4 Indexer failed, falling back to Torch: {exc!r}")
+
+        index_score = torch.einsum(
+            "bshd,btd->bsht", q, self.kv_cache[slot, :n_committed]
+        )
+        index_score = (index_score.relu_() * weights.unsqueeze(-1)).sum(dim=2)
+
+        if start_pos == 0:
+            mask = (
+                torch.arange(seqlen // ratio, device=x.device).repeat(seqlen, 1)
+                >= torch.arange(1, seqlen + 1, device=x.device).unsqueeze(1) // ratio
+            )
+            index_score = index_score + torch.where(mask, float("-inf"), 0.0)
+        topk_idxs = index_score.topk(min(self.index_topk, n_committed), dim=-1)[1]
+        if start_pos == 0:
+            mask = (
+                topk_idxs
+                >= torch.arange(1, seqlen + 1, device=x.device).unsqueeze(1) // ratio
+            )
+            topk_idxs = torch.where(mask, -1, topk_idxs + offset)
+        else:
+            topk_idxs = topk_idxs + offset
+        return topk_idxs
+"""
+    if old not in source:
+        raise SystemExit("FATAL: deepseek_v4.py did not match expected Indexer fallback")
+    source = source.replace(old, new, 1)
+    path.write_text(source)
+    print(f"applied DSv4 AITER Indexer patch: {path}")
+else:
+    print(f"DSv4 AITER Indexer patch already present: {path}")
+PYEOF
 
     # --no-deps: don't churn the image's pinned ROCm/torch/triton/aiter.
     # --force-reinstall: replace the wheel-installed atom with the editable copy.
@@ -1008,6 +1197,8 @@ start_gpu_monitor
 set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
+export ATOM_DSV4_AITER_SPARSE_ATTN=${ATOM_DSV4_AITER_SPARSE_ATTN:-1}
+export ATOM_DSV4_AITER_INDEXER=${ATOM_DSV4_AITER_INDEXER:-1}
 export ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS=${ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS:-256}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
 # support yet (deferred to a follow-up PR). max-num-seqs is sized to the

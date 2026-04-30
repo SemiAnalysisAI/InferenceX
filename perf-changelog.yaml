@@ -2050,6 +2050,8 @@
 - config-keys:
     - dsv4-fp4-mi355x-atom
   description:
-    - "Revert the experimental DSv4 ATOM batched-decode sparse-attention overlay after it hung MI355X profile/sweep jobs"
-    - "Keep profile workflow support, but force PROFILE_NUM_STEPS=1 and PROFILE_OUTPUT_LEN=1 so profiler runs capture a one-token window"
+    - "Overlay Oseltamivir/aiter@083a837 DSv4 sparse MQA sink and Indexer scorer/top-k Triton kernels on top of the existing AITER FP4 perf stack"
+    - "Use Oseltamivir/ATOM@0ddf9a9 as the default ATOM overlay, with the local ROCm/ATOM#650 patch path retained for upstream debugging"
+    - "Patch the DSv4 sparse_attn_v4 and Indexer paths to use the AITER kernels before falling back to the correctness-first Torch implementations"
+    - "Use a dense causal Indexer fast path for 1k1k when all committed compressed entries are selected, avoiding the [S,H,T] Torch scoring tensor entirely"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
