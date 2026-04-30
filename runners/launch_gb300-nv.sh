@@ -4,7 +4,7 @@
 
 set -x
 
-export SLURM_PARTITION="batch"
+export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
@@ -12,11 +12,11 @@ export MODEL_PATH=$MODEL
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528-fp4-v2
+    export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=/raid/shared/models/deepseek-r1-0528
+    export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
@@ -25,11 +25,29 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+# Run the import on a compute node via srun, not on the login node:
+# the login node is x86_64 while the compute nodes are aarch64, so the
+# arm64 squash file has to be built on a compute node.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
+        exec 9>\"$lock\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
+        if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import: $squash'
+        else
+            rm -f \"$squash\"
+            enroot import -o \"$squash\" docker://$image
+        fi
+    "
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
