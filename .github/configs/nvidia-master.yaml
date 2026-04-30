@@ -1727,10 +1727,11 @@ dsv4-fp4-b200-vllm:
     - { tp: 8, conc-start: 1, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
-# DeepSeek-V4-Pro TRTLLM bring-up. Keep this TP-only and below the eval
-# threshold until TRTLLM has a DSv4 chat-template/parser path wired in this repo.
+# DeepSeek-V4-Pro TRTLLM bring-up. Requires a TensorRT-LLM image built from
+# NVIDIA/TensorRT-LLM@feat/deepseek_v4; public release images do not include
+# the DSv4 model, sparse attention, tokenizer, and cache-manager code.
 dsv4-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1741,11 +1742,11 @@ dsv4-fp4-b200-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
+    - { tp: 8, ep: 8, conc-start: 1, conc-end: 8 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
+    - { tp: 8, ep: 8, conc-start: 1, conc-end: 8 }
 
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
@@ -2586,7 +2587,7 @@ dsv4-fp4-b300-vllm:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -2597,11 +2598,11 @@ dsv4-fp4-b300-trt:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
+    - { tp: 8, ep: 8, conc-start: 1, conc-end: 8 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
+    - { tp: 8, ep: 8, conc-start: 1, conc-end: 8 }
 
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.20.0-cu130

@@ -2028,6 +2028,6 @@
     - dsv4-fp4-b300-trt
   description:
     - "Add DeepSeek-V4-Pro FP4 TRTLLM single-node bring-up configs on B200 and B300"
-    - "Use TensorRT-LLM release 1.2.0rc6.post2 with TP8, EP1, STP-only conc 1-8 for 1k1k and 8k1k"
-    - "Benchmark prompts use the repository DSv4 encoder via --dsv4; evals are intentionally avoided by keeping conc below the eval threshold until TRTLLM DSv4 chat handling is wired"
+    - "Use a TensorRT-LLM image built from NVIDIA/TensorRT-LLM@feat/deepseek_v4 (f1c5fe1) with TP8, EP8, STP-only conc 1-8 for 1k1k and 8k1k"
+    - "Serve DeepSeek-V4-Pro through TRTLLM's deepseek_v4 tokenizer and /v1/chat/completions; include utils/build_trtllm_deepseek_v4_image.sh for building the required branch image"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233

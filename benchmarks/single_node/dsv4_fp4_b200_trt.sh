@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# DeepSeek-V4-Pro single-node TRTLLM bring-up recipe. This intentionally starts
-# with low-concurrency TP-only STP points; DSv4 has no Jinja chat template and
-# TRTLLM does not currently have a DSv4-specific chat parser wired here.
+# DeepSeek-V4-Pro single-node TRTLLM bring-up recipe for NVIDIA/TensorRT-LLM
+# feat/deepseek_v4. The public release images do not contain this model path.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -35,22 +34,27 @@ PORT=${PORT:-8888}
 EXTRA_CONFIG_FILE="dsv4-fp4-trt.yml"
 
 MOE_BACKEND="TRTLLM"
-MAX_BATCH_SIZE=$(( CONC > 8 ? CONC : 8 ))
+MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
-KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.80}"
+KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.50}"
 
+ATTENTION_DP_CONFIG=""
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    echo "DSv4 TRTLLM bring-up only supports TP-only search-space entries for now." >&2
-    exit 1
+    ATTENTION_DP_CONFIG="
+attention_dp_config:
+    batching_wait_iters: 0
+    enable_balance: true
+    timeout_iters: 60"
 fi
 
 cat > "$EXTRA_CONFIG_FILE" << EOF
 cuda_graph_config:
     enable_padding: true
     max_batch_size: $CUDA_GRAPH_MAX_BATCH_SIZE
-enable_attention_dp: false
+enable_attention_dp: $DP_ATTENTION$ATTENTION_DP_CONFIG
 print_iter_log: true
 kv_cache_config:
+    tokens_per_block: 128
     dtype: fp8
     free_gpu_memory_fraction: $KV_CACHE_FREE_MEM_FRACTION
     enable_block_reuse: false
@@ -77,15 +81,18 @@ start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
 mpirun -n 1 --oversubscribe --allow-run-as-root \
-    trtllm-serve "$MODEL" --port="$PORT" \
+    trtllm-serve "$MODEL" \
+    --host 0.0.0.0 \
+    --port "$PORT" \
     --trust_remote_code \
-    --backend=pytorch \
-    --max_batch_size="$MAX_BATCH_SIZE" \
-    --max_seq_len="$MAX_MODEL_LEN" \
-    --max_num_tokens="$MAX_NUM_TOKENS" \
-    --tp_size="$TP" \
-    --ep_size="$EP_SIZE" \
-    --extra_llm_api_options="$EXTRA_CONFIG_FILE" \
+    --backend pytorch \
+    --max_batch_size "$MAX_BATCH_SIZE" \
+    --max_seq_len "$MAX_MODEL_LEN" \
+    --max_num_tokens "$MAX_NUM_TOKENS" \
+    --tp_size "$TP" \
+    --ep_size "$EP_SIZE" \
+    --custom_tokenizer deepseek_v4 \
+    --config "$EXTRA_CONFIG_FILE" \
     > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
@@ -95,7 +102,8 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
-    --backend openai \
+    --backend openai-chat \
+    --endpoint /v1/chat/completions \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
@@ -103,7 +111,6 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$PWD/" \
-    --dsv4 \
     --trust-remote-code \
     --server-pid "$SERVER_PID"
 

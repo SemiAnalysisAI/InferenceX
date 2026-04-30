@@ -165,11 +165,12 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --use-chat-template, --dsv4, and --trust-remote-code
+# All parameters are required except --endpoint, --use-chat-template, --dsv4, and --trust-remote-code
 # Parameters:
 #   --model: Model name
 #   --port: Server port
 #   --backend: Backend type - e.g., 'vllm' or 'openai'
+#   --endpoint: Optional API endpoint override
 #   --input-len: Random input sequence length
 #   --output-len: Random output sequence length
 #   --random-range-ratio: Random range ratio
@@ -194,6 +195,7 @@ run_benchmark_serving() {
     local model=""
     local port=""
     local backend=""
+    local endpoint=""
     local input_len=""
     local output_len=""
     local random_range_ratio=""
@@ -219,6 +221,10 @@ run_benchmark_serving() {
                 ;;
             --backend)
                 backend="$2"
+                shift 2
+                ;;
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
             --input-len)
@@ -356,6 +362,10 @@ run_benchmark_serving() {
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
     )
+
+    if [[ -n "$endpoint" ]]; then
+        benchmark_cmd+=(--endpoint "$endpoint")
+    fi
     
     # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
