@@ -28,24 +28,28 @@ NGINX_IMAGE="nginx:1.27.4"
 SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
+# Run the import on a compute node via srun, not on the login node:
+# the login node is x86_64 while the compute nodes are aarch64, so the
+# arm64 squash file has to be built on a compute node.
+#
 # Parallel GH jobs target the same shared squash path on VAST; without
 # serialization, racing `enroot import -o` runs leave the file in a
 # transient state that makes Python's `Path.resolve()` raise ELOOP.
-# flock per-file at the head node so only one importer runs at a time;
-# others wait, then see a valid file and skip.
+# The lock file lives on the shared VAST mount so flock serializes
+# across the 3 parallel compute nodes via NFSv4 advisory locks.
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
-    (
-        exec 9>"$lock"
-        flock -w 600 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
-        if unsquashfs -l "$squash" > /dev/null 2>&1; then
-            echo "Squash file already exists and is valid, skipping import: $squash"
+    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
+        exec 9>\"$lock\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
+        if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import: $squash'
         else
-            rm -f "$squash"
-            srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $squash docker://$image"
+            rm -f \"$squash\"
+            enroot import -o \"$squash\" docker://$image
         fi
-    )
+    "
 }
 
 import_squash "$SQUASH_FILE" "$IMAGE"
