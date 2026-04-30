@@ -31,10 +31,10 @@ sanitize_slurm_mpi_env_for_trtllm() {
         return 0
     fi
 
-    echo "Sanitizing Slurm/PMI environment for TensorRT-LLM direct launch"
+    echo "Sanitizing Slurm/PMI environment for TensorRT-LLM launch"
     while IFS='=' read -r name _; do
         case "$name" in
-            SLURM_*|PMI*|PMIX*|OMPI_*|OPAL_*|ORTE_*)
+            SLURM_*|PMI*|PMIX*|OMPI_*|ORTE_*)
                 unset "$name"
                 ;;
         esac
