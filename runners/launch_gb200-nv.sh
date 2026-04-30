@@ -15,6 +15,12 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
+    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        # Same compute-node-local NVMe path as the dynamo-vllm dsv4
+        # branch — see that branch for rationale. SRT_SLURM_MODEL_PREFIX
+        # matches the model.path alias in our DSV4 sglang recipes.
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -150,6 +156,16 @@ if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
+    # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
+    # and overlay our hand-rolled DSV4 sglang recipes. NVIDIA/srt-slurm
+    # has no upstream sglang DSV4 disagg recipes yet, hence the overlay.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
