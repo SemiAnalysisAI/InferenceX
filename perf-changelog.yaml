@@ -2041,4 +2041,4 @@
     - "Recipe uses TP/EP={4/4, 8/8}, num_speculative_tokens=3, draft_tensor_parallel_size=1"
     - "Sweep covers ISL/OSL 1k/1k, 1k/8k, and 8k/1k with concurrency 4-64"
     - "Image pinned to vllm/vllm-openai-rocm:nightly-4eafc729285e459a5fc96efd6f7b313b155cad48 for Eagle3 support"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1234
