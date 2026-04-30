@@ -31,12 +31,6 @@ NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed
 # Run the import on a compute node via srun, not on the login node:
 # the login node is x86_64 while the compute nodes are aarch64, so the
 # arm64 squash file has to be built on a compute node.
-#
-# Parallel GH jobs target the same shared squash path on VAST; without
-# serialization, racing `enroot import -o` runs leave the file in a
-# transient state that makes Python's `Path.resolve()` raise ELOOP.
-# The lock file lives on the shared VAST mount so flock serializes
-# across the 3 parallel compute nodes via NFSv4 advisory locks.
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
