@@ -2008,6 +2008,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
 
 - config-keys:
+    - dsv4-fp4-b200-vllm-mtp
+  description:
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B200"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1230
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Keep the GB200 Dynamo vLLM MegaMOE max-throughput recipe at 3P/1D DEP8 conc=4096"
+    - "Add GB200 Dynamo vLLM MegaMOE high-throughput recipe at 2P/1D DEP8 conc=4096"
+    - "Add GB200 Dynamo vLLM MegaMOE mid-curve recipe at 1P/1D DEP8 conc=256/512/1024"
+    - "Remove stale offload recipe copies and the old no-MegaMOE mid/max-throughput points from the GB200 Dynamo vLLM matrix"
+    - "Disable FlashInfer autotune on GB200 decode workers for accuracy stability, matching the srt-slurm recipe fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1223
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang benchmarks via Dynamo (1k/1k sweep; 8k/1k recipes shipped but commented out)"
