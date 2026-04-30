@@ -2006,3 +2006,12 @@
     - "Change image to vllm/vllm-openai:v0.20.0-cu130"
     - "Use Mega MoE for DEP configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
+
+- config-keys:
+    - dsv4-fp4-b200-trt
+    - dsv4-fp4-b300-trt
+  description:
+    - "Add DeepSeek-V4-Pro FP4 TRTLLM single-node bring-up configs on B200 and B300"
+    - "Use TensorRT-LLM release 1.2.0rc6.post2 with TP8, EP1, STP-only conc 1-8 for 1k1k and 8k1k"
+    - "Benchmark prompts use the repository DSv4 encoder via --dsv4; evals are intentionally avoided by keeping conc below the eval threshold until TRTLLM DSv4 chat handling is wired"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
