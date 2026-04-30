@@ -19,17 +19,11 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE"
 
-# ROCm/ATOM#650 is still a single-request marker for DSv4. Run
-# 24953107645 showed CONC>1 fails in two ways: 1k warmup can exhaust the KV
-# budget after sparse-attn temporaries raise peak memory, and 8k prefill OOMs
-# in the torch sparse_attn fallback when two long requests are batched. Keep
-# this fatal guard until ATOM lands the AITER sparse-attention / multi-request
-# path for DeepSeek-V4.
-if [ "$CONC" -ne 1 ]; then
-    echo "FATAL: ROCm/ATOM#650 DSv4 path is single-request only; CONC must be 1, got $CONC" >&2
-    exit 1
-fi
-
+# ROCm/ATOM#650 is still a PR1 DSv4 skeleton. The local overlay below gives
+# DSv4 persistent per-request cache slots so CONC>1 no longer corrupts the
+# recurrent KV/compressor/indexer state. It is still eager and not vectorized
+# across requests, so keep sweep points modest until upstream lands the native
+# multi-request sparse-attention/cache path.
 if [ "$EP_SIZE" -ne 1 ]; then
     echo "FATAL: ROCm/ATOM#650 PR1 has not validated expert parallel serving; EP_SIZE must be 1, got $EP_SIZE" >&2
     exit 1
@@ -193,7 +187,7 @@ fi
 # we overlay an editable install from the PR branch at a pinned SHA. Bump
 # this SHA when the PR moves; do not track the branch tip (the run becomes
 # a moving target if the branch is force-pushed).
-ATOM_PR_SHA="cdbff359d3db7afd3801e28b38fc71253121ee84"
+ATOM_PR_SHA="af17eb89ceb6370b0c1724aef3bf938e6baedecd"
 export ATOM_PR_DIR="/tmp/atom-pr650"
 
 if [ ! -d "$ATOM_PR_DIR/.git" ]; then
@@ -285,6 +279,455 @@ if marker not in source:
 else:
     print(f"DSv4 sparse_attn_v4 decode/chunk patch already present: {path}")
 PYEOF
+
+    # Local multi-request overlay for ROCm/ATOM#650. ATOM's scheduler passes
+    # DSv4 a token-flat batch, but PR650 treats every request as cache slot 0
+    # (`kv_cache[:1]` and matching compressor/indexer state). Reuse ATOM's
+    # mamba-state slot allocator for DSv4, then run each sequence against its
+    # persistent slot. This fixes correctness for CONC>1; it is intentionally
+    # conservative and still loops requests until upstream vectorizes the DSv4
+    # sparse-attention/cache path.
+    sed 's/^$/ /' <<'PATCH' | git apply
+diff --git a/atom/model_engine/llm_engine.py b/atom/model_engine/llm_engine.py
+index 8de9532..ddde446 100644
+--- a/atom/model_engine/llm_engine.py
++++ b/atom/model_engine/llm_engine.py
+@@ -171,7 +171,16 @@ class InputOutputProcessor:
+             self.num_speculative_tokens = (
+                 self.config.speculative_config.num_speculative_tokens
+             )
+-        mamba_model_types = {"qwen3_next", "qwen3_5_text", "qwen3_5_moe_text"}
++        mamba_model_types = {
++            "qwen3_next",
++            "qwen3_5_text",
++            "qwen3_5_moe_text",
++            "deepseek_v4",
++            "deepseek_v4_pro",
++        }
+-        if self.config.hf_config.model_type in mamba_model_types:
++        architectures = getattr(self.config.hf_config, "architectures", []) or []
++        if self.config.hf_config.model_type in mamba_model_types or any(
++            "DeepseekV4" in arch for arch in architectures
++        ):
+             self.mamba_enabled = True
+
+diff --git a/atom/model_engine/model_runner.py b/atom/model_engine/model_runner.py
+index 72e9d84..598f2a5 100644
+--- a/atom/model_engine/model_runner.py
++++ b/atom/model_engine/model_runner.py
+@@ -659,6 +659,14 @@ class ModelRunner:
+             )
+         return False
+
++    def is_deepseek_v4(self) -> bool:
++        model_type = getattr(self.hf_text_config, "model_type", None)
++        architectures = getattr(self.hf_text_config, "architectures", []) or []
++        return model_type in (
++            "deepseek_v4",
++            "deepseek_v4_pro",
++        ) or any("DeepseekV4" in arch for arch in architectures)
++
+     def is_qwen_next(self) -> bool:
+         if not hasattr(self.hf_text_config, "model_type"):
+             return False
+@@ -1250,9 +1256,10 @@ class ModelRunner:
+
+         # GDN recurrent state: deduct mamba tensor memory from pool budget
+         mamba_per_slot = self._compute_mamba_per_slot_bytes()
++        needs_recurrent_slots = mamba_per_slot > 0 or self.is_deepseek_v4()
+         slots_per_req = 1 + self.num_spec_tokens
+         max_mamba_slots = (
+-            config.max_num_seqs * slots_per_req if mamba_per_slot > 0 else 0
++            config.max_num_seqs * slots_per_req if needs_recurrent_slots else 0
+         )
+         mamba_tensor_bytes = max_mamba_slots * mamba_per_slot
+         available_for_pool = available_for_kv - mamba_tensor_bytes
+@@ -1270,7 +1277,7 @@ class ModelRunner:
+         # Store for BlockManager and allocate_kv_cache
+         config.mamba_equiv_per_req = mamba_equiv
+         config.max_mamba_slots = max_mamba_slots
+-        config.num_mamba_groups = config.max_num_seqs if mamba_per_slot > 0 else 0
++        config.num_mamba_groups = config.max_num_seqs if needs_recurrent_slots else 0
+         self.max_mamba_slots = max_mamba_slots
+
+         num_kvcache_blocks = available_for_pool // block_bytes
+@@ -1309,7 +1316,7 @@ class ModelRunner:
+         return {
+             "num_kvcache_blocks": num_kvcache_blocks,
+             "mamba_equiv_per_req": mamba_equiv,
+-            "num_mamba_groups": config.max_num_seqs if mamba_per_slot > 0 else 0,
++            "num_mamba_groups": config.max_num_seqs if needs_recurrent_slots else 0,
+         }
+
+     def allocate_kv_cache(self, num_kvcache_blocks):
+@@ -1782,6 +1789,13 @@ class ModelRunner:
+             )
+         attn_metadata, positions = self.attn_metadata_builder.build(batch=batch, bs=bs)
+         context_bs = batch.total_seqs_num_prefill if is_prefill else scheduled_bs
++        if self.is_deepseek_v4():
++            cache_slots = list(batch.mamba_state_slots)
++            if len(cache_slots) < context_bs:
++                cache_slots = list(range(context_bs))
++            attn_metadata.dsv4_cache_slots = torch.tensor(
++                cache_slots[:context_bs], dtype=torch.int64, device=self.device
++            )
+
+         # graph_bs should be batch size (number of sequences), not token count
+         graph_bs = num_input_tokens if is_prefill else bs
+diff --git a/atom/models/deepseek_v4.py b/atom/models/deepseek_v4.py
+index 46cf1b0..0d84c78 100644
+--- a/atom/models/deepseek_v4.py
++++ b/atom/models/deepseek_v4.py
+@@ -506,7 +506,9 @@ class Compressor(nn.Module):
+         new_tensor[:, 1:, :ratio] = tensor[:, :-1, :, :d]
+         return new_tensor
+
+-    def forward(self, x: torch.Tensor, start_pos: int) -> Optional[torch.Tensor]:
++    def forward(
++        self, x: torch.Tensor, start_pos: int, cache_slot: int = 0
++    ) -> Optional[torch.Tensor]:
+         """Compress KV for the input tokens. Writes into self.kv_cache when a
+         compression block boundary is hit; otherwise just buffers state and returns None.
+
+@@ -524,6 +526,7 @@ class Compressor(nn.Module):
+         if x.dim() == 2:
+             x = x.unsqueeze(0)  # [num_tokens, dim] → [1, num_tokens, dim]
+         bsz, seqlen, _ = x.size()
++        slot = slice(cache_slot, cache_slot + bsz)
+         ratio = self.compress_ratio
+         overlap = self.overlap
+         d = self.head_dim
+@@ -545,16 +548,16 @@ class Compressor(nn.Module):
+             # Save the last `ratio` overlap-slice tokens into kv_state for use
+             # by the next decode call's overlap window.
+             if overlap and cutoff >= ratio:
+-                self.kv_state[:bsz, :ratio] = kv[:, cutoff - ratio : cutoff]
+-                self.score_state[:bsz, :ratio] = (
++                self.kv_state[slot, :ratio] = kv[:, cutoff - ratio : cutoff]
++                self.score_state[slot, :ratio] = (
+                     score[:, cutoff - ratio : cutoff] + self.ape
+                 )
+             # Save the trailing partial block (remainder tokens) into kv_state.
+             if remainder > 0:
+-                kv, self.kv_state[:bsz, offset : offset + remainder] = kv.split(
++                kv, self.kv_state[slot, offset : offset + remainder] = kv.split(
+                     [cutoff, remainder], dim=1
+                 )
+-                self.score_state[:bsz, offset : offset + remainder] = (
++                self.score_state[slot, offset : offset + remainder] = (
+                     score[:, cutoff:] + self.ape[:remainder]
+                 )
+                 score = score[:, :cutoff]
+@@ -570,20 +573,20 @@ class Compressor(nn.Module):
+             should_compress = (start_pos + 1) % self.compress_ratio == 0
+             score = score + self.ape[start_pos % ratio]
+             if overlap:
+-                self.kv_state[:bsz, ratio + start_pos % ratio] = kv.squeeze(1)
+-                self.score_state[:bsz, ratio + start_pos % ratio] = score.squeeze(1)
++                self.kv_state[slot, ratio + start_pos % ratio] = kv.squeeze(1)
++                self.score_state[slot, ratio + start_pos % ratio] = score.squeeze(1)
+                 if should_compress:
+                     kv_state = torch.cat(
+                         [
+-                            self.kv_state[:bsz, :ratio, :d],
+-                            self.kv_state[:bsz, ratio:, d:],
++                            self.kv_state[slot, :ratio, :d],
++                            self.kv_state[slot, ratio:, d:],
+                         ],
+                         dim=1,
+                     )
+                     score_state = torch.cat(
+                         [
+-                            self.score_state[:bsz, :ratio, :d],
+-                            self.score_state[:bsz, ratio:, d:],
++                            self.score_state[slot, :ratio, :d],
++                            self.score_state[slot, ratio:, d:],
+                         ],
+                         dim=1,
+                     )
+@@ -591,14 +594,14 @@ class Compressor(nn.Module):
+                         dim=1, keepdim=True
+                     )
+                     # Roll: the just-completed window becomes the next overlap window.
+-                    self.kv_state[:bsz, :ratio] = self.kv_state[:bsz, ratio:]
+-                    self.score_state[:bsz, :ratio] = self.score_state[:bsz, ratio:]
++                    self.kv_state[slot, :ratio] = self.kv_state[slot, ratio:]
++                    self.score_state[slot, :ratio] = self.score_state[slot, ratio:]
+             else:
+-                self.kv_state[:bsz, start_pos % ratio] = kv.squeeze(1)
+-                self.score_state[:bsz, start_pos % ratio] = score.squeeze(1)
++                self.kv_state[slot, start_pos % ratio] = kv.squeeze(1)
++                self.score_state[slot, start_pos % ratio] = score.squeeze(1)
+                 if should_compress:
+                     kv = (
+-                        self.kv_state[:bsz] * self.score_state[:bsz].softmax(dim=1)
++                        self.kv_state[slot] * self.score_state[slot].softmax(dim=1)
+                     ).sum(dim=1, keepdim=True)
+
+         if not should_compress:
+@@ -622,9 +625,9 @@ class Compressor(nn.Module):
+             act_quant_inplace(kv[..., :-rd], 64, self.scale_fmt)
+
+         if start_pos == 0:
+-            self.kv_cache[:bsz, : seqlen // ratio] = kv
++            self.kv_cache[slot, : seqlen // ratio] = kv
+         else:
+-            self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)
++            self.kv_cache[slot, start_pos // ratio] = kv.squeeze(1)
+         return kv
+
+
+@@ -696,6 +699,7 @@ class Indexer(nn.Module):
+         qr: torch.Tensor,
+         start_pos: int,
+         offset: int,
++        cache_slot: int = 0,
+     ) -> torch.Tensor:
+         """Compute sparse top-k indices over the indexer's compressed KV cache.
+
+@@ -715,6 +719,7 @@ class Indexer(nn.Module):
+         ratio = self.compress_ratio
+         rd = self.rope_head_dim
+         end_pos = start_pos + seqlen
++        slot = slice(cache_slot, cache_slot + 1)
+
+         # Lazy plumb the indexer's kv_cache + freqs_cis into its compressor.
+         if self.compressor.kv_cache is None:
+@@ -729,7 +734,7 @@ class Indexer(nn.Module):
+         fp4_act_quant_inplace(q, _FP4_BLOCK_SIZE)
+
+         # ----- Indexer KV (Compressor takes 2D, mutates kv_cache) -----
+-        self.compressor(x, start_pos)
++        self.compressor(x, start_pos, cache_slot)
+         # weights_proj is ATOM Linear → 2D input; restore B=1 dim for einsum.
+         weights = (
+             self.weights_proj(x) * (self.softmax_scale * self.n_heads**-0.5)
+@@ -737,7 +742,7 @@ class Indexer(nn.Module):
+
+         # ----- Index score -----
+         index_score = torch.einsum(
+-            "bshd,btd->bsht", q, self.kv_cache[:1, : end_pos // ratio]
++            "bshd,btd->bsht", q, self.kv_cache[slot, : end_pos // ratio]
+         )
+         index_score = (index_score.relu_() * weights.unsqueeze(-1)).sum(dim=2)
+
+@@ -959,7 +964,9 @@ class DeepseekV4Attention(nn.Module):
+
+         self.wo_a.quant_type = _QT.No
+
+-    def forward(self, x: torch.Tensor, start_pos: int) -> torch.Tensor:
++    def forward(
++        self, x: torch.Tensor, start_pos: int, cache_slot: int = 0
++    ) -> torch.Tensor:
+         """Compute attention for `x` at absolute position `start_pos`.
+
+         Args:
+@@ -978,6 +985,7 @@ class DeepseekV4Attention(nn.Module):
+         win = self.window_size
+         ratio = self.compress_ratio
+         rd = self.rope_head_dim
++        slot = slice(cache_slot, cache_slot + 1)
+
+         # First-call plumbing: hand the (compressed-half) KV cache + freqs_cis
+         # to the compressor / indexer.
+@@ -992,14 +1000,14 @@ class DeepseekV4Attention(nn.Module):
+         # with garbage. Real prefill only overwrites a few slots, leaving
+         # stale warmup data that poisons decode attention.
+         if start_pos == 0:
+-            self.kv_cache.zero_()
++            self.kv_cache[slot].zero_()
+             if self.compress_ratio:
+-                self.compressor.kv_state.zero_()
+-                self.compressor.score_state.fill_(float("-inf"))
++                self.compressor.kv_state[slot].zero_()
++                self.compressor.score_state[slot].fill_(float("-inf"))
+                 if self.indexer is not None:
+-                    self.indexer.kv_cache.zero_()
+-                    self.indexer.compressor.kv_state.zero_()
+-                    self.indexer.compressor.score_state.fill_(float("-inf"))
++                    self.indexer.kv_cache[slot].zero_()
++                    self.indexer.compressor.kv_state[slot].zero_()
++                    self.indexer.compressor.score_state[slot].fill_(float("-inf"))
+
+         # ----- Q: low-rank projection + per-head RMSNorm + partial RoPE -----
+         # ATOM TP linears require 2D inputs; subsequent ops (RoPE, sparse_attn)
+@@ -1023,7 +1031,7 @@ class DeepseekV4Attention(nn.Module):
+         if self.compress_ratio:
+             offset = kv.size(1) if start_pos == 0 else win
+             if self.indexer is not None:
+-                compress_topk_idxs = self.indexer(x, qr, start_pos, offset)
++                compress_topk_idxs = self.indexer(x, qr, start_pos, offset, cache_slot)
+             else:
+                 compress_topk_idxs = _get_compress_topk_idxs(
+                     ratio, 1, seqlen, start_pos, offset, device=x.device
+@@ -1037,26 +1045,26 @@ class DeepseekV4Attention(nn.Module):
+         # implicit B=1.) -----
+         if start_pos == 0:
+             if seqlen <= win:
+-                self.kv_cache[:1, :seqlen] = kv
++                self.kv_cache[slot, :seqlen] = kv
+             else:
+                 cutoff = seqlen % win
+                 (
+-                    self.kv_cache[:1, cutoff:win],
+-                    self.kv_cache[:1, :cutoff],
++                    self.kv_cache[slot, cutoff:win],
++                    self.kv_cache[slot, :cutoff],
+                 ) = kv[
+                     :, -win:
+                 ].split([win - cutoff, cutoff], dim=1)
+             if self.compress_ratio:
+-                if (kv_compress := self.compressor(x, start_pos)) is not None:
++                if (kv_compress := self.compressor(x, start_pos, cache_slot)) is not None:
+                     kv = torch.cat([kv, kv_compress], dim=1)
+             o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)
+         else:
+-            self.kv_cache[:1, start_pos % win] = kv.squeeze(1)
++            self.kv_cache[slot, start_pos % win] = kv.squeeze(1)
+             if self.compress_ratio:
+-                self.compressor(x, start_pos)
++                self.compressor(x, start_pos, cache_slot)
+             o = sparse_attn(
+                 q,
+-                self.kv_cache[:1],
++                self.kv_cache[slot],
+                 self.attn_sink,
+                 topk_idxs,
+                 self.softmax_scale,
+@@ -1599,6 +1607,7 @@ class Block(nn.Module):
+         x: torch.Tensor,
+         start_pos: int,
+         input_ids: Optional[torch.Tensor],
++        cache_slot: int = 0,
+     ) -> torch.Tensor:
+         # ----- Attention sub-layer with mHC mixing -----
+         residual = x
+@@ -1606,7 +1615,7 @@ class Block(nn.Module):
+             x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base
+         )
+         x = self.attn_norm(x)
+-        x = self.attn(x, start_pos)
++        x = self.attn(x, start_pos, cache_slot)
+         x = self.hc_post(x, residual, post, comb)
+
+         # ----- FFN sub-layer with mHC mixing -----
+@@ -1821,11 +1830,30 @@ class DeepseekV4Model(nn.Module):
+         self.hc_head_base = nn.Parameter(torch.empty(hc_mult, dtype=torch.float32))
+         self.hc_head_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+
++    def _forward_one(
++        self,
++        input_ids: torch.Tensor,
++        start_pos: int,
++        cache_slot: int,
++    ) -> torch.Tensor:
++        h = self.embed(input_ids)  # [num_tokens, dim]
++        # Expand to hc_mult copies for Hyper-Connections: [num_tokens, hc, dim]
++        h = h.unsqueeze(-2).repeat(1, self.hc_mult, 1)
++
++        for layer in self.layers:
++            h = layer(h, start_pos, input_ids, cache_slot)
++
++        logits = self.head(
++            h, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm
++        )
++        return logits
++
+     @torch.inference_mode()
+     def forward(
+         self,
+         input_ids: torch.Tensor,
+         start_pos: int = 0,
++        positions: Optional[torch.Tensor] = None,
+         **model_kwargs: dict,
+     ) -> torch.Tensor:
+         """Forward.
+@@ -1844,17 +1872,51 @@ class DeepseekV4Model(nn.Module):
+                 input_ids.size(0) == 1
+             ), "B>1 batched input_ids needs attn_metadata; not supported yet"
+             input_ids = input_ids.flatten()
+-        h = self.embed(input_ids)  # [num_tokens, dim]
+-        # Expand to hc_mult copies for Hyper-Connections: [num_tokens, hc, dim]
+-        h = h.unsqueeze(-2).repeat(1, self.hc_mult, 1)
++        if positions is None:
++            positions = torch.arange(
++                start_pos,
++                start_pos + input_ids.numel(),
++                device=input_ids.device,
++                dtype=torch.int64,
++            )
++        else:
++            positions = positions.flatten()
+
+-        for layer in self.layers:
+-            h = layer(h, start_pos, input_ids)
++        attn_metadata = None
++        context = None
++        try:
++            from atom.utils.forward_context import get_forward_context
+
+-        logits = self.head(
+-            h, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm
+-        )
+-        return logits
++            forward_context = get_forward_context()
++            attn_metadata = forward_context.attn_metadata
++            context = forward_context.context
++        except Exception:
++            pass
++
++        cu_seqlens_q = getattr(attn_metadata, "cu_seqlens_q", None)
++        if cu_seqlens_q is None or context is None or context.batch_size <= 1:
++            seq_start = int(positions[0].item()) if positions.numel() else int(start_pos)
++            cache_slots = getattr(attn_metadata, "dsv4_cache_slots", None)
++            cache_slot = int(cache_slots[0].item()) if cache_slots is not None else 0
++            return self._forward_one(input_ids, seq_start, cache_slot)
++
++        num_seqs = int(context.batch_size)
++        cache_slots = getattr(attn_metadata, "dsv4_cache_slots", None)
++        if cache_slots is None or cache_slots.numel() < num_seqs:
++            cache_slots = torch.arange(num_seqs, device=input_ids.device, dtype=torch.int64)
++
++        logits = []
++        for seq_idx in range(num_seqs):
++            start = int(cu_seqlens_q[seq_idx].item())
++            end = int(cu_seqlens_q[seq_idx + 1].item())
++            if end <= start:
++                continue
++            seq_start = int(positions[start].item())
++            cache_slot = int(cache_slots[seq_idx].item())
++            logits.append(self._forward_one(input_ids[start:end], seq_start, cache_slot))
++        if not logits:
++            return self._forward_one(input_ids[:1], int(start_pos), 0)
++        return torch.cat(logits, dim=0)
+
+
+ class DeepseekV4ForCausalLM(nn.Module):
+@@ -1918,6 +1980,9 @@ class DeepseekV4ForCausalLM(nn.Module):
+         # config lacks `quantization_config` (e.g. dummy / toy validation),
+         # this still works — base spec is QuantType.No.
+         self.args.quant_config = make_v4_quant_config(self.hf_config)
++        self.args.max_batch_size = max(
++            self.args.max_batch_size, int(getattr(config, "max_num_seqs", 1))
++        )
+         self.model = DeepseekV4Model(args=self.args)
+
+     def forward(
+@@ -1929,7 +1994,12 @@ class DeepseekV4ForCausalLM(nn.Module):
+         **model_kwargs: dict,
+     ) -> torch.Tensor:
+         start_pos = int(positions[0].item()) if positions is not None else 0
+-        return self.model(input_ids=input_ids, start_pos=start_pos, **model_kwargs)
++        return self.model(
++            input_ids=input_ids,
++            start_pos=start_pos,
++            positions=positions,
++            **model_kwargs,
++        )
+
+     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
+         # In V4, the LM head is fused into DeepseekV4Model.forward (it consumes
+PATCH
 
     # --no-deps: don't churn the image's pinned ROCm/torch/triton/aiter.
     # --force-reinstall: replace the wheel-installed atom with the editable copy.
@@ -421,9 +864,9 @@ export ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS=${ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS:-
 # KV/GDN-mamba allocator overshoot the GPU budget ("GDN mamba tensor
 # exceeds available KV budget"), and using 1 hangs warmup at 0% GPU. 4
 # is the minimum we've seen complete warmup successfully (also the PR's
-# offline repro value). The PR1 kv_cache[:1,...] hardcode in
-# deepseek_v4.py means any forward with batch>1 silently corrupts
-# non-slot-0 lanes; eval (gsm8k) at conc>1 is the canary.
+# offline repro value). The local PR650 overlay above maps each request to a
+# persistent DSv4 cache slot; without it, deepseek_v4.py's `kv_cache[:1]`
+# writes corrupt non-slot-0 lanes at CONC>1.
 MAX_NUM_SEQS=$(( CONC < 4 ? 4 : CONC ))
 MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-$MAX_MODEL_LEN_VALUE}
 python3 -m atom.entrypoints.openai_server \

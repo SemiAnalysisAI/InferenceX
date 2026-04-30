@@ -2013,4 +2013,12 @@
     - "Advance the AITER DSv4 perf-stack base to ROCm/aiter main commit 8c27e66f, which includes merged ROCm/aiter#2916"
     - "Remove the local runtime aiter/ops/mhc.py patcher and AITER_MHC_FIX_SHA fallback now the mhc_pre device-allocation fix is upstream"
     - "Keep the open AITER performance PR cherry-picks (#2642, #2822, #2900); they are not merged upstream yet"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1229
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Enable DSv4 ATOM multi-request smoke coverage by adding a local ROCm/ATOM#650 overlay that assigns persistent per-request cache slots for DSv4 KV/compressor/indexer state"
+    - "Expand MI355X ATOM DSv4 sweep from CONC=1 only to CONC=1/2/4 for 1k1k and 8k1k"
+    - "Bump the overlaid ROCm/ATOM#650 SHA to af17eb8; the patch unblocks correctness but still runs DSv4 requests sequentially until upstream vectorized sparse-attention/cache support lands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -1538,13 +1538,12 @@ dsv4-fp8-mi355x-vllm:
     search-space:
     - { tp: 8, conc-start: 1, conc-end: 1 }
 
-# Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
-# PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
-# that OOM once warmup/prefill batches multiple requests; keep CONC=1 until
-# the AITER sparse-attention kernel / multi-request path lands upstream.
-# --enforce-eager and ATOM_USE_TRITON_MOE=1 are required on gfx950. Image is
-# the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
-# the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
+# Day-0 DeepSeek-V4 on ATOM (ROCm/ATOM#650) with local runtime overlays.
+# dsv4_fp4_mi355x_atom.sh patches PR650 to give each request persistent DSv4
+# KV/compressor/indexer cache slots, unblocking CONC>1 smoke coverage. The path
+# still uses eager execution and request-looped DSv4 attention until upstream
+# lands native multi-request sparse-attention/cache support, so keep this sweep
+# conservative.
 dsv4-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1557,8 +1556,8 @@ dsv4-fp4-mi355x-atom:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
