@@ -1,4 +1,4 @@
-name: "conc256"
+name: "conc512"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -66,9 +66,9 @@ resources:
   prefill_nodes: 1
   prefill_workers: 1
   gpus_per_prefill: 4
-  decode_nodes: 2
+  decode_nodes: 4
   decode_workers: 1
-  gpus_per_decode: 8
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -84,9 +84,18 @@ backend:
     SGLANG_ENABLE_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
     SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -94,6 +103,10 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
 
   decode_environment:
     PYTHONUNBUFFERED: "1"
@@ -101,9 +114,17 @@ backend:
     SGLANG_ENABLE_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
     SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1152"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -111,25 +132,31 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
     # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
     # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
     prefill:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      model-path: "/model/"
       trust-remote-code: true
-      disable-radix-cache: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+
+      enable-dp-attention: true
+      moe-a2a-backend: "deepep"
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
-
-      tensor-parallel-size: 4
-      data-parallel-size:   1
-      expert-parallel-size: 1
-
-      moe-runner-backend: "flashinfer_mxfp4"
-      disable-flashinfer-autotune: true
 
       mem-fraction-static: 0.90
       max-running-requests: 512
@@ -138,30 +165,34 @@ backend:
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      model-path: "/model/"
       trust-remote-code: true
-      disable-radix-cache: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+
+      moe-a2a-backend: "deepep"
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
 
-      tensor-parallel-size: 8
-      data-parallel-size:   1
-      expert-parallel-size: 1
-
-      moe-runner-backend: "flashinfer_mxfp4"
-      disable-flashinfer-autotune: true
-
-      mem-fraction-static: 0.9
-      max-running-requests: 1024
-      cuda-graph-max-bs:    512
-      swa-full-tokens-ratio: 0.1
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.15
       context-length: 16384
+      tensor-parallel-size: 16
+      data-parallel-size: 16
+      expert-parallel-size: 16
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-a2a-backend: deepep
+      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      max-running-requests: 3072
+      cuda-graph-max-bs: 512
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "256"
+  concurrencies: "512"
   req_rate: "inf"
   use_chat_template: false
