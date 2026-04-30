@@ -2033,6 +2033,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - updated sglang container image 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
+- config-keys:
     - dsv4-fp4-b200-trt
     - dsv4-fp4-b300-trt
   description:
