@@ -2039,7 +2039,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
-    - dsv4-fp4-b200-trt
     - dsv4-fp4-b300-trt
   description:
     - "Add DeepSeek-V4-Pro FP4 TRTLLM single-node bring-up configs on B200 and B300"
