@@ -555,30 +555,6 @@ minimaxm2.5-fp8-mi355x-atom:
     - { tp: 4, conc-start: 4, conc-end: 128 }
     - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
 
-minimaxm2.5-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
-  model: amd/MiniMax-M2.5-MXFP4
-  model-prefix: minimaxm2.5
-  runner: mi355x
-  precision: fp4
-  framework: atom
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 4, conc-end: 1024 }
-    - { tp: 2, conc-start: 4, conc-end: 1024 }
-    - { tp: 4, conc-start: 4, conc-end: 128 }
-    - { tp: 8, conc-start: 4, conc-end: 16 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 4, conc-end: 1024 }
-    - { tp: 2, conc-start: 4, conc-end: 1024 }
-    - { tp: 4, conc-start: 4, conc-end: 128 }
-    - { tp: 8, conc-start: 4, conc-end: 16 }
-
 minimaxm2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.1
   model: amd/MiniMax-M2.5-MXFP4

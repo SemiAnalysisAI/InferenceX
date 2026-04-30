@@ -1963,13 +1963,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1204
 
 - config-keys:
-    - minimaxm2.5-fp4-mi355x-atom
-  description:
-    - "Add MiniMax-M2.5 MXFP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
-    - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
- 
-- config-keys:  
     - dsv4-fp4-gb200-dynamo-vllm
   description:
     - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
