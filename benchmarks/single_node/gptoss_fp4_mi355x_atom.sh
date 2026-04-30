@@ -49,12 +49,14 @@ set -x
 
 BLOCK_SIZE=${BLOCK_SIZE:-16}
 export ATOM_GPT_OSS_MODEL=1 #TODO remove this
+setup_atom_profile_args
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --block-size $BLOCK_SIZE > $SERVER_LOG 2>&1 &
+    --block-size $BLOCK_SIZE \
+    "${ATOM_PROFILE_ARGS[@]}" > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

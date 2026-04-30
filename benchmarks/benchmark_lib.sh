@@ -327,10 +327,12 @@ run_benchmark_serving() {
     # and cap num_prompts to keep traces small.
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
-        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
-        if [[ -n "$_prof_dir" ]]; then
-            mkdir -p "$_prof_dir"
-        fi
+        local _prof_dir=""
+        for _prof_dir in "${SGLANG_TORCH_PROFILER_DIR:-}" "${VLLM_TORCH_PROFILER_DIR:-}" "${ATOM_TORCH_PROFILER_DIR:-}"; do
+            if [[ -n "$_prof_dir" ]]; then
+                mkdir -p "$_prof_dir"
+            fi
+        done
         profile_flag+=(--profile)
         num_prompts="$max_concurrency"
     fi
@@ -415,6 +417,15 @@ run_benchmark_serving() {
 # Profiling trace helpers
 # --------------------------------
 
+setup_atom_profile_args() {
+    ATOM_PROFILE_ARGS=()
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        ATOM_TORCH_PROFILER_DIR=${ATOM_TORCH_PROFILER_DIR:-/workspace/atom_profiles}
+        mkdir -p "$ATOM_TORCH_PROFILER_DIR"
+        ATOM_PROFILE_ARGS+=(--torch-profiler-dir "$ATOM_TORCH_PROFILER_DIR")
+    fi
+}
+
 _find_latest_profile_trace() {
     local latest=""
     local dir="" candidate="" base=""
@@ -424,6 +435,9 @@ _find_latest_profile_trace() {
         search_roots=()
         if [[ -d "$dir" ]]; then
             search_roots+=("$dir")
+            while IFS= read -r -d '' candidate; do
+                search_roots+=("$candidate")
+            done < <(find "$dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
         fi
         if [[ -d "$dir/profiles" ]]; then
             search_roots+=("$dir/profiles")
@@ -463,11 +477,12 @@ move_profile_trace_for_relay() {
 
     local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
     local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    local atom_dir="${ATOM_TORCH_PROFILER_DIR:-/workspace}"
     local -a search_dirs=()
     local dir="" existing=""
     local seen=0
 
-    for dir in "$sglang_dir" "$vllm_dir" "/workspace"; do
+    for dir in "$sglang_dir" "$vllm_dir" "$atom_dir" "/workspace"; do
         if [[ -z "$dir" ]]; then
             continue
         fi

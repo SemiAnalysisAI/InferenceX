@@ -43,6 +43,7 @@ MEM_FRAC_STATIC=0.9
 
 set -x
 
+setup_atom_profile_args
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -50,6 +51,7 @@ python3 -m atom.entrypoints.openai_server \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --trust-remote-code \
+    "${ATOM_PROFILE_ARGS[@]}" \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

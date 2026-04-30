@@ -2022,3 +2022,10 @@
     - "Expand MI355X ATOM DSv4 sweep from CONC=1 only to CONC=1/2/4 for 1k1k and 8k1k"
     - "Bump the overlaid ROCm/ATOM#650 SHA to af17eb8; the patch unblocks correctness but still runs DSv4 requests sequentially until upstream vectorized sparse-attention/cache support lands"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Optimize DSv4 ATOM CONC=4 decode path by batching one-token sparse-attention calls across active requests inside the local ROCm/ATOM#650 overlay"
+    - "Add a vectorized B>1,M=1 sparse_attn_v4 torch fallback so steady-state decode avoids one sparse-attention launch sequence per request per layer"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
