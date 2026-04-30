@@ -96,12 +96,13 @@ bootstrap_trtllm_dsv4() {
         rm -rf "$dist_dir"
         mkdir -p "$dist_dir"
 
+        # setup.py sanity-checks for the generated bindings/ stubs directory.
+        # Do not use --skip-stubs here, or wheel packaging fails after C++ build.
         python3 scripts/build_wheel.py \
             --cuda_architectures "$archs" \
             --build_dir "$build_dir" \
             --dist_dir "$dist_dir" \
             --clean \
-            --skip-stubs \
             ${TRTLLM_DSV4_BUILD_ARGS:-}
 
         local wheel
