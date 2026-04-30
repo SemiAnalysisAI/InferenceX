@@ -26,6 +26,9 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
+export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
+echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
+
 bootstrap_trtllm_dsv4 || exit 1
 
 if [[ "$MODEL" != /* ]]; then
@@ -85,7 +88,7 @@ fi
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
-mpirun -n 1 --oversubscribe --allow-run-as-root \
+SERVE_CMD=(
     trtllm-serve "$MODEL" \
     --host 0.0.0.0 \
     --port "$PORT" \
@@ -97,8 +100,16 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
     --tp_size "$TP" \
     --ep_size "$EP_SIZE" \
     --custom_tokenizer deepseek_v4 \
-    --config "$EXTRA_CONFIG_FILE" \
-    > "$SERVER_LOG" 2>&1 &
+    --config "$EXTRA_CONFIG_FILE"
+)
+
+if [[ "${TRTLLM_DSV4_USE_MPIRUN:-1}" == "0" ]]; then
+    "${SERVE_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+else
+    mpirun -n 1 --oversubscribe --allow-run-as-root \
+        "${SERVE_CMD[@]}" \
+        > "$SERVER_LOG" 2>&1 &
+fi
 
 SERVER_PID=$!
 
