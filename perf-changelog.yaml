@@ -1968,8 +1968,8 @@
     - "Add MiniMax-M2.5 MXFP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
     - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
- 
-- config-keys:  
+
+- config-keys:
     - dsv4-fp4-gb200-dynamo-vllm
   description:
     - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
@@ -2033,7 +2033,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
+<<<<<<< dsv4-gb300-vllm
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated Dynamo vLLM benchmarks at 8k/1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1238
+=======
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - updated sglang container image 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
+>>>>>>> main
