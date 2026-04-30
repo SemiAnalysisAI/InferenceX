@@ -5,7 +5,7 @@ set -euo pipefail
 TRTLLM_REPO="${TRTLLM_REPO:-https://github.com/NVIDIA/TensorRT-LLM.git}"
 TRTLLM_REF="${TRTLLM_REF:-feat/deepseek_v4}"
 TRTLLM_COMMIT="${TRTLLM_COMMIT:-f1c5fe143febb70cd74f0fb4ccca1516206268d7}"
-IMAGE_WITH_TAG="${IMAGE_WITH_TAG:-ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1}"
+IMAGE_WITH_TAG="${IMAGE_WITH_TAG:-ghcr.io/semianalysiswork/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1}"
 CUDA_ARCHS="${CUDA_ARCHS:-100-real;103-real}"
 PUSH="${PUSH:-0}"
 KEEP_SRC="${KEEP_SRC:-0}"
