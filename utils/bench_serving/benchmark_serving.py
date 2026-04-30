@@ -56,6 +56,7 @@ except ImportError:
     from argparse import ArgumentParser as FlexibleArgumentParser
 
 from benchmark_utils import convert_to_pytorch_benchmark_format
+from encoding_dsv4 import encode_messages as dsv4_encode_messages
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
@@ -104,10 +105,30 @@ def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
     )
 
 
+def _apply_chat_template(prompt, tokenizer, dsv4):
+    """Render a single user message into the appropriate chat-template prompt.
+
+    When `dsv4` is True we use the self-contained DeepSeek-V4 encoder
+    (encoding_dsv4.encode_messages) which emits the
+    <bos><User>...<Assistant><think> framing the model expects. Otherwise we
+    fall back to the tokenizer's built-in jinja chat template.
+    """
+    if dsv4:
+        return dsv4_encode_messages(
+            [{"role": "user", "content": prompt}],
+            thinking_mode="thinking",
+        )
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt}],
+        add_generation_prompt=True,
+        tokenize=False,
+    )
+
+
 def _process_prompt_chunk(chunk_args):
     """Generate a chunk of random prompts in a worker process."""
     (indices, prefix_token_ids, input_lens, output_lens, offsets,
-     prefix_len, vocab_size, use_chat_template, seed) = chunk_args
+     prefix_len, vocab_size, use_chat_template, dsv4, seed) = chunk_args
 
     rng = np.random.RandomState(seed)
     tokenizer = _worker_tokenizer
@@ -135,11 +156,7 @@ def _process_prompt_chunk(chunk_args):
             prompt = tokenizer.decode(prompt_token_ids)
 
         if use_chat_template:
-            prompt = tokenizer.apply_chat_template(
-                [{"role": "user", "content": prompt}],
-                add_generation_prompt=True,
-                tokenize=False,
-            )
+            prompt = _apply_chat_template(prompt, tokenizer, dsv4)
 
         prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
         mismatch = prompt_len - tgt_prompt_len
@@ -156,6 +173,7 @@ def sample_random_requests(
     range_ratio: float,
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
+    dsv4: bool = False,
     tokenizer_id: Optional[str] = None,
     tokenizer_mode: str = "auto",
     trust_remote_code: bool = False,
@@ -164,12 +182,11 @@ def sample_random_requests(
     vocab_size = tokenizer.vocab_size
     prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()
 
+    if dsv4 and not use_chat_template:
+        raise ValueError("--dsv4 requires --use-chat-template to be set.")
+
     if use_chat_template:
-        chat_template_dummy = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "a"}],
-            add_generation_prompt=True,
-            tokenize=False,
-        )
+        chat_template_dummy = _apply_chat_template("a", tokenizer, dsv4)
         tokenized_chat_template_dummy = tokenizer.encode(chat_template_dummy, add_special_tokens=False)
         chat_template_len = len(tokenized_chat_template_dummy) - 1
         input_len = input_len - chat_template_len
@@ -215,6 +232,7 @@ def sample_random_requests(
                 prefix_len,
                 vocab_size,
                 use_chat_template,
+                dsv4,
                 int(local_rng.randint(0, 2**31)),
             ))
 
@@ -261,11 +279,7 @@ def sample_random_requests(
                 prompt = tokenizer.decode(prompt_token_ids)
 
             if use_chat_template:
-                prompt = tokenizer.apply_chat_template(
-                    [{"role": "user", "content": prompt}],
-                    add_generation_prompt=True,
-                    tokenize=False,
-                )
+                prompt = _apply_chat_template(prompt, tokenizer, dsv4)
 
             prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
             mismatches.append(prompt_len - tgt_prompt_len)
@@ -783,6 +797,7 @@ def main(args: argparse.Namespace):
             range_ratio=args.random_range_ratio,
             tokenizer=tokenizer,
             use_chat_template=args.use_chat_template,
+            dsv4=args.dsv4,
             tokenizer_id=tokenizer_id,
             tokenizer_mode=tokenizer_mode,
             trust_remote_code=args.trust_remote_code,
@@ -1154,6 +1169,15 @@ if __name__ == "__main__":
         help="Number of worker processes for parallel random prompt generation. "
         "Only used with --dataset-name random. "
         "0 (default) = auto (min(cpu_count, 8)). 1 = serial (no multiprocessing).",
+    )
+
+    dsv4_group = parser.add_argument_group("DeepSeek-V4 chat template options")
+    dsv4_group.add_argument(
+        "--dsv4",
+        action="store_true",
+        help="Use the DeepSeek-V4 chat template (encoding_dsv4.py) instead of "
+        "the tokenizer's built-in jinja chat template. Requires "
+        "--use-chat-template to also be set. Applies to the random dataset.",
     )
 
     hf_group = parser.add_argument_group("hf dataset options")
