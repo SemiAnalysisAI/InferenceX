@@ -170,8 +170,22 @@ When working with benchmark configurations, use these valid values:
 ### Git
 
 - Conventional commit messages
-- Use `[skip-sweep]` in commit message to skip benchmarks
+- Use `[skip-sweep]` in commit message to skip benchmarks (push-to-main only)
 - Changes to `perf-changelog.yaml` trigger benchmark runs
+
+### Pull Request Sweep Labels
+
+PRs do **not** run the sweep automatically — `run-sweep.yml` is gated on a label. Pick exactly one of the two; setting both is rejected by the workflow.
+
+| Label | Behavior | When to use |
+|-------|----------|-------------|
+| `sweep-enabled` | Runs the sweep with `--trim-conc`: each parallelism config is reduced to its single highest configured concurrency point. | Default for most PRs — validates the change runs end-to-end without consuming the full cluster. |
+| `full-sweep-enabled` | Runs the full intermediate concurrency sweep, identical to a push-to-main run. | Use when intermediate concurrency points actually matter for the PR (e.g., a recipe change expected to shift the throughput/latency curve, not just its endpoints). |
+
+Notes:
+- The two labels are mutually exclusive — `run-sweep.yml`'s `setup` job fails fast with an explicit error if both are present.
+- Push-to-main always runs the full (untrimmed) sweep unless `[skip-sweep]` is in the commit message; the trim only applies to PR runs that opt in via `sweep-enabled`.
+- The trimming logic lives in `trim_conc()` in `utils/process_changelog.py` — single-node entries are grouped by every non-`conc` field and only the highest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[max(conc)]`.
 
 ## Common Tasks
 
