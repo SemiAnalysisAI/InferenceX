@@ -26,6 +26,23 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
+sanitize_slurm_mpi_env_for_trtllm() {
+    if [[ "${TRTLLM_DSV4_SANITIZE_SLURM_MPI_ENV:-0}" != "1" ]]; then
+        return 0
+    fi
+
+    echo "Sanitizing Slurm/PMI environment for TensorRT-LLM direct launch"
+    while IFS='=' read -r name _; do
+        case "$name" in
+            SLURM_*|PMI*|PMIX*|OMPI_*|OPAL_*|ORTE_*)
+                unset "$name"
+                ;;
+        esac
+    done < <(env)
+}
+
+sanitize_slurm_mpi_env_for_trtllm
+
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 

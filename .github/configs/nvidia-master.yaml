@@ -1730,25 +1730,25 @@ dsv4-fp4-b200-vllm:
 # DeepSeek-V4-Pro TRTLLM bring-up. This uses a TensorRT-LLM image built from
 # NVIDIA/TensorRT-LLM@feat/deepseek_v4; the benchmark script keeps a guarded
 # source-build fallback if the image is missing the required DSv4 support.
-dsv4-fp4-b200-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: b200-dsv4
-  precision: fp4
-  framework: trt
-  multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 1, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 8, conc-start: 1, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
+#dsv4-fp4-b200-trt:
+#  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
+#  model: deepseek-ai/DeepSeek-V4-Pro
+#  model-prefix: dsv4
+#  runner: b200-dsv4
+#  precision: fp4
+#  framework: trt
+#  multinode: false
+#  seq-len-configs:
+#  - isl: 1024
+#    osl: 1024
+#    search-space:
+#    - { tp: 8, conc-start: 1, conc-end: 32 }
+#    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
+#  - isl: 8192
+#    osl: 1024
+#    search-space:
+#    - { tp: 8, conc-start: 1, conc-end: 32 }
+#    - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128 }
 
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
