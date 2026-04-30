@@ -2031,3 +2031,10 @@
     - "Topologies mirror the dsv4-fp4-gb300-dynamo-vllm sibling: low-conc 1p1d-dep8-tep8 (4 nodes), mid 1p1d-dep8-dep16 (6 nodes), high 3p1d-dep8-dep16 (10 nodes). 4096 overlap between mid and high gives a topology-crossover A/B"
     - "No upstream GB300 DSV4 sglang disagg recipe exists. Per-worker sglang_config (env vars + flashinfer_mxfp4 + chunked-prefill-size 4096 + disable-flashinfer-autotune + mem-fraction-static 0.82) is mirrored from NVIDIA/srt-slurm PR #69 (recipes/gb300-fp4/1k1k-dsv4/agg-2n-low-latency.yaml — GB300 DSV4 SGLang aggregated). Disagg flag set (nixl transfer backend, enable-dp-attention + moe-a2a-backend deepep) cross-checked against PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml — GB300 DSV4 SGLang disagg) and the SGLang DeepSeek-V4 cookbook. Stored under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - updated sglang container image 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
