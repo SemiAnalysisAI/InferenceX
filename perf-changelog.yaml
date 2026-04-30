@@ -1969,6 +1969,13 @@
     - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
  
+- config-keys:
+    - qwen3.5-bf16-mi355x-atom
+  description:
+    - "Day 0 Qwen3.5-397B-A17B BF16 MI355X benchmarks using Atom framework (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
+    - "Single-node sweep: TP4 and TP8, 1k/1k and 8k/1k ISL/OSL, FP8 KV cache, concurrency 4–256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1149  
+
 - config-keys:  
     - dsv4-fp4-gb200-dynamo-vllm
   description:
