@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
 # DeepSeek-V4-Pro single-node TRTLLM bring-up recipe for NVIDIA/TensorRT-LLM
-# feat/deepseek_v4. The public release images do not contain this model path.
+# feat/deepseek_v4. The public release/devel images do not contain this model
+# path yet, so the script builds and installs the pinned branch under /tmp.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/trtllm_dsv4_bootstrap.sh"
 
 check_env_vars \
     MODEL \
@@ -22,6 +24,8 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
+
+bootstrap_trtllm_dsv4 || exit 1
 
 if [[ "$MODEL" != /* ]]; then
     hf download "$MODEL"
