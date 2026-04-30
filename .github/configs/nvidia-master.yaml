@@ -1727,11 +1727,11 @@ dsv4-fp4-b200-vllm:
     - { tp: 8, conc-start: 1, conc-end: 32 }
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
-# DeepSeek-V4-Pro TRTLLM bring-up. Public release/devel tags do not include
-# the DSv4 branch yet, so the benchmark script bootstraps
-# NVIDIA/TensorRT-LLM@feat/deepseek_v4 inside the official devel image.
+# DeepSeek-V4-Pro TRTLLM bring-up. This uses a TensorRT-LLM image built from
+# NVIDIA/TensorRT-LLM@feat/deepseek_v4; the benchmark script keeps a guarded
+# source-build fallback if the image is missing the required DSv4 support.
 dsv4-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/devel:1.3.0rc13
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -2587,7 +2587,7 @@ dsv4-fp4-b300-vllm:
     - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/devel:1.3.0rc13
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300

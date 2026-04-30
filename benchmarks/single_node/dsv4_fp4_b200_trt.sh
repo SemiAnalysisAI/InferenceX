@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # DeepSeek-V4-Pro single-node TRTLLM bring-up recipe for NVIDIA/TensorRT-LLM
-# feat/deepseek_v4. The public release/devel images do not contain this model
-# path yet, so the script builds and installs the pinned branch under /tmp.
+# feat/deepseek_v4. The configured image should already contain this branch;
+# bootstrap_trtllm_dsv4 verifies that and only builds the pinned branch as a
+# fallback.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 source "$(dirname "$0")/trtllm_dsv4_bootstrap.sh"

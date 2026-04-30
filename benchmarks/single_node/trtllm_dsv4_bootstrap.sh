@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# Build and install the TensorRT-LLM DeepSeek-V4 feature branch at runtime.
-# This avoids relying on a custom prebuilt image while still picking up the
-# branch's required C++/CUDA kernels and Python model/tokenizer code.
+# Verify TensorRT-LLM DeepSeek-V4 support and, if needed, build/install the
+# pinned feature branch at runtime as a fallback.
 
 trtllm_dsv4_supported() {
     python3 - <<'PY'

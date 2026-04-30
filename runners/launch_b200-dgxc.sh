@@ -6,6 +6,45 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
+configure_enroot_ghcr_auth() {
+    case "$IMAGE" in
+        ghcr.io#*|ghcr.io/*) ;;
+        *) return 0 ;;
+    esac
+
+    if [[ -z "${GHCR_TOKEN:-}" ]]; then
+        echo "GHCR_TOKEN is not set; attempting anonymous ghcr.io import"
+        return 0
+    fi
+
+    local config_dir="${ENROOT_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/enroot}"
+    local credentials_file="$config_dir/.credentials"
+    local tmp_file
+    local ghcr_user="${GHCR_USER:-${GITHUB_ACTOR:-oauth2}}"
+    local xtrace_was_set=0
+
+    case "$-" in
+        *x*) xtrace_was_set=1; set +x ;;
+    esac
+
+    mkdir -p "$config_dir"
+    touch "$credentials_file"
+    chmod 600 "$credentials_file"
+    tmp_file="$(mktemp "${credentials_file}.XXXXXX")"
+    grep -v '^machine ghcr\.io ' "$credentials_file" > "$tmp_file" || true
+    printf 'machine ghcr.io login %s password $GHCR_TOKEN\n' "$ghcr_user" >> "$tmp_file"
+    mv "$tmp_file" "$credentials_file"
+    chmod 600 "$credentials_file"
+
+    if [[ "$xtrace_was_set" == "1" ]]; then
+        set -x
+    fi
+
+    echo "Configured enroot credentials for ghcr.io"
+}
+
+configure_enroot_ghcr_auth
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Validate framework
