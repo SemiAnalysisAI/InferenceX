@@ -3812,12 +3812,13 @@ minimaxm2.5-fp8-b200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 512 }
     agentic-coding:
-    # B200 tp=4: empirical compute ceiling ~50 in-flight, GPU cache cliff ~conc 48.
-    # CPU offload window narrow (compute saturates near KV cliff).
+    # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
+    # Cliffs colocated -> cpu offload window vanishingly narrow.
+    # Dense sampling 32-56 captures both; 64 confirms saturation.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64] }
-      - { tp: 4, offloading: cpu,  conc-list: [32, 48, 64, 96, 128] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64] }
+      - { tp: 4, offloading: cpu,  conc-list: [32, 40, 48, 56, 64] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
@@ -3846,13 +3847,13 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 2, conc-start: 64, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
     agentic-coding:
-    # B300 tp=4: empirical compute ceiling ~60 in-flight, GPU cache cliff ~conc 85.
-    # Compute saturates BEFORE KV cliff -> cpu offload doesn't help here.
-    # Run none and cpu side by side to confirm.
+    # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
+    # Compute saturates BEFORE KV cliff -> negative result for cpu offload demo.
+    # Dense around compute cliff 48-72; conc 96 confirms plateau.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 128] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 72, 96] }
+      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
 
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
@@ -3970,13 +3971,13 @@ minimaxm2.5-fp8-h100-vllm:
       # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
     agentic-coding:
-    # H100 tp=4 ep=4: empirical compute ceiling ~10 in-flight reqs;
-    # GPU cache cap 0.46M tokens (conc ~6 saturation @ 75K avg ISL).
-    # cpu offload useful zone: conc 6-10 (after KV cliff, before compute ceiling).
+    # H100 tp=4 ep=4: compute ceiling ~10 (empirical), KV cliff ~6 (analytical).
+    # Best cpu-offload demo SKU — 4-conc-point window between cliffs.
+    # Dense sampling 4-12 covers both cliffs; conc 16 confirms compute plateau.
     - duration: 1800
       search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 6, 8, 12, 16, 24] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [6, 8, 12, 16, 24, 32] }
+      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 10, 12, 16] }
+      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
 
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
@@ -4193,13 +4194,12 @@ minimaxm2.5-fp8-h200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
     agentic-coding:
-    # H200 tp=4: empirical compute ceiling ~35 in-flight (winged TP — fixed-seq-len
-    # has only tp=8 which is broken on v0.19.1 fp8 block_n=128).
-    # GPU cache cap 2.19M tokens (conc ~29 saturation). cpu offload zone: conc 24-48.
+    # H200 tp=4: compute ceiling ~35 (empirical), KV cliff ~29 (analytical).
+    # cpu offload window conc 29-35 — dense sampling 24-40 captures both cliffs.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [24, 32, 48, 64, 96] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 28, 32, 36, 48] }
+      - { tp: 4, offloading: cpu,  conc-list: [24, 28, 32, 36, 40, 48] }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
