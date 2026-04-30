@@ -1968,7 +1968,7 @@
     - "Add MiniMax-M2.5 MXFP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
     - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
-  
+ 
 - config-keys:  
     - dsv4-fp4-gb200-dynamo-vllm
   description:
@@ -2008,12 +2008,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1221
 
 - config-keys:
-    - dsv4-fp4-mi355x-atom
+    - dsv4-fp4-b200-vllm-mtp
   description:
-    - "Advance the AITER DSv4 perf-stack base to ROCm/aiter main commit 8c27e66f, which includes merged ROCm/aiter#2916"
-    - "Remove the local runtime aiter/ops/mhc.py patcher and AITER_MHC_FIX_SHA fallback now the mhc_pre device-allocation fix is upstream"
-    - "Keep the open AITER performance PR cherry-picks (#2642, #2822, #2900); they are not merged upstream yet"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "Add preliminary vLLM MTP configs for DeepSeek-V4-Pro on B200"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1230
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Keep the GB200 Dynamo vLLM MegaMOE max-throughput recipe at 3P/1D DEP8 conc=4096"
+    - "Add GB200 Dynamo vLLM MegaMOE high-throughput recipe at 2P/1D DEP8 conc=4096"
+    - "Add GB200 Dynamo vLLM MegaMOE mid-curve recipe at 1P/1D DEP8 conc=256/512/1024"
+    - "Remove stale offload recipe copies and the old no-MegaMOE mid/max-throughput points from the GB200 Dynamo vLLM matrix"
+    - "Disable FlashInfer autotune on GB200 decode workers for accuracy stability, matching the srt-slurm recipe fix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1223
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang benchmarks via Dynamo (1k/1k sweep; 8k/1k recipes shipped but commented out)"
+    - "Container: lmsysorg/sglang:deepseek-v4-grace-blackwell (linux/arm64); model from /mnt/numa1/models/deepseek-v4-pro/ (compute-node-local NVMe)"
+    - "Topologies mirror the dsv4-fp4-gb300-dynamo-vllm sibling: low-conc 1p1d-dep8-tep8 (4 nodes), mid 1p1d-dep8-dep16 (6 nodes), high 3p1d-dep8-dep16 (10 nodes). 4096 overlap between mid and high gives a topology-crossover A/B"
+    - "No upstream GB300 DSV4 sglang disagg recipe exists. Per-worker sglang_config (env vars + flashinfer_mxfp4 + chunked-prefill-size 4096 + disable-flashinfer-autotune + mem-fraction-static 0.82) is mirrored from NVIDIA/srt-slurm PR #69 (recipes/gb300-fp4/1k1k-dsv4/agg-2n-low-latency.yaml — GB300 DSV4 SGLang aggregated). Disagg flag set (nixl transfer backend, enable-dp-attention + moe-a2a-backend deepep) cross-checked against PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml — GB300 DSV4 SGLang disagg) and the SGLang DeepSeek-V4 cookbook. Stored under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/ and overlaid onto the upstream srt-slurm checkout at runtime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
     - dsv4-fp4-mi355x-atom
