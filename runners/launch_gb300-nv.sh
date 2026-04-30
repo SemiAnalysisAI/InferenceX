@@ -2,7 +2,7 @@
 
 # This script sets up the environment and launches multi-node benchmarks
 
-set -x
+set -exo pipefail
 
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
@@ -58,11 +58,9 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
+RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
+SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+rm -rf "$SRT_REPO_DIR"
 
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
@@ -81,8 +79,10 @@ export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
 
-uv venv "$GITHUB_WORKSPACE/.venv"
-source "$GITHUB_WORKSPACE/.venv/bin/activate"
+VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+rm -rf "$VENV_DIR"
+uv venv "$VENV_DIR"
+source "$VENV_DIR/bin/activate"
 uv pip install -e .
 
 if ! command -v srtctl &> /dev/null; then
@@ -93,7 +93,7 @@ fi
 echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
-SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
+SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
