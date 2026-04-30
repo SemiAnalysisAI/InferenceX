@@ -7753,7 +7753,7 @@ dsv4-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300-cw
+  runner: gb300
   precision: fp4
   framework: dynamo-vllm
   multinode: true
