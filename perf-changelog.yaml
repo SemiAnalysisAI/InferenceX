@@ -2031,3 +2031,14 @@
     - "Topologies mirror the dsv4-fp4-gb300-dynamo-vllm sibling: low-conc 1p1d-dep8-tep8 (4 nodes), mid 1p1d-dep8-dep16 (6 nodes), high 3p1d-dep8-dep16 (10 nodes). 4096 overlap between mid and high gives a topology-crossover A/B"
     - "No upstream GB300 DSV4 sglang disagg recipe exists. Per-worker sglang_config (env vars + flashinfer_mxfp4 + chunked-prefill-size 4096 + disable-flashinfer-autotune + mem-fraction-static 0.82) is mirrored from NVIDIA/srt-slurm PR #69 (recipes/gb300-fp4/1k1k-dsv4/agg-2n-low-latency.yaml — GB300 DSV4 SGLang aggregated). Disagg flag set (nixl transfer backend, enable-dp-attention + moe-a2a-backend deepep) cross-checked against PR #75 (recipes/gb300-fp4/1k1k-dsv4/disagg-1p1d-tp4-mxfp4.yaml — GB300 DSV4 SGLang disagg) and the SGLang DeepSeek-V4 cookbook. Stored under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm-eagle3
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM Eagle3 speculative decoding benchmark for MI355X"
+    - "Model: MiniMaxAI/MiniMax-M2.5 from Hugging Face Hub"
+    - "Draft model: MiniMaxAI/MiniMax-M2.5-Eagle3 from Hugging Face Hub"
+    - "Recipe uses TP/EP={4/4, 8/8}, num_speculative_tokens=3, draft_tensor_parallel_size=1"
+    - "Sweep covers ISL/OSL 1k/1k, 1k/8k, and 8k/1k with concurrency 4-64"
+    - "Image pinned to vllm/vllm-openai-rocm:nightly-4eafc729285e459a5fc96efd6f7b313b155cad48 for Eagle3 support"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
