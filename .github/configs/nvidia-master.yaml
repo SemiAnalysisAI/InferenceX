@@ -7748,3 +7748,101 @@ dsv4-fp4-gb200-dynamo-vllm:
         tp: 8
         ep: 8
         dp-attn: true
+
+dsv4-fp4-gb300-dynamo-sglang:
+  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-cw
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  seq-len-configs:
+  - isl: 8192
+    osl: 1024
+    search-space:
+    # WideEP TP=16 decode: 1p1d-dep4-dep16. 5 nodes (4P + 16D = 20 GPUs).
+    - conc-list: [512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc512-20.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true
+    # DP-attn wideep: 1p1d-dep4-dep8. 3 nodes.
+    - conc-list: [512]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc512.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # DP-attn wideep: 2p1d-dep4-dep8. 4 nodes.
+    - conc-list: [1024]
+      prefill:
+        num-worker: 2
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1024.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # Low concurrency
+    - conc-list: [1]
+      prefill:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1.yaml"
+      decode:
+        num-worker: 1
+        tp: 4
+        ep: 1
+        dp-attn: false
+    # Mid concurrency
+    - conc-list: [2048]
+      prefill:
+        num-worker: 4
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc2048.yaml"
+      decode:
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: true
+    # Max concurrency
+    - conc-list: [16384]
+      prefill:
+        num-worker: 14
+        tp: 4
+        ep: 4
+        dp-attn: true
+        additional-settings:
+        - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc16384.yaml"
+      decode:
+        num-worker: 1
+        tp: 16
+        ep: 16
+        dp-attn: true

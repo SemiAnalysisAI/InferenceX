@@ -114,7 +114,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         )
         mn_groups[key].append((i, entry))
 
-    for entries in mn_groups.values():
+    for key, entries in mn_groups.items():
+        # TODO(pr1157): srt-slurm pin (9d75f82) lacks the lm-eval orchestrator path
+        # (only on sa-submission-q2-2026). Skip eval-only here until the pin is bumped.
+        if key[:3] == ("deepseek-ai/DeepSeek-V4-Pro", "gb300-cw", "dynamo-sglang"):
+            continue
         best_idx, best_entry = max(entries, key=_max_eval_conc)
         eval_indices.add(best_idx)
         # Set eval-conc to median of eligible conc values to avoid OOM during eval
