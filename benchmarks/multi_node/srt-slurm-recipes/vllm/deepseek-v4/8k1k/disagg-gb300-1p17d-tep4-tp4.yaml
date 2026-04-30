@@ -102,8 +102,8 @@ benchmark:
   osl: 1024
   concurrencies: "18x36x72"
   req_rate: "inf"
+  tokenizer_mode: "deepseek_v4"
   use_chat_template: true
-  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
 
 identity:
   model:
