@@ -89,7 +89,7 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
-  GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.REPO_PAT }}
+  GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
   GHCR_USER: ${{ secrets.GHCR_USER || github.actor }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache

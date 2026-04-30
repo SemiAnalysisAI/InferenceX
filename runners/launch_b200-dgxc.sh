@@ -12,11 +12,6 @@ configure_enroot_ghcr_auth() {
         *) return 0 ;;
     esac
 
-    if [[ -z "${GHCR_TOKEN:-}" ]]; then
-        echo "GHCR_TOKEN is not set; attempting anonymous ghcr.io import"
-        return 0
-    fi
-
     local config_dir="${ENROOT_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/enroot}"
     local credentials_file="$config_dir/.credentials"
     local tmp_file
@@ -32,7 +27,11 @@ configure_enroot_ghcr_auth() {
     chmod 600 "$credentials_file"
     tmp_file="$(mktemp "${credentials_file}.XXXXXX")"
     grep -v '^machine ghcr\.io ' "$credentials_file" > "$tmp_file" || true
-    printf 'machine ghcr.io login %s password $GHCR_TOKEN\n' "$ghcr_user" >> "$tmp_file"
+
+    if [[ -n "${GHCR_TOKEN:-}" ]]; then
+        printf 'machine ghcr.io login %s password $GHCR_TOKEN\n' "$ghcr_user" >> "$tmp_file"
+    fi
+
     mv "$tmp_file" "$credentials_file"
     chmod 600 "$credentials_file"
 
@@ -40,7 +39,11 @@ configure_enroot_ghcr_auth() {
         set -x
     fi
 
-    echo "Configured enroot credentials for ghcr.io"
+    if [[ -n "${GHCR_TOKEN:-}" ]]; then
+        echo "Configured enroot credentials for ghcr.io"
+    else
+        echo "GHCR_TOKEN is not set; removed stale ghcr.io credentials for anonymous import"
+    fi
 }
 
 configure_enroot_ghcr_auth
