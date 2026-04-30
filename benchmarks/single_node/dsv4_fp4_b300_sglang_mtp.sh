@@ -6,12 +6,12 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 #   TP            -- tensor parallel size                       -> --tp
 #   EP_SIZE       -- expert parallel size                       -> --ep-size
 #   DP_ATTENTION  -- "true" enables --enable-dp-attention --dp-size $TP
-#                    Also selects MoE backend / chunked-prefill-size:
-#                      true  -> deepep + mega_moe + chunked-prefill 32768
-#                      false -> flashinfer_mxfp4  + chunked-prefill 8192
-#
-# EAGLE/MTP speculative-decoding flags are hardcoded to (3, 1, 4): num-steps=3,
-# eagle-topk=1, num-draft-tokens=4. Same chain across all CONC bands.
+#                    Also selects MoE backend / chunked-prefill / EAGLE chain
+#                    / mem-fraction-static / max-running-requests:
+#                      true  -> flashinfer_mxfp4 + DP-attn + chunked-prefill 32768
+#                               + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
+#                      false -> flashinfer_mxfp4 (TP-only) + chunked-prefill 8192
+#                               + EAGLE (3,1,4) + mem-fraction 0.90 + max-running CONC*3/2
 check_env_vars \
     MODEL \
     TP \
@@ -63,40 +63,52 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Recipe path is selected by DP_ATTENTION; MoE backend and chunked-prefill-size follow.
+# Recipe path is selected by DP_ATTENTION; MoE backend, chunked-prefill, EAGLE
+# chain, mem-fraction, and max-running all follow.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-# MTP (EAGLE) speculative-decoding flags applied unconditionally on every recipe.
-SPEC_FLAGS=(
-    --speculative-algorithm EAGLE
-    --speculative-num-steps 3
-    --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
-)
-
 if [ "${DP_ATTENTION}" = "true" ]; then
-    # Large-batch EP path: deepep + mega_moe.
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    # DP-attn path: flashinfer_mxfp4 + DP-attn (covers conc 16-256).
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    SPEC_FLAGS=(
+        --speculative-algorithm EAGLE
+        --speculative-num-steps 1
+        --speculative-eagle-topk 1
+        --speculative-num-draft-tokens 2
+    )
     PARALLEL_ARGS=(
         --dp-size "$TP"
         --enable-dp-attention
-        --moe-a2a-backend deepep
+        --moe-runner-backend flashinfer_mxfp4
+        --disable-flashinfer-autotune
         --deepep-config "$DEEPEP_CONFIG"
+        --cuda-graph-max-bs 256
     )
     CHUNKED_PREFILL_SIZE=32768
+    MEM_FRACTION_STATIC=0.92
+    MAX_RUNNING_REQUESTS=256
 else
-    # Small-batch TP-only path: flashinfer_mxfp4.
+    # TP-only fallback for low-conc: flashinfer_mxfp4 + EAGLE (3,1,4).
+    SPEC_FLAGS=(
+        --speculative-algorithm EAGLE
+        --speculative-num-steps 3
+        --speculative-eagle-topk 1
+        --speculative-num-draft-tokens 4
+    )
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
     )
     CHUNKED_PREFILL_SIZE=8192
+    MEM_FRACTION_STATIC=0.90
+    MAX_RUNNING_REQUESTS="$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))"
 fi
 
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
@@ -116,8 +128,8 @@ PYTHONNOUSERSITE=1 sglang serve \
     --tp $TP \
     --ep-size $EP_SIZE \
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
-    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
-    --mem-fraction-static 0.90 \
+    --max-running-requests "$MAX_RUNNING_REQUESTS" \
+    --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio 0.1 \
     "${SPEC_FLAGS[@]}" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &

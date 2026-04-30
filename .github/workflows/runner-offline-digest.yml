@@ -1,0 +1,103 @@
+name: Runner Offline Digest
+
+# Daily check that lists self-hosted runners reporting `offline` and posts
+# a summary + threaded details to Slack. No post when nothing is offline.
+#
+# Required secrets:
+#   RUNNERS_PAT      — PAT (or GitHub App token) with repo "Administration: Read"
+#                      so it can list self-hosted runners. The default GITHUB_TOKEN
+#                      cannot read this endpoint.
+#   SLACK_BOT_TOKEN  — Slack bot token with `chat:write`. The bot must be a member
+#                      of channel C09PULGMVNG.
+
+on:
+  schedule:
+    - cron: '13 14 * * *'  # daily 14:13 UTC ≈ 8:13 AM CST (9:13 AM CDT during DST)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List offline runners
+        id: runners
+        env:
+          GH_TOKEN: ${{ secrets.RUNNERS_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          RUNNERS=$(gh api --paginate "/repos/$REPO/actions/runners?per_page=100" --jq '.runners[]' | jq -s '.')
+          TOTAL=$(jq 'length' <<<"$RUNNERS")
+          OFFLINE=$(jq '[.[] | select(.status == "offline")]' <<<"$RUNNERS")
+          OFFLINE_COUNT=$(jq 'length' <<<"$OFFLINE")
+
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "offline_count=$OFFLINE_COUNT" >> "$GITHUB_OUTPUT"
+
+          echo "Total runners: $TOTAL"
+          echo "Offline runners: $OFFLINE_COUNT"
+
+          if [[ "$OFFLINE_COUNT" -gt 0 ]]; then
+            DETAIL=$(jq -r '
+              sort_by(.name) | .[] |
+              ([.labels[] | select(.type == "custom") | .name]) as $custom |
+              "• `\(.name)` (\(.os)) — labels: " +
+              (if ($custom | length) > 0 then $custom else [.labels[].name] end | join(", "))
+            ' <<<"$OFFLINE")
+            {
+              echo 'detail<<DETAIL_EOF'
+              echo "$DETAIL"
+              echo 'DETAIL_EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo "$DETAIL"
+          fi
+
+      - name: Post Slack digest
+        if: steps.runners.outputs.offline_count != '0'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          CHANNEL: C09PULGMVNG
+          OFFLINE_COUNT: ${{ steps.runners.outputs.offline_count }}
+          TOTAL: ${{ steps.runners.outputs.total }}
+          DETAIL: ${{ steps.runners.outputs.detail }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          DATE=$(date -u +%Y-%m-%d)
+          PARENT_TEXT=":warning: *Runner digest — ${DATE}*: ${OFFLINE_COUNT}/${TOTAL} self-hosted runners offline in \`${REPO}\` (<${RUN_URL}|run>)"
+
+          parent_resp=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "$(jq -n --arg ch "$CHANNEL" --arg t "$PARENT_TEXT" '{channel: $ch, text: $t}')")
+
+          if [[ "$(jq -r '.ok' <<<"$parent_resp")" != "true" ]]; then
+            echo "Slack parent post failed: $parent_resp" >&2
+            exit 1
+          fi
+
+          THREAD_TS=$(jq -r '.ts' <<<"$parent_resp")
+
+          REPLY_TEXT=$(printf 'Offline runners:\n%s' "$DETAIL")
+
+          reply_resp=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "$(jq -n \
+              --arg ch "$CHANNEL" \
+              --arg t "$REPLY_TEXT" \
+              --arg ts "$THREAD_TS" \
+              '{channel: $ch, text: $t, thread_ts: $ts}')")
+
+          if [[ "$(jq -r '.ok' <<<"$reply_resp")" != "true" ]]; then
+            echo "Slack thread reply failed: $reply_resp" >&2
+            exit 1
+          fi
+
+          echo "Posted parent + thread reply (ts=$THREAD_TS) to $CHANNEL"
