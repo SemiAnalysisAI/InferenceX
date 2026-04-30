@@ -3813,13 +3813,12 @@ minimaxm2.5-fp8-b200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 512 }
     agentic-coding:
     # B200 tp=4 GPU cache cap ~3.63M tokens (conc ~48 saturation @ 75K avg ISL, observed 3.5M)
-    # B200 tp=8 GPU cache cap ~9.08M tokens (conc ~121 saturation)
+    # Fixed-seq-len enables tp=2,4. tp=2 is too tight for agentic ISL.
+    # tp=8 not in fixed-seq-len + fails fp8 block_n=128 check.
     - duration: 1800
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96] }
-      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu,  conc-list: [128, 192, 256, 384] }
+      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256, 384] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
@@ -3849,10 +3848,11 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 4, conc-start: 4, conc-end: 8 }
     agentic-coding:
     # B300 tp=4 GPU cache cap ~6.35M tokens (conc ~85 saturation @ 75K avg ISL)
+    # Fixed-seq-len has tp=1,2,4 with various ep. Use tp=4 (primary).
     - duration: 1800
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96] }
-      - { tp: 4, offloading: cpu,  conc-list: [96, 128, 192, 256, 384] }
+      - { tp: 4, offloading: cpu,  conc-list: [96, 128, 192, 256, 384, 512] }
 
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
@@ -3971,13 +3971,12 @@ minimaxm2.5-fp8-h100-vllm:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
     agentic-coding:
     # H100 tp=4 ep=4 GPU cache cap ~0.46M tokens (conc ~6 saturation @ 75K avg ISL)
-    # H100 tp=8 GPU cache cap ~2.72M tokens (conc ~36 saturation)
+    # tp=8 ep=8 commented out in fixed-seq-len; tp=8 ep=1 fails fp8 block_n=128 check
+    # (gate/up output_size 1536 / tp=8 = 192 not div 128). Use tp=4 ep=4 only.
     - duration: 1800
       search-space:
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8] }
-      - { tp: 8, offloading: none,        conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [16, 32, 64, 96, 128] }
-      - { tp: 8, offloading: cpu,         conc-list: [64, 96, 128, 192] }
+      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [8, 16, 32, 64, 96, 128, 192, 256] }
 
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
@@ -4194,14 +4193,13 @@ minimaxm2.5-fp8-h200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
     agentic-coding:
-    # H200 tp=4 GPU cache cap ~2.19M tokens (conc ~29 saturation @ 75K avg ISL)
-    # H200 tp=8 GPU cache cap ~6.18M tokens (conc ~82 saturation)
+    # H200 tp=4 GPU cache cap ~2.19M tokens (conc ~29 saturation @ 75K avg ISL).
+    # Fixed-seq-len reference only has tp=8, but tp=8 fp8 fails block_n=128 check
+    # on v0.19.1 (1536/8=192 not div 128). Winging tp=4 since no good reference.
     - duration: 1800
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: cpu,  conc-list: [32, 64, 96, 128, 192] }
-      - { tp: 8, offloading: cpu,  conc-list: [96, 128, 192, 256] }
+      - { tp: 4, offloading: cpu,  conc-list: [32, 64, 96, 128, 192, 256, 384] }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2

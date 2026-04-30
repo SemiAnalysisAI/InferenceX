@@ -581,13 +581,12 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 512 }
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
     agentic-coding:
-    # MI355X tp=4 GPU cache cap ~6.81M tokens (conc ~91 saturation @ 75K avg ISL)
-    # MI355X tp=8 GPU cache cap ~15.4M tokens (conc ~206 saturation)
-    # AMD does not support vLLM simple cpu offload; offload=none across full conc range
+    # MI355X tp=4 ep=4 GPU cache cap ~6.81M tokens (conc ~91 saturation @ 75K avg ISL)
+    # Fixed-seq-len has tp=2 ep=2, tp=4 ep=4, tp=8 ep=8. Using tp=4 ep=4 (primary).
+    # AMD does not support vLLM simple cpu offload; offload=none only.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 192] }
+      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128, 192] }
 
 minimaxm2.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -657,11 +656,11 @@ minimaxm2.5-fp8-mi300x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
     agentic-coding:
     # MI300X tp=4 GPU cache cap ~3.93M tokens (conc ~52 saturation @ 75K avg ISL)
-    # AMD does not support vLLM simple cpu offload; offload=none across full conc range
+    # Fixed-seq-len has tp=2,4. tp=8 not in fixed-seq-len + fails fp8 block_n=128.
+    # AMD does not support vLLM simple cpu offload; offload=none only
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128] }
 
 minimaxm2.5-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
