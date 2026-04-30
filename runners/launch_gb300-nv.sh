@@ -28,8 +28,28 @@ NGINX_IMAGE="nginx:1.27.4"
 SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+# Parallel GH jobs target the same shared squash path on VAST; without
+# serialization, racing `enroot import -o` runs leave the file in a
+# transient state that makes Python's `Path.resolve()` raise ELOOP.
+# flock per-file at the head node so only one importer runs at a time;
+# others wait, then see a valid file and skip.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    (
+        exec 9>"$lock"
+        flock -w 600 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+        if unsquashfs -l "$squash" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import: $squash"
+        else
+            rm -f "$squash"
+            srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "enroot import -o $squash docker://$image"
+        fi
+    )
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
