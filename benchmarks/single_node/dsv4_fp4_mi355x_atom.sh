@@ -268,31 +268,6 @@ if marker not in source:
         out = (exp_scores / denom.clamp(min=1e-30)).matmul(kv_f32)
         return out.view(1, 1, H, D).to(out_dtype)
 
-    if M == 1:
-        valid_2d = topk_idxs[:, 0] != -1
-        safe_idxs_2d = topk_idxs[:, 0].clamp(min=0).long()
-        batch_idx = torch.arange(B, device=device).view(B, 1).expand_as(safe_idxs_2d)
-        kv_f32 = kv[batch_idx, safe_idxs_2d].float()
-        kv_f32 = torch.where(
-            valid_2d.unsqueeze(-1),
-            kv_f32,
-            torch.zeros((), dtype=kv_f32.dtype, device=device),
-        )
-        q_f32 = q[:, 0].float()
-        scores = torch.einsum("bhd,bkd->bhk", q_f32, kv_f32) * float(softmax_scale)
-        scores = scores.masked_fill(~valid_2d.unsqueeze(1), float("-inf"))
-        sink = attn_sink.float().view(1, H, 1)
-        cmax = torch.maximum(scores.amax(dim=-1, keepdim=True), sink)
-        cmax = torch.where(
-            cmax == float("-inf"),
-            torch.zeros((), dtype=cmax.dtype, device=device),
-            cmax,
-        )
-        exp_scores = (scores - cmax).exp()
-        denom = exp_scores.sum(dim=-1, keepdim=True) + (sink - cmax).exp()
-        out = torch.einsum("bhk,bkd->bhd", exp_scores / denom.clamp(min=1e-30), kv_f32)
-        return out.view(B, 1, H, D).to(out_dtype)
-
     # ----- Gather KV per query position -----
 """
     if old not in source:
@@ -654,65 +629,6 @@ index 46cf1b0..0d84c78 100644
 +        q_all = self.wq_b(qr_all).view(total_tokens, self.n_local_heads, self.head_dim)
 +        q_all = q_all * torch.rsqrt(q_all.square().mean(-1, keepdim=True) + self.eps)
 +        kv_all = self.kv_norm(self.wkv(x)).view(total_tokens, self.head_dim)
-+
-+        if seq_meta and all(
-+            end - start == 1 and start_pos > 0
-+            for start, end, start_pos, _ in seq_meta
-+        ):
-+            q_chunks = []
-+            kv_cache_chunks = []
-+            topk_chunks = []
-+            freqs_chunks = []
-+            for start, end, start_pos, cache_slot in seq_meta:
-+                freqs_cis = self.freqs_cis[start_pos : start_pos + 1]
-+                slot = slice(cache_slot, cache_slot + 1)
-+
-+                q = q_all[start:end].unsqueeze(0)
-+                _apply_rotary_emb(q[..., -rd:], freqs_cis)
-+                kv = kv_all[start:end].unsqueeze(0)
-+                _apply_rotary_emb(kv[..., -rd:], freqs_cis)
-+                act_quant_inplace(kv[..., :-rd], 64, self.scale_fmt)
-+
-+                topk_idxs = _get_window_topk_idxs(
-+                    win, 1, 1, start_pos, device=x.device
-+                )
-+                if self.compress_ratio:
-+                    offset = win
-+                    if self.indexer is not None:
-+                        compress_topk_idxs = self.indexer(
-+                            x[start:end], qr_all[start:end], start_pos, offset, cache_slot
-+                        )
-+                    else:
-+                        compress_topk_idxs = _get_compress_topk_idxs(
-+                            ratio, 1, 1, start_pos, offset, device=x.device
-+                        )
-+                    topk_idxs = torch.cat([topk_idxs, compress_topk_idxs], dim=-1)
-+
-+                self.kv_cache[slot, start_pos % win] = kv.squeeze(1)
-+                if self.compress_ratio:
-+                    self.compressor(x[start:end], start_pos, cache_slot)
-+
-+                q_chunks.append(q)
-+                kv_cache_chunks.append(self.kv_cache[slot])
-+                topk_chunks.append(topk_idxs.int())
-+                freqs_chunks.append(freqs_cis)
-+
-+            o = sparse_attn(
-+                torch.cat(q_chunks, dim=0),
-+                torch.cat(kv_cache_chunks, dim=0),
-+                self.attn_sink,
-+                torch.cat(topk_chunks, dim=0),
-+                self.softmax_scale,
-+            )
-+            out_chunks = []
-+            for idx, freqs_cis in enumerate(freqs_chunks):
-+                o_i = o[idx : idx + 1]
-+                _apply_rotary_emb(o_i[..., -rd:], freqs_cis, inverse=True)
-+                out_chunks.append(o_i.squeeze(0))
-+            o = torch.cat(out_chunks, dim=0).view(total_tokens, self.n_local_groups, -1)
-+            wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
-+            o = torch.einsum("sgd,grd->sgr", o, wo_a)
-+            return self.wo_b(o.flatten(1))
 +
 +        outputs = []
 +        for start, end, start_pos, cache_slot in seq_meta:

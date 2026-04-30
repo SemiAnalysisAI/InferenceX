@@ -324,7 +324,7 @@ run_benchmark_serving() {
     fi
 
     # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
-    # and cap num_prompts to keep traces small.
+    # and cap the run to a tiny one-step window by default.
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
         local _prof_dir=""
@@ -334,7 +334,8 @@ run_benchmark_serving() {
             fi
         done
         profile_flag+=(--profile)
-        num_prompts="$max_concurrency"
+        num_prompts="${PROFILE_NUM_PROMPTS:-$max_concurrency}"
+        output_len="${PROFILE_OUTPUT_LEN:-${PROFILE_NUM_STEPS:-1}}"
     fi
 
     # Build benchmark command

@@ -164,6 +164,8 @@ jobs:
           SGLANG_TORCH_PROFILER_DIR: /workspace/
           VLLM_TORCH_PROFILER_DIR: /workspace/
           ATOM_TORCH_PROFILER_DIR: /workspace/atom_profiles
+          PROFILE_NUM_STEPS: '1'
+          PROFILE_OUTPUT_LEN: '1'
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
