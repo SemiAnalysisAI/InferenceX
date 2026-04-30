@@ -1968,8 +1968,8 @@
     - "Add MiniMax-M2.5 MXFP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
     - "Single-node sweep: TP1–TP8, 1k/1k and 8k/1k ISL/OSL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1042
- 
-- config-keys:  
+
+- config-keys:
     - dsv4-fp4-gb200-dynamo-vllm
   description:
     - "DSV4-Pro FP4 GB200 dynamo-vLLM disagg against srt-slurm aflowers/vllm-gb200-v0.20.0"
@@ -2033,19 +2033,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
-    - dsv4-fp4-mi355x-atom
+    - qwen3.5-fp8-b200-sglang
   description:
-    - "Enable DSv4 ATOM multi-request smoke coverage by adding a local ROCm/ATOM#650 overlay that assigns persistent per-request cache slots for DSv4 KV/compressor/indexer state"
-    - "Expand MI355X ATOM DSv4 sweep from CONC=1 only to CONC=1/2/4 for 1k1k and 8k1k"
-    - "Bump the overlaid ROCm/ATOM#650 SHA to af17eb8; the patch unblocks correctness but still runs DSv4 requests sequentially until upstream vectorized sparse-attention/cache support lands"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
-    - dsv4-fp4-mi355x-atom
-  description:
-    - "Optimize DSv4 ATOM CONC=4 decode path by batching one-token sparse-attention calls across active requests inside the local ROCm/ATOM#650 overlay"
-    - "Add a vectorized B>1,M=1 sparse_attn_v4 torch fallback so steady-state decode avoids one sparse-attention launch sequence per request per layer"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - updated sglang container image 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
     - dsv4-fp4-mi355x-atom
@@ -2054,4 +2045,4 @@
     - "Use Oseltamivir/ATOM@0ddf9a9 as the default ATOM overlay, with the local ROCm/ATOM#650 patch path retained for upstream debugging"
     - "Patch the DSv4 sparse_attn_v4 and Indexer paths to use the AITER kernels before falling back to the correctness-first Torch implementations"
     - "Use a dense causal Indexer fast path for 1k1k when all committed compressed entries are selected, avoiding the [S,H,T] Torch scoring tensor entirely"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1229
