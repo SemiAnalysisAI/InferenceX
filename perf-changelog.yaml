@@ -2045,3 +2045,10 @@
     - "Use ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-f1c5fe1, built from NVIDIA/TensorRT-LLM@feat/deepseek_v4 (f1c5fe1), with a guarded source-build fallback"
     - "Serve DeepSeek-V4-Pro through TRTLLM's deepseek_v4 tokenizer and /v1/chat/completions with TP8, EP8, STP-only conc 1-8 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Update TRTLLM DeepSeek-V4-Pro image to ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884"
+    - "Image is built from NVIDIA/TensorRT-LLM@feat/deepseek_v4 4999884, including post-f1c5fe1 DeepSeek-V4 correctness and CI fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
