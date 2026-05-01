@@ -11,8 +11,8 @@ on:
 jobs:
   claude:
     if: |
-      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@Klaud-Cold'))) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude') || contains(github.event.issue.body, '@Klaud-Cold') || contains(github.event.issue.title, '@Klaud-Cold')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,9 +42,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
-          trigger_phrase: "@claude"
+          trigger_phrase: "${{ contains(github.event.comment.body || github.event.issue.body || github.event.issue.title || '', '@Klaud-Cold') && '@Klaud-Cold' || '@claude' }}"
           track_progress: true
-          allowed_bots: ''
+          allowed_bots: 'Klaud-Cold'
           additional_permissions: |
             actions: read
           settings: |
