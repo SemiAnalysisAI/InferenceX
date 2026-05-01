@@ -2071,6 +2071,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1242
 
 - config-keys:
+    - glm5-fp8-mi355x-sglang-mtp
+  description:
+    - "Updated the Image for glm5-fp8-mi355x-sglang-mtp"
+    - "Optimized the search space"
+    - "Removed redundant transformer installation"
+    - "Optimization model serves configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
+
+- config-keys:
     - dsv4-fp4-mi355x-atom
   description:
     - "Overlay Oseltamivir/aiter@083a837 DSv4 sparse MQA sink and Indexer scorer/top-k Triton kernels on top of the existing AITER FP4 perf stack"

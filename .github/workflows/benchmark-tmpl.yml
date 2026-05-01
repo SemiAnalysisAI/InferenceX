@@ -67,7 +67,26 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
-
+      scenario-type:
+        description: "Scenario type (fixed-seq-len or agentic-coding)"
+        required: false
+        type: string
+        default: 'fixed-seq-len'
+      offloading:
+        description: "KV offload backend for agentic scenarios (none/cpu/ssd)"
+        required: false
+        type: string
+        default: 'none'
+      total-cpu-dram-gb:
+        description: "Total CPU DRAM in GB for KV offloading"
+        required: false
+        type: string
+        default: '600'
+      duration:
+        description: "Benchmark duration in seconds"
+        required: false
+        type: string
+        default: '1800'
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -89,6 +108,13 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  SCENARIO_TYPE: ${{ inputs.scenario-type }}
+  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
+  OFFLOADING: ${{ inputs.offloading }}
+  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  DURATION: ${{ inputs.duration }}
+  RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
@@ -124,12 +150,19 @@ jobs:
             done
           fi
 
+          # Cleanup results/ from a prior job on this runner. Agentic jobs
+          # write to fixed subpaths (trace_replay/, metrics_*, etc.), so stale
+          # data from a previous job would otherwise be picked up as this
+          # job's output when replay fails early.
+          rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
-          clean: false
+          clean: true
+          submodules: true
 
       - name: Cleanup stale eval outputs (pre-run)
         if: ${{ inputs.run-eval || inputs.eval-only }}
@@ -178,25 +211,53 @@ jobs:
           fi
 
       - name: Process result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
           python3 utils/process_result.py
 
       - name: Upload result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic aggregated result
+        if: ${{ inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic raw results
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            results/server.log
+            results/metrics_server_metrics.csv
+            results/metrics_plots.png
+            results/metrics_workload.png
+            results/metrics_client_metrics.csv
+            results/benchmark.log
+            results/config.yaml
+            results/vllm_command.txt
+            results/benchmark_command.txt
+            results/workload_distribution_summary.txt
+            results/workload_distribution_plots.png
+            results/trace_replay/detailed_results.csv
+            results/trace_replay/debug_trace.jsonl
+          if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
-          path: server.log
+          path: ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
           if-no-files-found: ignore
 
       - name: Upload GPU metrics

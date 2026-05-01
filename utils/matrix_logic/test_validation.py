@@ -101,15 +101,18 @@ def valid_single_node_master_config():
         "framework": "sglang",
         "runner": "mi300x",
         "multinode": False,
-        "seq-len-configs": [
-            {
-                "isl": 1024,
-                "osl": 1024,
-                "search-space": [
-                    {"tp": 8, "conc-start": 4, "conc-end": 64}
-                ]
-            }
-        ]
+        "scenarios": {
+            "fixed-seq-len": [
+
+                {
+                    "isl": 1024,
+                    "osl": 1024,
+                    "search-space": [
+                        {"tp": 8, "conc-start": 4, "conc-end": 64}
+                    ]
+                }
+            ]
+        }
     }
 
 
@@ -125,37 +128,40 @@ def valid_multinode_master_config():
         "runner": "gb200",
         "multinode": True,
         "disagg": True,
-        "seq-len-configs": [
-            {
-                "isl": 1024,
-                "osl": 1024,
-                "search-space": [
-                    {
-                        "prefill": {
-                            "num-worker": 5,
-                            "tp": 4,
-                            "ep": 4,
-                            "dp-attn": True,
-                            "additional-settings": [
-                                "PREFILL_MAX_NUM_TOKENS=8448",
-                                "PREFILL_MAX_BATCH_SIZE=1",
-                            ],
-                        },
-                        "decode": {
-                            "num-worker": 1,
-                            "tp": 8,
-                            "ep": 8,
-                            "dp-attn": True,
-                            "additional-settings": [
-                                "DECODE_MAX_NUM_TOKENS=256",
-                                "DECODE_MAX_BATCH_SIZE=256",
-                            ],
-                        },
-                        "conc-list": [2150],
-                    }
-                ]
-            }
-        ]
+        "scenarios": {
+            "fixed-seq-len": [
+
+                {
+                    "isl": 1024,
+                    "osl": 1024,
+                    "search-space": [
+                        {
+                            "prefill": {
+                                "num-worker": 5,
+                                "tp": 4,
+                                "ep": 4,
+                                "dp-attn": True,
+                                "additional-settings": [
+                                    "PREFILL_MAX_NUM_TOKENS=8448",
+                                    "PREFILL_MAX_BATCH_SIZE=1",
+                                ],
+                            },
+                            "decode": {
+                                "num-worker": 1,
+                                "tp": 8,
+                                "ep": 8,
+                                "dp-attn": True,
+                                "additional-settings": [
+                                    "DECODE_MAX_NUM_TOKENS=256",
+                                    "DECODE_MAX_BATCH_SIZE=256",
+                                ],
+                            },
+                            "conc-list": [2150],
+                        }
+                    ]
+                }
+            ]
+        }
     }
 
 

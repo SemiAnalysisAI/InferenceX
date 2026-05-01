@@ -198,6 +198,7 @@ def main():
             results.extend(data)
         else:
             results.append(data)
+    results = [r for r in results if r.get("scenario_type") != "agentic-coding"]
 
     print(f"Loaded {len(results)} benchmark results", file=sys.stderr)
 
