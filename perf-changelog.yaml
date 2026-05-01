@@ -2061,7 +2061,7 @@
     - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
-  
+
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-mtp2
   description:
@@ -2087,3 +2087,13 @@
     - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
     - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Add tp:2 ep:1 conc 4-128 search-space for 1k1k and 8k1k"
+    - "Align server flags with FP4 B200 STP: --enable-symm-mem, --expert-parallel-size, dynamic scheduler-recv-interval"
+    - "Add MTP flags: SGLANG_ENABLE_SPEC_V2=1, EAGLE speculative decoding (steps=3, topk=1, draft=4)"
+    - "Reduce prefill/chunked from 32768 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1257
