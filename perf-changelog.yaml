@@ -1758,6 +1758,15 @@
 
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 single-node MI355X ATOM benchmark"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
+  
+- config-keys:
     - dsv4-fp8-h200-vllm
   description:
     - "Add DeepSeek-V4-Pro vLLM H200 benchmark per https://vllm.ai/blog/deepseek-v4"
@@ -2043,3 +2052,20 @@
   description:
     - updated sglang container image 
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
+- config-keys:
+    - glm5-fp8-mi355x-atom
+  description:
+    - "Update GLM-5 FP8 MI355X ATOM benchmark: new image, add TP=4, set gpu-memory-utilization"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
+  
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Add final DeepSeek-V4-Pro FP4 GB200 Dynamo vLLM MTP2 Pareto recipes using vLLM nightly image"
+    - "Recipes cover 8k/1k aggregate TP8 low-latency conc=1, low-latency bridge 1P DEP8 + 4D TP8 no-offload conc=16/32/64, mid 1P/1D DEP8 MegaMOE conc=128, and high-throughput 2P/1D DEP8 MegaMOE conc=1024"
+    - "All recipes enable FP4 indexer cache and speculative-config mtp with num_speculative_tokens=2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1242
