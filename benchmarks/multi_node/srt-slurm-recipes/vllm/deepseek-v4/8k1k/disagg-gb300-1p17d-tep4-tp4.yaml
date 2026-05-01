@@ -1,20 +1,17 @@
-name: "dsv4-vllm-disagg-gb200-3p1d-dep8-dep16"
+name: "svf-vllm-disagg-gb300-1p17d-tep4-tp4"
 
-# Mid-concurrency topology: 3 prefill workers (DP=8) feeding a single
-# wide decode (DP=16). Targets conc 512-1024 where a single big decode
-# batches efficiently. Same per-worker vllm_config as the NVIDIA 7p1d
-# reference (PR #67); only resources, prefill_workers count, and
-# benchmark concurrencies differ. Decode capacity matches 7p1d
-# (max-num-seqs=256) since the decode topology itself is identical.
-
+# Topology: 1 prefill (TEP=4) + 17 decode (TP=4). 18 GB300 nodes (1P + 17D = 72
+# GPUs at 4 GPUs/node), NATS/etcd colocated on the prefill node.
+# Wide-decode point at concurrency 18 — each decode worker holds a
+# single replica.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:deepseekv4-cu130"
+  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
   precision: "fp4"
 
 dynamo:
-  hash: 6a159fedd8e4a1563aa647c31f622aedbf254b5b
   install: true
+  wheel: "1.2.0.dev20260426"
 
 setup_script: vllm-container-deps.sh
 
@@ -26,14 +23,14 @@ health_check:
   interval_seconds: 10
 
 resources:
-  gpu_type: "gb200"
+  gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 6
-  decode_nodes: 4
-  prefill_workers: 3
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 16
+  prefill_nodes: 1
+  decode_nodes: 17
+  prefill_workers: 1
+  decode_workers: 17
+  gpus_per_prefill: 4
+  gpus_per_decode: 4
 
 frontend:
   type: dynamo
@@ -42,58 +39,50 @@ frontend:
 backend:
   type: vllm
   connector: null
-
   prefill_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-
   decode_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    VLLM_SERVER_DEV_MODE: "1"
 
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: auto
-      max-num-seqs: 2
+      max-model-len: 16384
+      max-num-seqs: 256
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.88
+      gpu-memory-utilization: 0.9
+      enable-ep-weight-filter: true
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
-
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      data-parallel-size: 16
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
-      max-model-len: auto
-      max-num-seqs: 256
-      max-cudagraph-capture-size: 256
-      max-num-batched-tokens: 256
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 256
@@ -101,12 +90,17 @@ backend:
       gpu-memory-utilization: 0.9
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
+      enable-ep-weight-filter: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      no-enable-flashinfer-autotune: true
       enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "512x1024"
+  concurrencies: "18"
   req_rate: "inf"
-  use_chat_template: false
+  tokenizer_mode: "deepseek_v4"
+  use_chat_template: true
