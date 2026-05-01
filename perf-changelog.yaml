@@ -1756,7 +1756,6 @@
     - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
 
-
   
 - config-keys:  
     - qwen3.5-fp4-mi355x-atom
