@@ -2081,3 +2081,12 @@
     - "Keep SGLANG_DSV4_FP4_EXPERTS=false and SGLANG_FORCE_TRITON_MOE_FP8=1: required for sgl-project/DeepSeek-V4-Pro-FP8 (FP4 path asserts intermediate_size_per_partition==2048 in fp8.py; swiglu_limit clamp lives in fused_moe_triton)"
     - "Expected speedup over the previous PR #23608 day-0 torch-fallback recipe: ~5.4-5.8x at conc 1-8 (matches the '+ indexer tilelang attn' tier in the AMD DSv4-Flash-FP8 reference table)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1255
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang-mtp
+  description:
+    - "Updated the Image for glm5-fp8-mi355x-sglang-mtp"
+    - "Optimized the search space"
+    - "Removed redundant transformer installation"
+    - "Optimization model serves configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
