@@ -57,9 +57,6 @@ export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 # Disable allocating memory in one pass
 export MORI_SHMEM_MODE=ISOLATION
 
-# Enable SDMA
-export MORI_ENABLE_SDMA=true
-
 # Enable spec v2 
 export SGLANG_ENABLE_SPEC_V2=1
 export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1

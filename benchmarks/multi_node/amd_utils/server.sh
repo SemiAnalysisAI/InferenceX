@@ -209,6 +209,7 @@ if [[ -n "$prefill_max_total_tokens" ]]; then
 fi
 if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_two_batch_overlap" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --enable-two-batch-overlap"
+    export MORI_ENABLE_SDMA=true
 fi
 
 DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
