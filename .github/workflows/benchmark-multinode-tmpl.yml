@@ -140,6 +140,7 @@ env:
   EVAL_CONC: ${{ inputs.eval-conc }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
   OFFLOADING: ${{ inputs.offloading }}
