@@ -5,6 +5,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -18,10 +19,9 @@ fi
 hf download "$MODEL"
 
 # Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
-# rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428 image ships with. We stay
-# on the rocm700 line because the rocm720 image hits hipErrorInvalidConfiguration
-# in eager DP-attention gather on use_symmetric_memory-allocated buffers.
-# Bump SGL_PR_SHA when the branch advances.
+# rocm/sgl-dev:rocm720-deepseek-v4-mi35x image ships with. The image's sglang
+# is moving fast and we want a reproducible pin per benchmark run. Bump
+# SGL_PR_SHA when the branch advances.
 SGL_PR_SHA="18afbf151a2992b06a089191769b299629ed73dd"
 SGL_PR_DIR="/tmp/sglang-amd-dsv4"
 
@@ -104,13 +104,22 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+PARALLEL_ARGS=(
+    --tensor-parallel-size "$TP"
+)
+
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS+=(
+        --dp "$TP"
+        --enable-dp-attention
+    )
+fi
+
 python3 -m sglang.launch_server \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
-    --tensor-parallel-size $TP \
-    --dp $TP \
-    --enable-dp-attention \
+    "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend compressed \

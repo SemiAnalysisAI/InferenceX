@@ -2082,9 +2082,10 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
-    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428"
+    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
     - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
     - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime"
     - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 and SGLANG_REASONING_EFFORT=max to match the FP4 Models update"
-    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm700 squash import on first launch"
+    - "Respect DP_ATTENTION from the generated matrix; the default FP4 MI355X SGLang path runs without DP attention"
+    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244

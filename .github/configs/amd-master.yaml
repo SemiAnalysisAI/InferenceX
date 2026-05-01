@@ -1607,7 +1607,7 @@ dsv4-fp8-mi355x-sglang:
 # but uses the canonical DeepSeek-V4-Pro checkpoint and enables the FP4 expert
 # loader path in benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428
+  image: rocm/sgl-dev:rocm720-deepseek-v4-mi35x
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
