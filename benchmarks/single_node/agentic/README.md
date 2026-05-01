@@ -5,4 +5,6 @@ benchmark. Results are not published on https://inferencex.com and are not
 intended to be cited.
 
 These launchers exist to develop and validate the agentic-coding scenario
-type before it is promoted to first-class status.
+type before it is promoted to first-class status. The scripts themselves
+are best-effort and mainly serve as a reference implementation of how the
+plumbing (env vars, scenario routing, result paths) should work.
