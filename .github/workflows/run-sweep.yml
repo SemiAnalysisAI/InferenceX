@@ -428,10 +428,15 @@ jobs:
               with:
                   github-token: ${{ github.token }}
                   script: |
-                      const url = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
+                      const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
+                      const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
+                      const body = [
+                          `see unofficial run visualizer at ${inferenceUrl}`,
+                          `see unofficial run visualizer at ${evaluationUrl}`,
+                      ].join('\n');
                       await github.rest.issues.createComment({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           issue_number: context.issue.number,
-                          body: `see unofficial run visualizer at ${url}`,
+                          body,
                       });
