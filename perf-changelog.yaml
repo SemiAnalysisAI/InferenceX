@@ -1758,6 +1758,15 @@
 
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 single-node MI355X ATOM benchmark"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
+  
+- config-keys:
     - dsv4-fp8-h200-vllm
   description:
     - "Add DeepSeek-V4-Pro vLLM H200 benchmark per https://vllm.ai/blog/deepseek-v4"
@@ -2039,6 +2048,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
+    - glm5-fp8-mi355x-atom
+  description:
+    - "Update GLM-5 FP8 MI355X ATOM benchmark: new image, add TP=4, set gpu-memory-utilization"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
+  
+- config-keys:
     - dsv4-fp4-mi355x-atom
   description:
     - "Overlay Oseltamivir/aiter@083a837 DSv4 sparse MQA sink and Indexer scorer/top-k Triton kernels on top of the existing AITER FP4 perf stack"
@@ -2046,26 +2064,3 @@
     - "Patch the DSv4 sparse_attn_v4 and Indexer paths to use the AITER kernels before falling back to the correctness-first Torch implementations"
     - "Use a dense causal Indexer fast path for 1k1k when all committed compressed entries are selected, avoiding the [S,H,T] Torch scoring tensor entirely"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1229
-
-- config-keys:
-    - dsv4-fp4-mi355x-atom
-  description:
-    - "Add TP=4 DSv4 ATOM sweep points at conc=1/2/4 for 1k1k and 8k1k"
-    - "Profile data shows TP=8 DSv4 ATOM decode/prefill is dominated by aiter cross_device_reduce kernels (~49% of GPU kernel time), so TP=4 tests whether fewer ranks reduces the communication bottleneck enough to improve per-GPU throughput"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
-    - dsv4-fp4-mi355x-atom
-  description:
-    - "Bump the ATOM DSv4 overlay from Oseltamivir/ATOM@0ddf9a9 to Oseltamivir/ATOM@d1a78e6, rebased on current ROCm/ATOM#650 head a709564"
-    - "This picks up PR650's CPU metadata path, paged compressed KV plumbing, Triton SWA writes, and compressor state-write plumbing while keeping the AITER sparse_attn/Indexer dispatch"
-    - "Skip the older local multi-request patch when the newer PR650 _v4_get_seq_metadata path is present"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
-    - dsv4-fp4-mi355x-atom
-  description:
-    - "Retile the forked AITER DSv4 sparse MQA sink from 8x64 to 4x128 by default, keeping the same accumulator footprint while reducing repeated QK score work for 512-wide values"
-    - "Bump sparse/indexer overlay pins to Oseltamivir/aiter@023eb3b and Oseltamivir/ATOM@486d35f"
-    - "Expose ATOM_DSV4_AITER_SPARSE_ATTN_{TILE_K,BLOCK_H,BLOCK_D,SCORE_D} for profile-guided sparse attention tuning"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
