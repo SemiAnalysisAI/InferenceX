@@ -27,6 +27,7 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=1
 
 # TODO(Cam): the lmsysorg/sglang:deepseek-v4-blackwell image installs sglang
 # editable at /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
