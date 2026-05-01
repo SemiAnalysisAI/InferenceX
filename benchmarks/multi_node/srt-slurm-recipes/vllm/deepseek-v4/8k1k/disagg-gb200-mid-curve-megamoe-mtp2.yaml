@@ -1,19 +1,5 @@
 name: "svf-vllm-disagg-gb200-mid-curve-megamoe-mtp2"
 
-# Mirrored from NVIDIA/srt-slurm codex/pr103-agg-dsv4-mtp branch:
-#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-mid-curve-megamoe-mtp2.yaml
-#
-# Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes total with a
-# dedicated NATS/etcd infra node. MegaMOE MTP2 mid-curve point at
-# concurrency 128 with no CPU/NVMe offload.
-#
-# Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
-#   * model.container set to the vLLM nightly image to match
-#     nvidia-master.yaml image.
-#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
-#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f"

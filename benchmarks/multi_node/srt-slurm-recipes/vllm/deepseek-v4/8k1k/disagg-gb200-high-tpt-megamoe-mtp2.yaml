@@ -1,19 +1,5 @@
 name: "svf-vllm-disagg-gb200-high-tpt-megamoe-mtp2"
 
-# Mirrored from NVIDIA/srt-slurm codex/pr103-agg-dsv4-mtp branch:
-#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml
-#
-# Topology: 2 prefill (DEP=8 each) + 1 decode (DEP=8). 7 nodes total with a
-# dedicated NATS/etcd infra node. MegaMOE MTP2 high-throughput point at
-# concurrency 1024 with no CPU/NVMe offload.
-#
-# Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
-#   * model.container set to the vLLM nightly image to match
-#     nvidia-master.yaml image.
-#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
-#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f"
@@ -48,7 +34,6 @@ infra:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-
 backend:
   type: vllm
   connector: null
@@ -63,6 +48,8 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
@@ -77,6 +64,8 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
@@ -137,7 +126,6 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-
 benchmark:
   type: "sa-bench"
   isl: 8192

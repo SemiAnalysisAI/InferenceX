@@ -1,19 +1,5 @@
-name: "svf-vllm-disagg-gb200-low-latency-mtp2"
+name: svf-vllm-disagg-gb200-low-latency-mtp2
 
-# Mirrored from NVIDIA/srt-slurm codex/pr103-agg-dsv4-mtp branch:
-#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-low-latency-mtp2.yaml
-#
-# Topology: 2 prefill (TP=8 each) + 1 decode (TP=8). 7 nodes total with a
-# dedicated NATS/etcd infra node. MTP2 low-latency points at concurrencies
-# 1/2/4/8/16.
-#
-# Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
-#   * model.container set to the vLLM nightly image to match
-#     nvidia-master.yaml image.
-#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
-#     absorb cold-cache /mnt/numa1 model loads.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f"
@@ -33,66 +19,67 @@ health_check:
   interval_seconds: 10
 
 resources:
-  gpu_type: "gb200"
+  gpu_type: gb200
   gpus_per_node: 4
-  prefill_nodes: 4
-  decode_nodes: 2
-  prefill_workers: 2
-  decode_workers: 1
+  prefill_nodes: 2
+  decode_nodes: 8
+  prefill_workers: 1
+  decode_workers: 4
   gpus_per_prefill: 8
   gpus_per_decode: 8
-
 infra:
   etcd_nats_dedicated_node: true
-
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-
 backend:
   type: vllm
   connector: null
   prefill_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
-    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+    TILELANG_CLEANUP_TEMP_FILES: '1'
+    VLLM_USE_NCCL_SYMM_MEM: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    VLLM_SERVER_DEV_MODE: '1'
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '1024'
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: '2048'
+    UCX_MEMTYPE_CACHE: n
+    UCX_MEMTYPE_REG_WHOLE: n
+    UCX_TLS: cuda_copy,cuda_ipc,tcp
+    UCX_CUDA_IPC_ENABLE_MNNVL: y
     NCCL_P2P_LEVEL: NVL
   decode_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+    TILELANG_CLEANUP_TEMP_FILES: '1'
+    VLLM_USE_NCCL_SYMM_MEM: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    VLLM_SERVER_DEV_MODE: '1'
+    UCX_MEMTYPE_CACHE: n
+    UCX_MEMTYPE_REG_WHOLE: n
+    UCX_TLS: cuda_copy,cuda_ipc,tcp
+    UCX_CUDA_IPC_ENABLE_MNNVL: y
     NCCL_P2P_LEVEL: NVL
   vllm_config:
     prefill:
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "tp8-prefill-2p1d-mtp2"}'
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      kv-cache-dtype: fp8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-hybrid-lb: true
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
       enforce-eager: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       max-model-len: 9280
       max-num-seqs: 8
-      max-num-batched-tokens: 32768
+      max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -104,17 +91,17 @@ backend:
       numa-bind: true
       tokenizer-mode: deepseek_v4
     decode:
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "tp8-decode-2p1d-mtp2"}'
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      kv-cache-dtype: "fp8"
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      kv-cache-dtype: fp8
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       max-model-len: 9280
-      max-num-seqs: 64
-      max-cudagraph-capture-size: 64
-      max-num-batched-tokens: 64
+      max-num-seqs: 256
+      max-cudagraph-capture-size: 256
+      max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -125,15 +112,14 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-
 benchmark:
-  type: "sa-bench"
+  type: sa-bench
   isl: 8192
   osl: 1024
-  concurrencies: "1x2x4x8x16"
-  req_rate: "inf"
+  concurrencies: 16x32x64
+  req_rate: inf
   use_chat_template: true
-  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+  custom_tokenizer: sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer
 
 identity:
   model:
