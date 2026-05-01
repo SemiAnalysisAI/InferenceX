@@ -63,33 +63,29 @@ NGINX_IMAGE="nginx:1.27.4"
 # old /mnt/vast/squash dir contains '+'-separated files from prior runs.
 SQUASH_DIR="/mnt/vast/squash_dupe"
 mkdir -p "$SQUASH_DIR"
-# Compute nodes (slurm-gb300-138-*, slurm-gb300-139-*) are aarch64; the
-# image `lmsysorg/sglang:deepseek-v4-grace-blackwell` is published as
-# arm64-only. The CI runner pod is x86_64 and (a) cannot run
-# `enroot import` for the arm64 manifest because `enroot-aufs2ovlfs`
-# needs CAP_SYS_ADMIN that the pod lacks ("Operation not permitted"),
-# and (b) even with `--arch aarch64` the conversion still fails on x86.
-# Per `https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780`
-# the import has to be dispatched to an arm64 compute node via srun.
-# To keep CI self-contained we instead pin to the pre-staged arm64 sqsh
-# under /mnt/vast/squash_dupe/ (refreshed manually by running that gist
-# script when the docker tag is updated). Filename suffix `_arm64`
-# distinguishes the working arm64 sqsh from any stale amd64 shadow.
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
 
-if [[ ! -f "$SQUASH_FILE" ]]; then
-    echo "ERROR: pre-staged arm64 sqsh missing: $SQUASH_FILE" >&2
-    echo "Refresh it on a GB300 compute node via the script in the gist:" >&2
-    echo "  https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780" >&2
-    exit 1
-fi
-if [[ ! -f "$NGINX_SQUASH_FILE" ]]; then
-    echo "ERROR: pre-staged arm64 nginx sqsh missing: $NGINX_SQUASH_FILE" >&2
-    echo "Run on an aarch64 host:" >&2
-    echo "  enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE" >&2
-    exit 1
-fi
+# Run the import on a compute node via srun, not on the runner pod:
+# the runner pod is x86_64 while the compute nodes are aarch64, so the
+# arm64 squash file has to be built on a compute node.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --exclusive --time=180 bash -c "
+        exec 9>\"$lock\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
+        if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import: $squash'
+        else
+            rm -f \"$squash\"
+            enroot import -o \"$squash\" docker://$image
+        fi
+    "
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
