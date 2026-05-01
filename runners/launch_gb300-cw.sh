@@ -8,10 +8,9 @@
 set -x
 
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Weights staged on the shared VAST mount; no compute-node-local
-    # NVMe on cw. The exact upstream recipes refer to this model as
-    # `dspro`.
-    export MODEL_PATH="/mnt/vast/models/dsv4/"
+    # Weights staged on compute-node-local NVMe at /scratch/models/dsv4/.
+    # The exact upstream recipes refer to this model as `dspro`.
+    export MODEL_PATH="/scratch/models/dsv4/"
 else
     echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
     exit 1

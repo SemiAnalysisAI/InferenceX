@@ -2056,3 +2056,10 @@
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
   
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Add final DeepSeek-V4-Pro FP4 GB200 Dynamo vLLM MTP2 Pareto recipes using vLLM nightly image"
+    - "Recipes cover 8k/1k aggregate TP8 low-latency conc=1, low-latency bridge 1P DEP8 + 4D TP8 no-offload conc=16/32/64, mid 1P/1D DEP8 MegaMOE conc=128, and high-throughput 2P/1D DEP8 MegaMOE conc=1024"
+    - "All recipes enable FP4 indexer cache and speculative-config mtp with num_speculative_tokens=2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1242

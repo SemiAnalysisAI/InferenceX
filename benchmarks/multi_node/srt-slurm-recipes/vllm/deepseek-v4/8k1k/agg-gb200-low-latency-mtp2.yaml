@@ -1,0 +1,86 @@
+name: "svf-vllm-agg-gb200-low-latency-mtp2"
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      attention-config: '{"use_fp4_indexer_cache":true}'
+      tokenizer-mode: deepseek_v4
+      max-model-len: 9280
+      max-num-seqs: 4
+      max-num-batched-tokens: 8192
+      max-cudagraph-capture-size: 4
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      gpu-memory-utilization: 0.9
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "1"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
