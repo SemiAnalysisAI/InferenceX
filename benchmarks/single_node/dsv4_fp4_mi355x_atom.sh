@@ -60,7 +60,7 @@ export AITER_LOG_LEVEL=WARNING
 #   * sunway513/aiter@e450e4d adds DSv4 FP4 MoE tuned rows that route
 #     eligible token counts to FlyDSL FP4 MoE kernels instead of default CK
 #     heuristics when the image has the optional flydsl package.
-#   * Oseltamivir/aiter@aeb8946 adds DSv4 sparse MQA sink and Indexer
+#   * Oseltamivir/aiter@0923d27 adds DSv4 sparse MQA sink and Indexer
 #     scorer/top-k Triton ops so ATOM can avoid the PR650 Torch fallback, plus
 #     a 4x128 sparse-attn tile that reduces repeated QK score work for D=512.
 #
@@ -84,7 +84,7 @@ if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
     AITER_DSV4_SPARSE_INDEXER=${AITER_DSV4_SPARSE_INDEXER:-1}
     AITER_DSV4_SPARSE_INDEXER_REPO=${AITER_DSV4_SPARSE_INDEXER_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_DSV4_SPARSE_INDEXER_REF=${AITER_DSV4_SPARSE_INDEXER_REF:-dsv4-sparse-indexer-pr}
-    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-aeb89469b0a5e0884bbf84af2a055285e1a27a2b}
+    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-0923d27163ae5b722be27ea980e447fe6c3c7308}
 
     rm -rf "$AITER_PERF_DIR"
     git clone --filter=blob:none "$AITER_PERF_REPO" "$AITER_PERF_DIR"
@@ -164,15 +164,18 @@ PYEOF
 
     python3 - <<'PYEOF'
 import csv
+import inspect
 import os
 from pathlib import Path
 import aiter
+from aiter.ops.triton.attention.dsv4_indexer import dsv4_indexer_topk
 
 root = Path(aiter.__file__).resolve().parent
 moe = (root / "fused_moe.py").read_text()
 mhc = (root / "ops" / "mhc.py").read_text()
 fp4_utils = (root / "utility" / "fp4_utils.py").read_text()
 dsv4_tuned_fmoe = Path(os.environ["AITER_DSV4_TUNED_FMOE_FILE"]) if os.environ.get("AITER_DSV4_TUNED_FMOE_FILE") else None
+dsv4_indexer_params = inspect.signature(dsv4_indexer_topk).parameters
 required = {
     "native MXFP4 MoE skip_inter_quant": "skip_inter_quant" in moe,
     "mhc_pre device allocation fix": (
@@ -190,6 +193,9 @@ required = {
     "DSv4 Indexer Triton op": (
         root / "ops" / "triton" / "attention" / "dsv4_indexer.py"
     ).exists(),
+    "DSv4 batched Indexer API": (
+        "seq_ids" in dsv4_indexer_params and "kv_lens" in dsv4_indexer_params
+    ),
 }
 missing = [name for name, ok in required.items() if not ok]
 if missing:
