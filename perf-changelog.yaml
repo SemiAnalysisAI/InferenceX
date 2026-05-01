@@ -2080,4 +2080,4 @@
     - "Keep SGLANG_TOPK_TRANSFORM_512_TORCH=1 for now: sgl-project/sglang#24143 (topk512 native ROCm kernel) merged 4-30 21:31 UTC, after the c924543 image was built (4-30 08:26 UTC); will flip to 0 once a newer daily image lands"
     - "Keep SGLANG_DSV4_FP4_EXPERTS=false and SGLANG_FORCE_TRITON_MOE_FP8=1: required for sgl-project/DeepSeek-V4-Pro-FP8 (FP4 path asserts intermediate_size_per_partition==2048 in fp8.py; swiglu_limit clamp lives in fused_moe_triton)"
     - "Expected speedup over the previous PR #23608 day-0 torch-fallback recipe: ~5.4-5.8x at conc 1-8 (matches the '+ indexer tilelang attn' tier in the AMD DSv4-Flash-FP8 reference table)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/Placeholder
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1255
