@@ -3813,12 +3813,12 @@ minimaxm2.5-fp8-b200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 512 }
     agentic-coding:
     # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
-    # Cliffs colocated -> cpu offload window vanishingly narrow.
-    # Dense sampling 32-56 captures both; 64 confirms saturation.
+    # Push none past the KV cliff (96, 128) to make the no-offload throughput
+    # collapse visible; cpu range overlaps fully for same-conc comparison.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64] }
-      - { tp: 4, offloading: cpu,  conc-list: [32, 40, 48, 56, 64] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 96, 128] }
+      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 96, 128] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
@@ -3848,12 +3848,13 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 4, conc-start: 4, conc-end: 8 }
     agentic-coding:
     # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
-    # Compute saturates BEFORE KV cliff -> negative result for cpu offload demo.
-    # Dense around compute cliff 48-72; conc 96 confirms plateau.
+    # Push none past the KV cliff (96, 128, 192) so the no-offload throughput
+    # collapse is visible; cpu range overlaps fully so each high-conc point
+    # has a same-conc no-offload counterpart for direct comparison.
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 72, 96] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96, 128, 192] }
+      - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
