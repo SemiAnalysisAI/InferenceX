@@ -1762,15 +1762,17 @@ dsv4-fp4-b200-vllm:
     # too much per-rank cudagraph workspace at 1M max-model-len.
     agentic-coding:
     # Initial sweep for DSv4-Pro fp4 on B200, DP=8 + EP=8 (per blog recipe).
-    # DSv4 uses hybrid CSA+HCA attention with ~10% of V3.2's KV per token at
-    # 1M context, so the KV cliff should sit far above the typical agentic
-    # working range. Initial conc list stays in [1, 64] to map the
-    # throughput/latency curve. cpu-offload conc list overlaps the tail of
-    # none for direct same-conc comparison.
+    # DSv4's hybrid CSA+HCA attention reaches ~10% of V3.2's KV per token at
+    # 1M context, but only when HMA (Hybrid KV-cache Manager) is enabled —
+    # HMA is what drops KV outside the local-attention sliding window. The
+    # SimpleCPUOffloadConnector path forces --disable-hybrid-kv-cache-manager,
+    # which falls back to full per-layer KV storage and overflows the per-rank
+    # budget at 1M context (vLLM error: 442.99 GiB needed, max-model-len cap
+    # 236288). HMA is DSv4's intended long-context mechanism, so the cpu
+    # offload path is intentionally skipped here.
     - duration: 1800
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -2659,15 +2661,17 @@ dsv4-fp4-b300-vllm:
     # fixed-seq-len TP-only layout at low conc.
     agentic-coding:
     # Initial sweep for DSv4-Pro fp4 on B300, DP=8 + EP=8 (per blog recipe).
-    # DSv4 uses hybrid CSA+HCA attention with ~10% of V3.2's KV per token at
-    # 1M context, so the KV cliff should sit far above the typical agentic
-    # working range. Initial conc list stays in [1, 64] to map the
-    # throughput/latency curve. cpu-offload conc list overlaps the tail of
-    # none for direct same-conc comparison.
+    # DSv4's hybrid CSA+HCA attention reaches ~10% of V3.2's KV per token at
+    # 1M context, but only when HMA (Hybrid KV-cache Manager) is enabled —
+    # HMA is what drops KV outside the local-attention sliding window. The
+    # SimpleCPUOffloadConnector path forces --disable-hybrid-kv-cache-manager,
+    # which falls back to full per-layer KV storage and overflows the per-rank
+    # budget at 1M context (vLLM error: 442.99 GiB needed, max-model-len cap
+    # 236288). HMA is DSv4's intended long-context mechanism, so the cpu
+    # offload path is intentionally skipped here.
     - duration: 1800
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
