@@ -10,55 +10,52 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE
+    EP_SIZE \
+    DP_ATTENTION
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-nvidia-smi
-
-hf download "$MODEL"
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-CONTEXT_LENGTH=$((ISL + OSL + 20))
-if [ "${EVAL_ONLY}" = "true" ]; then
-    setup_eval_context
-    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
+export OMP_NUM_THREADS=1
+
+# Calculate max-model-len based on ISL and OSL
+if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
+    CALCULATED_MAX_MODEL_LEN=""
+else
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
+fi
+
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=" --enable-expert-parallel"
+else
+  EP=" "
 fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
---enable-symm-mem \
---disable-radix-cache \
---quantization fp8 \
---kv-cache-dtype fp8_e4m3 \
---mamba-ssm-dtype bfloat16 \
---attention-backend trtllm_mha \
---moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
---mem-fraction-static 0.8 \
---stream-interval 50 \
---scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \
---tokenizer-worker-num 6 \
---context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
+
+python3 -m atom.entrypoints.openai_server \
+    --model $MODEL \
+    --server-port $PORT \
+    -tp $TP \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    --trust-remote-code \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-pip install -q datasets pandas
-
+export PYTHONDONTWRITEBYTECODE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -69,11 +66,12 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
+    run_eval --framework lm-eval --port "$PORT" 
     append_lm_eval_summary
 fi
 
