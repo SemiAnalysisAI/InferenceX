@@ -8,6 +8,7 @@ from generate_sweep_configs import (
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    generate_test_config_sweep,
     mark_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
@@ -1535,6 +1536,49 @@ def full_sweep_args_both():
 
 
 # =============================================================================
+# Test generate_test_config_sweep
+# =============================================================================
+
+class TestGenerateTestConfigSweep:
+    """Tests for exact config-key sweep generation."""
+
+    def test_runner_node_filter_expands_config_runner(self, sample_multinode_config, sample_runner_config):
+        """test-config should allow targeting one concrete runner node."""
+        args = argparse.Namespace(
+            config_keys=["dsr1-fp4-gb200-dynamo-trt"],
+            seq_lens=None,
+            conc=None,
+            runner_node_filter="gb200-nv_0",
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_multinode_config,
+            sample_runner_config,
+        )
+
+        assert len(result) == 1
+        assert result[0]["runner"] == "gb200-nv_0"
+
+    def test_runner_node_filter_no_match_skips_config(self, sample_multinode_config, sample_runner_config):
+        """Unmatched node filters should produce no entries."""
+        args = argparse.Namespace(
+            config_keys=["dsr1-fp4-gb200-dynamo-trt"],
+            seq_lens=None,
+            conc=None,
+            runner_node_filter="gb300-nv_0",
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_multinode_config,
+            sample_runner_config,
+        )
+
+        assert result == []
+
+
+# =============================================================================
 # Test apply_node_type_defaults
 # =============================================================================
 
@@ -1884,5 +1928,4 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-
 

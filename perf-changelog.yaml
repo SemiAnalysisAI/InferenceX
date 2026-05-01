@@ -2042,6 +2042,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated Dynamo vLLM benchmarks at 8k/1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1238
+
+- config-keys:
     - qwen3.5-fp8-b200-sglang
   description:
     - updated sglang container image 
