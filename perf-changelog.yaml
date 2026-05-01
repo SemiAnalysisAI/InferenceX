@@ -2,7 +2,7 @@
     - dsr1-fp8-mi355x-sglang
   description:
     - "Tune --num-continuous-decode-steps 4 → 8 (+4.7% avg output throughput gain)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1109
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1243
 
 - config-keys:
     - 70b-fp8-*-vllm
