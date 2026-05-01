@@ -7,12 +7,36 @@
 
 set -x
 
-if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Weights staged on compute-node-local NVMe at /scratch/models/dsv4/.
-    # The exact upstream recipes refer to this model as `dspro`.
+if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # Weights staged on compute-node-local NVMe.
     export MODEL_PATH="/scratch/models/dsv4/"
+
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        # Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
+        # (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
+        # generation). The single-threaded random prompt generator in the
+        # upstream sa-bench dominates bench startup on the 7p1d/conc=8192
+        # sweep (~50 min for the main pass alone before the first HTTP
+        # request leaves the client). The fork bumps that to ~1 min via
+        # multiprocessing.Pool with `--random-num-workers 48`.
+        #
+        # TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
+        # (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
+        SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
+        SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="aflowers/gb200-dsv4-recipes"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4"
+        SRT_RECIPE_DST="recipes/vllm/deepseek-v4"
+    else
+        echo "Unsupported framework on gb300-cw for dsv4/fp4: $FRAMEWORK. Currently supported: dynamo-sglang, dynamo-vllm"
+        exit 1
+    fi
 else
-    echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4"
     exit 1
 fi
 
@@ -32,18 +56,6 @@ export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 NGINX_IMAGE="nginx:1.27.4"
-# Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
-# (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
-# generation). The single-threaded random prompt generator in the
-# upstream sa-bench dominates bench startup on the 7p1d/conc=8192
-# sweep (~50 min for the main pass alone before the first HTTP
-# request leaves the client). The fork bumps that to ~1 min via
-# multiprocessing.Pool with `--random-num-workers 48`.
-#
-# TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
-# (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
-SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
-SRT_SLURM_RECIPES_COMMIT="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
 # `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
@@ -102,15 +114,11 @@ fi
 
 git clone "$SRT_SLURM_RECIPES_REPO" "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout "$SRT_SLURM_RECIPES_COMMIT"
+git checkout "$SRT_SLURM_RECIPES_REF"
 
-# Overlay the hand-rolled DSV4 sglang recipes onto the upstream srt-slurm
-# checkout. Mirrors launch_gb200-nv.sh's dynamo-sglang dsv4 branch:
-# destination must be `recipes/sglang/deepseek-v4` because
-# `additional-settings: CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/...`
-# in `.github/configs/nvidia-master.yaml` is what srtctl loads.
-mkdir -p recipes/sglang/deepseek-v4
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+# Overlay the hand-rolled DSV4 recipes onto the selected srt-slurm checkout.
+mkdir -p "$SRT_RECIPE_DST"
+cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -166,7 +174,7 @@ mkdir -p configs/dynamo-wheels
 
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300-CW (SGLang)
+# SRT SLURM Configuration for GB300-CW
 
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
@@ -192,6 +200,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dynamo-vllm: ${SQUASH_FILE}
   dspro-0426: ${SQUASH_FILE}
   dspro-0426-nixl: ${SQUASH_FILE}
   dsv4-grace-blackwell: ${SQUASH_FILE}
