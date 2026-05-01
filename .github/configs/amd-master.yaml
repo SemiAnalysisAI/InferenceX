@@ -1581,4 +1581,4 @@ dsv4-fp4-mi355x-atom:
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
+    - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }

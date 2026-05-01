@@ -60,7 +60,7 @@ export AITER_LOG_LEVEL=WARNING
 #   * sunway513/aiter@e450e4d adds DSv4 FP4 MoE tuned rows that route
 #     eligible token counts to FlyDSL FP4 MoE kernels instead of default CK
 #     heuristics when the image has the optional flydsl package.
-#   * Oseltamivir/aiter@023eb3b adds DSv4 sparse MQA sink and Indexer
+#   * Oseltamivir/aiter@aeb8946 adds DSv4 sparse MQA sink and Indexer
 #     scorer/top-k Triton ops so ATOM can avoid the PR650 Torch fallback, plus
 #     a 4x128 sparse-attn tile that reduces repeated QK score work for D=512.
 #
@@ -83,8 +83,8 @@ if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
     AITER_DSV4_TUNED_FMOE_PATH=${AITER_DSV4_TUNED_FMOE_PATH:-aiter/configs/model_configs/dsv4_fp4_tuned_fmoe.csv}
     AITER_DSV4_SPARSE_INDEXER=${AITER_DSV4_SPARSE_INDEXER:-1}
     AITER_DSV4_SPARSE_INDEXER_REPO=${AITER_DSV4_SPARSE_INDEXER_REPO:-https://github.com/Oseltamivir/aiter.git}
-    AITER_DSV4_SPARSE_INDEXER_REF=${AITER_DSV4_SPARSE_INDEXER_REF:-dsv4-sparse-indexer}
-    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-023eb3bc190cd58646517a6c96a3b6b799bc1f40}
+    AITER_DSV4_SPARSE_INDEXER_REF=${AITER_DSV4_SPARSE_INDEXER_REF:-dsv4-sparse-indexer-pr}
+    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-aeb89469b0a5e0884bbf84af2a055285e1a27a2b}
 
     rm -rf "$AITER_PERF_DIR"
     git clone --filter=blob:none "$AITER_PERF_REPO" "$AITER_PERF_DIR"
