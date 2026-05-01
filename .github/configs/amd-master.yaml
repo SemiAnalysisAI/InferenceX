@@ -582,11 +582,12 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
     agentic-coding:
     # MI355X tp=4 ep=4: compute ceiling ~60 (empirical), KV cliff ~91 (analytical).
-    # Compute saturates first. Dense around compute 48-72; 96 confirms plateau.
-    # AMD: no cpu offload support.
+    # Compute saturates first; cpu offload likely won't help, but worth confirming.
+    # AMD uses native OffloadingConnector (NOT SimpleCPUOffloadConnector).
     - duration: 1800
       search-space:
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 72, 96] }
+      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
 
 minimaxm2.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
@@ -656,11 +657,12 @@ minimaxm2.5-fp8-mi300x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
     agentic-coding:
     # MI300X tp=4: compute ceiling ~25 (estimated, between H100 and H200);
-    # KV cliff ~52. Compute saturates first. Dense around compute 16-32.
-    # AMD: no cpu offload support (vllm OffloadingConnector not on rocm).
+    # KV cliff ~52. Compute saturates first.
+    # AMD uses native OffloadingConnector (NOT SimpleCPUOffloadConnector).
     - duration: 1800
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 20, 24, 28, 32, 40, 48] }
+      - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 minimaxm2.5-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.18.0
