@@ -554,7 +554,7 @@ _patch_lm_eval() {
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
 # --- Patch LocalChatCompletion.parse_generations to handle empty content with reasoning_content ---
-import re, sys, unicodedata, json
+import os, re, sys, unicodedata, json
 from lm_eval.filters import extraction as ex
 from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
 
@@ -581,7 +581,7 @@ def _le_parse_generations(outputs, **kwargs):
 # Keep staticmethod semantics
 _LCC.parse_generations = staticmethod(_le_parse_generations)
 
-# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" for TRT ---
+# --- Patch TemplateAPI.apply_chat_template ---
 try:
     from lm_eval.models import api_models as _api_models
     _TemplateAPI = _api_models.TemplateAPI
@@ -592,6 +592,56 @@ except Exception:
 
 if _TemplateAPI is not None and _JsonChatStr is not None:
     _orig_apply_chat_template = _TemplateAPI.apply_chat_template
+    _dsv4_encode_messages = None
+
+    def _content_to_text(content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    parts.append(str(item.get("text", item.get("content", ""))))
+                else:
+                    parts.append(str(item))
+            return "\n".join(part for part in parts if part)
+        if content is None:
+            return ""
+        return str(content)
+
+    def _load_dsv4_encoder():
+        global _dsv4_encode_messages
+        if _dsv4_encode_messages is not None:
+            return _dsv4_encode_messages
+
+        roots = [
+            os.environ.get("INFMAX_WORKSPACE"),
+            os.environ.get("GITHUB_WORKSPACE"),
+            os.getcwd(),
+            "/workspace",
+            "/infmax-workspace",
+        ]
+        for root in roots:
+            if not root:
+                continue
+            candidate = os.path.join(root, "utils", "bench_serving")
+            if os.path.exists(os.path.join(candidate, "encoding_dsv4.py")) and candidate not in sys.path:
+                sys.path.insert(0, candidate)
+
+        from encoding_dsv4 import encode_messages
+
+        _dsv4_encode_messages = encode_messages
+        return _dsv4_encode_messages
+
+    def _apply_dsv4_chat_template(chat_history):
+        encode_messages = _load_dsv4_encoder()
+        messages = []
+        for item in chat_history:
+            normalized = {**item}
+            normalized.pop("type", None)
+            normalized["content"] = _content_to_text(normalized.get("content"))
+            messages.append(normalized)
+        return encode_messages(messages, thinking_mode="thinking")
 
     def _patched_apply_chat_template(
         self,
@@ -599,6 +649,8 @@ if _TemplateAPI is not None and _JsonChatStr is not None:
         add_generation_prompt: bool = True,
     ):
         """Applies a chat template to a list of chat history between user and model."""
+        if os.environ.get("EVAL_DSV4_CHAT_TEMPLATE") == "1":
+            return _apply_dsv4_chat_template(chat_history)
         if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
             return self.tokenizer.apply_chat_template(
                 chat_history,
@@ -703,13 +755,30 @@ run_lm_eval() {
         esac
     done
 
-    _install_lm_eval_deps
-    _patch_lm_eval
-
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
+    local openai_completions_base="${openai_server_base}/v1/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
-    MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
+    export MODEL_NAME="${MODEL_NAME:-$MODEL}" # Prefer MODEL_NAME, else MODEL
+
+    local lm_eval_model="local-chat-completions"
+    local lm_eval_base_url="$openai_chat_base"
+    local lm_eval_eos_string="${EVAL_EOS_STRING:-</s>}"
+    local lm_eval_tokenizer_args="tokenized_requests=False"
+
+    if [[ "${MODEL_PREFIX:-}" == "dsv4" || "${MODEL_NAME:-}" == *"DeepSeek-V4"* || "${MODEL:-}" == *"DeepSeek-V4"* ]]; then
+        export EVAL_DSV4_CHAT_TEMPLATE=1
+        lm_eval_model="local-completions"
+        lm_eval_base_url="$openai_completions_base"
+        lm_eval_eos_string="${EVAL_EOS_STRING:-<｜end▁of▁sentence｜>}"
+        lm_eval_tokenizer_args="tokenizer_backend=None,tokenized_requests=False"
+        echo "Using DeepSeek-V4 eval prompt encoding via utils/bench_serving/encoding_dsv4.py"
+    else
+        unset EVAL_DSV4_CHAT_TEMPLATE
+    fi
+
+    _install_lm_eval_deps
+    _patch_lm_eval
 
     # Cap output tokens: must fit within context window (leave room for input),
     # and avoid excessive KV cache reservation per request on TRT.
@@ -722,11 +791,11 @@ run_lm_eval() {
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+    python3 -m lm_eval --model "${lm_eval_model}" --apply_chat_template \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      --model_args "model=${MODEL_NAME},base_url=${lm_eval_base_url},api_key=${OPENAI_API_KEY},eos_string=${lm_eval_eos_string},max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,${lm_eval_tokenizer_args},max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
