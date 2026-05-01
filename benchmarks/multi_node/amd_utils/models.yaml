@@ -231,9 +231,12 @@ DeepSeek-R1-0528-MXFP4-v2:
     mem_fraction_static: 0.8
     disable_radix_cache: true
     dp:
-      max_running_requests: 32
+      max_running_requests: 4096
       chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"
       cuda_graph_bs: "1 2 3"
+      context_length: 9217
+      max_total_tokens: 131072
+      enable_two_batch_overlap: true
     no_dp:
       max_running_requests: 128
       chunked_prefill_size: 16384
