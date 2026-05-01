@@ -1758,6 +1758,15 @@
 
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 single-node MI355X ATOM benchmark"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
+  
+- config-keys:
     - dsv4-fp8-h200-vllm
   description:
     - "Add DeepSeek-V4-Pro vLLM H200 benchmark per https://vllm.ai/blog/deepseek-v4"
@@ -2039,13 +2048,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
-    - dsv4-fp8-mi355x-sglang
     - dsv4-fp4-mi355x-sglang
   description:
-    - "Bump MI355X DSv4 SGLang image to rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
-    - "Keep dsv4-fp8-mi355x-sglang on sgl-project/DeepSeek-V4-Pro-FP8 and its FP8 expert loader path"
-    - "Add dsv4-fp4-mi355x-sglang using deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
-    - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime in both MI355X DSv4 SGLang scripts"
+    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
+    - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
+    - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime"
     - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 and SGLANG_REASONING_EFFORT=max to match the FP4 Models update"
     - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244
