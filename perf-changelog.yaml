@@ -1,10 +1,4 @@
 - config-keys:
-    - dsr1-fp8-mi355x-sglang
-  description:
-    - "Tune --num-continuous-decode-steps 4 → 8 (+4.7% avg output throughput gain)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1243
-
-- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
@@ -2043,4 +2037,10 @@
   description:
     - updated sglang container image 
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Tune --num-continuous-decode-steps 4 → 8 (+4.7% avg output throughput gain)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1243
 
