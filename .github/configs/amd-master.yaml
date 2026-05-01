@@ -307,6 +307,26 @@ qwen3.5-fp4-mi355x-sglang:
     - { tp: 2, conc-start: 4, conc-end: 256 }
     - { tp: 4, conc-start: 4, conc-end: 16 }
 
+qwen3.5-fp4-mi355x-atom:
+  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model-prefix: qwen3.5
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  seq-len-configs:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+  - isl: 8192
+    osl: 1024
+    search-space:
+    - { tp: 2, conc-start: 4, conc-end: 256 }
+    - { tp: 4, conc-start: 4, conc-end: 16 }
+
 qwen3.5-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
