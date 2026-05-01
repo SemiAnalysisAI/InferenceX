@@ -1,0 +1,119 @@
+name: "svf-vllm-disagg-gb300-7p2d-dep4-dep16"
+
+# Topology: 7 prefill (DEP=4) + 2 decode (DEP=16). 15 GB300 nodes (7P + 8D
+# = 60 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra node.
+# Wide-EP decode max-throughput point at concurrency 3072.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 7
+  decode_nodes: 8
+  prefill_workers: 7
+  decode_workers: 2
+  gpus_per_prefill: 4
+  gpus_per_decode: 16
+
+infra:
+  etcd_nats_dedicated_node: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+  decode_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      attention-config: '{"use_fp4_indexer_cache": true}'
+      moe-backend: "deep_gemm_mega_moe"
+      enforce-eager: true
+      max-model-len: 16384
+      max-num-seqs: 256
+      max-num-batched-tokens: 16384
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
+      block-size: 256
+      gpu-memory-utilization: 0.9
+      enable-ep-weight-filter: true
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      attention-config: '{"use_fp4_indexer_cache": true}'
+      moe-backend: "deep_gemm_mega_moe"
+      max-model-len: 16384
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 512
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      enable-ep-weight-filter: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      no-enable-flashinfer-autotune: true
+      enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "3072"
+  req_rate: "inf"
+  tokenizer_mode: "deepseek_v4"
+  use_chat_template: true

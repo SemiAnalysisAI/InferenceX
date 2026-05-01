@@ -402,3 +402,41 @@ jobs:
                         "run-attempt": "${{ github.run_attempt }}"
                       }
                     }'
+
+    comment-unofficial-run-visualizer:
+        needs:
+            [
+                collect-results,
+                collect-evals,
+                calc-success-rate,
+                upload-changelog-metadata,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+            )
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Comment unofficial run visualizer link on PR
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                  github-token: ${{ github.token }}
+                  script: |
+                      const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
+                      const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
+                      const body = [
+                          `see unofficial run visualizer at ${inferenceUrl}`,
+                          `see unofficial run visualizer at ${evaluationUrl}`,
+                      ].join('\n');
+                      await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.issue.number,
+                          body,
+                      });
