@@ -1,9 +1,9 @@
 name: "svf-vllm-disagg-gb300-1p17d-tep4-tp4"
 
 # Topology: 1 prefill (TEP=4) + 17 decode (TP=4). 18 GB300 nodes (1P + 17D = 72
-# GPUs at 4 GPUs/node), NATS/etcd colocated on the prefill node. Sweeps
-# concurrencies 18, 36, and 72 — wide-decode points where each decode
-# worker holds a single replica.
+# GPUs at 4 GPUs/node), NATS/etcd colocated on the prefill node.
+# Wide-decode point at concurrency 18 — each decode worker holds a
+# single replica.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
@@ -100,7 +100,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "18x36x72"
+  concurrencies: "18"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"
   use_chat_template: true

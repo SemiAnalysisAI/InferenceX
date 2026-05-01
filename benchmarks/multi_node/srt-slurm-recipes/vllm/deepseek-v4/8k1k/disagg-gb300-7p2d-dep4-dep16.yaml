@@ -2,7 +2,7 @@ name: "svf-vllm-disagg-gb300-7p2d-dep4-dep16"
 
 # Topology: 7 prefill (DEP=4) + 2 decode (DEP=16). 15 GB300 nodes (7P + 8D
 # = 60 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra node.
-# Wide-EP decode max-throughput sweep at concurrencies 2048 and 3072.
+# Wide-EP decode max-throughput point at concurrency 3072.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
@@ -113,7 +113,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "2048x3072"
+  concurrencies: "3072"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"
   use_chat_template: true

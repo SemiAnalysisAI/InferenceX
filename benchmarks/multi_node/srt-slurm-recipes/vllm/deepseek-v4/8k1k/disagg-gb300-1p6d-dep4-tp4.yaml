@@ -2,7 +2,7 @@ name: "svf-vllm-disagg-gb300-1p6d-dep4-tp4"
 
 # Topology: 1 prefill (DEP=4) + 6 decode (TP=4). 7 GB300 nodes (1P + 6D = 28
 # GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra node. Low-mid curve
-# points at concurrencies 192 and 256.
+# point at concurrency 192.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
@@ -108,7 +108,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "192x256"
+  concurrencies: "192"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"
   use_chat_template: true
