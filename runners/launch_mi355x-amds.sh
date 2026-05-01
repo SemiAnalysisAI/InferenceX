@@ -221,6 +221,8 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    # TEMP: bypass the normal benchmark and run DSv4 AITER sparse/indexer
+    # kernel tests on MI355X while ROCm/aiter#2998 is under review.
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
@@ -228,7 +230,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL \
-        bash "$BENCHMARK_SCRIPT"
+        bash runners/test_dsv4_aiter_kernels.sh
 
     scancel $JOB_ID
 
