@@ -20,8 +20,12 @@ class Fields(Enum):
     PRECISION = 'precision'
     FRAMEWORK = 'framework'
     RUNNER = 'runner'
-    SEQ_LEN_CONFIGS = 'seq-len-configs'
+    SCENARIOS = 'scenarios'
     MULTINODE = 'multinode'
+
+    # Scenario type keys
+    FIXED_SEQ_LEN = 'fixed-seq-len'
+    AGENTIC_CODING = 'agentic-coding'
 
     # Seq-len-config fields
     ISL = 'isl'
@@ -45,11 +49,16 @@ class Fields(Enum):
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
 
+    # Agentic coding fields
+    OFFLOADING = 'offloading'
+    DURATION = 'duration'
+
     # Matrix entry fields
     CONC = 'conc'
     MAX_MODEL_LEN = 'max-model-len'
     EXP_NAME = 'exp-name'
     DISAGG = 'disagg'
+    SCENARIO_TYPE = 'scenario-type'
 
     # Eval
     RUN_EVAL = 'run-eval'
@@ -131,6 +140,64 @@ class MultiNodeMatrixEntry(BaseModel):
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+
+
+class SingleNodeAgenticMatrixEntry(BaseModel):
+    """Pydantic model for validating single-node agentic coding matrix entries."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    image: str
+    model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
+    precision: str
+    framework: str
+    runner: str
+    tp: int
+    ep: int
+    dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    conc: int
+    offloading: Literal["none", "cpu", "ssd"] = Field(alias=Fields.OFFLOADING.value)
+    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    exp_name: str = Field(alias=Fields.EXP_NAME.value)
+    scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+
+class MultiNodeAgenticMatrixEntry(BaseModel):
+    """Pydantic model for validating multinode agentic coding matrix entries."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    image: str
+    model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
+    precision: str
+    framework: str
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+        alias=Fields.SPEC_DECODING.value
+    )
+    runner: str
+    prefill: WorkerConfig
+    decode: WorkerConfig
+    conc: int
+    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    exp_name: str = Field(alias=Fields.EXP_NAME.value)
+    disagg: bool
+    scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+
+AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
+
+
+def validate_agentic_matrix_entry(entry: dict) -> dict:
+    """Validate that an agentic matrix entry matches the expected structure."""
+    try:
+        if Fields.PREFILL.value in entry:
+            MultiNodeAgenticMatrixEntry(**entry)
+        else:
+            SingleNodeAgenticMatrixEntry(**entry)
+    except ValidationError as e:
+        raise ValueError(
+            f"The following parsed agentic matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}")
+    return entry
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
@@ -260,6 +327,80 @@ class MultiNodeSeqLenConfig(BaseModel):
         alias=Fields.SEARCH_SPACE.value)
 
 
+class AgenticCodingSearchSpaceEntry(BaseModel):
+    """Agentic coding search space configuration."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    tp: Optional[int] = None
+    ep: Optional[int] = None
+    dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+        default="none", alias=Fields.SPEC_DECODING.value)
+    prefill: Optional[WorkerConfig] = None
+    decode: Optional[WorkerConfig] = None
+    offloading: Literal["none", "cpu", "ssd"] = Field(default="none", alias=Fields.OFFLOADING.value)
+    conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
+    conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
+    conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+
+    @model_validator(mode='after')
+    def validate_conc_fields(self):
+        return _validate_conc_fields(self)
+
+    @model_validator(mode='after')
+    def validate_topology_fields(self):
+        has_single_node = self.tp is not None
+        has_any_multinode_field = self.prefill is not None or self.decode is not None
+        has_complete_multinode = self.prefill is not None and self.decode is not None
+        if has_single_node:
+            valid = not has_any_multinode_field
+        else:
+            valid = has_complete_multinode
+        if not valid:
+            raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        return self
+
+
+class AgenticCodingConfig(BaseModel):
+    """Agentic coding scenario configuration for trace replay benchmarks."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+
+
+class SingleNodeScenarios(BaseModel):
+    """Scenarios wrapper for single-node configs."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    fixed_seq_len: Optional[List[SingleNodeSeqLenConfig]] = Field(
+        default=None, alias=Fields.FIXED_SEQ_LEN.value)
+    agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
+        default=None, alias=Fields.AGENTIC_CODING.value)
+
+    @model_validator(mode='after')
+    def at_least_one_scenario(self):
+        if not self.fixed_seq_len and not self.agentic_coding:
+            raise ValueError("At least one scenario type must be specified")
+        return self
+
+
+class MultiNodeScenarios(BaseModel):
+    """Scenarios wrapper for multinode configs."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    fixed_seq_len: Optional[List[MultiNodeSeqLenConfig]] = Field(
+        default=None, alias=Fields.FIXED_SEQ_LEN.value)
+    agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
+        default=None, alias=Fields.AGENTIC_CODING.value)
+
+    @model_validator(mode='after')
+    def at_least_one_scenario(self):
+        if not self.fixed_seq_len and not self.agentic_coding:
+            raise ValueError("At least one scenario type must be specified")
+        return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -272,8 +413,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: bool = Field(default=False)
-    seq_len_configs: List[SingleNodeSeqLenConfig] = Field(
-        alias=Fields.SEQ_LEN_CONFIGS.value)
+    scenarios: SingleNodeScenarios
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -288,8 +428,7 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
-    seq_len_configs: List[MultiNodeSeqLenConfig] = Field(
-        alias=Fields.SEQ_LEN_CONFIGS.value)
+    scenarios: MultiNodeScenarios
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:
@@ -343,6 +482,10 @@ class ChangelogEntry(BaseModel):
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
+    scenario_type: Optional[List[str]] = Field(
+        alias="scenario-type", default=None,
+        description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
+    )
 
 
 class ChangelogMetadata(BaseModel):
@@ -361,9 +504,9 @@ class ChangelogMatrixEntry(BaseModel):
     """
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    single_node: dict[str, list[SingleNodeMatrixEntry]
+    single_node: dict[str, list[Union[SingleNodeMatrixEntry, SingleNodeAgenticMatrixEntry]]
                       ] = Field(default_factory=dict)
-    multi_node: dict[str, list[MultiNodeMatrixEntry]
+    multi_node: dict[str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
                      ] = Field(default_factory=dict)
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)

@@ -213,8 +213,8 @@ else
     fi
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
-    SCRIPT_FW="benchmarks/single_node/${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
-    SCRIPT_FALLBACK="benchmarks/single_node/${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     if [[ -f "$SCRIPT_FW" ]]; then
         BENCHMARK_SCRIPT="$SCRIPT_FW"
     else

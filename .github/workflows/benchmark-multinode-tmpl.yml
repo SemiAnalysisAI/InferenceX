@@ -91,6 +91,31 @@ on:
         type: string
         required: false
         default: ""
+      scenario-type:
+        description: "Scenario type (fixed-seq-len or agentic-coding)"
+        type: string
+        required: false
+        default: fixed-seq-len
+      conc:
+        description: "Concurrency for agentic-coding scenarios (single value per matrix entry)"
+        type: string
+        required: false
+        default: ""
+      duration:
+        description: "Agentic trace replay duration in seconds"
+        type: string
+        required: false
+        default: "1800"
+      offloading:
+        description: "KV offload backend for agentic scenarios (none/cpu/ssd)"
+        required: false
+        type: string
+        default: 'none'
+      total-cpu-dram-gb:
+        description: "Total CPU DRAM in GB for KV offloading"
+        required: false
+        type: string
+        default: '600'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -113,6 +138,13 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  SCENARIO_TYPE: ${{ inputs.scenario-type }}
+  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
+  CONC: ${{ inputs.conc }}
+  DURATION: ${{ inputs.duration }}
+  OFFLOADING: ${{ inputs.offloading }}
+  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
@@ -152,7 +184,8 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
-          clean: false
+          clean: true
+          submodules: true
 
       - name: Cleanup stale eval outputs (pre-run)
         if: ${{ inputs.run-eval || inputs.eval-only }}
@@ -182,6 +215,13 @@ jobs:
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
+          elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+            if [ -f "${RESULT_FILENAME}.json" ]; then
+              echo "Found agentic result file: ${RESULT_FILENAME}.json"
+            else
+              echo "Run failed: Agentic benchmark result ${RESULT_FILENAME}.json not found." >&2
+              exit 1
+            fi
           else
             # Check if at least one result file was created
             if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
@@ -194,7 +234,7 @@ jobs:
           fi
 
       - name: Process result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
@@ -215,7 +255,7 @@ jobs:
           done
 
       - name: Upload result
-        if: ${{ !inputs.eval-only }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
@@ -227,6 +267,27 @@ jobs:
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
+
+      - name: Upload agentic aggregated result
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic raw results
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            LOGS/agentic/benchmark.log
+            LOGS/agentic/benchmark_command.txt
+            LOGS/agentic/workload_distribution_summary.txt
+            LOGS/agentic/workload_distribution_plots.png
+            LOGS/agentic/trace_replay/detailed_results.csv
+            LOGS/agentic/trace_replay/debug_trace.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

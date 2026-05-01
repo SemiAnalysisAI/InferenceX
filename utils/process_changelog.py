@@ -161,6 +161,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
+                if entry.scenario_type:
+                    base_cmd.extend(["--scenario-type", *entry.scenario_type])
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -187,6 +189,8 @@ def main():
                 *MASTER_CONFIGS,
                 "--evals-only",
             ]
+            if entry.scenario_type:
+                base_cmd.extend(["--scenario-type", *entry.scenario_type])
             try:
                 eval_result = subprocess.run(
                     base_cmd,
@@ -203,10 +207,16 @@ def main():
         all_benchmark_results = trim_conc(all_benchmark_results)
 
     for result in all_benchmark_results:
-        seq_len_str = seq_len_to_str(result["isl"], result["osl"])
-        if "prefill" in result and result["prefill"] is not None:
+        if result.get("scenario-type") == "agentic-coding":
+            if result.get("prefill") is not None:
+                final_results["multi_node"]["agentic"].append(result)
+            else:
+                final_results["single_node"]["agentic"].append(result)
+        elif "prefill" in result and result["prefill"] is not None:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["multi_node"][seq_len_str].append(result)
         else:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
     final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
