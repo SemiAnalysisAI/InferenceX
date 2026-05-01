@@ -2080,6 +2080,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Fix tp:2 search-space: ep 2 -> 1"
+    - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
+    - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
