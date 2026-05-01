@@ -39,13 +39,14 @@ else:
     print(f"No patch needed: model_type is {config.get('model_type')!r}")
 PYEOF
 
-# DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
+export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
 export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
 export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
-export SGLANG_HACK_FLASHMLA_BACKEND=torch
+export SGLANG_HACK_FLASHMLA_BACKEND=tilelang
+export SGLANG_OPT_USE_TILELANG_INDEXER=true
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
@@ -85,7 +86,6 @@ python3 -m sglang.launch_server \
     --page-size 256 \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
-    --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
     --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &

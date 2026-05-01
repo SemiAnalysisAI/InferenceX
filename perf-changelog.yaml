@@ -2214,3 +2214,15 @@
     - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
     - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Bump dsv4-fp8-mi355x-sglang image to rocm/sgl-dev:rocm720-mi35x-c924543-20260430-DSv4 (sgl-project/sglang amd/deepseek_v4 integration through 6/N + ENV-set commit c924543)"
+    - "Switch SGLANG_HACK_FLASHMLA_BACKEND from torch to tilelang (sgl-project/sglang#24033, FlashMLA 101->2 kernels per call)"
+    - "Add SGLANG_OPT_USE_TILELANG_INDEXER=true (sgl-project/sglang#24050, fp8 paged-MQA-logits indexer 12->1 kernels per call)"
+    - "Drop --disable-cuda-graph from sglang.launch_server (CUDA graph for DSv4 on ROCm/HIP enabled by sgl-project/sglang#23832)"
+    - "Keep SGLANG_TOPK_TRANSFORM_512_TORCH=1 for now: sgl-project/sglang#24143 (topk512 native ROCm kernel) merged 4-30 21:31 UTC, after the c924543 image was built (4-30 08:26 UTC); will flip to 0 once a newer daily image lands"
+    - "Keep SGLANG_DSV4_FP4_EXPERTS=false and SGLANG_FORCE_TRITON_MOE_FP8=1: required for sgl-project/DeepSeek-V4-Pro-FP8 (FP4 path asserts intermediate_size_per_partition==2048 in fp8.py; swiglu_limit clamp lives in fused_moe_triton)"
+    - "Expected speedup over the previous PR #23608 day-0 torch-fallback recipe: ~5.4-5.8x at conc 1-8 (matches the '+ indexer tilelang attn' tier in the AMD DSv4-Flash-FP8 reference table)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/Placeholder
