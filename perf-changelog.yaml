@@ -2038,3 +2038,14 @@
     - updated sglang container image 
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump MI355X DSv4 SGLang image to rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
+    - "Keep dsv4-fp8-mi355x-sglang on sgl-project/DeepSeek-V4-Pro-FP8 and its FP8 expert loader path"
+    - "Add dsv4-fp4-mi355x-sglang using deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
+    - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime in both MI355X DSv4 SGLang scripts"
+    - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 and SGLANG_REASONING_EFFORT=max to match the FP4 Models update"
+    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244

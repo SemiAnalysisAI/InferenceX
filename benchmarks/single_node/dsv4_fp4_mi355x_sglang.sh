@@ -64,11 +64,13 @@ else:
     print(f"No patch needed: model_type is {config.get('model_type')!r}")
 PYEOF
 
-# DSv4-specific SGLang env vars. Mirrors python/run_dsv4.sh on the
-# amd/deepseek_v4 branch (commented FP8 path) at SGL_PR_SHA. The branch's
-# FP4 Models integration commit (33de1e64) flipped SGLANG_FORCE_TRITON_MOE_FP8
-# from 1 to 0; with it set to 0, FP8 MoE dispatches through aiter (shuffled
-# weights + aiter fused_moe) instead of the triton MoE fallback.
+# DSv4 FP4-experts path. Mirrors the active path of python/run_dsv4.sh on
+# the amd/deepseek_v4 branch at SGL_PR_SHA:
+#   SGLANG_DSV4_FP4_EXPERTS=True   -> route experts through the FP4 kernels
+#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter (gating
+#                                    switch added in commit 33de1e64);
+#                                    also enables swiglu_limit clamp in the
+#                                    triton MoE fallback path.
 export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
@@ -84,7 +86,7 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=1
 export SGLANG_TOPK_TRANSFORM_512_TORCH=1
 export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-export SGLANG_DSV4_FP4_EXPERTS=false
+export SGLANG_DSV4_FP4_EXPERTS=True
 export SGLANG_OPT_DPSK_V4_RADIX=0
 export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
 export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
