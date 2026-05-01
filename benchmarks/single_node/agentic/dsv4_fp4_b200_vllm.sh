@@ -3,10 +3,15 @@ set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM.
-# Mirrors the fixed-seq-len dsv4_fp4_b200_vllm.sh recipe (TP-only path,
-# no DP-attn, ep=1 unless overridden) with --no-enable-prefix-caching
-# removed (the agentic trace replay is a prefix-caching benchmark) and a
-# 1M max-model-len to exercise DSv4's long-context capability.
+# Layout follows the official vLLM blog recipe (https://vllm.ai/blog/deepseek-v4):
+# DP=8 + EP=8 (data-parallel attention with expert-parallel MoE), block_size=256,
+# kv-cache-dtype=fp8, FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph
+# capture with custom_ops=all. The recipe doesn't override
+# max-num-batched-tokens / max-cudagraph-capture-size so neither do we; we only
+# pin max-model-len (1M, full DSv4 context) and max-num-seqs (per-rank cap).
+# --no-enable-prefix-caching is intentionally absent (the agentic trace replay
+# IS the prefix-caching benchmark). Image vllm/vllm-openai:deepseekv4-cu130 is
+# the DSv4-tuned tag from the blog recipe.
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -20,8 +25,6 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-EP_SIZE=${EP_SIZE:-1}
-DP_ATTENTION=${DP_ATTENTION:-false}
 if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
     MAX_MODEL_LEN=1000000
 fi
@@ -60,25 +63,6 @@ case "$OFFLOADING" in
         ;;
 esac
 
-PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-if [ "$DP_ATTENTION" = "true" ]; then
-    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
-fi
-
-EP_ARGS=()
-if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
-fi
-
-# Mega-MoE backend and the lower GMU only kick in on the DP-attn path,
-# per the vLLM v0.20.0 DeepSeek-V4-Pro recipe.
-GMU_ARGS=()
-MOE_ARGS=()
-if [ "$DP_ATTENTION" = "true" ]; then
-    GMU_ARGS=(--gpu-memory-utilization 0.85)
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
-
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
@@ -90,19 +74,15 @@ vllm serve "$MODEL" \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
-"${PARALLEL_ARGS[@]}" \
-"${EP_ARGS[@]}" \
-"${GMU_ARGS[@]}" \
-"${MOE_ARGS[@]}" \
+--enable-expert-parallel \
+--data-parallel-size "$TP" \
 --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
 --reasoning-parser deepseek_v4 \
---max-cudagraph-capture-size 2048 \
 --max-model-len "$MAX_MODEL_LEN" \
---max-num-batched-tokens 2048 \
 --max-num-seqs "$CONC" \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!

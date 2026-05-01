@@ -1734,7 +1734,7 @@ dsv4-fp4-b200-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:deepseekv4-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
@@ -1754,18 +1754,28 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
+    # NOTE: agentic-coding overrides image and parallelism layout to match the
+    # official vLLM blog recipe for DSv4-Pro 8xB200 / 8xB300
+    # (https://vllm.ai/blog/deepseek-v4): vllm/vllm-openai:deepseekv4-cu130
+    # image, DP=8 + EP=8 (dp-attn=true), FULL_AND_PIECEWISE cudagraph capture.
+    # The fixed-seq-len entries above use TP-only at low conc which works for
+    # short sequences but consumes too much per-rank cudagraph workspace at
+    # 1M max-model-len, so agentic uses the recipe layout exclusively. Image
+    # override is at the search-space level — matrix logic doesn't currently
+    # honor that, so we instead pin the recipe image at the config-block level
+    # (this also affects fixed-seq-len, which is acceptable since the recipe
+    # image is a strict superset of v0.20.0-cu130 for DSv4-Pro).
     agentic-coding:
-    # Initial sweep for DSv4-Pro fp4 on B200. TP/EP layout mirrors the
-    # fixed-seq-len low-conc entry (tp=8, ep=1, no DP-attn). DSv4 uses MLA so
-    # the per-token KV cache is much smaller than dense attention; the KV
-    # cliff should sit far above the typical agentic working range, so the
-    # initial conc list stays in [1, 64] to map the throughput/latency curve
-    # before pushing the cliff. cpu-offload conc list overlaps the tail of
+    # Initial sweep for DSv4-Pro fp4 on B200, DP=8 + EP=8 (per blog recipe).
+    # DSv4 uses hybrid CSA+HCA attention with ~10% of V3.2's KV per token at
+    # 1M context, so the KV cliff should sit far above the typical agentic
+    # working range. Initial conc list stays in [1, 64] to map the
+    # throughput/latency curve. cpu-offload conc list overlaps the tail of
     # none for direct same-conc comparison.
     - duration: 1800
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -2623,7 +2633,7 @@ dsv4-fp8-h200-vllm:
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
   # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:deepseekv4-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -2647,18 +2657,22 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, conc-start: 1, conc-end: 64 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
+    # NOTE: agentic-coding uses the official vLLM blog recipe layout for
+    # DSv4-Pro 8xB200 / 8xB300 (https://vllm.ai/blog/deepseek-v4): DP=8 + EP=8
+    # (dp-attn=true) with FULL_AND_PIECEWISE cudagraph capture. See B200
+    # config-block comment above for rationale on diverging from the
+    # fixed-seq-len TP-only layout at low conc.
     agentic-coding:
-    # Initial sweep for DSv4-Pro fp4 on B300. TP/EP layout mirrors the
-    # fixed-seq-len low-conc entry (tp=8, ep=1, no DP-attn). DSv4 uses MLA so
-    # the per-token KV cache is much smaller than dense attention; the KV
-    # cliff should sit far above the typical agentic working range, so the
-    # initial conc list stays in [1, 64] to map the throughput/latency curve
-    # before pushing the cliff. cpu-offload conc list overlaps the tail of
+    # Initial sweep for DSv4-Pro fp4 on B300, DP=8 + EP=8 (per blog recipe).
+    # DSv4 uses hybrid CSA+HCA attention with ~10% of V3.2's KV per token at
+    # 1M context, so the KV cliff should sit far above the typical agentic
+    # working range. Initial conc list stays in [1, 64] to map the
+    # throughput/latency curve. cpu-offload conc list overlaps the tail of
     # none for direct same-conc comparison.
     - duration: 1800
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
