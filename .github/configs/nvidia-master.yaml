@@ -1734,7 +1734,7 @@ dsv4-fp4-b200-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
@@ -1754,17 +1754,12 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-    # NOTE: agentic-coding overrides image and parallelism layout to match the
-    # official vLLM blog recipe for DSv4-Pro 8xB200 / 8xB300
-    # (https://vllm.ai/blog/deepseek-v4): vllm/vllm-openai:deepseekv4-cu130
-    # image, DP=8 + EP=8 (dp-attn=true), FULL_AND_PIECEWISE cudagraph capture.
-    # The fixed-seq-len entries above use TP-only at low conc which works for
-    # short sequences but consumes too much per-rank cudagraph workspace at
-    # 1M max-model-len, so agentic uses the recipe layout exclusively. Image
-    # override is at the search-space level — matrix logic doesn't currently
-    # honor that, so we instead pin the recipe image at the config-block level
-    # (this also affects fixed-seq-len, which is acceptable since the recipe
-    # image is a strict superset of v0.20.0-cu130 for DSv4-Pro).
+    # NOTE: agentic-coding adopts the parallelism layout from the official
+    # vLLM blog recipe for DSv4-Pro 8xB200 / 8xB300
+    # (https://vllm.ai/blog/deepseek-v4): DP=8 + EP=8 (dp-attn=true) with
+    # FULL_AND_PIECEWISE cudagraph capture. The fixed-seq-len entries above
+    # use TP-only at low conc which works for short sequences but consumes
+    # too much per-rank cudagraph workspace at 1M max-model-len.
     agentic-coding:
     # Initial sweep for DSv4-Pro fp4 on B200, DP=8 + EP=8 (per blog recipe).
     # DSv4 uses hybrid CSA+HCA attention with ~10% of V3.2's KV per token at
@@ -2633,7 +2628,7 @@ dsv4-fp8-h200-vllm:
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
   # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu130
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300

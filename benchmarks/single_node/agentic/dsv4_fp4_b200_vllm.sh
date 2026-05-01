@@ -10,8 +10,9 @@ set -x
 # max-num-batched-tokens / max-cudagraph-capture-size so neither do we; we only
 # pin max-model-len (1M, full DSv4 context) and max-num-seqs (per-rank cap).
 # --no-enable-prefix-caching is intentionally absent (the agentic trace replay
-# IS the prefix-caching benchmark). Image vllm/vllm-openai:deepseekv4-cu130 is
-# the DSv4-tuned tag from the blog recipe.
+# IS the prefix-caching benchmark). Image is vllm/vllm-openai:v0.20.0-cu130
+# (the DSv4-tuned deepseekv4-cu130 tag mentioned in the blog isn't currently
+# pinned in this repo's pipeline).
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
