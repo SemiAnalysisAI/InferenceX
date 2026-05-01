@@ -2177,3 +2177,4 @@
     - "Fix result file parsing for non-disagg multinode benchmarks (decode num-worker=0)"
     - "sa-bench result files without _ctx_/_gen_ suffix were silently dropped from the summary table"
     - "Fix applies to all 7 multinode launch scripts, the benchmark-multinode-tmpl workflow, and process_result.py"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1256
