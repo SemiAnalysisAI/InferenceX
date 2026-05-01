@@ -229,12 +229,12 @@ else
 fi
 
 # Apply an ATOM DSv4 overlay over the image's wheel-installed atom. The default
-# fork commit is ROCm/ATOM#650 at af17eb8 plus the local multi-request cache-slot
-# fix and AITER sparse_attn/Indexer dispatch below. Keep ATOM_PR_* overridable so
-# this can be pointed back at ROCm/ATOM#650 while debugging upstream movement.
+# fork commit is ROCm/ATOM#650 head plus AITER sparse_attn/Indexer dispatch.
+# Keep ATOM_PR_* overridable so this can be pointed back at ROCm/ATOM#650 while
+# debugging upstream movement.
 ATOM_PR_REPO=${ATOM_PR_REPO:-https://github.com/Oseltamivir/ATOM.git}
-ATOM_PR_REF=${ATOM_PR_REF:-dsv4-aiter-sparse-indexer}
-ATOM_PR_SHA=${ATOM_PR_SHA:-0ddf9a9a7919631a9a89073d624bd25b16014f17}
+ATOM_PR_REF=${ATOM_PR_REF:-dsv4-pr650-head-aiter-sparse}
+ATOM_PR_SHA=${ATOM_PR_SHA:-d1a78e61af1a99fc2a156b40d45d011ccb648b5c}
 export ATOM_PR_DIR="/tmp/atom-pr650"
 
 if [ ! -d "$ATOM_PR_DIR/.git" ]; then
@@ -265,7 +265,7 @@ from pathlib import Path
 
 path = Path("atom/model_ops/sparse_attn_v4.py")
 source = path.read_text()
-marker = "ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS"
+marker = "ATOM_DSV4_AITER_SPARSE_ATTN"
 if marker not in source:
     source = source.replace(
         "from typing import Tuple\n\nimport torch\n",
@@ -380,7 +380,8 @@ PYEOF
     # MoE/FFN layer-by-layer. This fixes correctness for CONC>1 and avoids the
     # worst all-layers-per-request loop until upstream vectorizes the DSv4
     # sparse-attention/cache path.
-    if ! grep -q 'def forward_batched' atom/models/deepseek_v4.py; then
+    if ! grep -q 'def forward_batched' atom/models/deepseek_v4.py \
+        && ! grep -q '_v4_get_seq_metadata' atom/models/deepseek_v4.py; then
     sed 's/^$/ /' <<'PATCH' | git apply --recount
 diff --git a/atom/model_engine/llm_engine.py b/atom/model_engine/llm_engine.py
 index 8de9532..ddde446 100644

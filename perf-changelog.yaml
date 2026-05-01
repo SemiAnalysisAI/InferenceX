@@ -2053,3 +2053,11 @@
     - "Add TP=4 DSv4 ATOM sweep points at conc=1/2/4 for 1k1k and 8k1k"
     - "Profile data shows TP=8 DSv4 ATOM decode/prefill is dominated by aiter cross_device_reduce kernels (~49% of GPU kernel time), so TP=4 tests whether fewer ranks reduces the communication bottleneck enough to improve per-GPU throughput"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Bump the ATOM DSv4 overlay from Oseltamivir/ATOM@0ddf9a9 to Oseltamivir/ATOM@d1a78e6, rebased on current ROCm/ATOM#650 head a709564"
+    - "This picks up PR650's CPU metadata path, paged compressed KV plumbing, Triton SWA writes, and compressor state-write plumbing while keeping the AITER sparse_attn/Indexer dispatch"
+    - "Skip the older local multi-request patch when the newer PR650 _v4_get_seq_metadata path is present"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
