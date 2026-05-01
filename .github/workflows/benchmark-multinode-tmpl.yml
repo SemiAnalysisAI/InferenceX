@@ -208,12 +208,10 @@ jobs:
               exit 1
             fi
           elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-            # Agentic now mirrors fixed-seq-len: one server, multiple concs,
-            # per-conc result JSONs at ${RESULT_FILENAME}_conc${N}.json.
-            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-              echo "Found agentic result files: $(ls ${RESULT_FILENAME}_*.json)"
+            if [ -f "${RESULT_FILENAME}.json" ]; then
+              echo "Found agentic result file: ${RESULT_FILENAME}.json"
             else
-              echo "Run failed: No agentic benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
+              echo "Run failed: Agentic benchmark result ${RESULT_FILENAME}.json not found." >&2
               exit 1
             fi
           else
@@ -260,21 +258,18 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}_*.json
+          path: ${{ env.RESULT_FILENAME }}.json
 
       - name: Dump agentic benchmark log to GHA log
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
         run: |
-          shopt -s nullglob
-          # Per-conc subdirs (new layout) plus the legacy flat layout for safety.
-          for log in LOGS/agentic/conc*/benchmark.log \
-                     LOGS/agentic/conc*/workload_distribution_summary.txt \
-                     LOGS/agentic/benchmark.log \
-                     LOGS/agentic/workload_distribution_summary.txt; do
+          for log in LOGS/agentic/benchmark.log LOGS/agentic/workload_distribution_summary.txt; do
             if [ -f "$log" ]; then
               echo "::group::$log"
               cat "$log"
               echo "::endgroup::"
+            else
+              echo "$log not found"
             fi
           done
 
@@ -284,12 +279,6 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/conc*/benchmark.log
-            LOGS/agentic/conc*/benchmark_command.txt
-            LOGS/agentic/conc*/workload_distribution_summary.txt
-            LOGS/agentic/conc*/workload_distribution_plots.png
-            LOGS/agentic/conc*/trace_replay/detailed_results.csv
-            LOGS/agentic/conc*/trace_replay/debug_trace.jsonl
             LOGS/agentic/benchmark.log
             LOGS/agentic/benchmark_command.txt
             LOGS/agentic/workload_distribution_summary.txt
