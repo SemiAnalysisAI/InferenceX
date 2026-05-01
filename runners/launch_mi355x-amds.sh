@@ -185,7 +185,7 @@ else
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
     LEGACY_SQUASH_FILE=""
-    if [[ "$IMAGE" == "rocm/sgl-dev:rocm720-deepseek-v4-mi35x" ]]; then
+    if [[ "$IMAGE" == "rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428" ]]; then
         LEGACY_SQUASH_FILE="/var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh"
     fi
 

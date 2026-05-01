@@ -2048,11 +2048,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
+    - glm5-fp8-mi355x-atom
+  description:
+    - "Update GLM-5 FP8 MI355X ATOM benchmark: new image, add TP=4, set gpu-memory-utilization"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
+  
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
-    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
+    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:v0.5.10.post1-rocm700-mi35x-20260428"
     - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
     - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime"
     - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 and SGLANG_REASONING_EFFORT=max to match the FP4 Models update"
-    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
+    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm700 squash import on first launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244
