@@ -75,6 +75,7 @@ if is_multinode:
     decode_ep = int(multinode_env['DECODE_EP'])
     decode_dp_attn = multinode_env['DECODE_DP_ATTN']
 
+    total_gpus = prefill_gpus + decode_gpus
     multi_node_data = {
         'is_multinode': True,
         'prefill_tp': prefill_tp,
@@ -87,8 +88,8 @@ if is_multinode:
         'decode_num_workers': decode_num_workers,
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / (prefill_gpus + decode_gpus),
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / decode_gpus,
+        'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
+        'output_tput_per_gpu': float(bmk_result['output_throughput']) / (decode_gpus if decode_gpus > 0 else total_gpus),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
 

@@ -2170,3 +2170,10 @@
     - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
     - "ep=1 entries (dp-attn true and false) are unaffected by the EP=8 regression"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Fix result file parsing for non-disagg multinode benchmarks (decode num-worker=0)"
+    - "sa-bench result files without _ctx_/_gen_ suffix were silently dropped from the summary table"
+    - "Fix applies to all 7 multinode launch scripts, the benchmark-multinode-tmpl workflow, and process_result.py"
