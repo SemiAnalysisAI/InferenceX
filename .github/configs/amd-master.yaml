@@ -364,7 +364,7 @@ glm5-fp8-mi355x-sglang:
     - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
+  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -375,11 +375,13 @@ glm5-fp8-mi355x-sglang-mtp:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+    - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
 
 glm5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
