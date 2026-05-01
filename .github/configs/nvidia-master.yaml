@@ -5992,7 +5992,7 @@ dsr1-fp4-gb300-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
-  runner: gb300
+  runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
   multinode: true
