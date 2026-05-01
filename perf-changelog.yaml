@@ -2069,3 +2069,15 @@
     - "Recipes cover 8k/1k aggregate TP8 low-latency conc=1, low-latency bridge 1P DEP8 + 4D TP8 no-offload conc=16/32/64, mid 1P/1D DEP8 MegaMOE conc=128, and high-throughput 2P/1D DEP8 MegaMOE conc=1024"
     - "All recipes enable FP4 indexer cache and speculative-config mtp with num_speculative_tokens=2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1242
+
+- config-keys:
+    - glm5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add GLM-5 MXFP4 MI355X SGLang MTP benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.10.post1-rocm700-mi35x-20260428"
+    - "Model: amd/GLM-5-MXFP4"
+    - "EAGLE speculative decoding (num-steps=3, eagle-topk=1, num-draft-tokens=4) behind SGLANG_ENABLE_SPEC_V2=1"
+    - "Image ships transformers with glm_moe_dsa support, so no extra pip install is needed (unlike glm5-fp8-mi355x-sglang)"
+    - "Configs: 1k1k and 8k1k, TP=8 conc 4-64 with spec-decoding=mtp"
+    - "Requires benchmark_serving.py tokenizer fix: https://github.com/SemiAnalysisAI/InferenceX/pull/1253"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1254
