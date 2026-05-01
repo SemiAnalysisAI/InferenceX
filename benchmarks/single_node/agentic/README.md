@@ -1,0 +1,8 @@
+# Agentic single-node benchmarks
+
+**MVP / experimental.** Nothing in this directory is an official InferenceX
+benchmark. Results are not published on https://inferencex.com and are not
+intended to be cited.
+
+These launchers exist to develop and validate the agentic-coding scenario
+type before it is promoted to first-class status.
