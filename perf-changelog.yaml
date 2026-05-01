@@ -2061,3 +2061,11 @@
     - "This picks up PR650's CPU metadata path, paged compressed KV plumbing, Triton SWA writes, and compressor state-write plumbing while keeping the AITER sparse_attn/Indexer dispatch"
     - "Skip the older local multi-request patch when the newer PR650 _v4_get_seq_metadata path is present"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Retile the forked AITER DSv4 sparse MQA sink from 8x64 to 4x128 by default, keeping the same accumulator footprint while reducing repeated QK score work for 512-wide values"
+    - "Bump sparse/indexer overlay pins to Oseltamivir/aiter@023eb3b and Oseltamivir/ATOM@486d35f"
+    - "Expose ATOM_DSV4_AITER_SPARSE_ATTN_{TILE_K,BLOCK_H,BLOCK_D,SCORE_D} for profile-guided sparse attention tuning"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

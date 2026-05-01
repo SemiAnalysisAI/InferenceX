@@ -60,8 +60,9 @@ export AITER_LOG_LEVEL=WARNING
 #   * sunway513/aiter@e450e4d adds DSv4 FP4 MoE tuned rows that route
 #     eligible token counts to FlyDSL FP4 MoE kernels instead of default CK
 #     heuristics when the image has the optional flydsl package.
-#   * Oseltamivir/aiter@083a837 adds DSv4 sparse MQA sink and Indexer
-#     scorer/top-k Triton ops so ATOM can avoid the PR650 Torch fallback.
+#   * Oseltamivir/aiter@023eb3b adds DSv4 sparse MQA sink and Indexer
+#     scorer/top-k Triton ops so ATOM can avoid the PR650 Torch fallback, plus
+#     a 4x128 sparse-attn tile that reduces repeated QK score work for D=512.
 #
 # The open performance PRs cherry-pick cleanly over the pinned main SHA as
 # of 2026-04-29.
@@ -83,7 +84,7 @@ if [ "${AITER_DSV4_PERF_STACK:-1}" = "1" ]; then
     AITER_DSV4_SPARSE_INDEXER=${AITER_DSV4_SPARSE_INDEXER:-1}
     AITER_DSV4_SPARSE_INDEXER_REPO=${AITER_DSV4_SPARSE_INDEXER_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_DSV4_SPARSE_INDEXER_REF=${AITER_DSV4_SPARSE_INDEXER_REF:-dsv4-sparse-indexer}
-    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-083a837de5c44080b18b18682f2e7f611717a06b}
+    AITER_DSV4_SPARSE_INDEXER_SHA=${AITER_DSV4_SPARSE_INDEXER_SHA:-023eb3bc190cd58646517a6c96a3b6b799bc1f40}
 
     rm -rf "$AITER_PERF_DIR"
     git clone --filter=blob:none "$AITER_PERF_REPO" "$AITER_PERF_DIR"
@@ -234,7 +235,7 @@ fi
 # debugging upstream movement.
 ATOM_PR_REPO=${ATOM_PR_REPO:-https://github.com/Oseltamivir/ATOM.git}
 ATOM_PR_REF=${ATOM_PR_REF:-dsv4-pr650-head-aiter-sparse}
-ATOM_PR_SHA=${ATOM_PR_SHA:-d1a78e61af1a99fc2a156b40d45d011ccb648b5c}
+ATOM_PR_SHA=${ATOM_PR_SHA:-486d35fdeeb50c471329c2cd08681df9c3ad53ce}
 export ATOM_PR_DIR="/tmp/atom-pr650"
 
 if [ ! -d "$ATOM_PR_DIR/.git" ]; then
@@ -288,6 +289,18 @@ if marker not in source:
                 os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_SIZE", "128")
                 or "128"
             )
+            tile_k = int(
+                os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_TILE_K", "64") or "64"
+            )
+            block_h = int(
+                os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_H", "4") or "4"
+            )
+            block_d = int(
+                os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_D", "128") or "128"
+            )
+            score_d = int(
+                os.environ.get("ATOM_DSV4_AITER_SPARSE_ATTN_SCORE_D", "64") or "64"
+            )
             q_flat = q.reshape(B * M, H, D).contiguous()
             topk_flat = topk_idxs.reshape(B * M, K).contiguous().int()
             num_blocks = (N + block_size - 1) // block_size
@@ -320,6 +333,10 @@ if marker not in source:
                 topk_flat,
                 block_table,
                 attn_sink.float().contiguous(),
+                tile_k=tile_k,
+                block_h=block_h,
+                block_d=block_d,
+                score_d=score_d,
             )
             return out.view(B, M, H, D).to(out_dtype)
         except Exception as exc:
@@ -1201,6 +1218,10 @@ BLOCK_SIZE=${BLOCK_SIZE:-16}
 export ATOM_DSV4_AITER_SPARSE_ATTN=${ATOM_DSV4_AITER_SPARSE_ATTN:-1}
 export ATOM_DSV4_AITER_INDEXER=${ATOM_DSV4_AITER_INDEXER:-1}
 export ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS=${ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS:-256}
+export ATOM_DSV4_AITER_SPARSE_ATTN_TILE_K=${ATOM_DSV4_AITER_SPARSE_ATTN_TILE_K:-64}
+export ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_H=${ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_H:-4}
+export ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_D=${ATOM_DSV4_AITER_SPARSE_ATTN_BLOCK_D:-128}
+export ATOM_DSV4_AITER_SPARSE_ATTN_SCORE_D=${ATOM_DSV4_AITER_SPARSE_ATTN_SCORE_D:-64}
 # --enforce-eager is required: ROCm/ATOM#650 (PR1 skeleton) has no CUDAGraph
 # support yet (deferred to a follow-up PR). max-num-seqs is sized to the
 # client concurrency with a floor at 4 — the ATOM default (512) makes the
