@@ -305,7 +305,7 @@ class TestMarkEvalEntries:
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8, 16, 32],
+                "conc": [MIN_EVAL_CONC // 2, MIN_EVAL_CONC, MIN_EVAL_CONC * 2],
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -327,14 +327,14 @@ class TestMarkEvalEntries:
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8],
+                "conc": [MIN_EVAL_CONC // 2],
             },
         ]
 
         result = mark_eval_entries(matrix_values)
 
         assert result[0]["run-eval"] is True
-        assert result[0]["eval-conc"] == 32
+        assert result[0]["eval-conc"] == MIN_EVAL_CONC * 2
         assert result[1]["run-eval"] is False
 
     def test_marks_highest_and_median_conc(self):
@@ -1928,4 +1928,3 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-

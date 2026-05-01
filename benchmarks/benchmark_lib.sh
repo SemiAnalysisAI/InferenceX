@@ -741,7 +741,8 @@ run_lm_eval() {
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local eval_limit="${EVAL_LIMIT:-}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -751,6 +752,7 @@ run_lm_eval() {
             --gen-max-tokens) eval_context_len="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
+            --limit)          eval_limit="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
@@ -772,6 +774,7 @@ run_lm_eval() {
         lm_eval_base_url="$openai_completions_base"
         lm_eval_eos_string="${EVAL_EOS_STRING:-<｜end▁of▁sentence｜>}"
         lm_eval_tokenizer_args="tokenizer_backend=None,tokenized_requests=False"
+        eval_limit="${eval_limit:-40}"
         echo "Using DeepSeek-V4 eval prompt encoding via utils/bench_serving/encoding_dsv4.py"
     else
         unset EVAL_DSV4_CHAT_TEMPLATE
@@ -790,11 +793,17 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
+    local limit_args=()
+    if [ -n "$eval_limit" ]; then
+        limit_args=(--limit "$eval_limit")
+        echo "Eval sample limit: ${eval_limit}"
+    fi
     set -x
     python3 -m lm_eval --model "${lm_eval_model}" --apply_chat_template \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
+      "${limit_args[@]}" \
       --model_args "model=${MODEL_NAME},base_url=${lm_eval_base_url},api_key=${OPENAI_API_KEY},eos_string=${lm_eval_eos_string},max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,${lm_eval_tokenizer_args},max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
