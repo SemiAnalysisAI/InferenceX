@@ -1223,28 +1223,28 @@ dsr1-fp4-mi355x-sglang-disagg-exp:
   multinode: true
   disagg: true
   seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    # non-MTP configurations
-    # 1*DEP4+ 1*DEP8
-    - spec-decoding: "none"
-      conc-list: [ 1024, 2048, 4096 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=1"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=1"
-        - "DECODE_MTP_SIZE=0"
+  # - isl: 1024
+  #   osl: 1024
+  #   search-space:
+  #   # non-MTP configurations
+  #   # 1*DEP4+ 1*DEP8
+  #   - spec-decoding: "none"
+  #     conc-list: [ 1024, 2048, 4096 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 4
+  #       ep: 4
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=1"
+  #       - "DECODE_MTP_SIZE=0"
 
   - isl: 8192
     osl: 1024
@@ -1252,7 +1252,7 @@ dsr1-fp4-mi355x-sglang-disagg-exp:
     # non-MTP configurations
     # 2*DEP8 + 1*DEP8
     - spec-decoding: "none"
-      conc-list: [  1024, 2048 ]
+      conc-list: [ 512, 1024, 2048, 4096 ]
       prefill:
         num-worker: 2
         tp: 8
@@ -1280,28 +1280,28 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-exp:
   multinode: true
   disagg: true
   seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    # MTP configurations
-    # 1*DEP4+ 1*DEP8
-    - spec-decoding: "mtp"
-      conc-list: [ 1024, 2048, 4096 ]
-      prefill:
-        num-worker: 1
-        tp: 4
-        ep: 4
-        dp-attn: true
-        additional-settings:
-        - "PREFILL_NODES=1"
-      decode:
-        num-worker: 1
-        tp: 8
-        ep: 8
-        dp-attn: true
-        additional-settings:
-        - "DECODE_NODES=1"
-        - "DECODE_MTP_SIZE=1"
+  # - isl: 1024
+  #   osl: 1024
+  #   search-space:
+  #   # MTP configurations
+  #   # 1*DEP4+ 1*DEP8
+  #   - spec-decoding: "mtp"
+  #     conc-list: [ 1024, 2048, 4096 ]
+  #     prefill:
+  #       num-worker: 1
+  #       tp: 4
+  #       ep: 4
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "PREFILL_NODES=1"
+  #     decode:
+  #       num-worker: 1
+  #       tp: 8
+  #       ep: 8
+  #       dp-attn: true
+  #       additional-settings:
+  #       - "DECODE_NODES=1"
+  #       - "DECODE_MTP_SIZE=1"
 
 
   - isl: 8192
@@ -1310,7 +1310,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-exp:
     # MTP configurations
     # 2*DEP8 + 1*DEP8
     - spec-decoding: "mtp"
-      conc-list: [ 1024, 2048 ]
+      conc-list: [ 512, 1024, 2048, 4096 ]
       prefill:
         num-worker: 2
         tp: 8
