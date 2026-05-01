@@ -2042,6 +2042,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1157
 
 - config-keys:
+    - glm5-fp8-mi355x-sglang-mtp
+  description:
+    - "Add GLM5 FP8 MTP MI355X SGLang Support" 
+    - "Container : lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1122
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated Dynamo vLLM benchmarks at 8k/1k"
