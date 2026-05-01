@@ -17,6 +17,31 @@ fi
 
 hf download "$MODEL"
 
+# Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
+# rocm/sgl-dev:rocm720-deepseek-v4-mi35x image ships with. The image's sglang
+# is moving fast and we want a reproducible pin per benchmark run. Bump
+# SGL_PR_SHA when the branch advances.
+SGL_PR_SHA="18afbf151a2992b06a089191769b299629ed73dd"
+SGL_PR_DIR="/tmp/sglang-amd-dsv4"
+
+if [ ! -d "$SGL_PR_DIR/.git" ]; then
+    git clone --filter=blob:none https://github.com/sgl-project/sglang.git "$SGL_PR_DIR"
+fi
+(
+    cd "$SGL_PR_DIR"
+    git fetch --depth=1 origin "$SGL_PR_SHA" 2>/dev/null \
+        || git fetch --depth=1 origin amd/deepseek_v4
+    git checkout --force "$SGL_PR_SHA"
+    test "$(git rev-parse HEAD)" = "$SGL_PR_SHA"
+
+    # Reinstall just the Python package; the image already has the ROCm
+    # kernel deps (aiter, triton, tilelang, torch) at versions matched to
+    # this branch, so --no-deps avoids pip resolving them against PyPI.
+    pip install --no-build-isolation --no-deps --force-reinstall -e python/
+)
+
+python3 -c "import sglang; print(f'sglang {sglang.__version__} from {sglang.__path__[0]}')"
+
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
 # by writing a patched config to /tmp, but in practice isn't catching the error
@@ -39,7 +64,12 @@ else:
     print(f"No patch needed: model_type is {config.get('model_type')!r}")
 PYEOF
 
-# DSv4-specific SGLang env vars (from sgl-project/sglang#23608)
+# DSv4-specific SGLang env vars. Mirrors python/run_dsv4.sh on the
+# amd/deepseek_v4 branch (commented FP8 path) at SGL_PR_SHA. The branch's
+# FP4 Models integration commit (33de1e64) flipped SGLANG_FORCE_TRITON_MOE_FP8
+# from 1 to 0; with it set to 0, FP8 MoE dispatches through aiter (shuffled
+# weights + aiter fused_moe) instead of the triton MoE fallback.
+export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
@@ -58,7 +88,7 @@ export SGLANG_DSV4_FP4_EXPERTS=false
 export SGLANG_OPT_DPSK_V4_RADIX=0
 export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
 export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
-export SGLANG_FORCE_TRITON_MOE_FP8=1
+export SGLANG_FORCE_TRITON_MOE_FP8=0
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}

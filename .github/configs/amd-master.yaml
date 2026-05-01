@@ -1497,8 +1497,8 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=1"
 
 dsv4-fp8-mi355x-sglang:
-  image: rocm/sgl-dev:deepseek-v4-mi35x
-  model: sgl-project/DeepSeek-V4-Pro-FP8
+  image: rocm/sgl-dev:rocm720-deepseek-v4-mi35x
+  model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
   precision: fp8
