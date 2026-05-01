@@ -1625,7 +1625,6 @@ dsv4-fp4-mi355x-atom:
   precision: fp4
   framework: atom
   multinode: false
-  seq-len-configs:
   scenarios:
     fixed-seq-len:
     - isl: 1024
