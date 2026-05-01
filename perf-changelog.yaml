@@ -2063,3 +2063,9 @@
     - "Recipes cover 8k/1k aggregate TP8 low-latency conc=1, low-latency bridge 1P DEP8 + 4D TP8 no-offload conc=16/32/64, mid 1P/1D DEP8 MegaMOE conc=128, and high-throughput 2P/1D DEP8 MegaMOE conc=1024"
     - "All recipes enable FP4 indexer cache and speculative-config mtp with num_speculative_tokens=2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1242
+
+- config-keys:
+    - gptoss-fp4-h100-vllm
+  description:
+    - "Re-run GPT-OSS FP4 H100 vLLM sweep to validate unofficial-run-visualizer PR comment posts on completion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
