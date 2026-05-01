@@ -7,13 +7,36 @@
 
 set -x
 
-if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Weights staged on the shared VAST mount; no compute-node-local
-    # NVMe on cw. The exact upstream recipes refer to this model as
-    # `dspro`.
-    export MODEL_PATH="/mnt/vast/models/dsv4/"
+if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # Weights staged on compute-node-local NVMe.
+    export MODEL_PATH="/scratch/models/dsv4/"
+
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        # Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
+        # (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
+        # generation). The single-threaded random prompt generator in the
+        # upstream sa-bench dominates bench startup on the 7p1d/conc=8192
+        # sweep (~50 min for the main pass alone before the first HTTP
+        # request leaves the client). The fork bumps that to ~1 min via
+        # multiprocessing.Pool with `--random-num-workers 48`.
+        #
+        # TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
+        # (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
+        SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
+        SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="aflowers/gb200-dsv4-recipes"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4"
+        SRT_RECIPE_DST="recipes/vllm/deepseek-v4"
+    else
+        echo "Unsupported framework on gb300-cw for dsv4/fp4: $FRAMEWORK. Currently supported: dynamo-sglang, dynamo-vllm"
+        exit 1
+    fi
 else
-    echo "Unsupported model prefix/precision/framework combination on gb300-cw: $MODEL_PREFIX/$PRECISION/$FRAMEWORK. Currently supported: dsv4/fp4/dynamo-sglang"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4"
     exit 1
 fi
 
@@ -33,18 +56,6 @@ export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 NGINX_IMAGE="nginx:1.27.4"
-# Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
-# (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
-# generation). The single-threaded random prompt generator in the
-# upstream sa-bench dominates bench startup on the 7p1d/conc=8192
-# sweep (~50 min for the main pass alone before the first HTTP
-# request leaves the client). The fork bumps that to ~1 min via
-# multiprocessing.Pool with `--random-num-workers 48`.
-#
-# TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
-# (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
-SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
-SRT_SLURM_RECIPES_COMMIT="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
 # `squash_dupe` instead of `squash` to use '_'-separated names: srtctl /
@@ -52,33 +63,29 @@ SRT_SLURM_RECIPES_COMMIT="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
 # old /mnt/vast/squash dir contains '+'-separated files from prior runs.
 SQUASH_DIR="/mnt/vast/squash_dupe"
 mkdir -p "$SQUASH_DIR"
-# Compute nodes (slurm-gb300-138-*, slurm-gb300-139-*) are aarch64; the
-# image `lmsysorg/sglang:deepseek-v4-grace-blackwell` is published as
-# arm64-only. The CI runner pod is x86_64 and (a) cannot run
-# `enroot import` for the arm64 manifest because `enroot-aufs2ovlfs`
-# needs CAP_SYS_ADMIN that the pod lacks ("Operation not permitted"),
-# and (b) even with `--arch aarch64` the conversion still fails on x86.
-# Per `https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780`
-# the import has to be dispatched to an arm64 compute node via srun.
-# To keep CI self-contained we instead pin to the pre-staged arm64 sqsh
-# under /mnt/vast/squash_dupe/ (refreshed manually by running that gist
-# script when the docker tag is updated). Filename suffix `_arm64`
-# distinguishes the working arm64 sqsh from any stale amd64 shadow.
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g')_arm64.sqsh"
 
-if [[ ! -f "$SQUASH_FILE" ]]; then
-    echo "ERROR: pre-staged arm64 sqsh missing: $SQUASH_FILE" >&2
-    echo "Refresh it on a GB300 compute node via the script in the gist:" >&2
-    echo "  https://gist.github.com/Fridge003/42c6001e0bb613acf0e411305b8ea780" >&2
-    exit 1
-fi
-if [[ ! -f "$NGINX_SQUASH_FILE" ]]; then
-    echo "ERROR: pre-staged arm64 nginx sqsh missing: $NGINX_SQUASH_FILE" >&2
-    echo "Run on an aarch64 host:" >&2
-    echo "  enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE" >&2
-    exit 1
-fi
+# Run the import on a compute node via srun, not on the runner pod:
+# the runner pod is x86_64 while the compute nodes are aarch64, so the
+# arm64 squash file has to be built on a compute node.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    srun --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --exclusive --time=180 bash -c "
+        exec 9>\"$lock\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
+        if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import: $squash'
+        else
+            rm -f \"$squash\"
+            enroot import -o \"$squash\" docker://$image
+        fi
+    "
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -103,15 +110,11 @@ fi
 
 git clone "$SRT_SLURM_RECIPES_REPO" "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
-git checkout "$SRT_SLURM_RECIPES_COMMIT"
+git checkout "$SRT_SLURM_RECIPES_REF"
 
-# Overlay the hand-rolled DSV4 sglang recipes onto the upstream srt-slurm
-# checkout. Mirrors launch_gb200-nv.sh's dynamo-sglang dsv4 branch:
-# destination must be `recipes/sglang/deepseek-v4` because
-# `additional-settings: CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/...`
-# in `.github/configs/nvidia-master.yaml` is what srtctl loads.
-mkdir -p recipes/sglang/deepseek-v4
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+# Overlay the hand-rolled DSV4 recipes onto the selected srt-slurm checkout.
+mkdir -p "$SRT_RECIPE_DST"
+cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -167,7 +170,7 @@ mkdir -p configs/dynamo-wheels
 
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300-CW (SGLang)
+# SRT SLURM Configuration for GB300-CW
 
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
@@ -193,6 +196,7 @@ model_paths:
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dynamo-vllm: ${SQUASH_FILE}
   dspro-0426: ${SQUASH_FILE}
   dspro-0426-nixl: ${SQUASH_FILE}
   dsv4-grace-blackwell: ${SQUASH_FILE}
