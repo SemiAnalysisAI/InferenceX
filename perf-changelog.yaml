@@ -1755,16 +1755,6 @@
     - "Topologies: low-conc 1p1d-dep8-tep8 (4 nodes, mirrored from NVIDIA srt-slurm PR #71 with offload kept and numa-bind dropped); mid 1p1d-dep8-dep16 (6 nodes) and high 3p1d-dep8-dep16 (10 nodes) hand-rolled, structurally derived from the kimi-k2.5 1k/1k pattern"
     - "Recipes stored under benchmarks/multi_node/srt-slurm-recipes/ and overlaid onto the upstream srt-slurm checkout at runtime"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1129
-
-
-- config-keys:
-    - glm5-fp8-mi355x-atom
-  description:
-    - "Update GLM-5 FP8 MI355X ATOM benchmark: new image, add TP=4, set gpu-memory-utilization"
-    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
-    - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
-    - "Add --gpu-memory-utilization 0.9 to server launch"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
   
 - config-keys:  
     - qwen3.5-fp4-mi355x-atom
@@ -2056,3 +2046,12 @@
     - updated sglang container image 
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
+- config-keys:
+    - glm5-fp8-mi355x-atom
+  description:
+    - "Update GLM-5 FP8 MI355X ATOM benchmark: new image, add TP=4, set gpu-memory-utilization"
+    - "Image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
+    - "Add --gpu-memory-utilization 0.9 to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
+  
