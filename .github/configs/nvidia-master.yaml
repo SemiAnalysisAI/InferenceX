@@ -2428,7 +2428,7 @@ kimik2.5-int4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.17.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200
@@ -2447,11 +2447,6 @@ kimik2.5-fp4-b200-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -3915,7 +3910,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -3936,15 +3931,6 @@ gptoss-fp4-h100-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h100-vllm:
   image: vllm/vllm-openai:v0.18.0
@@ -4128,7 +4114,7 @@ gptoss-fp4-h200-trt:
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -4151,17 +4137,6 @@ gptoss-fp4-h200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 32 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 1, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.18.0
