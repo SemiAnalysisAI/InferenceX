@@ -337,20 +337,6 @@ def main() -> None:
     other = len(experiments) - success - failed
     print(f"  SUCCESS: {success}, FAILED: {failed}, OTHER: {other}")
 
-    # Run overview plots (throughput vs concurrency, workload consistency)
-    try:
-        from plot_sweep_overview import plot_throughput_vs_concurrency, plot_workload_consistency
-        pareto_input = output_dir / "pareto_input"
-        summary_csv = pareto_input / "experiment_summary.csv"
-        if summary_csv.exists():
-            overview_df = pd.read_csv(summary_csv)
-            plot_throughput_vs_concurrency(overview_df, output_dir)
-            plot_workload_consistency(pareto_input, output_dir)
-        else:
-            print("Warning: No experiment_summary.csv found, skipping overview plots")
-    except Exception as e:
-        print(f"Warning: Overview plots failed: {e}")
-
     print(f"Aggregated results saved to {output_dir}")
 
 
