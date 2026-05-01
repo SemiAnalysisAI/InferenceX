@@ -541,7 +541,24 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
     return matrix_values
 
 
-def generate_test_config_sweep(args, all_config_data):
+def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter: str | None) -> list[str]:
+    if not runner_node_filter:
+        return [runner]
+
+    candidates = runner_data.get(runner, [])
+    if runner_node_filter in runner:
+        candidates = [runner, *candidates]
+
+    matches = []
+    seen = set()
+    for node in candidates:
+        if runner_node_filter in node and node not in seen:
+            matches.append(node)
+            seen.add(node)
+    return matches
+
+
+def generate_test_config_sweep(args, all_config_data, runner_data=None):
     """Generate full sweep for specific config keys.
 
     Validates that all specified config keys exist before generating.
@@ -550,6 +567,8 @@ def generate_test_config_sweep(args, all_config_data):
     resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
 
     matrix_values = []
+
+    runner_data = runner_data or {}
 
     for key in resolved_keys:
         val = all_config_data[key]
@@ -561,6 +580,10 @@ def generate_test_config_sweep(args, all_config_data):
         precision = val[Fields.PRECISION.value]
         framework = val[Fields.FRAMEWORK.value]
         runner = val[Fields.RUNNER.value]
+        runners_for_entry = _runner_values_for_filter(
+            runner, runner_data, getattr(args, 'runner_node_filter', None))
+        if not runners_for_entry:
+            continue
         disagg = val.get(Fields.DISAGG.value, False)
 
         # Build seq-len filter if --seq-lens was provided
@@ -607,25 +630,26 @@ def generate_test_config_sweep(args, all_config_data):
                             # No intersection with requested conc values; skip
                             continue
 
-                    entry = {
-                        Fields.IMAGE.value: image,
-                        Fields.MODEL.value: model,
-                        Fields.MODEL_PREFIX.value: model_code,
-                        Fields.PRECISION.value: precision,
-                        Fields.FRAMEWORK.value: framework,
-                        Fields.RUNNER.value: runner,
-                        Fields.ISL.value: isl,
-                        Fields.OSL.value: osl,
-                        Fields.SPEC_DECODING.value: spec_decoding,
-                        Fields.PREFILL.value: prefill,
-                        Fields.DECODE.value: decode,
-                        Fields.CONC.value: conc_values,
-                        Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                        Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                        Fields.DISAGG.value: disagg,
-                        Fields.RUN_EVAL.value: False,
-                    }
-                    matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
+                    for runner_value in runners_for_entry:
+                        entry = {
+                            Fields.IMAGE.value: image,
+                            Fields.MODEL.value: model,
+                            Fields.MODEL_PREFIX.value: model_code,
+                            Fields.PRECISION.value: precision,
+                            Fields.FRAMEWORK.value: framework,
+                            Fields.RUNNER.value: runner_value,
+                            Fields.ISL.value: isl,
+                            Fields.OSL.value: osl,
+                            Fields.SPEC_DECODING.value: spec_decoding,
+                            Fields.PREFILL.value: prefill,
+                            Fields.DECODE.value: decode,
+                            Fields.CONC.value: conc_values,
+                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                            Fields.DISAGG.value: disagg,
+                            Fields.RUN_EVAL.value: False,
+                        }
+                        matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:
                     # Single-node config
                     tp = bmk[Fields.TP.value]
@@ -657,26 +681,27 @@ def generate_test_config_sweep(args, all_config_data):
                             continue
 
                     for conc in conc_values:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.TP.value: tp,
-                            Fields.CONC.value: conc,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                            Fields.EP.value: ep if ep is not None else 1,
-                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                            Fields.RUN_EVAL.value: False,
-                        }
-                        matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                                Fields.EP.value: ep if ep is not None else 1,
+                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,
+                            }
+                            matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
     return matrix_values
 
@@ -947,7 +972,7 @@ def main():
         matrix_values = generate_runner_model_sweep_config(
             args, all_config_data, runner_data)
     elif args.command == 'test-config':
-        matrix_values = generate_test_config_sweep(args, all_config_data)
+        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
     else:
         parser.error(f"Unknown command: {args.command}")
         
