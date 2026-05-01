@@ -61,7 +61,6 @@ vllm serve $MODEL \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---no-enable-prefix-caching \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"

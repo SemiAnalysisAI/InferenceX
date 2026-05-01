@@ -81,7 +81,6 @@ $EP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=1 \
---no-enable-prefix-caching \
 --trust-remote-code \
 --max-num-seqs $CONC \
 --mm-encoder-tp-mode data \

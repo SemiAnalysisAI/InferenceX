@@ -70,7 +70,6 @@ $PARALLEL_ARGS \
 --max-cudagraph-capture-size 2048 \
 --max-num-seqs $CONC \
 --stream-interval 20 \
---no-enable-prefix-caching \
 --trust-remote-code \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!

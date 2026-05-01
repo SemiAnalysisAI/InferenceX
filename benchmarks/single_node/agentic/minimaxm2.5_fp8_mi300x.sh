@@ -68,7 +68,6 @@ $EP \
 --kv-cache-dtype fp8 \
 --block-size=32 \
 --max-num-seqs $CONC \
---no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
 --trust-remote-code \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &

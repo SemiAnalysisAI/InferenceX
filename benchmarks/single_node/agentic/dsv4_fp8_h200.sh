@@ -51,7 +51,6 @@ vllm serve $MODEL \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
---no-enable-prefix-caching \
 --enable-expert-parallel \
 --data-parallel-size $TP \
 --max-model-len $MAX_MODEL_LEN \
