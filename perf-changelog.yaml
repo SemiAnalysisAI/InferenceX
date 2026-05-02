@@ -2093,3 +2093,10 @@
     - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
     - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "Update Atom image to rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Search-space: expand conc-end to 256 for tp2/tp4 (1k/1k and 8k/1k); remove tp8/ep8 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1194
