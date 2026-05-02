@@ -78,7 +78,6 @@ export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
 export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
 export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
-export SGLANG_HACK_FLASHMLA_BACKEND=torch
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
@@ -132,6 +131,7 @@ python3 -m sglang.launch_server \
     --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
+    --chat-template "$(dirname "$0")/chat_templates/deepseek_v4_thinking.jinja" \
     --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
