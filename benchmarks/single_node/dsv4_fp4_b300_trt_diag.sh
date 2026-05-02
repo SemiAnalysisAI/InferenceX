@@ -2,10 +2,12 @@
 
 # Temporary B300/TRTLLM DeepSeek-V4 diagnostic.
 #
-# This isolates the current garbage-output failure by comparing the baseline
-# FP8 KV-cache path against two ablations:
-#   1. BF16 KV cache, same CUDA graph config.
-#   2. FP8 KV cache with CUDA graph disabled.
+# This isolates the current garbage-output failure by installing the optional
+# fast Hadamard transform dependency and comparing the baseline FP8 KV-cache
+# path against valid cache/config ablations:
+#   1. Default/auto KV cache, same CUDA graph config.
+#   2. NVFP4 KV cache, same CUDA graph config.
+#   3. FP8 KV cache with CUDA graph disabled.
 #
 # The runner routes only the representative B300 DeepSeek-V4 TRT job here.
 
@@ -91,7 +93,11 @@ enable_attention_dp: $DP_ATTENTION
 print_iter_log: true
 kv_cache_config:
     tokens_per_block: 128
-    dtype: $kv_dtype
+EOF
+        if [[ "$kv_dtype" != "unset" ]]; then
+            printf '    dtype: %s\n' "$kv_dtype"
+        fi
+        cat <<EOF
     free_gpu_memory_fraction: $KV_CACHE_FREE_MEM_FRACTION
     enable_block_reuse: false
 stream_interval: 10
@@ -157,6 +163,43 @@ cleanup_server() {
         done
         kill -9 "$server_pid" 2>/dev/null || true
         wait "$server_pid" 2>/dev/null || true
+    fi
+}
+
+ensure_fast_hadamard_transform() {
+    if [[ "${TRTLLM_DSV4_DIAG_INSTALL_FHT:-1}" != "1" ]]; then
+        log "TRTLLM_DSV4_DIAG_INSTALL_FHT!=1; not installing fast_hadamard_transform"
+        return 0
+    fi
+
+    if python3 - <<'PY' >/dev/null 2>&1
+import fast_hadamard_transform  # noqa: F401
+PY
+    then
+        log "fast_hadamard_transform already importable"
+        return 0
+    fi
+
+    log "fast_hadamard_transform missing; attempting runtime install"
+    set +e
+    python3 -m pip install --no-cache-dir --no-build-isolation \
+        "git+https://github.com/Dao-AILab/fast-hadamard-transform.git" \
+        2>&1 | tee -a "$SERVER_LOG"
+    local install_status=${PIPESTATUS[0]}
+    set -e
+
+    if [[ "$install_status" != "0" ]]; then
+        log "WARNING: fast_hadamard_transform install failed with status $install_status; continuing without it"
+        return 0
+    fi
+
+    if python3 - <<'PY' >/dev/null 2>&1
+import fast_hadamard_transform  # noqa: F401
+PY
+    then
+        log "fast_hadamard_transform import succeeded after install"
+    else
+        log "WARNING: fast_hadamard_transform still not importable after install"
     fi
 }
 
@@ -386,6 +429,7 @@ fi
 
 sanitize_slurm_mpi_env_for_trtllm
 bootstrap_trtllm_dsv4 || exit 1
+ensure_fast_hadamard_transform
 
 if [[ "$MODEL" != /* ]]; then
     hf download "$MODEL"
@@ -440,8 +484,9 @@ start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 trap 'stop_gpu_monitor' EXIT
 
 run_variant "baseline_fp8_graph" "fp8" "on" "$PORT_BASE"
-run_variant "bf16_kv_graph" "bfloat16" "on" "$((PORT_BASE + 1))"
-run_variant "fp8_no_cuda_graph" "fp8" "off" "$((PORT_BASE + 2))"
+run_variant "auto_kv_graph" "unset" "on" "$((PORT_BASE + 1))"
+run_variant "nvfp4_kv_graph" "nvfp4" "on" "$((PORT_BASE + 2))"
+run_variant "fp8_no_cuda_graph" "fp8" "off" "$((PORT_BASE + 3))"
 
 stop_gpu_monitor
 trap - EXIT
@@ -459,16 +504,21 @@ with open(jsonl) as f:
 
 by_name = {row["variant"]: row for row in rows}
 baseline = by_name.get("baseline_fp8_graph", {})
-bf16 = by_name.get("bf16_kv_graph", {})
+auto_kv = by_name.get("auto_kv_graph", {})
+nvfp4 = by_name.get("nvfp4_kv_graph", {})
 no_graph = by_name.get("fp8_no_cuda_graph", {})
 
 summary = {
     "variants": rows,
     "baseline_ok": bool(baseline.get("probe_ok", False)),
-    "bf16_kv_ok": bool(bf16.get("probe_ok", False)),
+    "auto_kv_ok": bool(auto_kv.get("probe_ok", False)),
+    "nvfp4_kv_ok": bool(nvfp4.get("probe_ok", False)),
     "fp8_no_cuda_graph_ok": bool(no_graph.get("probe_ok", False)),
+    "supports_explicit_fp8_override_suspect": (
+        baseline.get("probe_ok") is False and auto_kv.get("probe_ok") is True
+    ),
     "supports_fp8_kv_scatter_suspect": (
-        baseline.get("probe_ok") is False and bf16.get("probe_ok") is True
+        baseline.get("probe_ok") is False and nvfp4.get("probe_ok") is True
     ),
     "supports_cuda_graph_stale_metadata_suspect": (
         baseline.get("probe_ok") is False and no_graph.get("probe_ok") is True
