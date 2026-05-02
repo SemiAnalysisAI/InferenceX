@@ -1613,8 +1613,8 @@ dsv4-fp8-mi355x-vllm:
       - { tp: 8, conc-start: 1, conc-end: 1 }
 
 # DeepSeek-V4 on ATOM using the updated atom0.1.2.post image. The launcher
-# overlays only ROCm/aiter#2998 DSv4 sparse/indexer implementations until
-# those kernels are included in the image-provided AITER package.
+# overlays ROCm/ATOM#650 only for DSv4 model registration/skeleton support,
+# then overlays ROCm/aiter#2998 for sparse/indexer kernels.
 dsv4-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1628,8 +1628,8 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }

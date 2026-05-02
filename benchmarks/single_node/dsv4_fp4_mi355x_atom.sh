@@ -30,6 +30,110 @@ PORT=${PORT:-8888}
 export OMP_NUM_THREADS=1
 export AITER_LOG_LEVEL=WARNING
 
+# The updated ATOM image still does not ship DeepSeek-V4 model registration:
+# without this, ModelRunner fails on hf_config.architectures[0] =
+# DeepseekV4ForCausalLM before AITER kernels are reached. Keep this overlay to
+# ROCm/ATOM#650's DSv4 skeleton only; the sparse/indexer kernel implementation
+# remains provided by ROCm/aiter#2998 below.
+if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
+    ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/ROCm/ATOM.git}
+    ATOM_PR650_REF=${ATOM_PR650_REF:-pull/650/head}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-352338dfc0954bf49cd02d8da77a1a233bb92821}
+    ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
+
+    rm -rf "$ATOM_PR650_DIR"
+    git clone --filter=blob:none "$ATOM_PR650_REPO" "$ATOM_PR650_DIR"
+    (
+        cd "$ATOM_PR650_DIR"
+        git fetch --depth=1 origin "$ATOM_PR650_REF"
+        fetched_sha="$(git rev-parse FETCH_HEAD)"
+        if [ "$fetched_sha" != "$ATOM_PR650_SHA" ]; then
+            echo "FATAL: $ATOM_PR650_REF resolved to $fetched_sha, expected $ATOM_PR650_SHA" >&2
+            exit 1
+        fi
+        git checkout --force FETCH_HEAD
+
+        python3 - <<'PYEOF'
+from pathlib import Path
+
+v4_model_types = '("deepseek_v4", "deepseek_v4_pro", "deepseek_v4_flash")'
+
+path = Path("atom/model_engine/model_runner.py")
+source = path.read_text()
+old = '''    def is_deepseek_v4(self) -> bool:
+        if not hasattr(self.hf_text_config, "model_type"):
+            return False
+        return self.hf_text_config.model_type == "deepseek_v4"
+'''
+new = f'''    def is_deepseek_v4(self) -> bool:
+        model_type = getattr(self.hf_text_config, "model_type", None)
+        architectures = getattr(self.hf_text_config, "architectures", []) or []
+        return model_type in {v4_model_types} or any(
+            "DeepseekV4" in arch for arch in architectures
+        )
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "deepseek_v4_pro" not in source[source.find("def is_deepseek_v4"): source.find("def is_mimo_v2")]:
+    raise SystemExit("FATAL: model_runner.py is_deepseek_v4 did not match expected source")
+path.write_text(source)
+
+path = Path("atom/model_engine/llm_engine.py")
+source = path.read_text()
+old = '''                "deepseek_v4",
+'''
+new = '''                "deepseek_v4",
+                "deepseek_v4_pro",
+                "deepseek_v4_flash",
+'''
+if "deepseek_v4_pro" not in source:
+    if old not in source:
+        raise SystemExit("FATAL: llm_engine.py per-req cache model list anchor missing")
+    source = source.replace(old, new, 1)
+path.write_text(source)
+
+path = Path("atom/config.py")
+source = path.read_text()
+if '"deepseek_v4_pro": "deepseek_v3"' not in source:
+    anchor = '''    "deepseek_v4": "deepseek_v3",  # V4 reuses V3 schema; V4-specific fields
+'''
+    insert = '''    "deepseek_v4": "deepseek_v3",  # V4 reuses V3 schema; V4-specific fields
+    "deepseek_v4_pro": "deepseek_v3",
+    "deepseek_v4_flash": "deepseek_v3",
+'''
+    if anchor not in source:
+        raise SystemExit("FATAL: config.py V4 registry anchor missing")
+    source = source.replace(anchor, insert, 1)
+old = '''        if getattr(self.hf_config, "model_type", None) == "deepseek_v4":
+'''
+new = f'''        hf_model_type = getattr(self.hf_config, "model_type", None)
+        hf_architectures = getattr(self.hf_config, "architectures", []) or []
+        if hf_model_type in {v4_model_types} or any(
+            "DeepseekV4" in arch for arch in hf_architectures
+        ):
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "hf_model_type in" not in source:
+    raise SystemExit("FATAL: config.py V4 block-size guard did not match expected source")
+path.write_text(source)
+PYEOF
+
+        python3 -m pip install --no-deps --no-build-isolation --force-reinstall -e .
+    )
+
+    python3 - <<'PYEOF'
+from atom.model_engine.model_runner import support_model_arch_dict
+
+target = support_model_arch_dict.get("DeepseekV4ForCausalLM")
+if target != "atom.models.deepseek_v4.DeepseekV4ForCausalLM":
+    raise SystemExit(f"FATAL: DeepseekV4ForCausalLM maps to {target!r}")
+print("ATOM PR650 DSv4 architecture registration imported successfully")
+PYEOF
+else
+    echo "WARN: ATOM_DSV4_PR650=0; using image-provided ATOM"
+fi
+
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and only overlays ROCm/aiter#2998 for the DSv4 sparse
 # MQA sink and Indexer top-k implementations until they are included in the
@@ -130,7 +234,7 @@ run_benchmark_serving \
     --trust-remote-code
 
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
+    run_eval --framework lm-eval --port "$PORT" --limit "${EVAL_LIMIT:-1}"
     append_lm_eval_summary
 fi
 
