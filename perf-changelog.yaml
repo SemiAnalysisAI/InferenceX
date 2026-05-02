@@ -1218,8 +1218,9 @@
     - dsr1-fp4-mi355x-sglang-disagg
     - dsr1-fp4-mi355x-sglang-disagg-mtp
   description:
-    - "Bump SGL mori image to March 27"
-    - "Add more low latency sweep configs"
+    - "Bump SGL mori image to lmsysorg/sglang-rocm"
+    - "Add more high tput / low latency sweep configs"
     - "Enable v2 mxfp4 DSR1 0528 model"
-    - "Enable fp4 disp feature on mori"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/983
+    - "Enable fp4 disp / fp8 combine feature on mori"
+    - "Enable Mori SDMA + two batch overlapping feature"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1236
