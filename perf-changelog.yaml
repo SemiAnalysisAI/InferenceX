@@ -2097,10 +2097,9 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
-    - "Add MI355X DSv4 FP4 SGLang benchmark using rocm/sgl-dev:rocm720-deepseek-v4-mi35x"
-    - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True"
-    - "Reinstall SGLang from amd/deepseek_v4 SHA 18afbf15 at runtime"
-    - "Set SGLANG_FORCE_TRITON_MOE_FP8=0 and SGLANG_REASONING_EFFORT=max to match the FP4 Models update"
-    - "Respect DP_ATTENTION from the generated matrix; the default FP4 MI355X SGLang path runs without DP attention"
-    - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
+    - "Add MI355X DSv4 FP4 SGLang benchmark on rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4"
+    - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True and SGLANG_FORCE_TRITON_MOE_FP8=0"
+    - "Overlay SGLang from amd/deepseek_v4 SHA a8410de6 at runtime"
+    - "Sweep DP attention on/off and EP=8 via DP_ATTENTION and EP_SIZE matrix env vars"
+    - "Ship a DeepSeek-V4 thinking-mode chat template so eval /v1/chat/completions works (the canonical checkpoint ships no chat_template)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244

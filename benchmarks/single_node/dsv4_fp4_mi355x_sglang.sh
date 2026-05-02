@@ -5,6 +5,8 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    DP_ATTENTION \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -40,8 +42,6 @@ fi
     pip install --no-build-isolation --no-deps --force-reinstall -e python/
 )
 
-python3 -c "import sglang; print(f'sglang {sglang.__version__} from {sglang.__path__[0]}')"
-
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
 # by writing a patched config to /tmp, but in practice isn't catching the error
@@ -64,13 +64,13 @@ else:
     print(f"No patch needed: model_type is {config.get('model_type')!r}")
 PYEOF
 
-# DSv4 FP4-experts path. Mirrors the active path of python/run_dsv4.sh on
-# the amd/deepseek_v4 branch at SGL_PR_SHA:
+# DSv4 FP4-experts path. Tracks the env block in python/run_dsv4.sh on the
+# amd/deepseek_v4 branch (HEAD's active block is FP8; we override the two
+# FP4-specific flags below):
 #   SGLANG_DSV4_FP4_EXPERTS=True   -> route experts through the FP4 kernels
-#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter (gating
-#                                    switch added in commit 33de1e64);
-#                                    also enables swiglu_limit clamp in the
-#                                    triton MoE fallback path.
+#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter and apply
+#                                    the swiglu_limit clamp in the triton
+#                                    MoE fallback path.
 export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=false
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
@@ -104,13 +104,24 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+PARALLEL_ARGS=(
+    --tensor-parallel-size "$TP"
+)
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS+=(
+        --dp "$TP"
+        --enable-dp-attention
+    )
+fi
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
+fi
+
 python3 -m sglang.launch_server \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
-    --tensor-parallel-size "$TP" \
-    --dp "$TP" \
-    --enable-dp-attention \
+    "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend compressed \

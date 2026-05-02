@@ -184,10 +184,6 @@ else
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
-    LEGACY_SQUASH_FILE=""
-    if [[ "$IMAGE" == "rocm/sgl-dev:rocm720-deepseek-v4-mi35x" ]]; then
-        LEGACY_SQUASH_FILE="/var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh"
-    fi
 
     set -x
     salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
@@ -199,10 +195,6 @@ else
     srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
-        if [[ -n \"$LEGACY_SQUASH_FILE\" && -e \"$LEGACY_SQUASH_FILE\" ]]; then
-            echo 'Removing legacy squash file and refreshing import: $LEGACY_SQUASH_FILE'
-            rm -f \"$LEGACY_SQUASH_FILE\" \"$SQUASH_FILE\"
-        fi
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
             echo 'Squash file already exists and is valid, skipping import'
         else
