@@ -557,6 +557,27 @@ _patch_lm_eval() {
 import os, re, sys, unicodedata, json
 from lm_eval.filters import extraction as ex
 from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
+try:
+    from lm_eval.models.openai_completions import LocalCompletions as _LC
+except Exception:
+    _LC = None
+
+def _truncate_dsv4_generation(text):
+      if os.environ.get("EVAL_DSV4_CHAT_TEMPLATE") != "1":
+          return text
+      if not isinstance(text, str):
+          return "" if text is None else str(text)
+      stops = [
+          "<｜end▁of▁sentence｜>",
+          "<｜begin▁of▁sentence｜>",
+          "<｜User｜>",
+          "<｜Assistant｜>",
+          "\u202e",
+      ]
+      positions = [text.find(stop) for stop in stops if text.find(stop) >= 0]
+      if not positions:
+          return text
+      return text[: min(positions)]
 
 def _le_parse_generations(outputs, **kwargs):
       res = []
@@ -572,7 +593,29 @@ def _le_parse_generations(outputs, **kwargs):
                   content = msg.get("content")
                   if content in (None, "", []):
                       content = msg.get("reasoning_content") or ""
-                  tmp[idx] = content
+                  tmp[idx] = _truncate_dsv4_generation(content)
+          except Exception:
+              tmp = [""]
+          res.extend(tmp)
+      return res
+
+def _lc_parse_generations(outputs, **kwargs):
+      res = []
+      if not isinstance(outputs, list):
+          outputs = [outputs]
+      for out in (outputs or []):
+          try:
+              choices = out.get("choices", [])
+              tmp = ["" for _ in choices]
+              for choice in choices:
+                  idx = choice.get("index", 0)
+                  if idx >= len(tmp):
+                      tmp.extend([""] * (idx - len(tmp) + 1))
+                  content = choice.get("text")
+                  if content in (None, "", []):
+                      msg = choice.get("message") or {}
+                      content = msg.get("content") or msg.get("reasoning_content") or ""
+                  tmp[idx] = _truncate_dsv4_generation(content)
           except Exception:
               tmp = [""]
           res.extend(tmp)
@@ -580,6 +623,8 @@ def _le_parse_generations(outputs, **kwargs):
 
 # Keep staticmethod semantics
 _LCC.parse_generations = staticmethod(_le_parse_generations)
+if _LC is not None:
+    _LC.parse_generations = staticmethod(_lc_parse_generations)
 
 # --- Patch TemplateAPI.apply_chat_template ---
 try:
@@ -767,8 +812,10 @@ run_lm_eval() {
     local lm_eval_base_url="$openai_chat_base"
     local lm_eval_eos_string="${EVAL_EOS_STRING:-</s>}"
     local lm_eval_tokenizer_args="tokenized_requests=False"
+    local is_dsv4_eval=false
 
     if [[ "${MODEL_PREFIX:-}" == "dsv4" || "${MODEL_NAME:-}" == *"DeepSeek-V4"* || "${MODEL:-}" == *"DeepSeek-V4"* ]]; then
+        is_dsv4_eval=true
         export EVAL_DSV4_CHAT_TEMPLATE=1
         lm_eval_model="local-completions"
         lm_eval_base_url="$openai_completions_base"
@@ -787,6 +834,14 @@ run_lm_eval() {
     local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
     if [ "$max_output_tokens" -gt 16384 ]; then
         max_output_tokens=16384
+    fi
+    if [ -n "${EVAL_MAX_OUTPUT_TOKENS:-}" ]; then
+        max_output_tokens="$EVAL_MAX_OUTPUT_TOKENS"
+    elif [ "$is_dsv4_eval" = "true" ]; then
+        local dsv4_max_output_tokens="${EVAL_DSV4_MAX_OUTPUT_TOKENS:-1024}"
+        if [ "$max_output_tokens" -gt "$dsv4_max_output_tokens" ]; then
+            max_output_tokens="$dsv4_max_output_tokens"
+        fi
     fi
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 

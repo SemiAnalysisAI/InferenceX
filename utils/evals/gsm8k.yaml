@@ -26,6 +26,10 @@ generation_kwargs:
   until:
     - "</s>"
     - "<|im_end|>"
+    - "<｜end▁of▁sentence｜>"
+    - "<｜User｜>"
+    - "<｜Assistant｜>"
+    - "\u202e"
   do_sample: false
   temperature: 0.0
 repeats: 1
