@@ -302,6 +302,35 @@ if old in source:
     source = source.replace(old, new, 1)
 elif "deepseek_v4_pro" not in source[source.find("def is_deepseek_v4"): source.find("def is_mimo_v2")]:
     raise SystemExit("FATAL: model_runner.py is_deepseek_v4 did not match expected source")
+old = '''            mt = self.config.hf_config.model_type
+            known = _IOProc._per_req_cache_model_types()  # noqa: SLF001
+            assert mt in known, (
+                f"Attention builder {type(self.attn_metadata_builder).__name__} "
+                f"reports per_req_cache_bytes>0 but model_type={mt!r} is not in "
+                f"InputOutputProcessor.per_req_cache_model_types ({sorted(known)}). "
+                "Add it to the set or sequences will not be assigned slots "
+                "(silent corruption)."
+            )
+'''
+new = f'''            mt = self.config.hf_config.model_type
+            architectures = getattr(self.config.hf_config, "architectures", []) or []
+            known = _IOProc._per_req_cache_model_types()  # noqa: SLF001
+            is_v4 = mt in {v4_model_types} or any(
+                "DeepseekV4" in arch for arch in architectures
+            )
+            assert mt in known or is_v4, (
+                f"Attention builder {{type(self.attn_metadata_builder).__name__}} "
+                f"reports per_req_cache_bytes>0 but model_type={{mt!r}} is not in "
+                f"InputOutputProcessor.per_req_cache_model_types ({{sorted(known)}}) "
+                "and is not a recognized DeepSeek-V4 architecture. Add it to "
+                "the set or sequences will not be assigned slots "
+                "(silent corruption)."
+            )
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "is not a recognized DeepSeek-V4 architecture" not in source:
+    raise SystemExit("FATAL: model_runner.py per-req cache assertion anchor missing")
 path.write_text(source)
 
 path = Path("atom/model_engine/llm_engine.py")
