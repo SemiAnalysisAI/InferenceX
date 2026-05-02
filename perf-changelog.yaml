@@ -2093,3 +2093,10 @@
     - "Update TRTLLM DeepSeek-V4-Pro image to ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884"
     - "Image is built from NVIDIA/TensorRT-LLM@feat/deepseek_v4 4999884, including post-f1c5fe1 DeepSeek-V4 correctness and CI fixes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Temporarily route the representative B300 TRTLLM DeepSeek-V4 8k TP8/EP1 job through a diagnostic script"
+    - "Diagnostic compares baseline FP8 KV cache, BF16 KV cache, and FP8 KV cache with CUDA graph disabled to isolate garbage-output eval failures"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
