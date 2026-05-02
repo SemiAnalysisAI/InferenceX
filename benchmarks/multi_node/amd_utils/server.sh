@@ -115,6 +115,7 @@ def parse_range(cuda_range, default_start, default_end):
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
+print(f'MODEL_EVAL_MAX_OUTPUT_TOKENS=\"{m.get(\"eval_max_output_tokens\", \"\")}\"')
 
 prefill = m.get('prefill', {})
 decode = m.get('decode', {})
@@ -540,8 +541,16 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
 
+            # Override eval context length with model's configured context_length
+            if [[ -n "$prefill_context_length" ]]; then
+                export EVAL_MAX_MODEL_LEN="$prefill_context_length"
+            fi
+            if [[ -n "$MODEL_EVAL_MAX_OUTPUT_TOKENS" ]]; then
+                export EVAL_MAX_OUTPUT_TOKENS="$MODEL_EVAL_MAX_OUTPUT_TOKENS"
+            fi
+
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"
+                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto}, max_out=${EVAL_MAX_OUTPUT_TOKENS:-auto})"
             else
                 # Run lm-eval against the router on port 30000
                 run_eval --framework lm-eval --port 30000
