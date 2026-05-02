@@ -784,17 +784,18 @@ gptoss-fp4-mi355x-atom:
   precision: fp4
   framework: atom
   multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 16, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 4, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 16, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
@@ -1611,13 +1612,9 @@ dsv4-fp8-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 1 }
 
-# Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
-# PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
-# that OOM once warmup/prefill batches multiple requests; keep CONC=1 until
-# the AITER sparse-attention kernel / multi-request path lands upstream.
-# --enforce-eager and ATOM_USE_TRITON_MOE=1 are required on gfx950. Image is
-# the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
-# the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
+# DeepSeek-V4 on ATOM using the updated atom0.1.2.post image. The launcher
+# overlays only ROCm/aiter#2998 DSv4 sparse/indexer implementations until
+# those kernels are included in the image-provided AITER package.
 dsv4-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1631,8 +1628,8 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }

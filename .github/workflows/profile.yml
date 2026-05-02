@@ -17,6 +17,14 @@ on:
         required: false
         type: string
         default: '64'
+      seq-len:
+        description: "Sequence length config to profile"
+        required: false
+        type: choice
+        options:
+          - 1k1k
+          - 8k1k
+        default: 1k1k
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -54,7 +62,7 @@ jobs:
         name: Generate matrix via script
         run: |
           pip install pydantic
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
+          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }} --seq-lens ${{ inputs.seq-len }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
@@ -148,13 +156,16 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           clean: false
 
-      - name: Launch + Profile (single-node sglang/vllm)
+      - name: Launch + Profile (single-node)
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
           PROFILE: '1'
           SGLANG_TORCH_PROFILER_DIR: /workspace/
           VLLM_TORCH_PROFILER_DIR: /workspace/
+          ATOM_TORCH_PROFILER_DIR: /workspace/atom_profiles
+          PROFILE_NUM_STEPS: '1'
+          PROFILE_OUTPUT_LEN: '1'
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
@@ -193,16 +204,30 @@ jobs:
             fi
           else
             echo "Profile trace not found: $trace_path" >&2
+            exit 1
           fi
 
       - name: Process result (json -> agg)
+        continue-on-error: true
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: |
           python3 utils/process_result.py
 
+      - name: Upload profile diagnostics
+        if: ${{ always() && env.RESULT_FILENAME != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_diagnostics_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.RESULT_FILENAME }}.json
+            agg_${{ env.RESULT_FILENAME }}.json
+            server.log
+            gpu_metrics.csv
+          if-no-files-found: ignore
+
       - name: Upload profile as artifact
-        if: ${{ steps.run.outputs.trace != '' }}
+        if: ${{ always() && steps.run.outputs.trace != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}
@@ -210,7 +235,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload TP-0-DECODE trace as artifact
-        if: ${{ steps.run.outputs.tp0_decode != '' }}
+        if: ${{ always() && steps.run.outputs.tp0_decode != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
@@ -218,7 +243,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload TP-0-EXTEND trace as artifact
-        if: ${{ steps.run.outputs.tp0_extend != '' }}
+        if: ${{ always() && steps.run.outputs.tp0_extend != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND

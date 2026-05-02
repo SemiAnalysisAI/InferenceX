@@ -20,7 +20,7 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
-MIN_EVAL_CONC = 16
+MIN_EVAL_CONC = 4
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -53,10 +53,21 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     eval_indices = set()
     mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
 
+    def _min_eval_conc(entry):
+        # DSv4 ATOM still needs conc=1 eval smoke coverage while its
+        # batched path is under active upstreaming.
+        if (
+            entry.get(Fields.MODEL_PREFIX.value) == "dsv4"
+            and entry.get(Fields.FRAMEWORK.value) == "atom"
+            and entry.get(Fields.RUNNER.value) == "mi355x"
+        ):
+            return 1
+        return MIN_EVAL_CONC
+
     def _eligible_eval_concs(entry):
         conc = entry[Fields.CONC.value]
         conc_values = conc if isinstance(conc, list) else [conc]
-        return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
+        return sorted(c for c in conc_values if c >= _min_eval_conc(entry))
 
     def _max_eval_conc(ie):
         return max(_eligible_eval_concs(ie[1]))

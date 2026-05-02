@@ -42,12 +42,14 @@ start_gpu_monitor
 
 set -x
 
+setup_atom_profile_args
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --trust-remote-code \
+    "${ATOM_PROFILE_ARGS[@]}" \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

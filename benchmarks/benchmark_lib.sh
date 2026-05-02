@@ -324,15 +324,18 @@ run_benchmark_serving() {
     fi
 
     # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
-    # and cap num_prompts to keep traces small.
+    # and cap the run to a tiny one-step window by default.
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
-        local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
-        if [[ -n "$_prof_dir" ]]; then
-            mkdir -p "$_prof_dir"
-        fi
+        local _prof_dir=""
+        for _prof_dir in "${SGLANG_TORCH_PROFILER_DIR:-}" "${VLLM_TORCH_PROFILER_DIR:-}" "${ATOM_TORCH_PROFILER_DIR:-}"; do
+            if [[ -n "$_prof_dir" ]]; then
+                mkdir -p "$_prof_dir"
+            fi
+        done
         profile_flag+=(--profile)
-        num_prompts="$max_concurrency"
+        num_prompts="${PROFILE_NUM_PROMPTS:-$max_concurrency}"
+        output_len="${PROFILE_OUTPUT_LEN:-${PROFILE_NUM_STEPS:-1}}"
     fi
 
     # Build benchmark command
@@ -415,6 +418,15 @@ run_benchmark_serving() {
 # Profiling trace helpers
 # --------------------------------
 
+setup_atom_profile_args() {
+    ATOM_PROFILE_ARGS=()
+    if [[ "${PROFILE:-}" == "1" ]]; then
+        ATOM_TORCH_PROFILER_DIR=${ATOM_TORCH_PROFILER_DIR:-/workspace/atom_profiles}
+        mkdir -p "$ATOM_TORCH_PROFILER_DIR"
+        ATOM_PROFILE_ARGS+=(--torch-profiler-dir "$ATOM_TORCH_PROFILER_DIR")
+    fi
+}
+
 _find_latest_profile_trace() {
     local latest=""
     local dir="" candidate="" base=""
@@ -424,6 +436,9 @@ _find_latest_profile_trace() {
         search_roots=()
         if [[ -d "$dir" ]]; then
             search_roots+=("$dir")
+            while IFS= read -r -d '' candidate; do
+                search_roots+=("$candidate")
+            done < <(find "$dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
         fi
         if [[ -d "$dir/profiles" ]]; then
             search_roots+=("$dir/profiles")
@@ -463,11 +478,12 @@ move_profile_trace_for_relay() {
 
     local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
     local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    local atom_dir="${ATOM_TORCH_PROFILER_DIR:-/workspace}"
     local -a search_dirs=()
     local dir="" existing=""
     local seen=0
 
-    for dir in "$sglang_dir" "$vllm_dir" "/workspace"; do
+    for dir in "$sglang_dir" "$vllm_dir" "$atom_dir" "/workspace"; do
         if [[ -z "$dir" ]]; then
             continue
         fi
@@ -538,7 +554,7 @@ _patch_lm_eval() {
     patch_dir="$(mktemp -d)"
     cat > "$patch_dir/sitecustomize.py" <<'PY'
 # --- Patch LocalChatCompletion.parse_generations to handle empty content with reasoning_content ---
-import re, sys, unicodedata, json
+import os, re, sys, unicodedata, json
 from lm_eval.filters import extraction as ex
 from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
 
@@ -565,7 +581,7 @@ def _le_parse_generations(outputs, **kwargs):
 # Keep staticmethod semantics
 _LCC.parse_generations = staticmethod(_le_parse_generations)
 
-# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" for TRT ---
+# --- Patch TemplateAPI.apply_chat_template ---
 try:
     from lm_eval.models import api_models as _api_models
     _TemplateAPI = _api_models.TemplateAPI
@@ -576,6 +592,56 @@ except Exception:
 
 if _TemplateAPI is not None and _JsonChatStr is not None:
     _orig_apply_chat_template = _TemplateAPI.apply_chat_template
+    _dsv4_encode_messages = None
+
+    def _content_to_text(content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    parts.append(str(item.get("text", item.get("content", ""))))
+                else:
+                    parts.append(str(item))
+            return "\n".join(part for part in parts if part)
+        if content is None:
+            return ""
+        return str(content)
+
+    def _load_dsv4_encoder():
+        global _dsv4_encode_messages
+        if _dsv4_encode_messages is not None:
+            return _dsv4_encode_messages
+
+        roots = [
+            os.environ.get("INFMAX_WORKSPACE"),
+            os.environ.get("GITHUB_WORKSPACE"),
+            os.getcwd(),
+            "/workspace",
+            "/infmax-workspace",
+        ]
+        for root in roots:
+            if not root:
+                continue
+            candidate = os.path.join(root, "utils", "bench_serving")
+            if os.path.exists(os.path.join(candidate, "encoding_dsv4.py")) and candidate not in sys.path:
+                sys.path.insert(0, candidate)
+
+        from encoding_dsv4 import encode_messages
+
+        _dsv4_encode_messages = encode_messages
+        return _dsv4_encode_messages
+
+    def _apply_dsv4_chat_template(chat_history):
+        encode_messages = _load_dsv4_encoder()
+        messages = []
+        for item in chat_history:
+            normalized = {**item}
+            normalized.pop("type", None)
+            normalized["content"] = _content_to_text(normalized.get("content"))
+            messages.append(normalized)
+        return encode_messages(messages, thinking_mode="thinking")
 
     def _patched_apply_chat_template(
         self,
@@ -583,6 +649,8 @@ if _TemplateAPI is not None and _JsonChatStr is not None:
         add_generation_prompt: bool = True,
     ):
         """Applies a chat template to a list of chat history between user and model."""
+        if os.environ.get("EVAL_DSV4_CHAT_TEMPLATE") == "1":
+            return _apply_dsv4_chat_template(chat_history)
         if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
             return self.tokenizer.apply_chat_template(
                 chat_history,
@@ -673,7 +741,8 @@ run_lm_eval() {
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local eval_limit="${EVAL_LIMIT:-}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -683,17 +752,35 @@ run_lm_eval() {
             --gen-max-tokens) eval_context_len="$2"; shift 2 ;;
             --temperature)    temperature="$2"; shift 2 ;;
             --top-p)          top_p="$2"; shift 2 ;;
+            --limit)          eval_limit="$2"; shift 2 ;;
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
 
-    _install_lm_eval_deps
-    _patch_lm_eval
-
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
+    local openai_completions_base="${openai_server_base}/v1/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
-    MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
+    export MODEL_NAME="${MODEL_NAME:-$MODEL}" # Prefer MODEL_NAME, else MODEL
+
+    local lm_eval_model="local-chat-completions"
+    local lm_eval_base_url="$openai_chat_base"
+    local lm_eval_eos_string="${EVAL_EOS_STRING:-</s>}"
+    local lm_eval_tokenizer_args="tokenized_requests=False"
+
+    if [[ "${MODEL_PREFIX:-}" == "dsv4" || "${MODEL_NAME:-}" == *"DeepSeek-V4"* || "${MODEL:-}" == *"DeepSeek-V4"* ]]; then
+        export EVAL_DSV4_CHAT_TEMPLATE=1
+        lm_eval_model="local-completions"
+        lm_eval_base_url="$openai_completions_base"
+        lm_eval_eos_string="${EVAL_EOS_STRING:-<｜end▁of▁sentence｜>}"
+        lm_eval_tokenizer_args="tokenizer_backend=None,tokenized_requests=False"
+        echo "Using DeepSeek-V4 eval prompt encoding via utils/bench_serving/encoding_dsv4.py"
+    else
+        unset EVAL_DSV4_CHAT_TEMPLATE
+    fi
+
+    _install_lm_eval_deps
+    _patch_lm_eval
 
     # Cap output tokens: must fit within context window (leave room for input),
     # and avoid excessive KV cache reservation per request on TRT.
@@ -705,12 +792,18 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
+    local limit_args=()
+    if [ -n "$eval_limit" ]; then
+        limit_args=(--limit "$eval_limit")
+        echo "Eval sample limit: ${eval_limit}"
+    fi
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+    python3 -m lm_eval --model "${lm_eval_model}" --apply_chat_template \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      "${limit_args[@]}" \
+      --model_args "model=${MODEL_NAME},base_url=${lm_eval_base_url},api_key=${OPENAI_API_KEY},eos_string=${lm_eval_eos_string},max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,${lm_eval_tokenizer_args},max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x

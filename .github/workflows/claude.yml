@@ -161,8 +161,8 @@ jobs:
             - If jobs cannot be run, say exactly what you could not run and why
             - **Important** Modify perf-changelog.yaml for any config changes affecting performance
 
-            ## Profiling (SGLang only)
-            When asked to profile a config, dispatch the `profile.yml` workflow. **Only SGLang configs can be profiled** — the profiler uses SGLang's `/start_profile` and `/stop_profile` HTTP endpoints. Reject profiling requests for vLLM, TRT, or other frameworks.
+            ## Profiling
+            When asked to profile a config, dispatch the `profile.yml` workflow. SGLang, vLLM, and ATOM single-node configs can be profiled through their `/start_profile` and `/stop_profile` HTTP endpoints when the server is launched with the corresponding torch profiler directory. Reject profiling requests for TRT, disaggregated/multi-node configs, or other frameworks.
 
             **Syntax:**
             ```
@@ -172,9 +172,10 @@ jobs:
                 workflow_id="profile.yml",
                 ref="main",
                 inputs={
-                    "config-key": "<config-key-ending-in-sglang>",
+                    "config-key": "<config-key>",
                     "config-file": "<.github/configs/nvidia-master.yaml or amd-master.yaml>",
-                    "conc": "<concurrency>"
+                    "conc": "<concurrency>",
+                    "seq-len": "<1k1k or 8k1k>"
                 }
             )
             ```
@@ -184,19 +185,16 @@ jobs:
             - Model: "deepseek" / "dsr1" → model-prefix `dsr1`; "gptoss" → `gptoss`; "qwen" → `qwen3.5`
             - Precision: "fp4" / "fp8" / "bf16"
             - Runner/hardware: "b200", "h200", "h100", "mi300x", "mi325x", "mi355x", etc.
-            - Framework: must be "sglang" (reject if not)
+            - Framework: must be "sglang", "vllm", or "atom" (reject TRT and disaggregated/multi-node)
             - Concurrency: "conc=N" → `"conc": "N"`. Default to `"64"` if not specified.
+            - Sequence length: default to `"1k1k"` unless the user asks for `"8k1k"`.
 
-            Construct the config-key as: `{model-prefix}-{precision}-{runner}-sglang`
+            Construct the config-key as: `{model-prefix}-{precision}-{runner}-{framework}`
             Choose config-file: NVIDIA runners (b200, h200, h100, gb200, gb300) → `nvidia-master.yaml`; AMD runners (mi300x, mi325x, mi355x) → `amd-master.yaml`
 
-            **Available SGLang config keys:**
-            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-bf16-b200-sglang`
-            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-bf16-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
-
             **Examples:**
-            - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: .github/configs/nvidia-master.yaml`, `conc: 4`
-            - "profile sglang mi355x dsr1 fp8" → `config-key: dsr1-fp8-mi355x-sglang`, `config-file: .github/configs/amd-master.yaml`, `conc: 64`
+            - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: .github/configs/nvidia-master.yaml`, `conc: 4`, `seq-len: 1k1k`
+            - "profile atom mi355x dsv4 fp4 conc=4 8k1k" → `config-key: dsv4-fp4-mi355x-atom`, `config-file: .github/configs/amd-master.yaml`, `conc: 4`, `seq-len: 8k1k`
 
             **After dispatch:**
             Monitor with `mcp__github__get_workflow_run`. The profile workflow takes ~15-30 minutes. When complete, the **Perfetto relay link** is in the workflow run's step summary. Retrieve it with:

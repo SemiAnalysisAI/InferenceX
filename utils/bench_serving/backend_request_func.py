@@ -273,6 +273,12 @@ async def async_request_openai_completions(
             async with session.post(url=api_url, json=payload,
                                     headers=headers) as response:
                 if response.status == 200:
+                    if api_url.endswith("profile"):
+                        output.latency = time.perf_counter() - st
+                        output.generated_text = await response.text()
+                        output.success = True
+                        return output
+
                     first_chunk_received = False
                     async for chunk_bytes in response.content:
                         chunk_bytes = chunk_bytes.strip()

@@ -43,6 +43,7 @@ MEM_FRAC_STATIC=0.9
 
 set -x
 
+setup_atom_profile_args
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -52,6 +53,7 @@ python3 -m atom.entrypoints.openai_server \
     --method mtp \
     --num-speculative-tokens 3 \
     --trust-remote-code \
+    "${ATOM_PROFILE_ARGS[@]}" \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
