@@ -5,7 +5,6 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -19,10 +18,10 @@ fi
 hf download "$MODEL"
 
 # Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
-# rocm/sgl-dev:rocm720-deepseek-v4-mi35x image ships with. The image's sglang
-# is moving fast and we want a reproducible pin per benchmark run. Bump
-# SGL_PR_SHA when the branch advances.
-SGL_PR_SHA="18afbf151a2992b06a089191769b299629ed73dd"
+# rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4 image ships with. The
+# branch is moving fast and we want a reproducible pin per benchmark run.
+# Bump SGL_PR_SHA when the branch advances.
+SGL_PR_SHA="a8410de6fba3c3d44d9c7e49af1868b3940ce654"
 SGL_PR_DIR="/tmp/sglang-amd-dsv4"
 
 if [ ! -d "$SGL_PR_DIR/.git" ]; then
@@ -105,22 +104,13 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-PARALLEL_ARGS=(
-    --tensor-parallel-size "$TP"
-)
-
-if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS+=(
-        --dp "$TP"
-        --enable-dp-attention
-    )
-fi
-
 python3 -m sglang.launch_server \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
-    "${PARALLEL_ARGS[@]}" \
+    --tensor-parallel-size "$TP" \
+    --dp "$TP" \
+    --enable-dp-attention \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend compressed \
@@ -128,7 +118,6 @@ python3 -m sglang.launch_server \
     --page-size 256 \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
-    --disable-cuda-graph \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
     --chat-template "$(dirname "$0")/chat_templates/deepseek_v4_thinking.jinja" \

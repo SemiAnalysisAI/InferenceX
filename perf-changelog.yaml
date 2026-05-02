@@ -2098,4 +2098,3 @@
     - "Respect DP_ATTENTION from the generated matrix; the default FP4 MI355X SGLang path runs without DP attention"
     - "Delete legacy /var/lib/squash/rocm_sgl-dev_deepseek-v4-mi35x.sqsh and refresh the new rocm720 squash import on first launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244
-  evals-only: true
