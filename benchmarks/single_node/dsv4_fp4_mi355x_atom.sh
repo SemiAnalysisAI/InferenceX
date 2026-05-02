@@ -274,6 +274,112 @@ fi
     grep -q 'mhc_pre = getattr(_aiter, "mhc_pre", None)' atom/models/deepseek_v4.py \
         || { echo "FATAL: ATOM DSv4 mhc_pre aiter hook not found"; exit 1; }
 
+    # The pinned ATOM fork has the V4 metadata builder, but some V4-Pro configs
+    # identify as deepseek_v4_pro / DeepseekV4* rather than exactly
+    # model_type=deepseek_v4. If those are not treated as V4 everywhere, ATOM
+    # falls back to the generic attention metadata path and V4 forward sees
+    # state_slot_mapping=None at runtime.
+    python3 - <<'PYEOF'
+from pathlib import Path
+
+v4_model_types = '("deepseek_v4", "deepseek_v4_pro", "deepseek_v4_flash")'
+
+path = Path("atom/model_engine/model_runner.py")
+source = path.read_text()
+old = '''    def is_deepseek_v4(self) -> bool:
+        if not hasattr(self.hf_text_config, "model_type"):
+            return False
+        return self.hf_text_config.model_type == "deepseek_v4"
+'''
+new = f'''    def is_deepseek_v4(self) -> bool:
+        model_type = getattr(self.hf_text_config, "model_type", None)
+        architectures = getattr(self.hf_text_config, "architectures", []) or []
+        return model_type in {v4_model_types} or any(
+            "DeepseekV4" in arch for arch in architectures
+        )
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "deepseek_v4_pro" not in source[source.find("def is_deepseek_v4"): source.find("def is_mimo_v2")]:
+    raise SystemExit("FATAL: model_runner.py is_deepseek_v4 did not match expected source")
+path.write_text(source)
+
+path = Path("atom/model_engine/llm_engine.py")
+source = path.read_text()
+old = '''                "deepseek_v4",
+'''
+new = '''                "deepseek_v4",
+                "deepseek_v4_pro",
+                "deepseek_v4_flash",
+'''
+if "deepseek_v4_pro" not in source:
+    if old not in source:
+        raise SystemExit("FATAL: llm_engine.py per-req cache model list anchor missing")
+    source = source.replace(old, new, 1)
+path.write_text(source)
+
+path = Path("atom/config.py")
+source = path.read_text()
+if '"deepseek_v4_pro": "deepseek_v3"' not in source:
+    anchor = '''    "deepseek_v4": "deepseek_v3",  # V4 reuses V3 schema; V4-specific fields
+'''
+    insert = '''    "deepseek_v4": "deepseek_v3",  # V4 reuses V3 schema; V4-specific fields
+    "deepseek_v4_pro": "deepseek_v3",
+    "deepseek_v4_flash": "deepseek_v3",
+'''
+    if anchor not in source:
+        raise SystemExit("FATAL: config.py V4 registry anchor missing")
+    source = source.replace(anchor, insert, 1)
+old = '''        if getattr(self.hf_config, "model_type", None) == "deepseek_v4":
+'''
+new = f'''        hf_model_type = getattr(self.hf_config, "model_type", None)
+        hf_architectures = getattr(self.hf_config, "architectures", []) or []
+        if hf_model_type in {v4_model_types} or any(
+            "DeepseekV4" in arch for arch in hf_architectures
+        ):
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "hf_model_type in" not in source:
+    raise SystemExit("FATAL: config.py V4 block-size guard did not match expected source")
+path.write_text(source)
+
+path = Path("atom/models/deepseek_v4.py")
+source = path.read_text()
+old = '''            seq_offsets = cpu_meta["cu_seqlens_q"][: num_seqs + 1].tolist()
+            slots = cpu_meta["state_slot_mapping"][:num_seqs].tolist()
+            start_pos_per_seq = cpu_meta["start_pos_per_seq"][:num_seqs].tolist()
+            per_seq_bts = [block_tables[i] for i in range(num_seqs)]
+        else:
+            seq_offsets = cu_seqlens_q[: num_seqs + 1].tolist()
+            slots = state_slot_mapping[:num_seqs].tolist()
+            per_seq_bts = [block_tables[i] for i in range(num_seqs)]
+'''
+new = '''            seq_offsets = cpu_meta["cu_seqlens_q"][: num_seqs + 1].tolist()
+            cpu_state_slots = cpu_meta["state_slot_mapping"]
+            if cpu_state_slots is None:
+                slots = list(range(num_seqs))
+            else:
+                slots = cpu_state_slots[:num_seqs].tolist()
+            start_pos_per_seq = cpu_meta["start_pos_per_seq"][:num_seqs].tolist()
+            per_seq_bts = [block_tables[i] for i in range(num_seqs)]
+        else:
+            seq_offsets = cu_seqlens_q[: num_seqs + 1].tolist()
+            if state_slot_mapping is None:
+                slots = list(range(num_seqs))
+            else:
+                slots = state_slot_mapping[:num_seqs].tolist()
+            per_seq_bts = [block_tables[i] for i in range(num_seqs)]
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "cpu_state_slots = cpu_meta" not in source:
+    raise SystemExit("FATAL: deepseek_v4.py state slot fallback anchor missing")
+path.write_text(source)
+
+print("applied DSv4 model-type/per-request-cache compatibility patch")
+PYEOF
+
     # ROCm/ATOM#650 sparse_attn_v4.py is a correctness-first torch fallback.
     # Route DSv4 sparse MQA through the forked AITER Triton kernel first. Keep
     # the old chunk/decode mitigations only as an explicit fallback path.
@@ -1228,9 +1334,37 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+run_with_server_monitor() {
+    local label="$1"
+    shift
+
+    "$@" &
+    local child_pid=$!
+
+    while kill -0 "$child_pid" 2>/dev/null; do
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "ERROR: ATOM server process $SERVER_PID died during $label" >&2
+            kill "$child_pid" 2>/dev/null || true
+            wait "$child_pid" 2>/dev/null || true
+            return 1
+        fi
+        if grep -Eq 'Traceback \(most recent call last\)|Fatal Python error|TypeError:|RuntimeError:' "$SERVER_LOG"; then
+            echo "ERROR: ATOM server log shows a worker failure during $label" >&2
+            tail -n 160 "$SERVER_LOG" >&2 || true
+            kill "$child_pid" 2>/dev/null || true
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$child_pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 2
+    done
+
+    wait "$child_pid"
+}
+
 set -x
 
-BLOCK_SIZE=${BLOCK_SIZE:-16}
+BLOCK_SIZE=${BLOCK_SIZE:-128}
 export ATOM_DSV4_AITER_SPARSE_ATTN=${ATOM_DSV4_AITER_SPARSE_ATTN:-1}
 export ATOM_DSV4_AITER_INDEXER=${ATOM_DSV4_AITER_INDEXER:-1}
 export ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS=${ATOM_DSV4_SPARSE_ATTN_CHUNK_TOKENS:-256}
@@ -1271,7 +1405,7 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-run_benchmark_serving \
+run_with_server_monitor "benchmark" run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
@@ -1282,11 +1416,12 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
+    --server-pid "$SERVER_PID" \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
+    run_with_server_monitor "eval" run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
