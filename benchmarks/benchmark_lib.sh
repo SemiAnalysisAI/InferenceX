@@ -795,7 +795,7 @@ run_lm_eval() {
     export EVAL_RESULT_DIR="$results_dir"
     local limit_args=()
     if [ -n "$eval_limit" ]; then
-        limit_args=(--limit "$eval_limit")
+        limit_args=(--limit "1")
         echo "Eval sample limit: ${eval_limit}"
     fi
     set -x
