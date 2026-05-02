@@ -2099,4 +2099,5 @@
   description:
     - "Temporarily route the representative B300 TRTLLM DeepSeek-V4 8k TP8/EP1 job through a diagnostic script"
     - "Diagnostic compares baseline FP8 KV cache, BF16 KV cache, and FP8 KV cache with CUDA graph disabled to isolate garbage-output eval failures"
+    - "The diagnostic intentionally fails after writing server.log so the run cannot be mistaken for a performance result"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
