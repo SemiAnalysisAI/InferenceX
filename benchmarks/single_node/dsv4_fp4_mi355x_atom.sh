@@ -30,15 +30,13 @@ PORT=${PORT:-8888}
 export OMP_NUM_THREADS=1
 export AITER_LOG_LEVEL=WARNING
 
-# The updated ATOM image still does not ship DeepSeek-V4 model registration:
-# without this, ModelRunner fails on hf_config.architectures[0] =
-# DeepseekV4ForCausalLM before AITER kernels are reached. Keep this overlay to
-# ROCm/ATOM#650's DSv4 skeleton only; the sparse/indexer kernel implementation
-# remains provided by ROCm/aiter#2998 below.
+# The updated ATOM image still does not ship DeepSeek-V4 model registration.
+# Overlay the ATOM branch stacked on ROCm/ATOM#650 that wires the DSv4 Indexer
+# path to ROCm/aiter#2998.
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
-    ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/ROCm/ATOM.git}
-    ATOM_PR650_REF=${ATOM_PR650_REF:-pull/650/head}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-6a0ebb9730839b08287117a17b7d13007acd2d0b}
+    ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
+    ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-aiter-pr2998-indexer}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-47858cc728f6758019aef34e58a2b695d08247db}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
@@ -167,21 +165,25 @@ PYEOF
     )
 
     python3 - <<'PYEOF'
+import inspect
 from atom.model_engine.model_runner import support_model_arch_dict
+from atom.models.deepseek_v4 import Indexer
 
 target = support_model_arch_dict.get("DeepseekV4ForCausalLM")
 if target != "atom.models.deepseek_v4.DeepseekV4ForCausalLM":
     raise SystemExit(f"FATAL: DeepseekV4ForCausalLM maps to {target!r}")
-print("ATOM PR650 DSv4 architecture registration imported successfully")
+source = inspect.getsource(Indexer.forward_batched)
+if "dsv4_indexer_topk" not in source:
+    raise SystemExit("FATAL: ATOM DSv4 Indexer is not wired to AITER dsv4_indexer_topk")
+print("ATOM DSv4 architecture registration and AITER Indexer wiring imported successfully")
 PYEOF
 else
     echo "WARN: ATOM_DSV4_PR650=0; using image-provided ATOM"
 fi
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
-# from amd-master.yaml and only overlays ROCm/aiter#2998 for the DSv4 sparse
-# MQA sink and Indexer top-k implementations until they are included in the
-# image-provided AITER package.
+# from amd-master.yaml and overlays ROCm/aiter#2998 for the DSv4 kernels. The
+# ATOM overlay above currently consumes its Indexer top-k path.
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/ROCm/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-pull/2998/head}
@@ -278,7 +280,7 @@ run_benchmark_serving \
     --trust-remote-code
 
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --limit "${EVAL_LIMIT:-1}"
+    run_eval --framework lm-eval --port "$PORT" --limit "${EVAL_LIMIT:-2}"
     append_lm_eval_summary
 fi
 
