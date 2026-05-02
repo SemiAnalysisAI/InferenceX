@@ -2096,3 +2096,10 @@
     - "Patch the DSv4 sparse_attn_v4 and Indexer paths to use the AITER kernels before falling back to the correctness-first Torch implementations"
     - "Use a dense causal Indexer fast path for 1k1k when all committed compressed entries are selected, avoiding the [S,H,T] Torch scoring tensor entirely"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1229
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Shorten DSv4 ATOM PR smoke runs: set DeepSeek-V4 eval limit to 1 sample and use one concurrency wave of benchmark prompts by default"
+    - "Keep NUM_PROMPTS and ATOM_DSV4_NUM_PROMPTS overrides for full-length perf reruns"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1229
