@@ -3,11 +3,12 @@
 # Temporary B300/TRTLLM DeepSeek-V4 diagnostic.
 #
 # This isolates the current garbage-output failure by installing the optional
-# fast Hadamard transform dependency and comparing the baseline FP8 KV-cache
-# path against valid cache/config ablations:
+# fast Hadamard transform dependency and comparing the baseline path against
+# targeted config ablations:
 #   1. Default/auto KV cache, same CUDA graph config.
-#   2. NVFP4 KV cache, same CUDA graph config.
-#   3. FP8 KV cache with CUDA graph disabled.
+#   2. Auto KV cache with TRTLLM autotuner disabled.
+#   3. Auto KV cache with the vanilla MoE backend.
+#   4. FP8 KV cache with CUDA graph disabled.
 #
 # The runner routes only the representative B300 DeepSeek-V4 TRT job here.
 
@@ -74,6 +75,8 @@ write_config() {
     local config_file="$1"
     local kv_dtype="$2"
     local graph_mode="$3"
+    local moe_backend="$4"
+    local autotuner="$5"
 
     {
         if [[ "$graph_mode" == "on" ]]; then
@@ -86,6 +89,10 @@ EOF
             cat <<'EOF'
 cuda_graph_config: null
 EOF
+        fi
+
+        if [[ "$autotuner" != "default" ]]; then
+            printf 'enable_autotuner: %s\n' "$autotuner"
         fi
 
         cat <<EOF
@@ -103,7 +110,7 @@ EOF
 stream_interval: 10
 num_postprocess_workers: 4
 moe_config:
-    backend: TRTLLM
+    backend: $moe_backend
 EOF
     } > "$config_file"
 }
@@ -229,13 +236,24 @@ filler = (
 
 probes = [
     {
-        "name": "short_math",
+        "name": "tiny_completion",
+        "endpoint": "completion",
         "expected": r"(?<!\d)4(?!\d)",
+        "max_tokens": 4,
+        "content": "2+2=",
+    },
+    {
+        "name": "short_math",
+        "endpoint": "chat",
+        "expected": r"(?<!\d)4(?!\d)",
+        "max_tokens": 96,
         "content": "Answer with the final integer only. What is 2 + 2?",
     },
     {
         "name": "gsm8k_like",
+        "endpoint": "chat",
         "expected": r"(?<!\d)8(?!\d)",
+        "max_tokens": 96,
         "content": (
             "Answer math word problems. Put the final answer as #### <number>.\n\n"
             "Q: Sarah has 3 boxes with 4 pencils in each box. How many pencils does she have?\n"
@@ -248,7 +266,9 @@ probes = [
     },
     {
         "name": "long_prefill_math",
+        "endpoint": "chat",
         "expected": r"(?<!\d)8(?!\d)",
+        "max_tokens": 96,
         "content": (
             filler
             + "\nIgnore the padding above. Answer with the final integer only. "
@@ -257,41 +277,64 @@ probes = [
     },
 ]
 
-def complete(content: str) -> str:
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": content}],
-        "temperature": 0,
-        "top_p": 1,
-        "max_tokens": 96,
-    }
+def post_json(path: str, payload: dict) -> dict:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"http://0.0.0.0:{port}/v1/chat/completions",
+        f"http://0.0.0.0:{port}{path}",
         data=data,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=180) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-    return body["choices"][0]["message"].get("content") or ""
+        return json.loads(resp.read().decode("utf-8"))
+
+def complete_chat(content: str, max_tokens: int) -> tuple[str, dict, str]:
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0,
+        "top_p": 1,
+        "max_tokens": max_tokens,
+    }
+    body = post_json("/v1/chat/completions", payload)
+    choice = body["choices"][0]
+    return choice["message"].get("content") or "", body.get("usage") or {}, choice.get("finish_reason")
+
+def complete_text(content: str, max_tokens: int) -> tuple[str, dict, str]:
+    payload = {
+        "model": model,
+        "prompt": content,
+        "temperature": 0,
+        "top_p": 1,
+        "max_tokens": max_tokens,
+    }
+    body = post_json("/v1/completions", payload)
+    choice = body["choices"][0]
+    return choice.get("text") or "", body.get("usage") or {}, choice.get("finish_reason")
 
 results = []
 ok_count = 0
 for probe in probes:
     try:
-        text = complete(probe["content"])
+        if probe["endpoint"] == "completion":
+            text, usage, finish_reason = complete_text(probe["content"], probe["max_tokens"])
+        else:
+            text, usage, finish_reason = complete_chat(probe["content"], probe["max_tokens"])
         expected_found = re.search(probe["expected"], text) is not None
         ok_count += int(expected_found)
         results.append({
             "name": probe["name"],
+            "endpoint": probe["endpoint"],
             "expected_found": expected_found,
+            "usage": usage,
+            "finish_reason": finish_reason,
             "raw": text,
             "raw_preview": text[:500],
         })
     except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as exc:
         results.append({
             "name": probe["name"],
+            "endpoint": probe["endpoint"],
             "expected_found": False,
             "error": repr(exc),
         })
@@ -317,6 +360,8 @@ run_variant() {
     local kv_dtype="$2"
     local graph_mode="$3"
     local port="$4"
+    local moe_backend="$5"
+    local autotuner="$6"
     local config_file="dsv4-fp4-trt-${variant}.yml"
     local variant_log="/tmp/dsv4_trt_${variant}_server.log"
     local probe_json="/tmp/dsv4_trt_${variant}_probe.json"
@@ -326,9 +371,9 @@ run_variant() {
 
     log
     log "===== TRTLLM DSV4 DIAGNOSTIC VARIANT: $variant ====="
-    log "kv_dtype=$kv_dtype cuda_graph=$graph_mode port=$port"
+    log "kv_dtype=$kv_dtype cuda_graph=$graph_mode moe_backend=$moe_backend autotuner=$autotuner port=$port"
 
-    write_config "$config_file" "$kv_dtype" "$graph_mode"
+    write_config "$config_file" "$kv_dtype" "$graph_mode" "$moe_backend" "$autotuner"
     log "Generated config $config_file:"
     sed 's/^/[config] /' "$config_file" | tee -a "$SERVER_LOG"
 
@@ -382,18 +427,19 @@ run_variant() {
         hadamard_missing=1
     fi
 
-    python3 - "$variant" "$kv_dtype" "$graph_mode" "$ready" "$probe_status" "$kvcache_nan" "$hadamard_missing" "$probe_json" "$DIAG_JSONL" <<'PY'
+    python3 - "$variant" "$kv_dtype" "$graph_mode" "$moe_backend" "$autotuner" "$ready" "$probe_status" "$kvcache_nan" "$hadamard_missing" "$probe_json" "$DIAG_JSONL" <<'PY'
 import json
 import os
 import sys
 
 variant, kv_dtype, graph_mode = sys.argv[1], sys.argv[2], sys.argv[3]
-ready = bool(int(sys.argv[4]))
-probe_status = int(sys.argv[5])
-kvcache_nan = bool(int(sys.argv[6]))
-hadamard_missing = bool(int(sys.argv[7]))
-probe_json = sys.argv[8]
-diag_jsonl = sys.argv[9]
+moe_backend, autotuner = sys.argv[4], sys.argv[5]
+ready = bool(int(sys.argv[6]))
+probe_status = int(sys.argv[7])
+kvcache_nan = bool(int(sys.argv[8]))
+hadamard_missing = bool(int(sys.argv[9]))
+probe_json = sys.argv[10]
+diag_jsonl = sys.argv[11]
 
 probe = {}
 if os.path.exists(probe_json):
@@ -404,6 +450,8 @@ row = {
     "variant": variant,
     "kv_dtype": kv_dtype,
     "cuda_graph": graph_mode,
+    "moe_backend": moe_backend,
+    "autotuner": autotuner,
     "ready": ready,
     "probe_status": probe_status,
     "probe_ok": bool(probe.get("ok", False)),
@@ -483,10 +531,11 @@ PY
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 trap 'stop_gpu_monitor' EXIT
 
-run_variant "baseline_fp8_graph" "fp8" "on" "$PORT_BASE"
-run_variant "auto_kv_graph" "unset" "on" "$((PORT_BASE + 1))"
-run_variant "nvfp4_kv_graph" "nvfp4" "on" "$((PORT_BASE + 2))"
-run_variant "fp8_no_cuda_graph" "fp8" "off" "$((PORT_BASE + 3))"
+run_variant "baseline_fp8_graph" "fp8" "on" "$PORT_BASE" "TRTLLM" "default"
+run_variant "auto_kv_graph" "unset" "on" "$((PORT_BASE + 1))" "TRTLLM" "default"
+run_variant "auto_kv_no_autotune" "unset" "on" "$((PORT_BASE + 2))" "TRTLLM" "false"
+run_variant "auto_kv_vanilla_moe" "unset" "on" "$((PORT_BASE + 3))" "VANILLA" "false"
+run_variant "fp8_no_cuda_graph" "fp8" "off" "$((PORT_BASE + 4))" "TRTLLM" "default"
 
 stop_gpu_monitor
 trap - EXIT
@@ -505,20 +554,25 @@ with open(jsonl) as f:
 by_name = {row["variant"]: row for row in rows}
 baseline = by_name.get("baseline_fp8_graph", {})
 auto_kv = by_name.get("auto_kv_graph", {})
-nvfp4 = by_name.get("nvfp4_kv_graph", {})
 no_graph = by_name.get("fp8_no_cuda_graph", {})
+no_autotune = by_name.get("auto_kv_no_autotune", {})
+vanilla_moe = by_name.get("auto_kv_vanilla_moe", {})
 
 summary = {
     "variants": rows,
     "baseline_ok": bool(baseline.get("probe_ok", False)),
     "auto_kv_ok": bool(auto_kv.get("probe_ok", False)),
-    "nvfp4_kv_ok": bool(nvfp4.get("probe_ok", False)),
+    "auto_kv_no_autotune_ok": bool(no_autotune.get("probe_ok", False)),
+    "auto_kv_vanilla_moe_ok": bool(vanilla_moe.get("probe_ok", False)),
     "fp8_no_cuda_graph_ok": bool(no_graph.get("probe_ok", False)),
     "supports_explicit_fp8_override_suspect": (
         baseline.get("probe_ok") is False and auto_kv.get("probe_ok") is True
     ),
-    "supports_fp8_kv_scatter_suspect": (
-        baseline.get("probe_ok") is False and nvfp4.get("probe_ok") is True
+    "supports_autotuner_suspect": (
+        auto_kv.get("probe_ok") is False and no_autotune.get("probe_ok") is True
+    ),
+    "supports_moe_backend_suspect": (
+        auto_kv.get("probe_ok") is False and vanilla_moe.get("probe_ok") is True
     ),
     "supports_cuda_graph_stale_metadata_suspect": (
         baseline.get("probe_ok") is False and no_graph.get("probe_ok") is True
