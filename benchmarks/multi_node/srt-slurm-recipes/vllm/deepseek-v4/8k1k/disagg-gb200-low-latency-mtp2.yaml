@@ -85,7 +85,7 @@ backend:
       no-enable-flashinfer-autotune: true
       no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       numa-bind: true
