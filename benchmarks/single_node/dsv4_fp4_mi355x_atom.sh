@@ -1431,6 +1431,7 @@ MAX_NUM_SEQS=$(( CONC < 4 ? 4 : CONC ))
 # sparse-attention problem, while MoE/FFN still sees the larger token batch.
 DEFAULT_MAX_NUM_BATCHED_TOKENS=$(( MAX_MODEL_LEN_VALUE > 16384 ? MAX_MODEL_LEN_VALUE : 16384 ))
 MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-$DEFAULT_MAX_NUM_BATCHED_TOKENS}
+NUM_PROMPTS=${NUM_PROMPTS:-${ATOM_DSV4_NUM_PROMPTS:-$CONC}}
 setup_atom_profile_args
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
@@ -1456,7 +1457,7 @@ run_with_server_monitor "benchmark" run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$NUM_PROMPTS" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

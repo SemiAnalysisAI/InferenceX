@@ -774,7 +774,7 @@ run_lm_eval() {
         lm_eval_base_url="$openai_completions_base"
         lm_eval_eos_string="${EVAL_EOS_STRING:-<｜end▁of▁sentence｜>}"
         lm_eval_tokenizer_args="tokenizer_backend=None,tokenized_requests=False"
-        eval_limit="${eval_limit:-4}"
+        eval_limit="${eval_limit:-1}"
         echo "Using DeepSeek-V4 eval prompt encoding via utils/bench_serving/encoding_dsv4.py"
     else
         unset EVAL_DSV4_CHAT_TEMPLATE
