@@ -697,15 +697,9 @@ run_lm_eval() {
 
     # Cap output tokens: must fit within context window (leave room for input),
     # and avoid excessive KV cache reservation per request on TRT.
-    # EVAL_MAX_OUTPUT_TOKENS overrides the computed value when set.
-    local max_output_tokens
-    if [[ -n "${EVAL_MAX_OUTPUT_TOKENS:-}" ]]; then
-        max_output_tokens=$EVAL_MAX_OUTPUT_TOKENS
-    else
-        max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
-        if [ "$max_output_tokens" -gt 16384 ]; then
-            max_output_tokens=16384
-        fi
+    local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
+    if [ "$max_output_tokens" -gt 16384 ]; then
+        max_output_tokens=16384
     fi
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 

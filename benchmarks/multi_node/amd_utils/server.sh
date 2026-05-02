@@ -115,7 +115,6 @@ def parse_range(cuda_range, default_start, default_end):
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
-print(f'MODEL_EVAL_MAX_OUTPUT_TOKENS=\"{m.get(\"eval_max_output_tokens\", \"\")}\"')
 
 prefill = m.get('prefill', {})
 decode = m.get('decode', {})
@@ -347,6 +346,9 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]
         DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--speculative-num-steps [0-9]*/--speculative-num-steps 3/; s/--speculative-num-draft-tokens [0-9]*/--speculative-num-draft-tokens 4/')
     fi
 
+    # Increase context-length for eval to accommodate R1 thinking chains
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--context-length [0-9]*/--context-length 16384/')
+
     unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
     unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
 fi
@@ -541,16 +543,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
 
-            # Override eval context length with model's configured context_length
-            if [[ -n "$prefill_context_length" ]]; then
-                export EVAL_MAX_MODEL_LEN="$prefill_context_length"
-            fi
-            if [[ -n "$MODEL_EVAL_MAX_OUTPUT_TOKENS" ]]; then
-                export EVAL_MAX_OUTPUT_TOKENS="$MODEL_EVAL_MAX_OUTPUT_TOKENS"
-            fi
+            # Use larger context length for eval to accommodate R1 thinking chains
+            export EVAL_MAX_MODEL_LEN=16384
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto}, max_out=${EVAL_MAX_OUTPUT_TOKENS:-auto})"
+                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
                 # Run lm-eval against the router on port 30000
                 run_eval --framework lm-eval --port 30000
