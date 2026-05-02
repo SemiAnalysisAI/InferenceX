@@ -338,6 +338,18 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
+if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
+    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
+
+    if [[ "$DECODE_ENABLE_DP" != "true" ]] && [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--speculative-num-steps [0-9]*/--speculative-num-steps 3/; s/--speculative-num-draft-tokens [0-9]*/--speculative-num-draft-tokens 4/')
+    fi
+
+    unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
+    unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+fi
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================
@@ -380,7 +392,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     # start the head prefill server
-    PREFILL_CMD="${PREFILL_SDMA_ENV} SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
+        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
+    fi
+    set +x
+    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -601,7 +619,13 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
 
-    PREFILL_CMD="${PREFILL_SDMA_ENV} SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
+        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
+    fi
+    set +x
+    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -663,7 +687,13 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
-    DECODE_CMD="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
+    DECODE_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_DECODE" ]]; then
+        DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
+    fi
+    set +x
+    DECODE_CMD="${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
