@@ -2121,4 +2121,4 @@
     - "EAGLE speculative decoding chain: --speculative-algorithm EAGLE --speculative-num-steps 3 --speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
     - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE acceptance regresses on raw random tokens"
     - "Search space mirrors the non-MTP H200 SGLang entry: TP=8 EP=1, conc 1 and 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1265
