@@ -42,6 +42,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --moe-runner-backend marlin \
     --chunked-prefill-size 4096 \
     --disable-flashinfer-autotune \
+    --disable-radix-cache \
     --mem-fraction-static 0.88 \
     --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
