@@ -784,17 +784,18 @@ gptoss-fp4-mi355x-atom:
   precision: fp4
   framework: atom
   multinode: false
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 16, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-  - isl: 8192
-    osl: 1024
-    search-space:
-    - { tp: 1, conc-start: 4, conc-end: 256 }
-    - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 16, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
