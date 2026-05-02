@@ -316,6 +316,21 @@ if "deepseek_v4_pro" not in source:
     if old not in source:
         raise SystemExit("FATAL: llm_engine.py per-req cache model list anchor missing")
     source = source.replace(old, new, 1)
+old = '''        if self.config.hf_config.model_type in self._per_req_cache_model_types():
+            self.has_per_req_cache = True
+'''
+new = '''        hf_model_type = getattr(self.config.hf_config, "model_type", None)
+        hf_architectures = getattr(self.config.hf_config, "architectures", []) or []
+        if (
+            hf_model_type in self._per_req_cache_model_types()
+            or any("DeepseekV4" in arch for arch in hf_architectures)
+        ):
+            self.has_per_req_cache = True
+'''
+if old in source:
+    source = source.replace(old, new, 1)
+elif "hf_architectures = getattr(self.config.hf_config" not in source:
+    raise SystemExit("FATAL: llm_engine.py per-req cache detection anchor missing")
 path.write_text(source)
 
 path = Path("atom/config.py")
