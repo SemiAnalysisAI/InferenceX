@@ -704,7 +704,7 @@ minimaxm2.5-fp8-mi325x-vllm:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
@@ -727,18 +727,9 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 1, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # offloading=none covers low + mid concurrency (no KV pressure → no need to offload)
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      # offloading=cpu covers mid + high concurrency where KV pressure exceeds GPU; overlap at 64 for crossover
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi325x
@@ -761,13 +752,6 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 8 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0

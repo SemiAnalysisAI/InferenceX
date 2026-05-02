@@ -2080,6 +2080,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Fix tp:2 search-space: ep 2 -> 1"
+    - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
+    - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
     - dsv4-fp4-b300-trt
   description:
     - "Add DeepSeek-V4-Pro FP4 TRTLLM single-node bring-up configs on B200 and B300"
