@@ -32,11 +32,12 @@ export AITER_LOG_LEVEL=WARNING
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays ROCm/aiter#2998 for the DSv4 kernels. Install
-# AITER before ATOM because the ATOM fork imports dsv4_indexer_topk at module load.
+# AITER before ATOM because the ATOM fork imports the DSv4 top-k/logits kernels
+# at module load.
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/ROCm/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-pull/2998/head}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-aa0c5b6d97ffc6d4d11b8172dc848239f229c863}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-085989cf31f4aa9af90cf53b1baa9daf61f3ed7f}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
@@ -62,14 +63,26 @@ if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
 
     python3 - <<'PYEOF'
 import inspect
+from aiter.ops.topk import top_k_per_row_decode, top_k_per_row_prefill
 from aiter.ops.triton.attention.dsv4_indexer import dsv4_indexer_topk
 from aiter.ops.triton.attention.sparse_mqa_sink import sparse_mqa_sink
+from aiter.ops.triton.fp8_mqa_logits import fp8_mqa_logits
+
+for fn in (
+    top_k_per_row_decode,
+    top_k_per_row_prefill,
+    fp8_mqa_logits,
+    dsv4_indexer_topk,
+    sparse_mqa_sink,
+):
+    if not callable(fn):
+        raise SystemExit(f"FATAL: imported non-callable AITER symbol: {fn!r}")
 
 indexer_params = inspect.signature(dsv4_indexer_topk).parameters
 missing = [name for name in ("seq_ids", "kv_lens") if name not in indexer_params]
 if missing:
     raise SystemExit(f"FATAL: AITER PR2998 DSv4 Indexer API missing {missing}")
-print("AITER PR2998 DSv4 sparse/indexer ops imported successfully")
+print("AITER PR2998 DSv4 sparse/top-k/indexer ops imported successfully")
 PYEOF
 else
     echo "WARN: AITER_DSV4_PR2998=0; using image-provided AITER"
@@ -77,11 +90,11 @@ fi
 
 # The updated ATOM image still does not ship DeepSeek-V4 model registration.
 # Overlay the ATOM branch stacked on ROCm/ATOM#650 that wires the DSv4 Indexer
-# path to ROCm/aiter#2998.
+# path to ROCm/aiter#2998 top-k/logits kernels.
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-aiter-pr2998-indexer}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-9e09677e1c10a9da81e3fc3247766ca1a232c9e7}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-2fe45ab217793a1c84e11d3d45254dc20e041a16}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
@@ -218,9 +231,15 @@ target = support_model_arch_dict.get("DeepseekV4ForCausalLM")
 if target != "atom.models.deepseek_v4.DeepseekV4ForCausalLM":
     raise SystemExit(f"FATAL: DeepseekV4ForCausalLM maps to {target!r}")
 source = inspect.getsource(Indexer.forward_batched)
-if "dsv4_indexer_topk" not in source:
-    raise SystemExit("FATAL: ATOM DSv4 Indexer is not wired to AITER dsv4_indexer_topk")
-print("ATOM DSv4 architecture registration and AITER Indexer wiring imported successfully")
+source += inspect.getsource(Indexer)
+missing = [
+    name
+    for name in ("top_k_per_row_prefill", "top_k_per_row_decode", "fp8_mqa_logits")
+    if name not in source
+]
+if missing:
+    raise SystemExit(f"FATAL: ATOM DSv4 Indexer is not wired to AITER symbols {missing}")
+print("ATOM DSv4 architecture registration and AITER top-k/logits wiring imported successfully")
 PYEOF
 else
     echo "WARN: ATOM_DSV4_PR650=0; using image-provided ATOM"
