@@ -28,6 +28,14 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 VLLM_BLOCK_SIZE=16
+ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+
+if [[ "$CONC" == "128" ]]; then
+    ASYNC_SCHEDULING_ARGS=""
+    echo "Using async scheduling for c128."
+else
+    echo "Disabling async scheduling for c${CONC}."
+fi
 
 if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
     export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
@@ -62,6 +70,7 @@ $EP \
 --block-size=$VLLM_BLOCK_SIZE \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
+$ASYNC_SCHEDULING_ARGS \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
