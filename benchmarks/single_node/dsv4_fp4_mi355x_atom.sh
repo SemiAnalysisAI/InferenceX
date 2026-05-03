@@ -37,7 +37,7 @@ export AITER_LOG_LEVEL=WARNING
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/ROCm/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-pull/2998/head}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-085989cf31f4aa9af90cf53b1baa9daf61f3ed7f}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-883ddb70fd6b0cf0f03c1c51f0f6d8b2cb63c171}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
@@ -82,6 +82,9 @@ indexer_params = inspect.signature(dsv4_indexer_topk).parameters
 missing = [name for name in ("seq_ids", "kv_lens") if name not in indexer_params]
 if missing:
     raise SystemExit(f"FATAL: AITER PR2998 DSv4 Indexer API missing {missing}")
+for fn in (top_k_per_row_decode, top_k_per_row_prefill):
+    if "k" not in inspect.signature(fn).parameters:
+        raise SystemExit(f"FATAL: AITER {fn.__name__} is missing dynamic k parameter")
 print("AITER PR2998 DSv4 sparse/top-k/indexer ops imported successfully")
 PYEOF
 else
