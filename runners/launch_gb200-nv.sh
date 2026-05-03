@@ -160,8 +160,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    # Upgrade vLLM inside the container from v0.20.0 to releases/v0.20.1
-    echo 'pip install https://wheels.vllm.ai/cfd2573f239f8e5be370b0148809e25ea5bb0a3e/vllm-0.20.1rc1.dev153%2Bgcfd2573f2-cp38-abi3-manylinux_2_24_aarch64.whl' >> configs/vllm-container-deps.sh
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
     # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
