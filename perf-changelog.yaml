@@ -2104,3 +2104,4 @@
     - "Enable fp4 disp / fp8 combine feature on mori"
     - "Enable Mori SDMA + two batch overlapping feature"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1236
+  evals-only: true
