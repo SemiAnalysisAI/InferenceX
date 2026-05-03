@@ -2073,13 +2073,15 @@
 - config-keys:
     - dsv4-fp8-mi355x-sglang
   description:
-    - "Bump dsv4-fp8-mi355x-sglang image to rocm/sgl-dev:rocm720-mi35x-c924543-20260430-DSv4 (sgl-project/sglang amd/deepseek_v4 integration through 6/N + ENV-set commit c924543)"
-    - "Switch SGLANG_HACK_FLASHMLA_BACKEND from torch to tilelang (sgl-project/sglang#24033, FlashMLA 101->2 kernels per call)"
-    - "Add SGLANG_OPT_USE_TILELANG_INDEXER=true (sgl-project/sglang#24050, fp8 paged-MQA-logits indexer 12->1 kernels per call)"
-    - "Drop --disable-cuda-graph from sglang.launch_server (CUDA graph for DSv4 on ROCm/HIP enabled by sgl-project/sglang#23832)"
-    - "Keep SGLANG_TOPK_TRANSFORM_512_TORCH=1 for now: sgl-project/sglang#24143 (topk512 native ROCm kernel) merged 4-30 21:31 UTC, after the c924543 image was built (4-30 08:26 UTC); will flip to 0 once a newer daily image lands"
+    - "Bump dsv4-fp8-mi355x-sglang image rocm/sgl-dev:deepseek-v4-mi35x (PR #23608 day-0) -> rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 (sgl-project/sglang amd/deepseek_v4 integration through 8/N): cuda graph (#23832), TileLang FlashMLA attn (#24033, 101->2 kernels per call), TileLang indexer attn (#24050, 12->1 kernels per call), native ROCm topk512transform kernel (#24143, ~30->1 launches per call), fused compress decode kernel (#24249, compressor c4/c128 decode fused)"
+    - "Switch SGLANG_HACK_FLASHMLA_BACKEND torch -> tilelang (sgl-project/sglang#24033)"
+    - "Add SGLANG_OPT_USE_TILELANG_INDEXER=true (sgl-project/sglang#24050)"
+    - "Drop --disable-cuda-graph from sglang.launch_server (sgl-project/sglang#23832)"
+    - "Set SGLANG_TOPK_TRANSFORM_512_TORCH=0 to use the native ROCm topk512 kernel from sgl-project/sglang#24143"
+    - "Set SGLANG_OPT_USE_FUSED_COMPRESS=true to use the fused compress decode kernel from sgl-project/sglang#24249"
     - "Keep SGLANG_DSV4_FP4_EXPERTS=false and SGLANG_FORCE_TRITON_MOE_FP8=1: required for sgl-project/DeepSeek-V4-Pro-FP8 (FP4 path asserts intermediate_size_per_partition==2048 in fp8.py; swiglu_limit clamp lives in fused_moe_triton)"
-    - "Expected speedup over the previous PR #23608 day-0 torch-fallback recipe: ~5.4-5.8x at conc 1-8 (matches the '+ indexer tilelang attn' tier in the AMD DSv4-Flash-FP8 reference table)"
+    - "Expected throughput speedup over the PR #23608 day-0 torch-fallback recipe: ~6.5-6.8x at conc 1-8 (matches the screenshot's full '+ topk512transform kernel' tier in the AMD DSv4-Flash-FP8 reference table)"
+    - "Eval fix (accuracy): cherry-pick `Fix DSv4 eval prompt encoding` from the DSV4-ATOM topic branch (sgl-project/sglang#23608 follow-up, commit 5128a68b). Patches benchmarks/benchmark_lib.sh::run_lm_eval to detect DSv4 (MODEL_PREFIX==dsv4 or MODEL/MODEL_NAME contains 'DeepSeek-V4') and (a) switch the lm-eval model adapter from local-chat-completions to local-completions, (b) point base_url at /v1/completions, (c) set EVAL_EOS_STRING to <｜end▁of▁sentence｜>, (d) set EVAL_DSV4_CHAT_TEMPLATE=1 so the patched lm-eval TemplateAPI.apply_chat_template renders messages locally via utils/bench_serving/encoding_dsv4.py instead of the missing server-side template. Required because sgl-project/DeepSeek-V4-Pro-FP8 ships tokenizer_config.json without chat_template, causing /v1/chat/completions to return HTTP 400 on every request (`No HuggingFace chat template found` in server log; verified empirically on a8410de: SGLang serving_chat.py / template_manager.py / encoding_dsv4.py are byte-identical to c924543 and have no DSv4 auto-wiring)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1255
 
 - config-keys:
