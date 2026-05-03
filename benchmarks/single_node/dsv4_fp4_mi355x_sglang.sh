@@ -19,28 +19,9 @@ fi
 
 hf download "$MODEL"
 
-# Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
-# rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4 image ships with. The
-# branch is moving fast and we want a reproducible pin per benchmark run.
-# Bump SGL_PR_SHA when the branch advances.
-SGL_PR_SHA="a8410de6fba3c3d44d9c7e49af1868b3940ce654"
-SGL_PR_DIR="/tmp/sglang-amd-dsv4"
-
-if [ ! -d "$SGL_PR_DIR/.git" ]; then
-    git clone --filter=blob:none https://github.com/sgl-project/sglang.git "$SGL_PR_DIR"
-fi
-(
-    cd "$SGL_PR_DIR"
-    git fetch --depth=1 origin "$SGL_PR_SHA" 2>/dev/null \
-        || git fetch --depth=1 origin amd/deepseek_v4
-    git checkout --force "$SGL_PR_SHA"
-    test "$(git rev-parse HEAD)" = "$SGL_PR_SHA"
-
-    # Reinstall just the Python package; the image already has the ROCm
-    # kernel deps (aiter, triton, tilelang, torch) at versions matched to
-    # this branch, so --no-deps avoids pip resolving them against PyPI.
-    pip install --no-build-isolation --no-deps --force-reinstall -e python/
-)
+# sglang ships in the image at the SHA encoded in the image tag (built
+# from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
+# bump the image tag in .github/configs/amd-master.yaml.
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this

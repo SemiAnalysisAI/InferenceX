@@ -591,7 +591,7 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
 
 minimaxm2.5-fp8-mi355x-atom:
-  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -603,15 +603,13 @@ minimaxm2.5-fp8-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
 
 minimaxm2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
@@ -1588,11 +1586,11 @@ dsv4-fp8-mi355x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
-# amd/deepseek_v4 branch; the runtime overlay in
-# benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh re-pins SGLang to a
-# specific SHA on top of it. Sweeps DP-attention on/off and EP=8.
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4
+  image: rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1604,12 +1602,12 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
       - { tp: 8, dp-attn: true, conc-start: 2 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 128 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 8 }
 
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,

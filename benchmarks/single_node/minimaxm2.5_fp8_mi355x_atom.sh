@@ -39,6 +39,7 @@ fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
+MEM_FRAC_STATIC=0.9
 
 set -x
 
@@ -48,6 +49,7 @@ python3 -m atom.entrypoints.openai_server \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    --gpu-memory-utilization $MEM_FRAC_STATIC \
     --trust-remote-code \
     "${ATOM_PROFILE_ARGS[@]}" \
     > $SERVER_LOG 2>&1 &
