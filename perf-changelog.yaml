@@ -2130,4 +2130,4 @@
     - "Pre-merge: benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh did not pass --ep-size, so EP_SIZE was silently dropped and sglang ran with ep_size=1; PR sweep eval reported gsm8k strict-match=0.9318"
     - "Post-merge: the final commit on #1244 (25fb176c) wired --ep-size $EP_SIZE into the launcher; sglang now actually runs ep_size=8 for ep=8 entries, and gsm8k strict-match drops to 0.0000 (flexible-extract 0.0061) on the rocm720-mi35x-583b1b6-20260501-DSv4 image"
     - "ep=1 dp-attn=true and dp-attn=false entries are unaffected; only ep=8 + dp-attn=true is broken under real expert parallelism on this image"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
