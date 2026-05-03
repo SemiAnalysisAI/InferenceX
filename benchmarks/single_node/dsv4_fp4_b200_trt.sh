@@ -34,7 +34,7 @@ sanitize_slurm_mpi_env_for_trtllm() {
     echo "Sanitizing Slurm/PMI environment for TensorRT-LLM launch"
     while IFS='=' read -r name _; do
         case "$name" in
-            SLURM_*|PMI*|PMIX*|OMPI_*|ORTE_*)
+            SLURM_*|PMIX*|PMI*|OMPI_*|ORTE_*)
                 unset "$name"
                 ;;
         esac

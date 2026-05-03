@@ -319,18 +319,6 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    # Temporary DeepSeek-V4 TRTLLM diagnostic. Keep it opt-in now that the eval
-    # workaround lives in the normal TRT script.
-    if [[ "${TRTLLM_DSV4_USE_DIAG:-0}" == "1" \
-        && "$MODEL_PREFIX" == "dsv4" \
-        && "$FRAMEWORK" == "trt" \
-        && "$EXP_NAME" == "dsv4_8k1k" \
-        && "$TP" == "8" \
-        && "$EP_SIZE" == "1" \
-        && "$DP_ATTENTION" == "false" ]]; then
-        BENCH_SCRIPT="benchmarks/single_node/dsv4_fp4_b300_trt_diag.sh"
-        echo "Routing B300 DeepSeek-V4 TRT job to temporary diagnostic script: $BENCH_SCRIPT"
-    fi
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): the deepseek-v4 sglang images (lmsysorg/sglang:deepseek-v4-blackwell
