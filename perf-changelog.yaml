@@ -2095,6 +2095,35 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Add MI355X DSv4 FP4 SGLang benchmark on rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4"
+    - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True and SGLANG_FORCE_TRITON_MOE_FP8=0"
+    - "Overlay SGLang from amd/deepseek_v4 SHA a8410de6 at runtime"
+    - "Sweep DP attention on/off and EP=8 via DP_ATTENTION and EP_SIZE matrix env vars"
+    - "Ship a DeepSeek-V4 thinking-mode chat template so eval /v1/chat/completions works (the canonical checkpoint ships no chat_template)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H200 single-node SGLang recipe (Marlin MoE backend, TP=8, EP=1)"
+    - "Image: lmsysorg/sglang:deepseek-v4-hopper pinned by digest"
+    - "Server flags: --moe-runner-backend marlin, --chunked-prefill-size 4096, --disable-flashinfer-autotune, --disable-radix-cache, --mem-fraction-static 0.88"
+    - "Search space: TP=8 EP=1, conc 1 and 4-64 for both 1k1k and 8k1k"
+    - "Pinned to the h200-dgxc runner pool (new runners.yaml group); launch_h200-dgxc-slurm.sh extended to support framework-tagged script names and mount /ix instead of /workspace for the deepseek-v4-hopper image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1264
+
+- config-keys:
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H200 single-node SGLang MTP variant (mirrors dsv4-fp8-h200-sglang)"
+    - "EAGLE speculative decoding chain: --speculative-algorithm EAGLE --speculative-num-steps 3 --speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
+    - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE acceptance regresses on raw random tokens"
+    - "Search space mirrors the non-MTP H200 SGLang entry: TP=8 EP=1, conc 1 and 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1265
+
+- config-keys:
     - dsr1-fp4-mi355x-sglang-disagg
     - dsr1-fp4-mi355x-sglang-disagg-mtp
   description:
