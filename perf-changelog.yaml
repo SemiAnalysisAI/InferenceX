@@ -2154,4 +2154,5 @@
   description:
     - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:fix-mhc7168-eb20e9e"
     - "Enable TRTLLM fused MHC by default now that the image includes the hidden-size 7168 fused-HC fix"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
+  evals-only: true
