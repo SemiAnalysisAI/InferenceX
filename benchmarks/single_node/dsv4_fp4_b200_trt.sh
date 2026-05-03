@@ -102,13 +102,8 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
-    # DeepSeek-V4-Pro has hidden size 7168. The current TRTLLM fused-HC MHC
-    # path corrupts eval generations for this shape; keep eval servers on the
-    # unfused path until the fused kernel is guarded or supports 7168.
-    export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-0}"
-    echo "TRTLLM_MHC_ENABLE_FUSED_HC: $TRTLLM_MHC_ENABLE_FUSED_HC"
-fi
+export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-0}"
+echo "TRTLLM_MHC_ENABLE_FUSED_HC: $TRTLLM_MHC_ENABLE_FUSED_HC"
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
