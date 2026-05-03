@@ -2148,4 +2148,3 @@
     - "Disable TRTLLM fused MHC hyper-connection for eval servers via TRTLLM_MHC_ENABLE_FUSED_HC=0 because the current fused kernel corrupts DeepSeek-V4-Pro hidden size 7168 generations"
     - "Keep this as eval-only PR validation until the TensorRT-LLM fused MHC kernel is guarded or supports hidden size 7168"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
-  
