@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -x
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -18,51 +17,52 @@ fi
 
 hf download "$MODEL"
 
-# ROCm / SGLang performance tuning for MI355X
-export SGLANG_ROCM_FUSED_DECODE_MLA=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export SAFETENSORS_FAST_GPU=1
-export SGLANG_ENABLE_SPEC_V2=1
+nvidia-smi
 
-SERVER_LOG=/workspace/server.log
+SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
-CONTEXT_LENGTH=$((ISL + OSL + 32))
+
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
-start_gpu_monitor
 
-python3 -m sglang.launch_server \
+start_gpu_monitor --output "$PWD/gpu_metrics.csv"
+
+set -x
+PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL \
-    --host=0.0.0.0 \
+    --host 0.0.0.0 \
     --port $PORT \
-    --tensor-parallel-size $TP \
     --trust-remote-code \
-    --cuda-graph-max-bs $CONC \
-    --context-length $CONTEXT_LENGTH \
-    --mem-fraction-static 0.85 \
-    --tool-call-parser glm47 \
-    --reasoning-parser glm45 \
-    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
-    --nsa-prefill-backend tilelang \
-    --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
-    --kv-cache-dtype fp8_e4m3 \
+    --tp $TP \
+    --moe-runner-backend marlin \
+    --chunked-prefill-size 4096 \
+    --disable-flashinfer-autotune \
+    --disable-radix-cache \
+    --mem-fraction-static 0.88 \
+    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     --speculative-algorithm EAGLE \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
     --speculative-num-draft-tokens 4 \
-    --tokenizer-worker-num $((TP*2)) \
-    --disable-radix-cache> $SERVER_LOG 2>&1 &
+    $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+pip install -q datasets pandas
+
+# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
+# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
+# tokenizer ships without a jinja chat_template, so plain --use-chat-template
+# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
+# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
+# silently regresses on raw random tokens).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -70,18 +70,16 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template
+    --result-dir "$PWD/" \
+    --dsv4
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

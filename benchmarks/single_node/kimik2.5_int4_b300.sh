@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this script reuses the existing
+# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
@@ -8,50 +12,42 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    EP_SIZE
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+hf download "$MODEL"
+
 nvidia-smi
 
-hf download "$MODEL"
+export PYTHONNOUSERSITE=1
+export VLLM_USE_FLASHINFER_MOE_INT4=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-CONTEXT_LENGTH=$((ISL + OSL + 20))
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+vllm serve $MODEL --host 0.0.0.0 --port $PORT \
+--gpu-memory-utilization 0.95 \
+--tensor-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
+--max-num-seqs $CONC \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
---enable-symm-mem \
---disable-radix-cache \
---quantization modelopt_fp4 \
---kv-cache-dtype fp8_e4m3 \
---mamba-ssm-dtype bfloat16 \
---attention-backend trtllm_mha \
---moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
---mem-fraction-static 0.8 \
---stream-interval 50 \
---scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \
---tokenizer-worker-num 6 \
---tokenizer-path $MODEL \
---context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
+--no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
@@ -67,10 +63,11 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts $(( CONC * 10 )) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

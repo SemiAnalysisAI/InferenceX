@@ -37,9 +37,15 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR" || exit 1
-git checkout sa-submission-q2-2026
+# TODO(CJQ): make first class upon srt-slurm upstream refactor
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+else
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout sa-submission-q2-2026
+fi
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -270,6 +276,7 @@ else
         LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
+
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): the deepseek-v4 sglang images (lmsysorg/sglang:deepseek-v4-blackwell
@@ -304,6 +311,7 @@ else
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
+        --mpi=none \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
         --no-container-mount-home \

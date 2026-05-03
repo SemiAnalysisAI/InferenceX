@@ -231,12 +231,13 @@ dsr1-fp8-h200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
-  seq-len-configs:
-  - isl: 1024
-    osl: 1024
-    search-space:
-    - conc-list: [1, 4, 16, 32, 64, 128, 256, 512]
-      prefill:
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - conc-list: [1, 4, 16, 32, 64, 128, 256, 512]
+        prefill:
         num-worker: 1
         tp: 8
         ep: 1
@@ -494,6 +495,7 @@ Markers available: `slow`, `integration`
 
 ## Important Notes
 1. Make sure no new directories are created in `/workspace` during the benchmark. Files are ok.
+2. **Never delete or modify whitespace in `perf-changelog.yaml`** — the CI pipeline depends on the exact whitespace (including trailing spaces on blank separator lines). Removing or altering whitespace will break CI and cause pipeline crashes.
 
 ## Fetching GitHub Actions Benchmark Results
 
