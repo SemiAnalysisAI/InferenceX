@@ -319,10 +319,10 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    # Temporary DeepSeek-V4 TRTLLM diagnostic for the garbage-output eval
-    # failure. Scope it to the representative 8k/1k TP8 EP1 B300 job so the
-    # run directly compares the suspect FP8 KV-cache and CUDA graph paths.
-    if [[ "$MODEL_PREFIX" == "dsv4" \
+    # Temporary DeepSeek-V4 TRTLLM diagnostic. Keep it opt-in now that the eval
+    # workaround lives in the normal TRT script.
+    if [[ "${TRTLLM_DSV4_USE_DIAG:-0}" == "1" \
+        && "$MODEL_PREFIX" == "dsv4" \
         && "$FRAMEWORK" == "trt" \
         && "$EXP_NAME" == "dsv4_8k1k" \
         && "$TP" == "8" \

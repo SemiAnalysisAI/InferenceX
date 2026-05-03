@@ -2121,3 +2121,4 @@
     - "Diagnostic installs fast-hadamard-transform, then compares explicit FP8 KV cache, default KV cache, NVFP4 KV cache, and FP8 KV cache with CUDA graph disabled"
     - "The diagnostic intentionally fails after writing server.log so the run cannot be mistaken for a performance result"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
+  evals-only: true
