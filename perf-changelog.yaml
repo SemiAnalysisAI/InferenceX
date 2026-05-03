@@ -2126,8 +2126,8 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
-    - "Note: ep=8 entries failed gsm8k eval after #1244 merged. The PR's last sweep (run 25246535693) and the post-merge sweep (run 25262278289) used identical matrix labels (tp=8 ep=8 dp-attn=true) but different sglang configs"
-    - "Pre-merge: benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh did not pass --ep-size, so EP_SIZE was silently dropped and sglang ran with ep_size=1; PR sweep eval reported gsm8k strict-match=0.9318"
-    - "Post-merge: the final commit on #1244 (25fb176c) wired --ep-size $EP_SIZE into the launcher; sglang now actually runs ep_size=8 for ep=8 entries, and gsm8k strict-match drops to 0.0000 (flexible-extract 0.0061) on the rocm720-mi35x-583b1b6-20260501-DSv4 image"
-    - "ep=1 dp-attn=true and dp-attn=false entries are unaffected; only ep=8 + dp-attn=true is broken under real expert parallelism on this image"
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 (one commit forward on amd/deepseek_v4: sglang PR #24249, fuse-compress-decode 0501)"
+    - "Drop the runtime sglang clone+pip overlay from benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh — the new image bakes the same a8410de6 SHA the overlay was pinning, so the overlay is redundant. Future sglang bumps now go through an image tag bump"
+    - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
+    - "ep=1 entries (dp-attn true and false) are unaffected by the EP=8 regression"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
