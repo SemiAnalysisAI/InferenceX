@@ -2142,6 +2142,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1057
 
 - config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Add B300 TensorRT-LLM DeepSeek-V4-Pro eval coverage using the feat/deepseek_v4 image"
+    - "Disable TRTLLM fused MHC hyper-connection for eval servers via TRTLLM_MHC_ENABLE_FUSED_HC=0 because the current fused kernel corrupts DeepSeek-V4-Pro hidden size 7168 generations"
+    - "Keep this as eval-only PR validation until the TensorRT-LLM fused MHC kernel is guarded or supports hidden size 7168"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
+
+- config-keys:
     - dsr1-fp4-mi355x-sglang-disagg
     - dsr1-fp4-mi355x-sglang-disagg-mtp
   description:

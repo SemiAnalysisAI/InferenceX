@@ -2706,6 +2706,29 @@ dsv4-fp4-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
+dsv4-fp4-b300-trt:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 32 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
