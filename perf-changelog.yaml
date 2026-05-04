@@ -2165,6 +2165,14 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
+    - "Tune DSv4 FP4 MI355X SGLang runtime envs: enable fused compress and TileLang MHC post, and drop the Torch fallback env overrides for top-k transform and FP8 paged MQA logits"
+    - "Drive SGLang --max-running-requests and --cuda-graph-max-bs from the matrix CONC value instead of hard-coding 256, so each sweep point launches with matching serving capacity and graph capture size"
+    - "Adjust the sweep coverage: start 1k1k dp-attn=true at conc=16, add 1k1k dp-attn=false conc=1-32, and extend 8k1k dp-attn=false coverage to conc=32"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxx
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 (one commit forward on amd/deepseek_v4: sglang PR #24249, fuse-compress-decode 0501)"
     - "Drop the runtime sglang clone+pip overlay from benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh — the new image bakes the same a8410de6 SHA the overlay was pinning, so the overlay is redundant. Future sglang bumps now go through an image tag bump"
     - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
