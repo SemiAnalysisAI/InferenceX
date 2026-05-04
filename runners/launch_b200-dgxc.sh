@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu"
+SLURM_PARTITION="gpu-2"
 SLURM_ACCOUNT="benchmark"
 
 set -x
@@ -279,10 +279,11 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    # gpu-10 and gpu-15 currently have stale CUDA contexts (NCCL "unhandled cuda error"
-    # during sglang scheduler init) and full filesystems (HuggingFace CAS download fails
-    # with "No space left on device"). Exclude until sa-shared admins clean those nodes up.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME" --exclude=gpu-10,gpu-15
+    # b200-dgxc cluster was re-partitioned to gpu-1 / gpu-2; the prior gpu-10
+    # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
+    # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
+    # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file
