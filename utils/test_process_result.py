@@ -47,6 +47,7 @@ def base_env_vars():
         "OSL": "1024",
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
+        "IMAGE": "test-image",
     }
 
 
@@ -381,6 +382,51 @@ class TestCalculations:
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
         assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
         assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
+
+    def test_multinode_aggregate_decode_fields_zero(self, tmp_path, multinode_env_vars):
+        """Aggregate multinode results should report zero decode TP/EP when no decode GPUs exist."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 1,
+            "total_token_throughput": 8000.0,
+            "output_throughput": 6000.0,
+        }
+
+        env = multinode_env_vars.copy()
+        env["PREFILL_GPUS"] = "8"
+        env["DECODE_GPUS"] = "0"
+        env["PREFILL_NUM_WORKERS"] = "1"
+        env["PREFILL_TP"] = "8"
+        env["PREFILL_EP"] = "1"
+        env["PREFILL_DP_ATTN"] = "false"
+        env["DECODE_NUM_WORKERS"] = "0"
+        env["DECODE_TP"] = "8"
+        env["DECODE_EP"] = "1"
+        env["DECODE_DP_ATTN"] = "false"
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["decode_tp"] == 0
+        assert output_data["decode_ep"] == 0
+        assert output_data["decode_num_workers"] == 0
+        assert output_data["num_decode_gpu"] == 0
+        assert output_data["num_prefill_gpu"] == 8
+        assert output_data["tput_per_gpu"] == pytest.approx(1000.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(750.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(250.0)
+
+    def test_multinode_zero_total_gpus_fails(self, tmp_path, sample_benchmark_result, multinode_env_vars):
+        """Invalid multinode metadata should fail before throughput division."""
+        env = multinode_env_vars.copy()
+        env["PREFILL_GPUS"] = "0"
+        env["DECODE_GPUS"] = "0"
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+
+        assert result.returncode != 0
+        assert "Multinode results require at least one GPU" in result.stderr
 
 
 # =============================================================================

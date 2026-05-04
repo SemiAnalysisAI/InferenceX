@@ -17,42 +17,41 @@ fi
 
 hf download "$MODEL"
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
+nvidia-smi
 
-export SGLANG_USE_AITER=1
-export RCCL_MSCCL_ENABLE=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-
-SERVER_LOG=/workspace/server.log
+SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
+
+echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
-start_gpu_monitor
 
-python3 -m sglang.launch_server \
-    --attention-backend aiter \
+start_gpu_monitor --output "$PWD/gpu_metrics.csv"
+
+set -x
+PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL \
-    --host=0.0.0.0 \
+    --host 0.0.0.0 \
     --port $PORT \
-    --tensor-parallel-size $TP \
     --trust-remote-code \
-    --chunked-prefill-size 196608 \
-    --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 8 \
-    --max-prefill-tokens 196608 \
-    --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --tp $TP \
+    --moe-runner-backend marlin \
+    --chunked-prefill-size 4096 \
+    --disable-flashinfer-autotune \
+    --disable-radix-cache \
+    --mem-fraction-static 0.88 \
+    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
+    $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -61,17 +60,15 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir "$PWD/"
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x
