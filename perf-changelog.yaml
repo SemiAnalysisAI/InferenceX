@@ -2213,4 +2213,5 @@
   description:
     - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"
     - "Mirror the B300 TRT launch path with OpenAI chat serving, FP8 KV cache, TRTLLM MoE, NCCL NVLS disabled by default, and fused MHC disabled for hidden size 7168 correctness"
+    - "Update the B200 DGXC Slurm partition from removed gpu to gpu-2 so single-node B200 jobs can allocate"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1277
