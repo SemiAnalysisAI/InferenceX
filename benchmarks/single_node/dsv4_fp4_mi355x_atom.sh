@@ -29,9 +29,6 @@ PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 export AITER_LOG_LEVEL=WARNING
-# Keep the dummy warmup from scaling with the high-concurrency serving token
-# budget. Runtime batching still uses --max-num-batched-tokens below.
-export ATOM_WARMUP_MAX_NUM_BATCHED_TOKENS=${ATOM_WARMUP_MAX_NUM_BATCHED_TOKENS:-4096}
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays ROCm/aiter#2998 for the DSv4 kernels. Install
@@ -112,7 +109,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-aiter-pr2998-indexer}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-ac1e4eaf62683a52523acc2235c824d9eeea8a27}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-deb141f3d9f98595bcea3aa585a37b2788a5c16e}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
@@ -285,13 +282,11 @@ else
 fi
 
 if [[ -z "${ATOM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
-    # The image default is 16384, which splits conc=64 1k-prefill traffic into
-    # 4-5 prefill batches. Use a conservative larger default for high-conc 1k
-    # runs while keeping an env override for 64k experiments.
-    if [ "$ISL" -le 1024 ] && [ "$CONC" -ge 64 ]; then
-        ATOM_MAX_NUM_BATCHED_TOKENS=32768
-    else
-        ATOM_MAX_NUM_BATCHED_TOKENS=16384
+    # Keep ATOM startup/warmup bounded without carrying a fork-only warmup knob.
+    # Do not set this below ISL, otherwise an 8k prefill may never be admitted.
+    ATOM_MAX_NUM_BATCHED_TOKENS=4096
+    if [ "$ISL" -gt "$ATOM_MAX_NUM_BATCHED_TOKENS" ]; then
+        ATOM_MAX_NUM_BATCHED_TOKENS="$ISL"
     fi
 fi
 
