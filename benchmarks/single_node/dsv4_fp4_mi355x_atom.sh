@@ -314,7 +314,7 @@ run_benchmark_serving \
     --trust-remote-code
 
 if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT" --limit "${EVAL_LIMIT:-2}"
+    run_eval --framework lm-eval --port "$PORT" --limit "${EVAL_LIMIT:-16}"
     append_lm_eval_summary
 fi
 

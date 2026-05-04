@@ -394,16 +394,17 @@ run_benchmark_serving() {
         local benchmark_pid=$!
 
         # Monitor loop: check both benchmark and server status
+        set +x
         while kill -0 "$benchmark_pid" 2>/dev/null; do
             if ! kill -0 "$server_pid" 2>/dev/null; then
                 echo "ERROR: Server process $server_pid died during benchmark"
                 kill "$benchmark_pid" 2>/dev/null
                 wait "$benchmark_pid" 2>/dev/null
-                set +x
                 return 1
             fi
             sleep 2
         done
+        set -x
 
         # Benchmark finished, get its exit code
         wait "$benchmark_pid"
