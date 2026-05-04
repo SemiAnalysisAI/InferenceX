@@ -34,7 +34,7 @@ mkdir -p "/tmp/slurm_job-${SLURM_JOB_ID}"
 
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-ghcr.io/simondanielsson/vllm-router:dev-streaming-cn-cjy}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260503-e8992ca}"
 ROUTER_CONT_NAME="router_vllm_local_${SLURM_JOB_ID}"
 
 # Launch vllm-router as a separate container (mirrors job.slurm behavior)
