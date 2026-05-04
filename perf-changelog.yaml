@@ -2213,4 +2213,4 @@
   description:
     - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
     - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
