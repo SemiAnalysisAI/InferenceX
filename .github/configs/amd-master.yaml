@@ -993,7 +993,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
         - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:nightly-100c7b65e7579c8caf4ee0b04a6410b2796b905c
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1046,7 +1046,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
         - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:nightly-100c7b65e7579c8caf4ee0b04a6410b2796b905c
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg

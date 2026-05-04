@@ -296,7 +296,7 @@ SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
 # vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-ghcr.io/simondanielsson/vllm-router:dev-streaming-cn-cjy}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260503-e8992ca}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -416,6 +416,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
         \"$VLLM_ROUTER_IMAGE\" \
         bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
             --vllm-pd-disaggregation \
+            --kv-connector moriio \
             --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
             --port ${ROUTER_PORT} \
             --host 0.0.0.0 \

@@ -32,8 +32,13 @@ fi
 export IBDEVICES
 
 # Shared: Auto-detect default network interface (portable across clusters)
-export GLOO_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
-export NCCL_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
+# Only auto-detect if not already set by the runner/environment
+if [[ -z "$GLOO_SOCKET_IFNAME" ]]; then
+    export GLOO_SOCKET_IFNAME=$(ip route 2>/dev/null | grep '^default' | awk '{print $5}' | head -n 1)
+fi
+if [[ -z "$NCCL_SOCKET_IFNAME" ]]; then
+    export NCCL_SOCKET_IFNAME=$(ip route 2>/dev/null | grep '^default' | awk '{print $5}' | head -n 1)
+fi
 
 set +x
 
