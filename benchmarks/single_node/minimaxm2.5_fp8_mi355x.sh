@@ -48,23 +48,18 @@ elif [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
     VLLM_BLOCK_SIZE=32
     echo "Disabling shuffle KV cache layout and using block size 32 for TP8/EP8."
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
-    if (( CONC <= 64 )); then
+    if (( CONC < 64 )); then
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    fi
-
-    if (( CONC >= 64 )); then
+        echo "Using baseline block size 32, shuffle disabled, and disabling async scheduling for 8k1k c${CONC}."
+    elif (( CONC == 64 )); then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
         export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
         VLLM_BLOCK_SIZE=16
-
-        if [[ -n "$ASYNC_SCHEDULING_ARGS" ]]; then
-            echo "Using shuffle KV cache layout with block size 16 and disabling async scheduling for 8k1k c${CONC}."
-        else
-            echo "Using shuffle KV cache layout with block size 16 and async scheduling for 8k1k c${CONC}."
-        fi
-    elif [[ -n "$ASYNC_SCHEDULING_ARGS" ]]; then
-        echo "Using baseline block size 32, shuffle disabled, and disabling async scheduling for 8k1k c${CONC}."
+        echo "Using shuffle KV cache layout with block size 16 and disabling async scheduling for 8k1k c${CONC}."
     else
-        echo "Using baseline block size 32, shuffle disabled, and async scheduling for 8k1k c${CONC}."
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+        echo "Using shuffle KV cache layout with block size 16 and async scheduling for 8k1k c${CONC}."
     fi
 else
     echo "Using baseline block size 32, shuffle disabled, and async scheduling for ISL=${ISL}, OSL=${OSL}, c${CONC}."
