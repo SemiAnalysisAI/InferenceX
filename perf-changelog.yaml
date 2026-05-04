@@ -2207,3 +2207,10 @@
     - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE-style speculative decoding regresses acceptance on raw random tokens"
     - "Search space mirrors the non-MTP H200 entry: TP=8, EP=8, DP-attn=true, CONC 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1222
+
+- config-keys:
+    - dsv4-fp4-b200-trt
+  description:
+    - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"
+    - "Mirror the B300 TRT launch path with OpenAI chat serving, FP8 KV cache, TRTLLM MoE, NCCL NVLS disabled by default, and fused MHC disabled for hidden size 7168 correctness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1277
