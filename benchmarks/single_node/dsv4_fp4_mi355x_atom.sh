@@ -29,6 +29,9 @@ PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 export AITER_LOG_LEVEL=WARNING
+# Keep the dummy warmup from scaling with the high-concurrency serving token
+# budget. Runtime batching still uses --max-num-batched-tokens below.
+export ATOM_WARMUP_MAX_NUM_BATCHED_TOKENS=${ATOM_WARMUP_MAX_NUM_BATCHED_TOKENS:-4096}
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays ROCm/aiter#2998 for the DSv4 kernels. Install
@@ -37,7 +40,7 @@ export AITER_LOG_LEVEL=WARNING
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/ROCm/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-pull/2998/head}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-883ddb70fd6b0cf0f03c1c51f0f6d8b2cb63c171}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-969863a082e49211756fba71e240d083fc7580bb}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
@@ -109,7 +112,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-aiter-pr2998-indexer}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-6a1b7a58bde47c2790f63d7927b9686512d4fc39}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-ac1e4eaf62683a52523acc2235c824d9eeea8a27}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
