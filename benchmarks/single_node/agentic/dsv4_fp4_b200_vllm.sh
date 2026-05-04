@@ -52,11 +52,18 @@ OFFLOAD_ARGS=""
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # B200-dgxc nodes have substantial DRAM; override workflow default
-        # (600 GB) so we can offload up to 1.5 TB of KV cache.
+        # B200-dgxc nodes have substantial DRAM; we want ~1.5 TB total CPU
+        # KV pool across all DP engines. SimpleCPUOffloadConnector divides
+        # cpu_bytes_to_use by parallel_config.world_size (= TP*PP, NOT
+        # including DP — see vllm/config/parallel.py docstring), so each
+        # DP engine independently allocates the full --kv_offloading_size
+        # via torch.zeros + cudaHostRegister. Pre-divide by $TP (= DP size,
+        # since the launcher passes --data-parallel-size $TP) so the
+        # aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
         TOTAL_CPU_DRAM_GB=1500
+        PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB"
+        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $PER_ENGINE_GB"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
