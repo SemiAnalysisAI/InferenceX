@@ -2630,6 +2630,28 @@ dsv4-fp8-h200-vllm:
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
 
+# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
+# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+dsv4-fp8-h200-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
 # Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
 # image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.

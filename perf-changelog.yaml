@@ -2197,3 +2197,13 @@
     - "Align B200 flags with B300: SGLANG_ENABLE_SPEC_V2=1, --enable-symm-mem, --expert-parallel-size"
     - "Reduce prefill tokens from 32768 to 16384, drop flashinfer_allreduce_fusion"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1065
+
+- config-keys:
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H200 vLLM MTP variant (mirrors dsv4-fp8-h200-vllm with --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":1})"
+    - "Image: vllm/vllm-openai:v0.20.1"
+    - "Set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 to skip the cudagraph-memory estimator (it overshoots the H200 + MTP memory budget at profile time even though actual cudagraph capture works fine)"
+    - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE-style speculative decoding regresses acceptance on raw random tokens"
+    - "Search space mirrors the non-MTP H200 entry: TP=8, EP=8, DP-attn=true, CONC 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1222
