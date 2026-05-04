@@ -2167,7 +2167,7 @@
   description:
     - "Flip SGLANG_TOPK_TRANSFORM_512_TORCH from 1 to 0. The indexer's top-k step now runs the tilelang kernel instead of the torch path."
     - "Flip SGLANG_OPT_USE_FUSED_COMPRESS from false to true. The DeepseekV4 compressor now goes through the fused triton path instead of the torch path."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxxx
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1275
 
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-mtp2
