@@ -874,6 +874,24 @@ ensure_hf_cli() {
     # Some lean runtime images used by multinode SGLang include Python but not
     # the Hugging Face CLI. Install just the hub CLI before prefetching traces.
     agentic_pip_install --quiet "huggingface_hub[cli]>=0.25.0"
+
+    # Pip installs the `hf` entrypoint to either /usr/local/bin (root) or
+    # $HOME/.local/bin (--user). Both can be off the default PATH inside
+    # lean SGLang containers — extend PATH so the subsequent `hf download`
+    # call resolves. If still missing, fall back to a python -m wrapper.
+    export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+    if ! command -v hf >/dev/null 2>&1; then
+        echo "[ensure_hf_cli] hf entrypoint not on PATH after install; using python -m wrapper" >&2
+        cat > /tmp/hf_wrapper.sh <<'WRAP'
+#!/usr/bin/env bash
+exec python3 -c "import sys; from huggingface_hub.commands.huggingface_cli import main; sys.argv[0]='hf'; main()" "$@"
+WRAP
+        chmod +x /tmp/hf_wrapper.sh
+        ln -sf /tmp/hf_wrapper.sh /usr/local/bin/hf 2>/dev/null \
+            || ln -sf /tmp/hf_wrapper.sh "$HOME/.local/bin/hf" 2>/dev/null \
+            || ln -sf /tmp/hf_wrapper.sh /tmp/hf
+        export PATH="/tmp:$PATH"
+    fi
 }
 
 resolve_trace_source() {
