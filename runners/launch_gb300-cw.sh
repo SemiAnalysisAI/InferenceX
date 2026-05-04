@@ -36,10 +36,11 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         exit 1
     fi
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    # DSR1 NVFP4 v2 staged on compute-node-local NVMe. Path mirrors the
-    # gb300-nv launcher's /data/models/dsr1-fp4 aside from the cw NVMe
-    # mount point.
-    export MODEL_PATH="/scratch/models/dsr1-fp4/"
+    # DSR1 NVFP4 v2 staged on compute-node-local NVMe at /scratch/models/dsr1-fp4
+    # (mirrors dsv4 layout — the source-of-truth copy lives on /mnt/vast NFS at
+    # /mnt/vast/models/dsr1-fp4 and is rsync'd to each compute node's local
+    # /scratch/ before the sweep so model load reads from NVMe, not NFS).
+    export MODEL_PATH="/scratch/models/dsr1-fp4"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # Use our srt-slurm-nv fork directly — the gb300-fp4 agentic sglang
@@ -208,15 +209,15 @@ default_mounts:
 model_paths:
   dspro: "${MODEL_PATH}"
   dsv4-pro: "${MODEL_PATH}"
-  # Our hand-rolled DSV4 sglang recipes use `model.path: deepseek-v4-pro`
-  # (matches the alias in launch_gb200-nv.sh's srtslurm.yaml). Without
-  # this entry srtctl preflight rejects with "Model 'deepseek-v4-pro'
-  # is not a local model path and is not defined in srtslurm.yaml
-  # model_paths".
+  # Our hand-rolled DSV4 sglang recipes use the model path alias
+  # 'deepseek-v4-pro' (matches launch_gb200-nv.sh's srtslurm.yaml).
+  # Without this entry srtctl preflight rejects with "Model
+  # 'deepseek-v4-pro' is not a local model path and is not defined in
+  # srtslurm.yaml model_paths".
   deepseek-v4-pro: "${MODEL_PATH}"
-  # gb300-fp4 dsr1 sglang recipes (recipes/gb300-fp4/agentic/*.yaml in
-  # cquil11/srt-slurm-nv) use `model.path: dsr1-fp4`; gb300-fp4 trt and
-  # other launchers use `dsr1`. Map both to the same staged weights.
+  # gb300-fp4 dsr1 sglang recipes in cquil11/srt-slurm-nv use the alias
+  # 'dsr1-fp4' for model path. gb300-fp4 trt and the gb300-nv launcher
+  # use 'dsr1'. Map both to the same staged weights.
   dsr1-fp4: "${MODEL_PATH}"
   dsr1: "${MODEL_PATH}"
 containers:
