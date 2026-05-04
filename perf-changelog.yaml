@@ -2067,7 +2067,13 @@
     - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
-  
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Tune --num-continuous-decode-steps 4 → 8 (+4.7% avg output throughput gain)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1243
+
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-mtp2
   description:
@@ -2093,6 +2099,13 @@
     - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
     - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "Update Atom image to rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Search-space: expand conc-end to 256 for tp2/tp4 (1k/1k and 8k/1k); remove tp8/ep8 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1194
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang
@@ -2157,3 +2170,12 @@
     - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
     - "ep=1 entries (dp-attn true and false) are unaffected by the EP=8 regression"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Fix result file parsing for non-disagg multinode benchmarks (decode num-worker=0)"
+    - "sa-bench result files without _ctx_/_gen_ suffix were silently dropped from the summary table"
+    - "Use vllm/vllm-openai:v0.20.1-ubuntu2404 directly for GB200 MTP2 instead of upgrading vLLM inside the v0.20.0 container"
+    - "Fix applies to all 7 multinode launch scripts, the benchmark-multinode-tmpl workflow, and process_result.py"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1256

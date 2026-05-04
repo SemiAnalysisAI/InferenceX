@@ -7945,10 +7945,10 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-# MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM nightly image
+# MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
-  image: vllm/vllm-openai:nightly-a749a33d8d05acdd3ab346bd3f0c6b5c9c80474f
+  image: vllm/vllm-openai:v0.20.1-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
