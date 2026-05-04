@@ -79,17 +79,8 @@ case "$OFFLOADING" in
         else
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
-        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        # Use --kv-transfer-config JSON instead of the --kv_offloading_size
-        # convenience flag so we can also pass lazy_offload=true. The eager
-        # default triggers an AssertionError in
-        # vllm/v1/core/kv_cache_utils.py:269 (popleft_n: curr_block is not None)
-        # under DSv4 + 1M max_model_len + high in-flight: the eviction
-        # bookkeeping races with the scheduler's free-block accounting and
-        # leaves the FreeKVCacheBlockQueue in an inconsistent state.
-        # lazy_offload defers the store path and the bug doesn't manifest.
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
+        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $PER_ENGINE_GB"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
