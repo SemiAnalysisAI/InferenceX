@@ -2187,3 +2187,13 @@
     - "Use vllm/vllm-openai:v0.20.1-ubuntu2404 directly for GB200 MTP2 instead of upgrading vLLM inside the v0.20.0 container"
     - "Fix applies to all 7 multinode launch scripts, the benchmark-multinode-tmpl workflow, and process_result.py"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1256
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Add TP8 search-space point (conc 4) for 1k1k and 8k1k"
+    - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
+    - "Align B200 flags with B300: SGLANG_ENABLE_SPEC_V2=1, --enable-symm-mem, --expert-parallel-size"
+    - "Reduce prefill tokens from 32768 to 16384, drop flashinfer_allreduce_fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1065
