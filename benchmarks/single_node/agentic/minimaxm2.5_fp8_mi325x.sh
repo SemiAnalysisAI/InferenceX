@@ -72,6 +72,7 @@ case "$OFFLOADING" in
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=true
         export LMCACHE_CHUNK_SIZE=256
+        export LMCACHE_MAX_LOCAL_CPU_SIZE=$((TOTAL_CPU_DRAM_GB / TP))
         # LMCache reuses vLLM's prefix cache hash function, so prefix caching
         # must be enabled (unlike native CPU offloading).
         PREFIX_CACHE_FLAG="--enable-prefix-caching"
