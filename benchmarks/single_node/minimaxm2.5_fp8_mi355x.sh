@@ -26,7 +26,49 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+VLLM_BLOCK_SIZE=32
+ASYNC_SCHEDULING_ARGS=""
+
+if [[ "$ISL" == "1024" && "$OSL" == "1024" && "$TP" == "8" && "$EP_SIZE" == "8" ]] && (( CONC == 2 )); then
+    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+    echo "Using baseline block size 32, shuffle disabled, and disabling async scheduling for 1k1k TP8/EP8 c2."
+elif [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+    VLLM_BLOCK_SIZE=16
+
+    if (( CONC <= 128 )); then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        echo "Using shuffle KV cache layout with block size 16 and disabling async scheduling for 1k1k c${CONC}."
+    else
+        echo "Using shuffle KV cache layout with block size 16 and async scheduling for 1k1k c${CONC}."
+    fi
+elif [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+    VLLM_BLOCK_SIZE=32
+    echo "Disabling shuffle KV cache layout and using block size 32 for TP8/EP8."
+elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+    if (( CONC <= 64 )); then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+    fi
+
+    if (( CONC >= 64 )); then
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+
+        if [[ -n "$ASYNC_SCHEDULING_ARGS" ]]; then
+            echo "Using shuffle KV cache layout with block size 16 and disabling async scheduling for 8k1k c${CONC}."
+        else
+            echo "Using shuffle KV cache layout with block size 16 and async scheduling for 8k1k c${CONC}."
+        fi
+    elif [[ -n "$ASYNC_SCHEDULING_ARGS" ]]; then
+        echo "Using baseline block size 32, shuffle disabled, and disabling async scheduling for 8k1k c${CONC}."
+    else
+        echo "Using baseline block size 32, shuffle disabled, and async scheduling for 8k1k c${CONC}."
+    fi
+else
+    echo "Using baseline block size 32, shuffle disabled, and async scheduling for ISL=${ISL}, OSL=${OSL}, c${CONC}."
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -52,9 +94,10 @@ $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
---block-size=32 \
+--block-size=$VLLM_BLOCK_SIZE \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
+$ASYNC_SCHEDULING_ARGS \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
