@@ -495,6 +495,7 @@ Markers available: `slow`, `integration`
 
 ## Important Notes
 1. Make sure no new directories are created in `/workspace` during the benchmark. Files are ok.
+2. **Never delete or modify whitespace in `perf-changelog.yaml`** — the CI pipeline depends on the exact whitespace (including trailing spaces on blank separator lines). Removing or altering whitespace will break CI and cause pipeline crashes.
 
 ## Fetching GitHub Actions Benchmark Results
 

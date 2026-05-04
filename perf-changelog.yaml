@@ -1903,6 +1903,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1182
 
 - config-keys:
+    - gptoss-fp4-mi355x-atom
+  description:
+    - "Update GPTOSS-120B FP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1195
+  
+- config-keys:
     - dsv4-fp4-b300-vllm
   description:
     - Add low-latency configs and remove non-pareto configs
@@ -2061,7 +2067,13 @@
     - "Add TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1126
-  
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Tune --num-continuous-decode-steps 4 → 8 (+4.7% avg output throughput gain)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1243
+
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-mtp2
   description:
@@ -2078,3 +2090,92 @@
     - "Removed redundant transformer installation"
     - "Optimization model serves configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1252
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Fix tp:2 search-space: ep 2 -> 1"
+    - "Dynamic scheduler-recv-interval: 30 for CONC>4, 10 otherwise"
+    - "Remove --max-running-requests, reduce prefill/chunked from 81920 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1018
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-atom
+  description:
+    - "Update Atom image to rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post"
+    - "Search-space: expand conc-end to 256 for tp2/tp4 (1k/1k and 8k/1k); remove tp8/ep8 configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1194
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Add MI355X DSv4 FP4 SGLang benchmark on rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4"
+    - "Use deepseek-ai/DeepSeek-V4-Pro with SGLANG_DSV4_FP4_EXPERTS=True and SGLANG_FORCE_TRITON_MOE_FP8=0"
+    - "Overlay SGLang from amd/deepseek_v4 SHA a8410de6 at runtime"
+    - "Sweep DP attention on/off and EP=8 via DP_ATTENTION and EP_SIZE matrix env vars"
+    - "Ship a DeepSeek-V4 thinking-mode chat template so eval /v1/chat/completions works (the canonical checkpoint ships no chat_template)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1244
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H200 single-node SGLang recipe (Marlin MoE backend, TP=8, EP=1)"
+    - "Image: lmsysorg/sglang:deepseek-v4-hopper pinned by digest"
+    - "Server flags: --moe-runner-backend marlin, --chunked-prefill-size 4096, --disable-flashinfer-autotune, --disable-radix-cache, --mem-fraction-static 0.88"
+    - "Search space: TP=8 EP=1, conc 1 and 4-64 for both 1k1k and 8k1k"
+    - "Pinned to the h200-dgxc runner pool (new runners.yaml group); launch_h200-dgxc-slurm.sh extended to support framework-tagged script names and mount /ix instead of /workspace for the deepseek-v4-hopper image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1264
+
+- config-keys:
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H200 single-node SGLang MTP variant (mirrors dsv4-fp8-h200-sglang)"
+    - "EAGLE speculative decoding chain: --speculative-algorithm EAGLE --speculative-num-steps 3 --speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
+    - "run_benchmark_serving uses --dsv4 (chat-formatted prompts) per the AGENTS.md MTP rule, since EAGLE acceptance regresses on raw random tokens"
+    - "Search space mirrors the non-MTP H200 SGLang entry: TP=8 EP=1, conc 1 and 4-64 for both 1k1k and 8k1k, with spec-decoding: mtp"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1265
+
+- config-keys:
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.20.0-cu130"
+    - "Search-space: tp=8 and tp=4/ep=1 over conc 4-64, on both 1024/1024 and 8192/1024 ISL/OSL"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1057
+
+- config-keys:
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Add Kimi-K2.5 INT4 B300 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.20.0-cu130"
+    - "Search-space: tp=8 and tp=4/ep=1 over conc 4-64, on both 1024/1024 and 8192/1024 ISL/OSL"
+    - "At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html does not have a B300-specific recipe, so this reuses the existing Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1057
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Add B300 TensorRT-LLM DeepSeek-V4-Pro eval coverage using the feat/deepseek_v4 image"
+    - "Disable TRTLLM fused MHC hyper-connection for eval servers via TRTLLM_MHC_ENABLE_FUSED_HC=0 because the current fused kernel corrupts DeepSeek-V4-Pro hidden size 7168 generations"
+    - "Keep this as eval-only PR validation until the TensorRT-LLM fused MHC kernel is guarded or supports hidden size 7168"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 (one commit forward on amd/deepseek_v4: sglang PR #24249, fuse-compress-decode 0501)"
+    - "Drop the runtime sglang clone+pip overlay from benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh — the new image bakes the same a8410de6 SHA the overlay was pinning, so the overlay is redundant. Future sglang bumps now go through an image tag bump"
+    - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
+    - "ep=1 entries (dp-attn true and false) are unaffected by the EP=8 regression"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Fix result file parsing for non-disagg multinode benchmarks (decode num-worker=0)"
+    - "sa-bench result files without _ctx_/_gen_ suffix were silently dropped from the summary table"
+    - "Use vllm/vllm-openai:v0.20.1-ubuntu2404 directly for GB200 MTP2 instead of upgrading vLLM inside the v0.20.0 container"
+    - "Fix applies to all 7 multinode launch scripts, the benchmark-multinode-tmpl workflow, and process_result.py"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1256

@@ -2044,7 +2044,7 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2056,11 +2056,13 @@ qwen3.5-fp4-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
+      - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
+      - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
@@ -2418,6 +2420,30 @@ kimik2.5-int4-b200-vllm:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, offloading: cpu,  conc-list: [32, 64, 96, 128] }
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this config reuses the existing
+# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
+kimik2.5-int4-b300-vllm:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: b300
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+
 kimik2.5-int4-h200-vllm:
   image: vllm/vllm-openai:v0.16.0
   model: moonshotai/Kimi-K2.5
@@ -2438,7 +2464,7 @@ kimik2.5-int4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.17.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200
@@ -2457,15 +2483,6 @@ kimik2.5-fp4-b200-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # offloading=none: GPU-only KV; covers low/mid concurrency where HBM holds the working set
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
-      # offloading=cpu: CPU host KV offload; covers high concurrency that exceeds HBM (overlap at 64)
-      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu,  conc-list: [128, 192, 256] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -2625,6 +2642,54 @@ dsv4-fp8-h200-vllm:
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
+# DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
+# Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
+# image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
+dsv4-fp8-h200-sglang:
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+
+# MTP variant of dsv4-fp8-h200-sglang. Mirrors the non-MTP recipe (same image,
+# runner pool, search space) and adds EAGLE speculative decoding via
+# --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
+dsv4-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
   # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
   # pareto sweep. The single-node schema has no explicit data-parallel-size
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
@@ -2672,6 +2737,51 @@ dsv4-fp4-b300-vllm:
       # offloading: none entries temporarily removed — already have data from
       # run 25234822495 (Friday). Re-add when sweep is broadened.
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
+
+dsv4-fp4-b300-trt:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 32 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
+dsv4-fp4-b300-vllm-mtp:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
@@ -3959,7 +4069,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -3980,15 +4090,6 @@ gptoss-fp4-h100-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h100-vllm:
   image: vllm/vllm-openai:v0.19.1
@@ -4180,7 +4281,7 @@ gptoss-fp4-h200-trt:
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.18.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -4203,17 +4304,6 @@ gptoss-fp4-h200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 32 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 1, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 2, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.19.1
@@ -7899,6 +7989,19 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 16
           dp-attn: true
 
+# MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
+# and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
+dsv4-fp4-gb200-dynamo-vllm-mtp2:
+  image: vllm/vllm-openai:v0.20.1-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:

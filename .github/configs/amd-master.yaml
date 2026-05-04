@@ -590,7 +590,7 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 4, ep: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
 
 minimaxm2.5-fp8-mi355x-atom:
-  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -602,15 +602,13 @@ minimaxm2.5-fp8-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 32, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
 
 minimaxm2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.19.1
@@ -686,7 +684,7 @@ minimaxm2.5-fp8-mi325x-vllm:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
@@ -709,18 +707,9 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 1, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # offloading=none covers low + mid concurrency (no KV pressure → no need to offload)
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      # offloading=cpu covers mid + high concurrency where KV pressure exceeds GPU; overlap at 64 for crossover
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.19.1
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi325x
@@ -743,13 +732,6 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 8 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu, conc-list: [64, 96, 128, 192, 256] }
 
 gptoss-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
@@ -775,7 +757,7 @@ gptoss-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi355x
@@ -787,12 +769,12 @@ gptoss-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 16, conc-end: 128 }
+      - { tp: 1, conc-start: 16, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
+      - { tp: 1, conc-start: 4, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
 
 dsr1-fp8-mi355x-atom:
@@ -1584,6 +1566,31 @@ dsv4-fp8-mi355x-sglang:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
+dsv4-fp4-mi355x-sglang:
+  image: rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
+      - { tp: 8, dp-attn: true, conc-start: 2 , conc-end: 32 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 8 }
 
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
 # stacked on #40871). Uses the ATOM MI355X image (ROCm 7.2.2, aiter with
