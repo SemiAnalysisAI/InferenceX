@@ -2165,6 +2165,15 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 (one commit forward on amd/deepseek_v4: sglang PR #24249, fuse-compress-decode 0501)"
+    - "Drop the runtime sglang clone+pip overlay from benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh — the new image bakes the same a8410de6 SHA the overlay was pinning, so the overlay is redundant. Future sglang bumps now go through an image tag bump"
+    - "Context: ep=8 dp-attn=true entries failed gsm8k eval after #1244 merged. PR sweep (run 25246535693) reported gsm8k strict-match=0.9318 because the launcher silently dropped --ep-size and sglang ran with ep_size=1 regardless of the matrix label; post-merge sweep (run 25262278289) ran with ep_size=8 and gsm8k strict-match dropped to 0.0000. The image bump is the candidate fix to verify on rerun"
+    - "ep=1 entries (dp-attn true and false) are unaffected by the EP=8 regression"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1266
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
     - "Flip SGLANG_TOPK_TRANSFORM_512_TORCH from 1 to 0. The indexer's top-k step now runs the tilelang kernel instead of the torch path."
     - "Flip SGLANG_OPT_USE_FUSED_COMPRESS from false to true. The DeepseekV4 compressor now goes through the fused triton path instead of the torch path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1275
