@@ -341,8 +341,9 @@ async def async_request_openai_chat_completions(
 
     async with aiohttp.ClientSession(trust_env=True,
                                      timeout=AIOHTTP_TIMEOUT) as session:
-        content = [{"type": "text", "text": request_func_input.prompt}]
+        content = request_func_input.prompt
         if request_func_input.multi_modal_content:
+            content = [{"type": "text", "text": request_func_input.prompt}]
             content.append(request_func_input.multi_modal_content)
         payload = {
             "model": request_func_input.model_name \
