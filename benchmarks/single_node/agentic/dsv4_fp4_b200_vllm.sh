@@ -3,16 +3,19 @@ set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM.
-# Layout follows the official vLLM blog recipe (https://vllm.ai/blog/deepseek-v4):
-# DP=8 + EP=8 (data-parallel attention with expert-parallel MoE), block_size=256,
-# kv-cache-dtype=fp8, FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph
-# capture with custom_ops=all. The recipe doesn't override
-# max-num-batched-tokens / max-cudagraph-capture-size so neither do we; we only
-# pin max-model-len (1M, full DSv4 context) and max-num-seqs (per-rank cap).
-# --no-enable-prefix-caching is intentionally absent (the agentic trace replay
-# IS the prefix-caching benchmark). Image is vllm/vllm-openai:v0.20.0-cu130
-# (the DSv4-tuned deepseekv4-cu130 tag mentioned in the blog isn't currently
-# pinned in this repo's pipeline).
+# Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
+# agentic sweep can probe both interactivity and throughput regimes:
+#   pure TP (DP_ATTENTION=false, EP_SIZE=1):  attention TP-sharded across
+#       all $TP GPUs in a single engine. Lower TPOT, lower batch.
+#   TP+EP   (DP_ATTENTION=false, EP_SIZE>1):  attention TP-sharded, MoE
+#       experts EP-sharded within the TP group.
+#   DEP     (DP_ATTENTION=true, EP_SIZE>1):   per-DP-rank attention with
+#       experts EP-sharded across DP ranks (per the vLLM blog recipe).
+#       Highest aggregate throughput at large CONC.
+#
+# Image is vllm/vllm-openai:v0.20.0-cu130. block_size=256, kv-cache-dtype=fp8,
+# FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph capture with
+# custom_ops=all (per the vLLM blog recipe at https://vllm.ai/blog/deepseek-v4).
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -26,6 +29,8 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
+EP_SIZE=${EP_SIZE:-1}
+DP_ATTENTION=${DP_ATTENTION:-false}
 if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
     MAX_MODEL_LEN=1000000
 fi
@@ -52,16 +57,28 @@ OFFLOAD_ARGS=""
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # B200-dgxc nodes have substantial DRAM; we want ~1.5 TB total CPU
-        # KV pool across all DP engines. SimpleCPUOffloadConnector divides
-        # cpu_bytes_to_use by parallel_config.world_size (= TP*PP, NOT
-        # including DP — see vllm/config/parallel.py docstring), so each
-        # DP engine independently allocates the full --kv_offloading_size
-        # via torch.zeros + cudaHostRegister. Pre-divide by $TP (= DP size,
-        # since the launcher passes --data-parallel-size $TP) so the
-        # aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
+        # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
+        # individual jobs to a fraction of that. Aim for ~1.5 TB total host
+        # CPU pool across the engine(s).
+        #
+        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
+        # parallel_config.world_size (= TP*PP, NOT including DP — see
+        # vllm/config/parallel.py and parallel.py docstrings). So:
+        #   - DP-attn=true  → each of $TP DP engines has world_size=1 in
+        #     its parallel_config; the connector does no internal divide,
+        #     and each engine torch.zeros + pin_tensor allocates the full
+        #     --kv_offloading_size value. Pre-divide by $TP here so the
+        #     aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
+        #   - DP-attn=false → single engine with world_size=TP. Pass the
+        #     full TOTAL_CPU_DRAM_GB; the connector's internal divide
+        #     yields TOTAL/TP per rank, and TP-shared mmap (PR #37206)
+        #     keeps the aggregate at TOTAL.
         TOTAL_CPU_DRAM_GB=1500
-        PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        if [ "$DP_ATTENTION" = "true" ]; then
+            PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        else
+            PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
+        fi
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $PER_ENGINE_GB"
         ;;
@@ -70,6 +87,16 @@ case "$OFFLOADING" in
         exit 1
         ;;
 esac
+
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "$DP_ATTENTION" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+fi
+
+EP_ARGS=()
+if [ "$EP_SIZE" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
@@ -82,8 +109,8 @@ vllm serve "$MODEL" \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
---enable-expert-parallel \
---data-parallel-size "$TP" \
+"${PARALLEL_ARGS[@]}" \
+"${EP_ARGS[@]}" \
 --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
 --tokenizer-mode deepseek_v4 \

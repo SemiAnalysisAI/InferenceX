@@ -1754,25 +1754,27 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-    # NOTE: agentic-coding adopts the parallelism layout from the official
-    # vLLM blog recipe for DSv4-Pro 8xB200 / 8xB300
-    # (https://vllm.ai/blog/deepseek-v4): DP=8 + EP=8 (dp-attn=true) with
-    # FULL_AND_PIECEWISE cudagraph capture. The fixed-seq-len entries above
-    # use TP-only at low conc which works for short sequences but consumes
-    # too much per-rank cudagraph workspace at 1M max-model-len.
+    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options for
+    # DSv4-Pro on this SKU — pure TP for low-conc / high-interactivity, DEP
+    # (DP-attn + EP-MoE) for high-conc / high-throughput per the vLLM blog
+    # recipe (https://vllm.ai/blog/deepseek-v4). HMA stays enabled alongside
+    # cpu offload via VLLM_USE_SIMPLE_KV_OFFLOAD=1 (the simple connector
+    # inherits SupportsHMA in v0.20.0, PR #37160). The launcher passes the
+    # full TOTAL_CPU_DRAM_GB to --kv_offloading_size in pure-TP mode (the
+    # connector's internal divide by world_size=TP gives per-rank values
+    # that share TP-mmap to ≈ TOTAL aggregate), and pre-divides by $TP in
+    # DP-attn mode (each DP engine has world_size=1, no internal divide,
+    # so we shrink the per-engine input to keep aggregate ≈ TOTAL).
     agentic-coding:
-    # Sweep for DSv4-Pro fp4 on B200, DP=8 + EP=8 (per blog recipe).
-    # DSv4's hybrid CSA+HCA attention reaches ~10% of V3.2's KV per token at
-    # 1M context with HMA (Hybrid KV-cache Manager) enabled. The launcher
-    # uses VLLM_USE_SIMPLE_KV_OFFLOAD=1 to select SimpleCPUOffloadConnector,
-    # which inherits SupportsHMA in v0.20.0 (PR #37160), so HMA stays on
-    # alongside cpu offload. cpu-offload conc list overlaps the tail of none
-    # for direct same-conc comparison.
     - duration: 1800
       search-space:
-      # offloading: none entries temporarily removed — already have data from
-      # run 25234821661 (Friday). Re-add when sweep is broadened.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
+      # Pure TP=8 — high interactivity, single engine, attention sharded
+      # across all 8 GPUs. Lower TPOT, smaller batch.
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
+      # DEP=8 — high throughput per blog recipe, DP=8 attention with EP=8 MoE.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [16, 32, 64, 128] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -2719,24 +2721,27 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, conc-start: 1, conc-end: 64 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    # NOTE: agentic-coding uses the official vLLM blog recipe layout for
-    # DSv4-Pro 8xB200 / 8xB300 (https://vllm.ai/blog/deepseek-v4): DP=8 + EP=8
-    # (dp-attn=true) with FULL_AND_PIECEWISE cudagraph capture. See B200
-    # config-block comment above for rationale on diverging from the
-    # fixed-seq-len TP-only layout at low conc.
+    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options —
+    # B300 has more flexibility than B200 since both half-node (TP=4 / DEP=4)
+    # and full-node (TP=8 / DEP=8) layouts are routinely used for DSv4-Pro on
+    # this SKU. Pure TP for low-conc / interactivity, DEP for high-conc /
+    # throughput. See B200 agentic-coding NOTE above for HMA + cpu-offload
+    # configuration details.
     agentic-coding:
-    # Sweep for DSv4-Pro fp4 on B300, DP=8 + EP=8 (per blog recipe).
-    # DSv4's hybrid CSA+HCA attention reaches ~10% of V3.2's KV per token at
-    # 1M context with HMA (Hybrid KV-cache Manager) enabled. The launcher
-    # uses VLLM_USE_SIMPLE_KV_OFFLOAD=1 to select SimpleCPUOffloadConnector,
-    # which inherits SupportsHMA in v0.20.0 (PR #37160), so HMA stays on
-    # alongside cpu offload. cpu-offload conc list overlaps the tail of none
-    # for direct same-conc comparison.
     - duration: 1800
       search-space:
-      # offloading: none entries temporarily removed — already have data from
-      # run 25234822495 (Friday). Re-add when sweep is broadened.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [16, 32, 64] }
+      # Pure TP=4 — half-node interactivity, leaves capacity for parallel runs.
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, offloading: cpu,  conc-list: [16, 32, 64] }
+      # Pure TP=8 — full-node interactivity.
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
+      # DEP=4 — mid-throughput, half-node DP-attn + EP-MoE.
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 32, 64, 128] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
+      # DEP=8 — high-throughput per blog recipe, full-node DP-attn + EP-MoE.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [32, 64, 128, 256] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [128, 256, 512] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
