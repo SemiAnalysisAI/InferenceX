@@ -284,14 +284,8 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    # b200-dgxc was re-partitioned from gpu to gpu-1/gpu-2. Use gpu-2, which
-    # is the clean GPU-only pool, instead of the removed gpu partition.
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
-    if [ -z "$JOB_ID" ]; then
-        echo "ERROR: salloc failed to allocate a job on partition $SLURM_PARTITION"
-        exit 1
-    fi
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes

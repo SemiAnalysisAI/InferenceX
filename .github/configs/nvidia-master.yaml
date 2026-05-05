@@ -1769,12 +1769,12 @@ dsv4-fp4-b200-trt:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 2048 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
 
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
