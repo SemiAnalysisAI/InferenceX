@@ -1756,7 +1756,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1769,12 +1769,12 @@ dsv4-fp4-b200-trt:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256 }
 
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
