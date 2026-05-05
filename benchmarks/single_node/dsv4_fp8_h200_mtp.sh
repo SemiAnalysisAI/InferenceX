@@ -48,17 +48,13 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# Per the recipe, run with EP + DP=8 (no --tensor-parallel-size flag). TP
-# from the search space is used only for GPU allocation by the runner and
-# as the DP size.
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
 --no-enable-prefix-caching \
---enable-expert-parallel \
---data-parallel-size $TP \
+--tensor-parallel-size $TP \
 $MAX_MODEL_LEN_ARG \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs 512 \
