@@ -42,16 +42,17 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     # /scratch/ before the sweep so model load reads from NVMe, not NFS).
     export MODEL_PATH="/scratch/models/dsr1-fp4"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # Use our srt-slurm-nv fork directly — the gb300-fp4 agentic sglang
-        # recipes already live there (recipes/gb300-fp4/agentic/*.yaml), no
-        # overlay needed.
+    if [[ $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "dynamo-trt" ]]; then
+        # Use our srt-slurm-nv fork directly — the gb300-fp4 agentic recipes
+        # for both sglang and trt already live there
+        # (recipes/gb300-fp4/agentic/*.yaml + recipes/trtllm/gb300-fp4/agentic/*.yaml),
+        # no overlay needed.
         SRT_SLURM_RECIPES_REPO="https://github.com/cquil11/srt-slurm-nv.git"
         SRT_SLURM_RECIPES_REF="cam/sa-submission-q2-2026"
         SRT_RECIPE_SRC=""
         SRT_RECIPE_DST=""
     else
-        echo "Unsupported framework on gb300-cw for dsr1/fp4: $FRAMEWORK. Currently supported: dynamo-sglang"
+        echo "Unsupported framework on gb300-cw for dsr1/fp4: $FRAMEWORK. Currently supported: dynamo-sglang, dynamo-trt"
         exit 1
     fi
 else
