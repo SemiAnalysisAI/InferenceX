@@ -922,7 +922,14 @@ install_agentic_deps() {
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
     # Editable install of aiperf from the submodule — gives us the
     # `aiperf` CLI plus the inferencex-agentx-mvp scenario plugin.
-    agentic_pip_install -q -e "$AIPERF_DIR"
+    #
+    # `--ignore-installed` sidesteps the distutils-uninstall error that
+    # vLLM containers hit on apt-managed system packages (blinker, etc.)
+    # when pip's resolver tries to upgrade one of aiperf's transitive
+    # deps. Installing fresh into the user/site location is safe — the
+    # system package stays in place and pip's import order picks up our
+    # newer copy first.
+    agentic_pip_install -q --ignore-installed -e "$AIPERF_DIR"
     # Force-upgrade datasets: containers often ship an older version without
     # the `Json` feature type used by the HF traces dataset. `Json` was added
     # in datasets 4.7.0 (March 2025). Unpinned installs won't upgrade an
