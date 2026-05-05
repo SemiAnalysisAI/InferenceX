@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu"
+SLURM_PARTITION="gpu-2"
 SLURM_ACCOUNT="benchmark"
 
 set -x
