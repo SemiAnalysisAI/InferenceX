@@ -2209,6 +2209,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1222
 
 - config-keys:
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
+    - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
+
+- config-keys:
     - dsv4-fp4-b200-trt
   description:
     - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"

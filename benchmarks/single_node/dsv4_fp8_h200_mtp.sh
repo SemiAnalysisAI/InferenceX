@@ -2,7 +2,7 @@
 
 # DeepSeek-V4-Pro H200 vLLM MTP variant of the recipe at
 # https://vllm.ai/blog/deepseek-v4. Mirrors dsv4_fp8_h200.sh but adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":1}' and
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}' and
 # routes prompts through chat-formatted encoding via --dsv4 (required for
 # meaningful MTP acceptance numbers per AGENTS.md).
 
@@ -65,7 +65,7 @@ $MAX_MODEL_LEN_ARG \
 --max-num-batched-tokens 512 \
 --no-enable-flashinfer-autotune \
 --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
---speculative-config '{"method":"mtp","num_speculative_tokens":1}' \
+--speculative-config '{"method":"mtp","num_speculative_tokens":2}' \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
