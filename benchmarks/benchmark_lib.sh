@@ -976,6 +976,13 @@ build_replay_cmd() {
     # have a fresh prompt prefix so steady-state cache-hit rates don't
     # inflate as the run progresses.
     REPLAY_CMD+=" --cache-bust system_prefix"
+    # 1-second timeslices on the server-metrics scrape so the post-run
+    # plotter has per-window time series (KV usage, cache hit rate,
+    # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
+    # snapshot cadence so metrics_plots.png is visually comparable.
+    # Without this, aiperf only emits aggregate stats and the 6x2 panels
+    # collapse to flat lines.
+    REPLAY_CMD+=" --slice-duration 1.0"
     REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
     # The inferencex-agentx-mvp scenario enforces a 900s minimum
     # benchmark duration. For smoke tests with shorter durations, opt
