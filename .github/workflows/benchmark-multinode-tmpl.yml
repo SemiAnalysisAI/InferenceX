@@ -180,21 +180,19 @@ jobs:
           # the cleanup with EBUSY and the whole job fails before any of
           # our code runs.
           #
-          # IMPORTANT: do NOT use `fuser -m $ws` to broad-kill — `-m`
-          # resolves to the mountpoint (typically the whole NFS share)
-          # and SIGKILLs every process using it, including the GHA
-          # runner agent. The runner agent goes offline mid-step and
-          # GHA marks the job failed ~10 min later. We learned this the
-          # hard way (see prior commit history). Instead, only kill
-          # the specific orphan that holds our workspace open.
+          # IMPORTANT — two ways to break the runner agent we learned the hard way:
+          #   1. fuser -m $ws  resolves to the entire mountpoint and SIGKILLs
+          #      every process using it (including the GHA runner agent).
+          #   2. host-wide pkill on a process pattern (e.g. tail -F sweep_*)
+          #      kills active tails belonging to OTHER GHA runners that
+          #      share the same physical host (gb300-nv_0/1/2 all live on
+          #      the same login node), aborting their in-flight jobs.
+          #
+          # Both bugs were observed in the v4-gb300/v5-gb300 sweeps. The
+          # right scope is "processes that have an open file under THIS
+          # workspace" — nothing else. Nothing host-wide.
           set +e
           ws="${{ github.workspace }}"
-          # Fast path: name-based pkill of exactly the kind of orphan we know about.
-          pkill -KILL -f 'tail -[fF].*sweep_[0-9]+' 2>/dev/null || true
-          pkill -KILL -f 'tail -[fF].*benchmark\.out' 2>/dev/null || true
-          # Slow path: only if there are actual .nfs* turds in our workspace,
-          # find the exact pids holding them and SIGKILL just those — never
-          # the broad mountpoint set.
           if [ -d "$ws" ]; then
             mapfile -t nfs_files < <(find "$ws" -name '.nfs*' 2>/dev/null)
             if [ "${#nfs_files[@]}" -gt 0 ] && command -v fuser >/dev/null 2>&1; then
@@ -204,6 +202,18 @@ jobs:
                 [ -n "$pids" ] && echo "[nfs-clean] killing pids $pids holding $f" && kill -KILL $pids 2>/dev/null
               done
               sleep 2
+            fi
+            # Also kill anything that has cwd/exe/fd within this workspace
+            # (workspace-scoped — does not touch peer runners on the same host).
+            if [ -r /proc ]; then
+              for pid_dir in /proc/[0-9]*; do
+                pid=$(basename "$pid_dir")
+                if ls -l "$pid_dir/cwd" 2>/dev/null | grep -q -F "$ws" \
+                   || ls -l "$pid_dir/fd"/* 2>/dev/null | grep -q -F "$ws"; then
+                  echo "[nfs-clean] killing pid $pid scoped to $ws"
+                  kill -KILL "$pid" 2>/dev/null || true
+                fi
+              done
             fi
             find "$ws" -name '.nfs*' -print -delete 2>/dev/null || true
           fi
