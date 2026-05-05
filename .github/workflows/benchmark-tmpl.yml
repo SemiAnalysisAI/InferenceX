@@ -245,6 +245,7 @@ jobs:
             results/benchmark_command.txt
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
+            results/metrics_plots.png
             results/trace_replay/profile_export.jsonl
             results/trace_replay/profile_export_aiperf.json
             results/trace_replay/profile_export_aiperf.csv

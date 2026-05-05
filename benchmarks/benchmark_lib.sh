@@ -994,4 +994,9 @@ write_agentic_result_json() {
     local result_dir="$1"
     RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
         python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
+
+    # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
+    # don't fail the launcher if plot generation has trouble (e.g. matplotlib
+    # missing in a stripped-down image). The agg JSON is the success gate.
+    python3 "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
