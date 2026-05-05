@@ -101,11 +101,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 
-# DeepSeek-V4-Pro has hidden size 7168. Keep fused HC off with the current
-# feat/deepseek_v4 image, matching the B300 TRT recipe.
-export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-0}"
-echo "TRTLLM_MHC_ENABLE_FUSED_HC: $TRTLLM_MHC_ENABLE_FUSED_HC"
-
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
 set -x
