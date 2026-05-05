@@ -62,7 +62,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
-    --moe-backend triton_unfused \
+    --moe-backend aiter \
     --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
