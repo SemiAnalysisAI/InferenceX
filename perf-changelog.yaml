@@ -2223,6 +2223,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Add tp:2 ep:1 conc 4-128 search-space for 1k1k and 8k1k"
+    - "Align server flags with FP4 B200 STP: --enable-symm-mem, --expert-parallel-size, dynamic scheduler-recv-interval"
+    - "Add MTP flags: SGLANG_ENABLE_SPEC_V2=1, EAGLE speculative decoding (steps=3, topk=1, draft=4)"
+    - "Reduce prefill/chunked from 32768 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1257
+
+- config-keys:
     - dsv4-fp4-b200-trt
   description:
     - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"
