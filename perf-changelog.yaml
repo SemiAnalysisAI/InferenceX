@@ -2219,4 +2219,4 @@
     - dsv4-fp8-h200-vllm-mtp
   description:
     - "Switch image from vllm/vllm-openai:v0.20.1 (cu130) to public.ecr.aws/q9t5s3a7/vllm-release-repo:fbd51e3dfc902364fddab316ef1337c4f261de1a-x86_64-cu129 (vLLM nightly release-repo build, cu129)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1284
