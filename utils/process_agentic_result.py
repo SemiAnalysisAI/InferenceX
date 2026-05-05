@@ -136,10 +136,44 @@ def _hf_traces_dir() -> Path | None:
     if not snapshots.is_dir():
         return None
     candidates = sorted(snapshots.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Prefer the snapshot that contains usable trace files. The published HF
+    # dataset ships a single ``traces.jsonl`` (one trace per line); older /
+    # local mirrors may use per-trace ``*.json`` files instead. Accept either.
     for c in candidates:
-        if c.is_dir() and any(c.glob("*.json")):
+        if not c.is_dir():
+            continue
+        if any(c.glob("*.jsonl")) or any(c.glob("*.json")):
             return c
     return None
+
+
+def _iter_trace_blobs(traces_dir: Path):
+    """Yield each trace JSON dict from the local HF cache.
+
+    Handles both layouts:
+    - one JSONL file (e.g. ``traces.jsonl``) with one trace per line — the
+      shape published HF dataset format.
+    - one ``*.json`` per trace — the legacy per-file layout.
+    """
+    for path in sorted(traces_dir.glob("*.jsonl")):
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        yield json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            continue
+    for path in sorted(traces_dir.glob("*.json")):
+        try:
+            with open(path) as f:
+                yield json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
 
 
 def _load_trace_metadata() -> dict[str, list[dict]]:
@@ -152,13 +186,10 @@ def _load_trace_metadata() -> dict[str, list[dict]]:
     if traces_dir is None:
         _TRACE_METADATA_CACHE = out
         return out
-    for path in traces_dir.glob("*.json"):
-        try:
-            with open(path) as f:
-                blob = json.load(f)
-        except (json.JSONDecodeError, OSError):
+    for blob in _iter_trace_blobs(traces_dir):
+        trace_id = blob.get("id")
+        if not trace_id:
             continue
-        trace_id = blob.get("id") or path.stem
         per_turn: list[dict] = []
         for req in blob.get("requests", []):
             if req.get("type") not in ("n", "s"):

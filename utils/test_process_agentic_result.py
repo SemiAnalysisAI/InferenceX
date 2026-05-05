@@ -394,6 +394,74 @@ def test_processor_aggregates_across_multiple_series(tmp_path: Path):
     assert agg["server_gpu_cache_hit_rate"] == pytest.approx(0.3)
 
 
+def test_processor_loads_traces_jsonl_for_theoretical_cache(tmp_path: Path):
+    """JSONL trace format (one trace per line) populates theoretical_cache_hit_rate.
+
+    The published HF dataset ships a single traces.jsonl — the loader must
+    accept it in addition to the legacy per-trace *.json layout.
+    """
+    result_dir = _write_fixture(tmp_path)
+    # Build a fake HF cache with traces.jsonl matching the conv_ids the
+    # fixture references (trace-A, trace-B).
+    hf_cache = tmp_path / "_hf"
+    snapshot = hf_cache / "datasets--semianalysisai--cc-traces-weka-042026" / "snapshots" / "abc"
+    snapshot.mkdir(parents=True)
+    traces = [
+        {
+            "id": "trace-A",
+            "requests": [
+                {"type": "n", "hash_ids": [1, 2, 3], "output_length": 50},
+                {"type": "n", "hash_ids": [1, 2, 3, 4], "output_length": 60},
+                {"type": "n", "hash_ids": [1, 2, 3, 4, 5], "output_length": 55},
+            ],
+        },
+        {
+            "id": "trace-B",
+            "requests": [
+                {"type": "n", "hash_ids": [10, 11], "output_length": 40},
+                {"type": "n", "hash_ids": [10, 11, 12, 13], "output_length": 70},
+            ],
+        },
+    ]
+    with open(snapshot / "traces.jsonl", "w") as f:
+        for t in traces:
+            f.write(json.dumps(t) + "\n")
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "RESULT_DIR": str(result_dir),
+            "AGENTIC_OUTPUT_DIR": str(tmp_path / "out"),
+            "RESULT_FILENAME": "agg_test",
+            "MODEL": "test-model",
+            "TP": "4",
+            "CONC": "8",
+            "RUNNER_TYPE": "h100-x4",
+            "HF_HUB_CACHE": str(hf_cache),
+        }
+    )
+    proc = subprocess.run(
+        [sys.executable, str(PROCESSOR)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    agg = json.loads((tmp_path / "out" / "agg_test.json").read_text())
+    # Walking trace-A turns 0..2 yields hash_ids
+    #   [1,2,3] | [1,2,3,4] | [1,2,3,4,5]
+    # Hits = blocks seen earlier in the same trace = 3 (turn 1) + 4 (turn 2) = 7
+    # Total = 3 + 4 + 5 = 12
+    # Walking trace-B turns 0..1: hits = 2 (turn 1's [10,11]) ; total = 2 + 4 = 6
+    # Aggregate: hits=9, total=18 -> 0.5
+    assert agg["theoretical_cache_hit_rate"] == pytest.approx(0.5)
+    # output_tokens_expected populated from trace metadata (5 records: A turns 0,1,2 + B turns 0,1)
+    assert agg["mean_output_tokens_expected"] == pytest.approx(
+        (50 + 60 + 55 + 40 + 70) / 5
+    )
+
+
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
     """When --num-profile-runs > 1, aiperf writes into a per-run subdir."""
     result_dir = tmp_path / "results"
