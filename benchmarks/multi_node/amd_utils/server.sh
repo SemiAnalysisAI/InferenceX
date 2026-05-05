@@ -338,13 +338,6 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
-if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
-    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
-    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
-    unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
-    unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
-fi
-
 # =============================================================================
 # Container Synchronization
 # =============================================================================
