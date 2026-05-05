@@ -2214,3 +2214,13 @@
     - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
     - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
+
+- config-keys:
+    - qwen3.5-fp4-b200-trt
+  description:
+    - "Add Qwen3.5-397B FP4 B200 TensorRT-LLM benchmark"
+    - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc12"
+    - "Model: nvidia/Qwen3.5-397B-A17B-NVFP4"
+    - "1k1k: TP-only (tp4 conc 4-16, tp8 conc 4), TEP (tp4ep4 conc 16-256), DEP (tp4ep4 dp-attn conc 1024, tp8ep8 dp-attn conc 512-1024)"
+    - "8k1k: TP-only (tp2 conc 4-32, tp4 conc 4-8, tp8 conc 4), TEP (tp2ep2 conc 64, tp4ep4 conc 16), DEP (tp4ep4 dp-attn conc 256-1024, tp8ep8 dp-attn conc 512-1024)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1280
