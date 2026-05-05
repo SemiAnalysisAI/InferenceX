@@ -970,6 +970,12 @@ build_replay_cmd() {
     # ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
     REPLAY_CMD+=" --num-dataset-entries 739"
+    # Required by the inferencex-agentx-mvp scenario (validator enforces
+    # cache_bust.target == system_prefix) but not auto-defaulted by it,
+    # so we pass it explicitly. Forces every recycled play of a trace to
+    # have a fresh prompt prefix so steady-state cache-hit rates don't
+    # inflate as the run progresses.
+    REPLAY_CMD+=" --cache-bust system_prefix"
     REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 }
