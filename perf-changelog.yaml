@@ -2216,6 +2216,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
 
 - config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Enable TRTLLM fused MHC by default with the DeepSeek-V4 feature image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
+
+- config-keys:
     - qwen3.5-fp4-b200-sglang-mtp
   description:
     - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
@@ -2224,4 +2231,3 @@
     - "Add MTP flags: SGLANG_ENABLE_SPEC_V2=1, EAGLE speculative decoding (steps=3, topk=1, draft=4)"
     - "Reduce prefill/chunked from 32768 to 16384"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1257
- 
