@@ -2239,3 +2239,11 @@
     - "Mirror the B300 TRT launch path with OpenAI chat serving, FP8 KV cache, TRTLLM MoE, NCCL NVLS disabled by default, and fused MHC disabled for hidden size 7168 correctness"
     - "Update the B200 DGXC Slurm partition from removed gpu to gpu-2 so single-node B200 jobs can allocate"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1277
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Add pure TP (tp:8, ep:1) search-space row alongside the existing DP+EP row"
+    - "Raise conc-end from 64 to 256 on both 1k1k and 8k1k sweeps"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1287
