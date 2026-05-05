@@ -2624,13 +2624,13 @@ dsv4-fp8-h200-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 256 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 256 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
 
 # MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
@@ -2648,13 +2648,13 @@ dsv4-fp8-h200-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
 # Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
