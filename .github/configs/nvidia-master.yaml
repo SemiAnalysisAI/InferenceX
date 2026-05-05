@@ -2634,7 +2634,7 @@ dsv4-fp8-h200-vllm:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4
+  image: public.ecr.aws#q9t5s3a7/vllm-release-repo:fbd51e3dfc902364fddab316ef1337c4f261de1a-x86_64-cu129
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
