@@ -5,4 +5,4 @@
 [submodule "utils/aiperf"]
 	path = utils/aiperf
 	url = https://github.com/cquil11/aiperf.git
-	branch = ajc/inferencex-agentx-mvp
+	branch = cjq/weka-live-assistant-responses

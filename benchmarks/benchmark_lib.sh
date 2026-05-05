@@ -875,11 +875,14 @@ run_eval() {
 
 
 # --------------------------------
-# Agentic trace replay helpers
+# Agentic trace replay helpers (aiperf driver)
 # --------------------------------
 
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
+AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
+# TRACE_REPLAY_DIR retained for any out-of-tree consumer that still
+# imports the kv-cache-tester scripts. Not used by the helpers below.
 TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
 agentic_pip_install() {
@@ -903,11 +906,13 @@ ensure_hf_cli() {
 
 resolve_trace_source() {
     local dataset="semianalysisai/cc-traces-weka-042026"
-    TRACE_SOURCE_FLAG="--hf-dataset $dataset"
-    echo "Loading traces from Hugging Face dataset: $dataset"
+    # aiperf reads the corpus via its public-dataset registry; the loader
+    # under the hood pulls from semianalysisai/cc-traces-weka-042026.
+    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka"
+    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
-    # for model weights) so datasets.load_dataset() reads from cache on
-    # subsequent runs instead of re-downloading every job.
+    # for model weights) so subsequent runs read from cache instead of
+    # re-downloading every job.
     ensure_hf_cli
     hf download --repo-type dataset "$dataset"
 }
@@ -915,7 +920,9 @@ resolve_trace_source() {
 install_agentic_deps() {
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
-    agentic_pip_install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
+    # Editable install of aiperf from the submodule — gives us the
+    # `aiperf` CLI plus the inferencex-agentx-mvp scenario plugin.
+    agentic_pip_install -q -e "$AIPERF_DIR"
     # Force-upgrade datasets: containers often ship an older version without
     # the `Json` feature type used by the HF traces dataset. `Json` was added
     # in datasets 4.7.0 (March 2025). Unpinned installs won't upgrade an
@@ -924,39 +931,41 @@ install_agentic_deps() {
 }
 
 build_replay_cmd() {
+    # aiperf invocation for the inferencex-agentx-mvp scenario.
+    #
+    # Live-assistant mode is on by default
+    # (AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1): the loader emits
+    # user-only deltas and the worker threads the server's live assistant
+    # response back into the session. This preserves cache-hit reuse on
+    # the just-generated KV blocks at the cost of hash-id fidelity past
+    # turn 0 — which is exactly what we want for benchmark numbers.
+    #
+    # The scenario plugin locks: --cache-bust system_prefix,
+    # --num-dataset-entries 739, --inter-turn-delay-cap-seconds 60, etc.,
+    # so we do not pass those. See utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="${DURATION:-1800}"
-    local max_delay="${MAX_DELAY:-60}"
-    local advance_min="${ADVANCE_MIN:-0.0}"
-    local advance_max="${ADVANCE_MAX:-0.7}"
 
-    REPLAY_CMD="python3 $TRACE_REPLAY_DIR/trace_replay_tester.py"
-    REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
+    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
+
+    REPLAY_CMD="aiperf profile --scenario inferencex-agentx-mvp"
+    REPLAY_CMD+=" --url http://localhost:$PORT"
+    REPLAY_CMD+=" --endpoint /v1/chat/completions"
+    REPLAY_CMD+=" --endpoint-type chat"
+    REPLAY_CMD+=" --streaming"
+    REPLAY_CMD+=" --model $MODEL"
+    REPLAY_CMD+=" --concurrency $CONC"
+    REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --random-seed 42"
+    REPLAY_CMD+=" --apply-chat-template"
+    REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
-    REPLAY_CMD+=" --output-dir $result_dir/trace_replay"
-    REPLAY_CMD+=" --start-users $CONC"
-    REPLAY_CMD+=" --max-users $CONC"
-    REPLAY_CMD+=" --test-duration $duration"
-    REPLAY_CMD+=" --recycle"
-    REPLAY_CMD+=" --max-delay $max_delay"
-    REPLAY_CMD+=" --max-concurrent-requests 0"
-    REPLAY_CMD+=" --advance-min $advance_min"
-    REPLAY_CMD+=" --advance-max $advance_max"
-    REPLAY_CMD+=" --warmup-enabled"
-    REPLAY_CMD+=" --seed 42"
-    if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
-        REPLAY_CMD+=" --hash-block-mode"
-    fi
-    if [ "${DEBUG_TRACE:-false}" = "true" ]; then
-        REPLAY_CMD+=" --debug-trace"
-    fi
-    REPLAY_CMD+=" --metrics-output-prefix $result_dir/metrics"
 }
 
 write_agentic_result_json() {
-    # Aggregate detailed_results.csv + metrics_server_metrics.csv into
-    # $INFMAX_CONTAINER_WORKSPACE/$RESULT_FILENAME.json. The workflow's
-    # existing retry-based existence check is the single success gate.
+    # Aggregate aiperf's profile_export.{json,jsonl} + server_metrics_export.json
+    # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow's existing
+    # retry-based existence check is the single success gate.
     local result_dir="$1"
     RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
         python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
