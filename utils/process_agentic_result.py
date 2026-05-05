@@ -410,20 +410,39 @@ def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
             result["response_cache_hit_rate"] = sum(cached) / prompt_total
 
     # -- Server-side Prometheus scrape (vLLM-specific keys) -----------------
+    # aiperf's server_metrics_export.json shape:
+    #   {"metrics": {<name>: {"type": ..., "series": [{"stats": {...}}, ...]}}}
+    # We aggregate across series (multiple endpoints / label sets) and prefer
+    # ``total`` for counters, then ``max``/``avg`` for gauges.
     metrics_by_name = _index_server_metrics(server_metrics)
 
     def _final_value(metric_name: str) -> float | None:
-        m = metrics_by_name.get(metric_name)
-        if not m:
+        entry = metrics_by_name.get(metric_name)
+        if not isinstance(entry, dict):
+            return None
+        series = entry.get("series") or []
+        if not isinstance(series, list):
             return None
         for stats_key in ("total", "max", "avg"):
-            stats = m.get("stats")
-            if isinstance(stats, dict) and stats_key in stats:
-                v = stats[stats_key]
-                if v is not None:
-                    return float(v)
-        v = m.get("value")
-        return float(v) if v is not None else None
+            agg = 0.0
+            found = False
+            for s in series:
+                if not isinstance(s, dict):
+                    continue
+                stats = s.get("stats")
+                if not isinstance(stats, dict):
+                    continue
+                v = stats.get(stats_key)
+                if v is None:
+                    continue
+                try:
+                    agg += float(v)
+                    found = True
+                except (TypeError, ValueError):
+                    continue
+            if found:
+                return agg
+        return None
 
     hits = _final_value("vllm:prefix_cache_hits")
     queries = _final_value("vllm:prefix_cache_queries")
@@ -466,28 +485,22 @@ def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
 
 
 def _index_server_metrics(server_metrics: dict) -> dict[str, dict]:
-    """Flatten aiperf's server_metrics_export.json into ``{metric_name: entry}``.
+    """Return the metrics dict from aiperf's server_metrics_export.json.
 
-    The export shape varies a bit by aiperf version; current shape is
-    ``{"endpoints": [{"url": ..., "metrics": [{"name": str, "stats": {...}}, ...]}]}``.
+    aiperf v0.8 schema: top-level ``{"metrics": {<name>: {"type": ...,
+    "series": [{"stats": {...}}, ...]}}}``. The ``metrics`` value is a
+    ``dict`` keyed by metric name, NOT a list. We just return it as-is so
+    callers can do ``out[metric_name]`` lookups.
+
+    See ``utils/aiperf/docs/server-metrics/server-metrics-json-schema.md``
+    for the full schema.
     """
-    out: dict[str, dict] = {}
     if not isinstance(server_metrics, dict):
-        return out
-    endpoints = server_metrics.get("endpoints") or []
-    if not isinstance(endpoints, list):
-        return out
-    for ep in endpoints:
-        for m in ep.get("metrics") or []:
-            name = m.get("name")
-            if isinstance(name, str):
-                out[name] = m
-    # Some aiperf versions emit a flat list under "metrics" without endpoints.
-    for m in server_metrics.get("metrics") or []:
-        name = m.get("name")
-        if isinstance(name, str):
-            out.setdefault(name, m)
-    return out
+        return {}
+    metrics = server_metrics.get("metrics")
+    if isinstance(metrics, dict):
+        return metrics
+    return {}
 
 
 # ---- main ------------------------------------------------------------------

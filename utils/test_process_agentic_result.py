@@ -290,6 +290,110 @@ def test_processor_response_cache_hit_rate_populated_when_cached_tokens_present(
     assert agg["response_cache_hit_rate"] == pytest.approx(0.6)
 
 
+def test_processor_parses_real_server_metrics_schema(tmp_path: Path):
+    """Verify aiperf's actual server_metrics_export.json shape is parsed.
+
+    Real schema: ``{"metrics": {<name>: {"series": [{"stats": {...}}, ...]}}}``
+    — keyed by metric name, with stats nested inside each series entry.
+    Regression guard: the v1 of the processor crashed with
+    ``AttributeError: 'str' object has no attribute 'get'`` because it
+    iterated the metrics dict like a list.
+    """
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "trace_replay"
+    server_metrics = {
+        "schema_version": "1.0",
+        "summary": {
+            "endpoints_configured": ["http://localhost:8888/metrics"],
+            "endpoints_successful": ["http://localhost:8888/metrics"],
+        },
+        "metrics": {
+            "vllm:prefix_cache_hits": {
+                "type": "counter",
+                "unit": "tokens",
+                "series": [
+                    {
+                        "endpoint_url": "http://localhost:8888/metrics",
+                        "labels": {"model": "test"},
+                        "stats": {"total": 800.0, "rate": 8.0},
+                    }
+                ],
+            },
+            "vllm:prefix_cache_queries": {
+                "type": "counter",
+                "unit": "tokens",
+                "series": [
+                    {
+                        "endpoint_url": "http://localhost:8888/metrics",
+                        "labels": {"model": "test"},
+                        "stats": {"total": 1000.0, "rate": 10.0},
+                    }
+                ],
+            },
+            "vllm:prompt_tokens": {
+                "type": "counter",
+                "unit": "tokens",
+                "series": [
+                    {
+                        "endpoint_url": "http://localhost:8888/metrics",
+                        "labels": {"model": "test"},
+                        "stats": {"total": 12345.0, "rate": 100.0},
+                    }
+                ],
+            },
+            "vllm:generation_tokens": {
+                "type": "counter",
+                "unit": "tokens",
+                "series": [
+                    {
+                        "endpoint_url": "http://localhost:8888/metrics",
+                        "labels": {"model": "test"},
+                        "stats": {"total": 6789.0, "rate": 50.0},
+                    }
+                ],
+            },
+        },
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    output_dir = tmp_path / "out"
+    agg = _run_processor(result_dir, output_dir)
+    assert agg["server_gpu_cache_hit_rate"] == pytest.approx(0.8)
+    assert agg["total_prompt_tokens"] == 12345
+    assert agg["total_generation_tokens"] == 6789
+
+
+def test_processor_aggregates_across_multiple_series(tmp_path: Path):
+    """Counters with multiple series (multi-endpoint) sum across them."""
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "trace_replay"
+    server_metrics = {
+        "metrics": {
+            "vllm:prefix_cache_hits": {
+                "type": "counter",
+                "series": [
+                    {"stats": {"total": 100.0}},
+                    {"stats": {"total": 200.0}},
+                ],
+            },
+            "vllm:prefix_cache_queries": {
+                "type": "counter",
+                "series": [
+                    {"stats": {"total": 400.0}},
+                    {"stats": {"total": 600.0}},
+                ],
+            },
+        }
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    output_dir = tmp_path / "out"
+    agg = _run_processor(result_dir, output_dir)
+    assert agg["server_gpu_cache_hit_rate"] == pytest.approx(0.3)
+
+
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
     """When --num-profile-runs > 1, aiperf writes into a per-run subdir."""
     result_dir = tmp_path / "results"
