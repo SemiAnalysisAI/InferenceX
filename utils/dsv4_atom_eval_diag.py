@@ -297,7 +297,13 @@ def _summarize_case(
                     for row in ok_rows
                     if case["max_tokens"] > 1 and not row.get("has_final_answer")
                 ],
-                "answers": sorted({row.get("answer") for row in ok_rows})[:12],
+                "answers": sorted(
+                    {
+                        row.get("answer")
+                        for row in ok_rows
+                        if row.get("answer") is not None
+                    }
+                )[:12],
             }
         )
     else:
