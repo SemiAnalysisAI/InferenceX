@@ -9,8 +9,8 @@ set -eo pipefail
 # optimization).
 #
 # DeepSeek-V4-Pro ships an FP4+FP8 mixed checkpoint: MoE expert weights
-# are stored in FP4 while attention/norm/router stay in FP8. The
-# triton_unfused MoE backend consumes the FP4 expert weights directly.
+# are stored in FP4 while attention/norm/router stay in FP8. The aiter
+# MoE backend handles MXFP4 expert weights natively on ROCm gfx950.
 #
 # Image: rocm/vllm-dev:deepseek-v4-latest already ships the validated
 # vLLM build, so no PR clone or runtime patching is needed here.
@@ -69,7 +69,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
-    --moe-backend triton_unfused \
+    --moe-backend aiter \
     --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
