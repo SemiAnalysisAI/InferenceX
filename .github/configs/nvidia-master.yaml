@@ -5497,7 +5497,7 @@ dsr1-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
-  runner: gb300
+  runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
   multinode: true
