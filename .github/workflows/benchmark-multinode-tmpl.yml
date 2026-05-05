@@ -243,11 +243,16 @@ jobs:
             if [ -f "$result_file" ]; then
               echo "Processing $result_file"
               # Extract GPU count, prefill_gpus and decode_gpus from filename for tp_size calculation
-              gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9]*\).*\.json/\1/p")
+              gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9][0-9]*\).*\.json/\1/p")
               prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
               decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
-              
+
               if [ -n "$gpus" ]; then
+                # Non-disagg results lack _ctx_/_gen_ fields; all GPUs belong to the single worker
+                if [ -z "$prefill_gpus" ] || [ -z "$decode_gpus" ]; then
+                  prefill_gpus=$gpus
+                  decode_gpus=0
+                fi
                 echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
                 RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
