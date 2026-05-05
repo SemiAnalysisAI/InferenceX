@@ -194,10 +194,15 @@ def _load_trace_metadata() -> dict[str, list[dict]]:
         for req in blob.get("requests", []):
             if req.get("type") not in ("n", "s"):
                 continue
+            # The on-disk trace uses ``in``/``out`` (the loader's Pydantic
+            # aliases for ``input_length`` / ``output_length``); accept either.
+            output_length = req.get("output_length")
+            if output_length is None:
+                output_length = req.get("out")
             per_turn.append(
                 {
                     "hash_ids": list(req.get("hash_ids") or []),
-                    "output_length": int(req.get("output_length") or 0),
+                    "output_length": int(output_length or 0),
                 }
             )
         if per_turn:

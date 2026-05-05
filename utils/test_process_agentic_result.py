@@ -406,20 +406,22 @@ def test_processor_loads_traces_jsonl_for_theoretical_cache(tmp_path: Path):
     hf_cache = tmp_path / "_hf"
     snapshot = hf_cache / "datasets--semianalysisai--cc-traces-weka-042026" / "snapshots" / "abc"
     snapshot.mkdir(parents=True)
+    # Real corpus uses the ``out`` alias (Pydantic's external name for
+    # output_length). Mix both to verify the loader accepts either.
     traces = [
         {
             "id": "trace-A",
             "requests": [
-                {"type": "n", "hash_ids": [1, 2, 3], "output_length": 50},
-                {"type": "n", "hash_ids": [1, 2, 3, 4], "output_length": 60},
+                {"type": "n", "hash_ids": [1, 2, 3], "out": 50},
+                {"type": "n", "hash_ids": [1, 2, 3, 4], "out": 60},
                 {"type": "n", "hash_ids": [1, 2, 3, 4, 5], "output_length": 55},
             ],
         },
         {
             "id": "trace-B",
             "requests": [
-                {"type": "n", "hash_ids": [10, 11], "output_length": 40},
-                {"type": "n", "hash_ids": [10, 11, 12, 13], "output_length": 70},
+                {"type": "n", "hash_ids": [10, 11], "out": 40},
+                {"type": "n", "hash_ids": [10, 11, 12, 13], "out": 70},
             ],
         },
     ]
