@@ -75,20 +75,30 @@ if is_multinode:
     decode_ep = int(multinode_env['DECODE_EP'])
     decode_dp_attn = multinode_env['DECODE_DP_ATTN']
 
+    total_gpus = prefill_gpus + decode_gpus
+    if total_gpus <= 0:
+        raise ValueError("Multinode results require at least one GPU.")
+    if prefill_gpus <= 0:
+        raise ValueError("Multinode results require at least one prefill GPU.")
+
+    output_tput_denominator = decode_gpus if decode_gpus > 0 else total_gpus
+    output_decode_tp = decode_tp if decode_gpus > 0 else 0
+    output_decode_ep = decode_ep if decode_gpus > 0 else 0
+
     multi_node_data = {
         'is_multinode': True,
         'prefill_tp': prefill_tp,
         'prefill_ep': prefill_ep,
         'prefill_dp_attention': prefill_dp_attn,
         'prefill_num_workers': prefill_num_workers,
-        'decode_tp': decode_tp,
-        'decode_ep': decode_ep,
+        'decode_tp': output_decode_tp,
+        'decode_ep': output_decode_ep,
         'decode_dp_attention': decode_dp_attn,
         'decode_num_workers': decode_num_workers,
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / (prefill_gpus + decode_gpus),
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / decode_gpus,
+        'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
+        'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
 

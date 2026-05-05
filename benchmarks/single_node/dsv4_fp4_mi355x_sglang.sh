@@ -19,28 +19,9 @@ fi
 
 hf download "$MODEL"
 
-# Overlay sglang from the amd/deepseek_v4 branch on top of whatever the
-# rocm/sgl-dev:rocm720-mi35x-583b1b6-20260501-DSv4 image ships with. The
-# branch is moving fast and we want a reproducible pin per benchmark run.
-# Bump SGL_PR_SHA when the branch advances.
-SGL_PR_SHA="a8410de6fba3c3d44d9c7e49af1868b3940ce654"
-SGL_PR_DIR="/tmp/sglang-amd-dsv4"
-
-if [ ! -d "$SGL_PR_DIR/.git" ]; then
-    git clone --filter=blob:none https://github.com/sgl-project/sglang.git "$SGL_PR_DIR"
-fi
-(
-    cd "$SGL_PR_DIR"
-    git fetch --depth=1 origin "$SGL_PR_SHA" 2>/dev/null \
-        || git fetch --depth=1 origin amd/deepseek_v4
-    git checkout --force "$SGL_PR_SHA"
-    test "$(git rev-parse HEAD)" = "$SGL_PR_SHA"
-
-    # Reinstall just the Python package; the image already has the ROCm
-    # kernel deps (aiter, triton, tilelang, torch) at versions matched to
-    # this branch, so --no-deps avoids pip resolving them against PyPI.
-    pip install --no-build-isolation --no-deps --force-reinstall -e python/
-)
+# sglang ships in the image at the SHA encoded in the image tag (built
+# from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
+# bump the image tag in .github/configs/amd-master.yaml.
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
@@ -72,18 +53,18 @@ PYEOF
 #                                    the swiglu_limit clamp in the triton
 #                                    MoE fallback path.
 export SGLANG_REASONING_EFFORT=max
-export SGLANG_OPT_USE_FUSED_COMPRESS=false
+export SGLANG_OPT_USE_FUSED_COMPRESS=true
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
 export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
 export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+export SGLANG_OPT_USE_TILELANG_MHC_POST=true
 export SGLANG_ENABLE_THINKING=1
 export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=1
-export SGLANG_TOPK_TRANSFORM_512_TORCH=1
+export SGLANG_TOPK_TRANSFORM_512_TORCH=0
 export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
 export SGLANG_DSV4_FP4_EXPERTS=True
 export SGLANG_OPT_DPSK_V4_RADIX=0
@@ -125,7 +106,8 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend compressed \
-    --max-running-request 256 \
+    --max-running-requests ${CONC} \
+    --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \

@@ -44,7 +44,7 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --chunked-prefill-size 196608 \
     --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
+    --num-continuous-decode-steps 8 \
     --max-prefill-tokens 196608 \
     --kv-cache-dtype fp8_e4m3 \
     --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
