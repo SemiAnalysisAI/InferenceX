@@ -1642,7 +1642,7 @@ dsv4-fp8-mi355x-vllm:
 # triton_unfused MoE backend consumes the FP4 expert weights from the
 # DeepSeek-V4-Pro FP4+FP8 mixed checkpoint; KV cache stays fp8.
 dsv4-fp4-mi355x-vllm:
-  image: rocm/vllm-dev:deepseek-v4-latest
+  image: rocm/vllm-dev:deepseek-v4-latest@sha256:d29cd950e683bbbd2a211812ce76db1f46401ca2c43bb6b9627a71a113723d3f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
