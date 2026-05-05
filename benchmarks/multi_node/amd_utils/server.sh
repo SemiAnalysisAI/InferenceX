@@ -41,9 +41,358 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
 
 # =============================================================================
+# DeepSeek-V4 model_type compat patch (NODE_RANK==0 only)
+# =============================================================================
+# DSv4-Pro-FP8 ships config.json with `"model_type": "deepseek_v4"`, which
+# HuggingFace Transformers does not yet recognize. PR #23608's fallback in
+# sglang/srt/hf_transformers_utils.get_config writes a patched copy under
+# /tmp at import time, but the benchmark client bypasses that path: every
+# downstream caller of AutoConfig.from_pretrained on the prefill node
+# (`bench_serving.py`, `lm-eval`, the OpenAI tokenizer endpoint, etc.)
+# crashes with `'PreTrainedConfig' object has no attribute
+# 'max_position_embeddings'` because they get the stub config back.
+#
+# Patching the cached config.json directly with `model_type=deepseek_v3`
+# fixes it WITHOUT changing the SGLang model dispatch, because dispatch
+# uses the `architectures: ["DeepseekV4ForCausalLM"]` field. Idempotent.
+#
+# We only patch on NODE_RANK==0 to avoid NFS write contention; the
+# cross-node barrier on port 5000 below ensures the other nodes only
+# read the file after it's been patched.
+if [[ "$NODE_RANK" == "0" && "$MODEL_NAME" == *DeepSeek-V4* ]]; then
+    DSV4_CONFIG_PATH="${MODEL_DIR}/${MODEL_NAME}/config.json"
+    if [[ -f "$DSV4_CONFIG_PATH" ]]; then
+        if grep -q '"model_type": "deepseek_v4"' "$DSV4_CONFIG_PATH"; then
+            echo "[DSv4-PATCH] $DSV4_CONFIG_PATH model_type deepseek_v4 -> deepseek_v3"
+            python3 - "$DSV4_CONFIG_PATH" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    cfg = json.load(f)
+if cfg.get("model_type") == "deepseek_v4":
+    cfg["model_type"] = "deepseek_v3"
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print(f"[DSv4-PATCH] Wrote patched config.json to {path}")
+else:
+    print(f"[DSv4-PATCH] Skipped: model_type is now {cfg.get('model_type')!r}")
+PYEOF
+        else
+            echo "[DSv4-PATCH] No patch needed at $DSV4_CONFIG_PATH (model_type already non-v4)"
+        fi
+    else
+        echo "[DSv4-PATCH][WARN] $DSV4_CONFIG_PATH not found; skipping (server will likely fail to load)"
+    fi
+fi
+
+# =============================================================================
 # Dependencies and Environment Setup
 # =============================================================================
 source $SGLANG_WS_PATH/env.sh
+
+# =============================================================================
+# DeepSeekV4 disagg compat patch — is_mla_backend recognizes DeepSeekV4TokenToKVPool
+# =============================================================================
+# Upstream bug: sglang's disagg/utils.py::is_mla_backend() only matches
+# isinstance(MLATokenToKVPool). DSv4's KV pool (DeepSeekV4TokenToKVPool) is a
+# *sibling* class of MLATokenToKVPool (both extend KVCache) and is missed by
+# the isinstance check, so the whole disagg path treats DSv4 as non-MLA. Then
+# disagg/prefill.py:163-164 falls through to `kv_args.kv_head_num =
+# self.token_to_kv_pool.head_num`, which crashes with AttributeError because
+# the DSv4 pool doesn't expose `head_num` (it has qk_nope_head_dim,
+# qk_rope_head_dim, indexer_head_dim instead — the MLA-flavored fields).
+#
+# Fix: in-place edit of the cached pyc/source inside the (--rm) container,
+# adding DeepSeekV4TokenToKVPool to the isinstance tuple. Idempotent (skips
+# if already patched). Gated on MODEL_NAME so non-DSv4 disagg configs are
+# unaffected. Runs on EVERY rank (each container has its own filesystem).
+#
+# This downstream-bug log lives at:
+#   ~/chun/scripts/dsv4/dsv4_disagg_enablement/bugs/04_upstream_dsv4_disagg_kv_pool_missing_head_num.md
+# Permanent fix should be a 3-line PR upstream; remove this block once the
+# next sglang DSv4 daily image (post a8410de-20260502) includes it.
+if [[ "$MODEL_NAME" == *DeepSeek-V4* ]]; then
+    # ----- Patch 1: is_mla_backend recognizes DSv4 KV pool (Bug 4) -----
+    python3 - <<'PYEOF'
+import sys
+try:
+    import sglang.srt.disaggregation.utils as u
+except Exception as e:
+    print(f"[DSv4-DISAGG-PATCH] import failed: {e}", file=sys.stderr)
+    sys.exit(0)
+
+path = u.__file__
+src = open(path).read()
+
+if 'DeepSeekV4TokenToKVPool' in src:
+    print(f"[DSv4-DISAGG-PATCH] {path} already patched (DeepSeekV4TokenToKVPool present), skipping")
+    sys.exit(0)
+
+old = (
+    "def is_mla_backend(target_kv_pool) -> bool:\n"
+    "    from sglang.srt.mem_cache.memory_pool import MLATokenToKVPool\n"
+    "\n"
+    "    return isinstance(target_kv_pool, MLATokenToKVPool)"
+)
+new = (
+    "def is_mla_backend(target_kv_pool) -> bool:\n"
+    "    from sglang.srt.mem_cache.memory_pool import MLATokenToKVPool\n"
+    "    from sglang.srt.mem_cache.deepseekv4_memory_pool import (\n"
+    "        DeepSeekV4TokenToKVPool,\n"
+    "    )\n"
+    "\n"
+    "    return isinstance(\n"
+    "        target_kv_pool, (MLATokenToKVPool, DeepSeekV4TokenToKVPool)\n"
+    "    )"
+)
+
+if old not in src:
+    print(f"[DSv4-DISAGG-PATCH] WARN: pattern not found in {path}; "
+          "is_mla_backend may have changed upstream — leaving unchanged",
+          file=sys.stderr)
+    sys.exit(0)
+
+new_src = src.replace(old, new, 1)
+open(path, "w").write(new_src)
+print(f"[DSv4-DISAGG-PATCH] Patched is_mla_backend in {path} (added DeepSeekV4TokenToKVPool)")
+PYEOF
+
+    # ----- Patch 2: ForwardMode.is_prefill() accepts include_draft_extend_v2 kwarg (Bug 6b) -----
+    # disaggregation/deepseek_v4_backend_radix.py:687 calls
+    #   forward_batch.forward_mode.is_prefill(include_draft_extend_v2=True)
+    # but forward_batch_info.py:108 defines `def is_prefill(self):` (no kwargs)
+    # and the body just delegates to `self.is_extend()` (no kwarg either).
+    # `is_extend()` already accepts include_draft_extend_v2 (lines 111-120) so
+    # we just need to plumb it through.
+    python3 - <<'PYEOF'
+import sys
+try:
+    import sglang.srt.model_executor.forward_batch_info as fbi
+except Exception as e:
+    print(f"[DSv4-DISAGG-PATCH-6b] import failed: {e}", file=sys.stderr)
+    sys.exit(0)
+
+path = fbi.__file__
+src = open(path).read()
+
+# Idempotency marker that's unique to OUR patch (not used elsewhere in the file)
+PATCH_MARKER = "[PATCH-6b]"
+if PATCH_MARKER in src:
+    print(f"[DSv4-DISAGG-PATCH-6b] {path} already patched (marker found), skipping")
+    sys.exit(0)
+
+old = (
+    "    def is_prefill(self):\n"
+    "        return self.is_extend()\n"
+)
+new = (
+    "    def is_prefill(self, include_draft_extend_v2: bool = False):\n"
+    "        # [PATCH-6b] forward the kwarg to is_extend() so the DSv4 radix\n"
+    "        # attention backend's is_prefill(include_draft_extend_v2=True)\n"
+    "        # call (deepseek_v4_backend_radix.py:687) doesn't TypeError.\n"
+    "        return self.is_extend(include_draft_extend_v2=include_draft_extend_v2)\n"
+)
+
+if old not in src:
+    print(f"[DSv4-DISAGG-PATCH-6b] WARN: pattern not found in {path}", file=sys.stderr)
+    sys.exit(0)
+
+new_src = src.replace(old, new, 1)
+open(path, "w").write(new_src)
+print(f"[DSv4-DISAGG-PATCH-6b] Patched is_prefill in {path} (kwarg-tolerant + forwarded)")
+PYEOF
+
+    # ----- Patch 5: relax loc.dtype assertion in _set_k_and_s_triton (Bug 9) -----
+    # nsa/index_buf_accessor.py:378 has:
+    #   assert loc.dtype == torch.int64, f"{loc.dtype=}"  # can be int32
+    # The author's own comment "# can be int32" tells us int32 is supposed to
+    # work, but the assert is overly strict. In disagg's prefill forward,
+    # loc arrives as int32 (it's an alloc indices tensor — see allocator.py).
+    # Relax to accept both int32 and int64; if downstream really needs int64,
+    # cast on the spot. Simplest is to broaden the allowed set.
+    python3 - <<'PYEOF'
+import sys, glob
+
+candidates = glob.glob("/sgl-workspace/**/nsa/index_buf_accessor.py", recursive=True)
+candidates += glob.glob("/opt/venv/lib/**/nsa/index_buf_accessor.py", recursive=True)
+if not candidates:
+    print("[DSv4-DISAGG-PATCH-9] WARN: index_buf_accessor.py not found", file=sys.stderr)
+    sys.exit(0)
+path = candidates[0]
+src = open(path).read()
+
+PATCH_MARKER = "[PATCH-9] loc.dtype int32-tolerant"
+if PATCH_MARKER in src:
+    print(f"[DSv4-DISAGG-PATCH-9] {path} already patched, skipping")
+    sys.exit(0)
+
+old = '    assert loc.dtype == torch.int64, f"{loc.dtype=}"  # can be int32\n'
+new = (
+    '    # [PATCH-9] loc.dtype int32-tolerant — original author already noted\n'
+    '    # "# can be int32" but kept the strict assertion. Relaxed for disagg.\n'
+    '    assert loc.dtype in (torch.int32, torch.int64), f"{loc.dtype=}"\n'
+)
+
+if old not in src:
+    print(f"[DSv4-DISAGG-PATCH-9] WARN: pattern not found in {path}", file=sys.stderr)
+    sys.exit(0)
+
+new_src = src.replace(old, new, 1)
+open(path, "w").write(new_src)
+print(f"[DSv4-DISAGG-PATCH-9] Patched _set_k_and_s_triton in {path}")
+PYEOF
+
+    # ----- Patch 4: _create_flashmla_metadata graceful when flash_mla is absent (Bug 7) -----
+    # `_create_flashmla_metadata` (deepseek_v4_backend_radix.py:130-133) does:
+    #     import flash_mla
+    #     return flash_mla.get_mla_metadata()[0]
+    # but the rocm/sgl-dev DSv4 image doesn't ship the `flash_mla` PyPI package
+    # (it's CUDA-only; HIP doesn't need it). The actual attention call routes
+    # through `flash_mla_with_kvcache_entrypoint` which on HIP overrides backend
+    # to "tilelang" and calls `dpsk_v4_fp8_attention_fwd` — completely bypassing
+    # flash_mla. The returned metadata is consumed by that path but treated as
+    # opaque (`tile_scheduler_metadata: Any`), and one existing call site already
+    # sets c4/c128 metadata to None (line 1220-1221). So returning None here is
+    # safe for the tilelang backend on HIP. Patch swaps in a try/except.
+    python3 - <<'PYEOF'
+import sys, glob
+
+candidates = glob.glob("/sgl-workspace/**/deepseek_v4_backend_radix.py", recursive=True)
+candidates += glob.glob("/opt/venv/lib/**/deepseek_v4_backend_radix.py", recursive=True)
+if not candidates:
+    print("[DSv4-DISAGG-PATCH-7] WARN: deepseek_v4_backend_radix.py not found", file=sys.stderr)
+    sys.exit(0)
+path = candidates[0]
+src = open(path).read()
+
+PATCH_MARKER = "[PATCH-7] flash_mla import-tolerant"
+if PATCH_MARKER in src:
+    print(f"[DSv4-DISAGG-PATCH-7] {path} already patched, skipping")
+    sys.exit(0)
+
+old = (
+    "def _create_flashmla_metadata():\n"
+    "    import flash_mla\n"
+    "\n"
+    "    return flash_mla.get_mla_metadata()[0]\n"
+)
+new = (
+    "def _create_flashmla_metadata():\n"
+    "    # [PATCH-7] flash_mla import-tolerant. The rocm/sgl-dev DSv4 image\n"
+    "    # doesn't ship flash_mla (CUDA-only). On HIP, the attention compute\n"
+    "    # routes to dpsk_v4_fp8_attention_fwd (tilelang) and ignores this\n"
+    "    # metadata. None is already a valid value at line ~1220-1221 below.\n"
+    "    try:\n"
+    "        import flash_mla\n"
+    "    except ImportError:\n"
+    "        return None\n"
+    "    return flash_mla.get_mla_metadata()[0]\n"
+)
+
+if old not in src:
+    print(f"[DSv4-DISAGG-PATCH-7] WARN: pattern not found in {path}", file=sys.stderr)
+    sys.exit(0)
+
+new_src = src.replace(old, new, 1)
+open(path, "w").write(new_src)
+print(f"[DSv4-DISAGG-PATCH-7] Patched _create_flashmla_metadata in {path}")
+PYEOF
+
+    # ----- Patch 3: DeepSeekV4TokenToKVPool seeds full_to_swa_index_mapping (Bug 6a) -----
+    # model_runner_kv_cache_mixin.py:663-671 constructs PagedTokenToKVPoolAllocator
+    # for v4 models (NOT SWATokenToKVPoolAllocator), so the SWA allocator's
+    # register_mapping(...) is never called and self.full_to_swa_index_mapping
+    # stays unset. The radix attention backend then asserts on it during cuda
+    # graph capture (deepseek_v4_backend_radix.py reaches the
+    # translate_loc_from_full_to_swa assert at deepseekv4_memory_pool.py:537).
+    #
+    # SWATokenToKVPoolAllocator's mapping is just `torch.zeros(size + page_size,
+    # dtype=int64) + tensor([-1])` (swa_memory_pool.py:290-299) — a placeholder
+    # populated later by alloc_extend. We seed the same tensor at the END of
+    # `_init_paged_compress_states` (the routine that was already running for
+    # DPSK_V4_RADIX=True, which is what disagg requires).
+    #
+    # IMPORTANT: this MUST be a source-file edit (not a class wrapper) because
+    # `python3 -m sglang.launch_server` spawns its scheduler subprocesses with
+    # the "spawn" multiprocessing start method, which re-imports modules from
+    # source — class objects modified in the parent process don't propagate.
+    # Patches 1+2 (above) work the same way.
+    #
+    # For correctness against real SWA allocations a non-trivial per-step
+    # mapping update would be needed, but for an enabling smoke test the
+    # placeholder lets the radix backend's translate_loc_from_full_to_swa run
+    # (returning 0 for every slot — i.e. "no SWA translation"). Track at
+    # bugs/06_*.md.
+    python3 - <<'PYEOF'
+import sys, os, glob
+
+# We CAN'T `import sglang.srt.mem_cache.deepseekv4_memory_pool` at this stage:
+# importing the deepseekv4 KV pool transitively imports fp8_kernel.is_fp8_fnuz()
+# which calls torch.cuda.get_device_properties(0) — fine inside the SLURM-launched
+# container with --device=/dev/kfd, but the launch_server forks happen later.
+# We're guaranteed to be running inside the docker container at server.sh time
+# but not guaranteed to have CUDA inited yet. Read the file path via filesystem
+# search instead.
+candidates = glob.glob("/sgl-workspace/**/deepseekv4_memory_pool.py", recursive=True)
+candidates += glob.glob("/opt/venv/lib/**/deepseekv4_memory_pool.py", recursive=True)
+candidates = [p for p in candidates if "/srt/mem_cache/" in p]
+if not candidates:
+    print("[DSv4-DISAGG-PATCH-6a] WARN: deepseekv4_memory_pool.py not found anywhere", file=sys.stderr)
+    sys.exit(0)
+path = candidates[0]
+src = open(path).read()
+
+PATCH_MARKER = "[PATCH-6a] seed full_to_swa_index_mapping"
+if PATCH_MARKER in src:
+    print(f"[DSv4-DISAGG-PATCH-6a] {path} already patched (marker found), skipping")
+    sys.exit(0)
+
+# Anchor: the end of _init_paged_compress_states. We replace the last 2 lines
+# of that method (the appends) plus the blank line + the next def line, then
+# put back everything except adding our seed in the middle.
+old = (
+    "            self.compress_state_pools.append(compress_state_pool)\n"
+    "            self.indexer_compress_state_pools.append(indexer_compress_state_pool)\n"
+    "\n"
+    "    def _init_compressed_layer_mapping(self):\n"
+)
+new = (
+    "            self.compress_state_pools.append(compress_state_pool)\n"
+    "            self.indexer_compress_state_pools.append(indexer_compress_state_pool)\n"
+    "\n"
+    "        # [PATCH-6a] seed full_to_swa_index_mapping with SWA allocator's default\n"
+    "        # placeholder tensor. See comment in benchmarks/multi_node/amd_utils/server.sh.\n"
+    "        if getattr(self, 'full_to_swa_index_mapping', None) is None:\n"
+    "            import torch as _torch_patch\n"
+    "            _patch_size = int(getattr(self, 'swa_size', 0) or 0)\n"
+    "            _patch_page = int(getattr(self, 'swa_page_size', 0) or 0) or int(getattr(self, 'page_size', 1))\n"
+    "            _patch_dev = getattr(self, 'device', 'cpu')\n"
+    "            self.full_to_swa_index_mapping = _torch_patch.cat([\n"
+    "                _torch_patch.zeros(_patch_size + _patch_page, dtype=_torch_patch.int64, device=_patch_dev),\n"
+    "                _torch_patch.tensor([-1], dtype=_torch_patch.int64, device=_patch_dev),\n"
+    "            ])\n"
+    "            import logging as _logging_patch\n"
+    "            _logging_patch.getLogger(__name__).warning(\n"
+    "                '[DSv4-DISAGG-PATCH-6a] Seeded full_to_swa_index_mapping '\n"
+    "                'on %s (numel=%d, device=%s)',\n"
+    "                self.__class__.__name__,\n"
+    "                self.full_to_swa_index_mapping.numel(),\n"
+    "                str(_patch_dev),\n"
+    "            )\n"
+    "\n"
+    "    def _init_compressed_layer_mapping(self):\n"
+)
+
+if old not in src:
+    print(f"[DSv4-DISAGG-PATCH-6a] WARN: pattern not found in {path}; "
+          "_init_paged_compress_states may have changed upstream", file=sys.stderr)
+    sys.exit(0)
+
+new_src = src.replace(old, new, 1)
+open(path, "w").write(new_src)
+print(f"[DSv4-DISAGG-PATCH-6a] Patched _init_paged_compress_states in {path}")
+PYEOF
+fi
 
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)

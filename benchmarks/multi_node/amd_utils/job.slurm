@@ -316,6 +316,19 @@ cleanup() {
 
 trap cleanup INT TERM HUP
 
+# Detect whether we need `sudo` for docker (per-host, runs again inside srun).
+# In SLURM-launched bash there is no TTY, so any `sudo docker` call by a user
+# without NOPASSWD sudo will fail immediately with "a terminal is required to
+# read the password". When the user is in the `docker` group, `docker ps`
+# succeeds without sudo. (Mirrors the dual-engine job.slurm on amd/vllm_disagg_mvp_dev.)
+if docker ps &>/dev/null; then
+    DOCKER_CMD="docker"
+else
+    DOCKER_CMD="sudo docker"
+fi
+export DOCKER_CMD
+echo "[${SLURM_JOB_ID}] DOCKER_CMD on submit host: $DOCKER_CMD"
+
 
 # Force NFS cache refresh on all nodes before running Docker to avoid stale file handle errors
 echo "Refreshing NFS caches on all nodes..."
@@ -340,11 +353,19 @@ set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
-# Pre-clean (idempotent)
-sudo docker ps -aq --filter \"name=^container_sbatch_\" | xargs -r sudo docker rm -f || true
-sudo docker ps -aq | xargs -r sudo docker stop || true
+# Re-detect docker invocation per-node (sudo permissions vary per host)
+if docker ps &>/dev/null; then
+    DOCKER_CMD=\"docker\"
+else
+    DOCKER_CMD=\"sudo docker\"
+fi
+echo \"[\$SLURM_PROCID] DOCKER_CMD=\$DOCKER_CMD on \$(hostname)\"
 
-exec sudo docker run --rm \
+# Pre-clean (idempotent)
+\$DOCKER_CMD ps -aq --filter \"name=^container_sbatch_\" | xargs -r \$DOCKER_CMD rm -f || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+
+exec \$DOCKER_CMD run --rm \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -425,4 +446,7 @@ if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
 fi
 "
 
-srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'sudo docker rm -f $DOCKER_CONT_NAME 2>/dev/null || true'
+srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
+    if docker ps &>/dev/null; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi
+    $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true
+'

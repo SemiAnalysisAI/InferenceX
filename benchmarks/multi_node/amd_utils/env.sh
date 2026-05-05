@@ -123,4 +123,65 @@ fi
 # FIXME: WA for latest upstream 0305 image
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
+# =============================================================================
+# DeepSeek-V4-specific environment overrides (sglang-disagg path)
+# =============================================================================
+# Mirrors the env block in benchmarks/single_node/dsv4_fp8_mi355x.sh so the
+# DSv4 disagg flow exercises the same TileLang FlashMLA + indexer + native
+# topk512 + fused compress decode kernels as the (proven) single-node path.
+# Gated on MODEL_NAME so it has no effect on DSR1/DSv3/Qwen3.5/GLM-5 disagg.
+#
+# Image expected: rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4 or newer.
+# Older sglang-0.5.9-rocm720-mi35x-mori-* images do not understand most of
+# these knobs; on those images the unrecognized vars are simply ignored
+# (SGLang does not strict-validate env vars), so this block is safe even if
+# the matrix entry's image is reverted.
+if [[ "$MODEL_NAME" == *DeepSeek-V4* ]]; then
+    echo "[INFO] DSv4 detected ($MODEL_NAME) — applying DSv4-specific env overrides"
+
+    export SGLANG_REASONING_EFFORT=max
+    export SGLANG_OPT_USE_FUSED_COMPRESS=true
+    # SGLANG_OPT_USE_OLD_COMPRESSOR: default in environ.py is False (new
+    # compressor that supports paged compress states / DPSK_V4_RADIX=True).
+    # Single-node DSv4 sets it to True because it goes with DPSK_V4_RADIX=0
+    # (non-paged compress_states with .kv attribute), and the OLD compressor
+    # (compress_extend_old at deepseek_v4.py:888) reads kv_and_score_states.kv.
+    # For DISAGG, we keep DPSK_V4_RADIX at default True (paged variant —
+    # required for get_state_buf_infos, see Bug 5). The paged variant returns
+    # CompressStatePool objects (no .kv attr), so the OLD compressor crashes
+    # with AttributeError. We must use the NEW compressor (compress_extend_paged
+    # at deepseek_v4.py:343) by leaving USE_OLD_COMPRESSOR at its default False.
+    # Tracked at: bugs/08_*.md
+    # export SGLANG_OPT_USE_OLD_COMPRESSOR=true   # disagg-incompatible w/ paged states
+    export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
+    export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
+    export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
+    export SGLANG_HACK_FLASHMLA_BACKEND=tilelang
+    export SGLANG_OPT_USE_TILELANG_INDEXER=true
+    export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+    export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
+    export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+    export SGLANG_ENABLE_THINKING=1
+    export SGLANG_USE_ROCM700A=1
+    export SGLANG_TOPK_TRANSFORM_512_TORCH=0
+    export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
+    export SGLANG_DSV4_FP4_EXPERTS=false
+    # SGLANG_OPT_DPSK_V4_RADIX: default in environ.py is True (paged compress
+    # states). Single-node DSv4 sets it to 0 for the simpler, slightly faster
+    # non-paged path (single-node never calls disagg's get_state_buf_infos so
+    # the missing compress_state_pools doesn't matter). For DISAGG, we MUST
+    # leave it at the default — get_state_buf_infos at disagg/prefill.py:178
+    # and disagg/decode.py:363 reads token_to_kv_pool.compress_state_pools,
+    # which is only set when _init_paged_compress_states() runs (the True
+    # branch at deepseekv4_memory_pool.py:521-524). Setting =0 here would
+    # crash with AttributeError. Hence we differ from single-node on this
+    # one var only. Tracked at:
+    #   ~/chun/scripts/dsv4/dsv4_disagg_enablement/bugs/05_*.md
+    # If disagg ever lands a non-paged code path, revert this comment.
+    # export SGLANG_OPT_DPSK_V4_RADIX=0   # disagg-incompatible; use default
+    export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
+    export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
+    export SGLANG_FORCE_TRITON_MOE_FP8=1
+fi
+
 

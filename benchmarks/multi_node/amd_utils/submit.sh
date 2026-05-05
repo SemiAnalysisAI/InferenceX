@@ -137,6 +137,14 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
+# Optional: exclude specific nodes (e.g. nodes with broken Docker sockets,
+# missing NOPASSWD sudo, or other per-node issues). Set SLURM_EXCLUDE_NODES
+# env var to a comma-separated list of hostnames.
+EXCLUDE_OPT=()
+if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
+    EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
+fi
+
 # Construct the sbatch command
 sbatch_cmd=(
     sbatch
@@ -145,6 +153,7 @@ sbatch_cmd=(
     -N "$NUM_NODES"
     -n "$NUM_NODES"
     "${NODELIST_OPT[@]}"
+    "${EXCLUDE_OPT[@]}"
     --time "$TIME_LIMIT"
     --partition "$SLURM_PARTITION"
     --account "$SLURM_ACCOUNT"

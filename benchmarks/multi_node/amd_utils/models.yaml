@@ -222,3 +222,90 @@ DeepSeek-R1-0528-MXFP4:
       max_running_requests: 128
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
+
+# DeepSeek-V4-Pro-FP8 (PD-disaggregated).
+#
+# This entry mirrors the proven single-node `dsv4-fp8-mi355x-sglang` config
+# (benchmarks/single_node/dsv4_fp8_mi355x.sh) as closely as possible, just
+# split across prefill/decode workers. The single-node config runs:
+#
+#   --tensor-parallel-size 8 --dp 8 --enable-dp-attention --trust-remote-code
+#   --disable-radix-cache --attention-backend compressed --page-size 256
+#   --max-running-request 256 --chunked-prefill-size 8192
+#   --disable-shared-experts-fusion --tool-call-parser deepseekv4
+#   --reasoning-parser deepseek-v4 --watchdog-timeout 1800
+#
+# DSv4-specific requirements vs the DeepSeek-R1-0528 baseline (in models.yaml):
+#   1. attention-backend MUST be `compressed` (not `aiter`). DSv4 uses the
+#      TileLang FlashMLA + indexer attention path; the rest of the stack
+#      (SGLANG_HACK_FLASHMLA_BACKEND=tilelang, SGLANG_OPT_USE_TILELANG_INDEXER
+#      =true, ...) is wired up by env.sh under the `*DeepSeek-V4*` block.
+#   2. tool-call-parser=deepseekv4, reasoning-parser=deepseek-v4 (DSv4 has
+#      its own reasoning/tool-call schema; the DSv3 parsers reject it).
+#   3. --disable-shared-experts-fusion: DSv4-Pro-FP8 ships shared experts
+#      separately; the fusion path is incompatible with the FP8 quantized
+#      weights in this checkpoint.
+#   4. dp_flags is JUST `--enable-dp-attention` — single-node DSv4 does not
+#      use --moe-dense-tp-size or --enable-dp-lm-head (those are DSR1/DSv3
+#      tunings that have NOT been validated against the DSv4 compressed
+#      attention + fused_compress decode path; including them here would
+#      diverge from the only proven recipe we have).
+#   5. base_flags does NOT include --moe-a2a-backend mori or --deepep-mode
+#      normal (DSR1-isms also not used by single-node DSv4).
+#
+# Page size 256 matches the single-node DSv4 bench (sglang's default 32
+# underutilizes MI355X HBM bandwidth on DSv4 MLA).
+#
+# kv-cache-dtype is INTENTIONALLY OMITTED (the single-node DSv4 bench also
+# doesn't set it explicitly): the compressed attention backend selects its
+# own optimal dtype, and forcing fp8_e4m3 causes a dtype-mismatch crash in
+# the DSv4 fused_compress decode kernel path.
+#
+# max_running_requests=256 on the prefill DP path matches the single-node
+# value exactly. The decode DP path keeps the dsr1-style higher budget
+# (4096) because decode workers are specialized in disagg (no prefill load)
+# and benefit from more concurrent in-flight requests; we will tune this
+# down if it OOMs in practice.
+DeepSeek-V4-Pro-FP8:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 1800 --attention-backend compressed --page-size 256 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disable-shared-experts-fusion --disaggregation-transfer-backend mori"
+  mtp_flags: ""
+  dp_flags: "--enable-dp-attention"
+  prefill:
+    mem_fraction_static: 0.85
+    disable_radix_cache: true
+    dp:
+      # TP8 + DP8 prefill (matches single-node dsv4-fp8-mi355x-sglang).
+      # max_running_requests=256 + chunked_prefill_size=8192 are exactly
+      # the single-node values.
+      max_running_requests: 256
+      chunked_prefill_size: 8192
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      # Bare TP8 prefill (no dp-attention). Kept for parity with other
+      # models in this YAML; the dsv4-fp8-mi355x-sglang-disagg matrix
+      # entry does not currently exercise this path.
+      max_running_requests: 128
+      chunked_prefill_size: 8192
+      cuda_graph_bs_range: "1-128"
+  decode:
+    mem_fraction_static: 0.88
+    prefill_round_robin_balance: true
+    dp:
+      # TP8 + DP8 decode (matches single-node attention/MoE layout).
+      # Higher max_running_requests than single-node's 256 because decode
+      # workers in disagg are specialized; tune down if OOM observed.
+      max_running_requests: 4096
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_DECODE * DECODE_TP_SIZE"
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      # EP-only decode (no DP). Not currently exercised by the disagg
+      # matrix entry; provided for schema completeness.
+      max_running_requests: 256
+      chunked_prefill_size: 8192
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      # Bare TP8 decode. Not currently exercised by the disagg matrix
+      # entry; provided for schema completeness.
+      max_running_requests: 128
+      chunked_prefill_size: 8192
+      cuda_graph_bs_range: "1-128"

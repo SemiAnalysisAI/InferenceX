@@ -1585,6 +1585,149 @@ dsv4-fp8-mi355x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# DSv4-Pro FP8 PD-disaggregated on MI355X via SGLang + MoRI KV transfer.
+#
+# This is the ENABLING-phase entry: minimal, pareto-typical search space,
+# topology mirrors the proven single-node `dsv4-fp8-mi355x-sglang` config
+# above as closely as possible (same image, same TP=DP=8 with dp-attention,
+# same conc range), just split across prefill and decode workers.
+#
+# Image:
+#   Reuses the same `rocm720-mi35x-a8410de-20260502-DSv4` daily build as
+#   single-node, since it is the only image that ships the DSv4 model class
+#   (sglang/srt/models/deepseek_v4.py from sglang#23608 and the 8 integration
+#   follow-ups). MoRI presence in this image is unconfirmed — if the disagg
+#   transfer probe fails at server startup we will need either:
+#     (a) a unified `<sgl_v0.5.x>-rocm720-mi35x-mori-<date>-DSv4` build from
+#         the AMD sgl-dev pipeline (best long term), or
+#     (b) a runtime MoRI overlay similar to vllm_disagg_utils/setup_deps.sh.
+#   The DSR1 sglang-disagg configs use `sglang-0.5.9-rocm720-mi35x-mori-0227-2`
+#   (older sglang, no DSv4) so that image is NOT a viable fallback.
+#
+# Topology (only what is currently a "typical" pareto recipe; expand later):
+#   * 1P1D (2 nodes): 1×TP8+DP8 prefill + 1×TP8+DP8 decode — direct disagg
+#     equivalent of the single-node config; isolates the cost of splitting
+#     KV transfer across the network from the model itself.
+#   * 1P2D (3 nodes): 1×TP8+DP8 prefill + 2×TP8+DP8 decode — exercises
+#     decode scaling; saturates the `mi355x-disagg` runner pool exactly.
+#   Both topologies use no EP and TP=DP=8 with --enable-dp-attention,
+#   matching the single-node tested recipe. EP, MTP, and bare-TP variants
+#   are intentionally deferred until the baseline is proven.
+#
+# DSv4-specific runtime setup (not visible in this matrix entry but applied
+# downstream by amd_utils/{env.sh,server.sh}):
+#   * env.sh exports the SGLANG_OPT_* / SGLANG_HACK_FLASHMLA_BACKEND env
+#     vars from benchmarks/single_node/dsv4_fp8_mi355x.sh under a guarded
+#     `if [[ "$MODEL_NAME" == *DeepSeek-V4* ]]` block.
+#   * server.sh patches `<MODEL_DIR>/<MODEL_NAME>/config.json` model_type
+#     from `deepseek_v4` to `deepseek_v3` (idempotent, NODE_RANK==0 only)
+#     so HF AutoConfig.from_pretrained succeeds while SGLang still
+#     dispatches to the native DSv4 model class via `architectures`.
+#
+# Eval (RUN_EVAL=true) is intentionally NOT enabled for the first PR.
+# Just like `dsv4-fp8-mi355x-sglang`, DSv4-Pro-FP8's tokenizer_config.json
+# has chat_template=None — the cherry-picked `Fix DSv4 eval prompt encoding`
+# patch in benchmarks/benchmark_lib.sh handles the single-node case but is
+# untested on the disagg /v1/completions code path; defer eval to a follow-up.
+dsv4-fp8-mi355x-sglang-disagg:
+  image: rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4
+  model: sgl-project/DeepSeek-V4-Pro-FP8
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp8
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1P1D: 1×TP8+DP8 prefill + 1×TP8+DP8 decode (2 nodes).
+      # Conc range matches the proven single-node dsv4-fp8-mi355x-sglang sweep.
+      - spec-decoding: "none"
+        # conc-list: [ 4, 8, 16, 32, 64 ]¨
+        conc-list: [ 4, 32, 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+      # 1P2D: 1×TP8+DP8 prefill + 2×TP8+DP8 decode (3 nodes).
+      # Higher conc range to exercise decode scaling beyond what 1P1D can sustain.
+      - spec-decoding: "none"
+        # conc-list: [ 32, 64, 128 ]
+        conc-list: [ 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=0"
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1P1D: 1×TP8+DP8 prefill + 1×TP8+DP8 decode (2 nodes).
+      - spec-decoding: "none"
+        # conc-list: [ 4, 8, 16, 32, 64 ]
+        conc-list: [ 4, 32, 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+      # 1P2D: 1×TP8+DP8 prefill + 2×TP8+DP8 decode (3 nodes).
+      - spec-decoding: "none"
+        # conc-list: [ 32, 64, 128 ]
+        conc-list: [ 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=0"
+
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
