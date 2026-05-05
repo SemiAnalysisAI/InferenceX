@@ -191,6 +191,9 @@ else
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
 
+    # Force re-import: delete stale sqsh so the flock block pulls fresh
+    srun --jobid=$JOB_ID bash -c "rm -f \"$SQUASH_FILE\" \"$LOCK_FILE\""
+
     # Use flock to serialize concurrent imports to the same squash file
     srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
