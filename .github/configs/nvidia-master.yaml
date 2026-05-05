@@ -2752,7 +2752,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300

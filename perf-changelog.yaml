@@ -2216,6 +2216,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
 
 - config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Enable TRTLLM fused MHC by default with the DeepSeek-V4 feature image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
+
+- config-keys:
     - dsv4-fp4-b200-trt
   description:
     - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"
