@@ -2152,6 +2152,6 @@
 - config-keys:
     - dsv4-fp4-b300-trt
   description:
-    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:fix-mhc7168-eb20e9e"
-    - "Enable TRTLLM fused MHC by default now that the image includes the hidden-size 7168 fused-HC fix"
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Enable TRTLLM fused MHC by default with the DeepSeek-V4 feature image"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
