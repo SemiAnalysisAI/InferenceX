@@ -109,7 +109,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-deep-l0-diag}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-3ed6633aa6ac2577511cc5fc9aa90a20a9cc17cc}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-f1e016ff584be93c0bcda4f9b1958c0ac24c753e}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
@@ -295,7 +295,9 @@ if [ "${EVAL_ONLY:-false}" = "true" ] && [ "${ATOM_DSV4_COMPONENT_DIAG:-1}" = "1
     export ATOM_DSV4_DIAG_LAYERS="${ATOM_DSV4_DIAG_LAYERS:-all}"
     export ATOM_DSV4_DIAG_VERBOSE="${ATOM_DSV4_DIAG_VERBOSE:-1}"
     export ATOM_DSV4_DIAG_TOKEN_LIMIT="${ATOM_DSV4_DIAG_TOKEN_LIMIT:-3}"
-    echo "DSv4 component diagnostics enabled: layers=${ATOM_DSV4_DIAG_LAYERS}, token_limit=${ATOM_DSV4_DIAG_TOKEN_LIMIT}"
+    export ATOM_DSV4_DIAG_FULL_SEQ_LIMIT="${ATOM_DSV4_DIAG_FULL_SEQ_LIMIT:-128}"
+    export ATOM_DSV4_DEEP_ATTN_REF_DIAG="${ATOM_DSV4_DEEP_ATTN_REF_DIAG:-1}"
+    echo "DSv4 component diagnostics enabled: layers=${ATOM_DSV4_DIAG_LAYERS}, token_limit=${ATOM_DSV4_DIAG_TOKEN_LIMIT}, full_seq_limit=${ATOM_DSV4_DIAG_FULL_SEQ_LIMIT}, attn_ref=${ATOM_DSV4_DEEP_ATTN_REF_DIAG}"
 fi
 
 run_dsv4_atom_eval_diagnostics() {
