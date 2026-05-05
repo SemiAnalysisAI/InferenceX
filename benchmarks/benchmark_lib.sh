@@ -977,6 +977,13 @@ build_replay_cmd() {
     # inflate as the run progresses.
     REPLAY_CMD+=" --cache-bust system_prefix"
     REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
+    # The inferencex-agentx-mvp scenario enforces a 900s minimum
+    # benchmark duration. For smoke tests with shorter durations, opt
+    # into --unsafe-override (the run's submission_valid will be flagged
+    # false; that's expected for non-canonical runs).
+    if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE:-false}" = "true" ]; then
+        REPLAY_CMD+=" --unsafe-override"
+    fi
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 }
 
