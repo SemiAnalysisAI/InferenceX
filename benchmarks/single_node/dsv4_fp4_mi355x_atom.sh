@@ -29,6 +29,10 @@ PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
 export AITER_LOG_LEVEL=WARNING
+# Current DSv4 diagnostics isolate equal-prompt corruption to the AITER TP
+# reduce after L0 attention wo_b. Use torch/RCCL TP reductions for DSv4 until
+# that AITER collective path is fixed.
+export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays ROCm/aiter#2998 for the DSv4 kernels. Install
@@ -109,7 +113,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-deep-l0-diag}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-a3b54a8732d428d1b16fa9fccd6be3da641adb4d}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-7b4f6b1471f8ab72579f467f243c1968237a66ed}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
