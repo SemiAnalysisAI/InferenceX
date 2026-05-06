@@ -2264,3 +2264,14 @@
   description:
     - "Re-run qwen3.5-fp8-b200-sglang-mtp sweep after the B200 DGXC Slurm partition change (gpu → gpu-2)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1292
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Tune MiniMax-M2.5 FP8 MI355X vLLM scheduling thresholds for better throughput and stability across the 1k/1k and 8k/1k sweep points"
+    - "Default path: block-size=32, shuffled KV cache disabled (VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0), async scheduling enabled"
+    - "1k/1k TP8/EP8: keep block-size=32 and shuffled KV cache disabled; disable async scheduling (--no-async-scheduling)"
+    - "1k/1k non-TP8/EP8: block-size=16 with shuffled KV cache enabled; disable async scheduling through c128"
+    - "8k/1k TP8/EP8: keep block-size=32 and shuffled KV cache disabled; disable AITER MoE (VLLM_ROCM_USE_AITER_MOE=0); disable async scheduling"
+    - "8k/1k non-TP8/EP8: disable async scheduling through c64; switch to block-size=16 with shuffled KV cache at c64 and above"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1276
