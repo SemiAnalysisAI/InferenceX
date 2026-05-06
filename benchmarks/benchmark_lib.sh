@@ -954,6 +954,19 @@ build_replay_cmd() {
     local duration="${DURATION:-1800}"
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
+    # Dataset configuration (load + reconstruct + inputs.json + mmap)
+    # routinely takes 4-5 min for the 739-trace weka corpus. The default
+    # 300s timeout flips parallel jobs into TimeoutError mid-setup when
+    # many launchers contend for the shared HF cache + tmpfs. Bump to
+    # 900s — the post-setup measurement window is unaffected.
+    export AIPERF_DATASET_CONFIGURATION_TIMEOUT=900
+    # Cap per-job reconstruction worker count. Default auto-picks
+    # min(cpu_count-1, 16, num_traces) which means a 32-core node
+    # spawns 16 subprocess workers per aiperf instance. With 16 parallel
+    # jobs on a 32-core slurm node that's 256 reconstruction workers
+    # thrashing the HF cache. Cap at 4 — measured negligible difference
+    # in setup time on the 5-min smoke runs.
+    export AIPERF_DATASET_WEKA_PARALLEL_WORKERS=4
 
     REPLAY_CMD="aiperf profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url http://localhost:$PORT"
