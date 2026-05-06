@@ -3043,3 +3043,10 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Switch to AITER-env-based recipe on v0.21: enable AITER MOE/RMSNORM/UnifiedAttn/A16W4 + HSA_NO_SCRATCH_RECLAIM, drop legacy TRITON_ROPE/BUFFER_OPS/--attention-backend/fuse_rope_kvcache, add --max-num-seqs 256 + --async-scheduling"
+    - "Pass --compilation-config to disable v0.21's new fuse_allreduce_rms pass (enabled by default on ROCm but costs ~4% on the AITER path). EXTRA_COMPILATION_CONFIG overrides the default"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
