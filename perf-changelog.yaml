@@ -2247,3 +2247,9 @@
     - "Add pure TP (tp:8, ep:1) search-space row alongside the existing DP+EP row"
     - "Raise conc-end from 64 to 256 on both 1k1k and 8k1k sweeps"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1287
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Re-run qwen3.5-fp8-b200-sglang-mtp sweep after the B200 DGXC Slurm partition change (gpu → gpu-2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
