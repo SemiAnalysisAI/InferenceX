@@ -2214,3 +2214,42 @@
     - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
     - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+  description:
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Enable TRTLLM fused MHC by default with the DeepSeek-V4 feature image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1270
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update image to lmsysorg/sglang:nightly-dev-20260422-de962f32"
+    - "Add tp:2 ep:1 conc 4-128 search-space for 1k1k and 8k1k"
+    - "Align server flags with FP4 B200 STP: --enable-symm-mem, --expert-parallel-size, dynamic scheduler-recv-interval"
+    - "Add MTP flags: SGLANG_ENABLE_SPEC_V2=1, EAGLE speculative decoding (steps=3, topk=1, draft=4)"
+    - "Reduce prefill/chunked from 32768 to 16384"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1257
+
+- config-keys:
+    - dsv4-fp4-b200-trt
+  description:
+    - "Add B200 TensorRT-LLM DeepSeek-V4-Pro single-node coverage using the feat/deepseek_v4 image"
+    - "Mirror the B300 TRT launch path with OpenAI chat serving, FP8 KV cache, TRTLLM MoE, NCCL NVLS disabled by default, and fused MHC disabled for hidden size 7168 correctness"
+    - "Update the B200 DGXC Slurm partition from removed gpu to gpu-2 so single-node B200 jobs can allocate"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1277
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Add pure TP (tp:8, ep:1) search-space row alongside the existing DP+EP row"
+    - "Raise conc-end from 64 to 256 on both 1k1k and 8k1k sweeps"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1287
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Re-run qwen3.5-fp8-b200-sglang-mtp sweep after the B200 DGXC Slurm partition change (gpu → gpu-2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1292
