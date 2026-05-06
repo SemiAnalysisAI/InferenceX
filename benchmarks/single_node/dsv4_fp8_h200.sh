@@ -9,6 +9,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -37,20 +38,29 @@ else
     MAX_MODEL_LEN_ARG="--max-model-len 800000"
 fi
 
+# DP_ATTENTION=true runs DP-attention with expert parallel (DP size = TP);
+# DP_ATTENTION=false runs pure tensor parallel.
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+fi
+
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# Per the recipe, run with EP + DP=8 (no --tensor-parallel-size flag). TP
-# from the search space is used only for GPU allocation by the runner and
-# as the DP size.
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
 --no-enable-prefix-caching \
---enable-expert-parallel \
---data-parallel-size $TP \
+"${PARALLEL_ARGS[@]}" \
+"${EP_ARGS[@]}" \
 $MAX_MODEL_LEN_ARG \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs 512 \
