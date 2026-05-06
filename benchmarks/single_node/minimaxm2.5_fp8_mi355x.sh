@@ -62,10 +62,6 @@ elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
         VLLM_BLOCK_SIZE=16
         echo "8k1k c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
     fi
-elif [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
-    echo "TP8/EP8 fallback: using block size 32, shuffle disabled, async scheduling enabled."
-else
-    echo "Default policy for ISL=${ISL}, OSL=${OSL}, TP=${TP}, EP=${EP_SIZE}, CONC=${CONC}: using block size 32, shuffle disabled, async scheduling enabled."
 fi
 
 SERVER_LOG=/workspace/server.log
