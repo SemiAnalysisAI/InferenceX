@@ -178,11 +178,17 @@ wait_for_server_ready() {
 #   --max-concurrency: Max concurrency
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
+#   --dataset-name: Optional dataset, 'random' or 'infinitebench'
+#   --dataset-path: Optional InfiniteBench JSONL file/directory
+#   --infinitebench-task: Optional InfiniteBench task/file, defaults to longbook_qa_eng
 #   --use-chat-template: Optional flag to enable chat template
 #   --dsv4: Optional flag to use the DeepSeek-V4 chat template
 #           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
 #           template. Implies --use-chat-template.
+#   --dsv4-thinking-mode: Optional DeepSeek-V4 encoding mode, 'chat' or 'thinking'
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
+#   --temperature: Optional sampling temperature
+#   --num-chips: Optional chip/GPU count for guide-style decode throughput
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     # In eval-only mode, skip the throughput benchmark entirely.
@@ -204,10 +210,16 @@ run_benchmark_serving() {
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
+    local dataset_name="${BENCHMARK_DATASET_NAME:-${BENCHMARK_DATASET:-random}}"
+    local dataset_path="${INFINITEBENCH_DATASET_PATH:-${DATASET_PATH:-}}"
+    local infinitebench_task="${INFINITEBENCH_TASK:-longbook_qa_eng}"
     local use_chat_template=false
     local dsv4=false
+    local dsv4_thinking_mode="${DSV4_THINKING_MODE:-}"
     local trust_remote_code=false
     local server_pid=""
+    local temperature="${BENCHMARK_TEMPERATURE:-}"
+    local num_chips="${BENCHMARK_NUM_CHIPS:-${WORLD_SIZE:-${TP:-}}}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -259,6 +271,18 @@ run_benchmark_serving() {
                 workspace_dir="$2"
                 shift 2
                 ;;
+            --dataset-name)
+                dataset_name="$2"
+                shift 2
+                ;;
+            --dataset-path)
+                dataset_path="$2"
+                shift 2
+                ;;
+            --infinitebench-task)
+                infinitebench_task="$2"
+                shift 2
+                ;;
             --use-chat-template)
                 use_chat_template=true
                 shift
@@ -268,6 +292,10 @@ run_benchmark_serving() {
                 use_chat_template=true
                 shift
                 ;;
+            --dsv4-thinking-mode)
+                dsv4_thinking_mode="$2"
+                shift 2
+                ;;
             --trust-remote-code)
                 trust_remote_code=true
                 shift
@@ -276,13 +304,68 @@ run_benchmark_serving() {
                 server_pid="$2"
                 shift 2
                 ;;
+            --temperature)
+                temperature="$2"
+                shift 2
+                ;;
+            --num-chips)
+                num_chips="$2"
+                shift 2
+                ;;
             *)
                 echo "Unknown parameter: $1"
                 return 1
                 ;;
         esac
     done
-    
+
+    # Temporary InfiniteBench experiment override: ignore caller-provided
+    # dataset and input/output lengths, and always run the CANN-style 8K/256
+    # InfiniteBench workload. This branch is not intended for main.
+    dataset_name="infinitebench"
+    infinitebench_task="longbook_qa_eng"
+    temperature="1.0"
+    random_range_ratio="1.0"
+    input_len=8192
+    output_len=256
+    if [[ "${MODEL_PREFIX:-}" == "dsv4" || "$model" == *"DeepSeek-V4"* ]]; then
+        use_chat_template=true
+        dsv4=true
+    fi
+
+    case "$dataset_name" in
+        InfiniteBench|infinitebench)
+            dataset_name="infinitebench"
+            ;;
+        Random|random)
+            dataset_name="random"
+            ;;
+        *)
+            echo "Error: unsupported --dataset-name '$dataset_name' (expected random or infinitebench)"
+            return 1
+            ;;
+    esac
+
+    if [[ -z "$dsv4_thinking_mode" ]]; then
+        if [[ "$dataset_name" == "infinitebench" ]]; then
+            dsv4_thinking_mode="chat"
+        else
+            dsv4_thinking_mode="thinking"
+        fi
+    fi
+
+    if [[ -z "$temperature" ]]; then
+        if [[ "$dataset_name" == "infinitebench" ]]; then
+            temperature="1.0"
+        else
+            temperature="0.0"
+        fi
+    fi
+
+    if [[ -z "$random_range_ratio" && "$dataset_name" == "infinitebench" ]]; then
+        random_range_ratio="1.0"
+    fi
+
     # Validate all required parameters
     if [[ -z "$model" ]]; then
         echo "Error: --model is required"
@@ -347,21 +430,37 @@ run_benchmark_serving() {
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
-        --dataset-name random
+        --dataset-name "$dataset_name"
         --random-input-len "$input_len"
         --random-output-len "$output_len"
         --random-range-ratio "$random_range_ratio"
         --num-prompts "$num_prompts"
         --max-concurrency "$max_concurrency"
         --request-rate inf
+        --temperature "$temperature"
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
         --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
+        --metadata "benchmark_input_len=$input_len" "benchmark_output_len=$output_len"
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
     )
+
+    if [[ "$dataset_name" == "infinitebench" ]]; then
+        benchmark_cmd+=(
+            --infinitebench-task "$infinitebench_task"
+            --infinitebench-input-len "$input_len"
+            --infinitebench-output-len "$output_len"
+        )
+        if [[ -n "$dataset_path" ]]; then
+            benchmark_cmd+=(--dataset-path "$dataset_path")
+        fi
+        if [[ -n "$num_chips" ]]; then
+            benchmark_cmd+=(--num-chips "$num_chips")
+        fi
+    fi
 
     if [[ -n "$endpoint" ]]; then
         benchmark_cmd+=(--endpoint "$endpoint")
@@ -375,7 +474,7 @@ run_benchmark_serving() {
     # Add --dsv4 if requested (requires --use-chat-template, which we
     # auto-enable when --dsv4 is passed in).
     if [[ "$dsv4" == true ]]; then
-        benchmark_cmd+=(--dsv4)
+        benchmark_cmd+=(--dsv4 --dsv4-thinking-mode "$dsv4_thinking_mode")
     fi
 
     # Add --trust-remote-code if requested

@@ -56,6 +56,11 @@ data = {
     'osl': int(osl),
 }
 
+if 'benchmark_input_len' in bmk_result:
+    data['isl'] = int(bmk_result['benchmark_input_len'])
+if 'benchmark_output_len' in bmk_result:
+    data['osl'] = int(bmk_result['benchmark_output_len'])
+
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
 
 if is_multinode:
@@ -124,12 +129,34 @@ else:
 
     data = data | single_node_data
 
+if bmk_result.get('dataset_name') == 'infinitebench':
+    if 'infinitebench_input_len' in bmk_result:
+        data['isl'] = int(bmk_result['infinitebench_input_len'])
+    if 'infinitebench_output_len' in bmk_result:
+        data['osl'] = int(bmk_result['infinitebench_output_len'])
+
 for key, value in bmk_result.items():
     if key.endswith('ms'):
         data[key.replace('_ms', '')] = float(value) / 1000.0
     if 'tpot' in key:
         data[key.replace('_ms', '').replace(
             'tpot', 'intvty')] = 1000.0 / float(value)
+
+for key in [
+    'dataset_name',
+    'temperature',
+    'infinitebench_task',
+    'infinitebench_input_len',
+    'infinitebench_output_len',
+    'dsv4_thinking_mode',
+    'num_chips',
+    'benchmark_input_len',
+    'benchmark_output_len',
+    'decode_throughput_from_mean_tpot',
+    'decode_throughput_per_chip_from_mean_tpot',
+]:
+    if key in bmk_result:
+        data[key] = bmk_result[key]
 
 print(json.dumps(data, indent=2))
 
