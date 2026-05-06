@@ -29,6 +29,7 @@ def sample_benchmark_result():
         "ttft_p99_ms": 250.3,
         "tpot_p50_ms": 25.0,
         "tpot_p99_ms": 45.0,
+        "std_tpot_ms": 5.0,
         "e2e_latency_p50_ms": 1500.0,
         "e2e_latency_p99_ms": 2500.0,
     }
@@ -202,6 +203,8 @@ class TestProcessResultScript:
         # Verify interactivity calculations (1000 / tpot_ms)
         assert output_data["intvty_p50"] == pytest.approx(1000.0 / 25.0)
         assert output_data["intvty_p99"] == pytest.approx(1000.0 / 45.0)
+        assert output_data["std_tpot"] == pytest.approx(0.005)
+        assert "std_intvty" not in output_data
 
         # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
