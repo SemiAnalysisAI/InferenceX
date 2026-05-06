@@ -2252,4 +2252,4 @@
     - qwen3.5-fp8-b200-sglang-mtp
   description:
     - "Re-run qwen3.5-fp8-b200-sglang-mtp sweep after the B200 DGXC Slurm partition change (gpu → gpu-2)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1292
