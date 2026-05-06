@@ -46,7 +46,8 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     fi
 elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
     if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
-        echo "8k1k TP8/EP8: using block size 32, shuffle disabled, async scheduling enabled."
+        export VLLM_ROCM_USE_AITER_MOE=0
+        echo "8k1k TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling enabled."
     elif (( CONC < 64 )); then
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
         echo "8k1k c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
