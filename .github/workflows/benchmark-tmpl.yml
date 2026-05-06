@@ -259,6 +259,8 @@ jobs:
             results/trace_replay/server_metrics_export.csv
             results/trace_replay/server_metrics_export.parquet
             results/trace_replay/gpu_telemetry_export.jsonl
+            results/trace_replay/logs/aiperf.log
+            results/trace_replay/logs/*.log
           # Excluded by design (multi-GB debug artifacts, not consumed by
           # post-processing): results/trace_replay/inputs.json (pre-formatted
           # request bodies — the mmap'd binary equivalent is rebuilt from
