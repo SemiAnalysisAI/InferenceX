@@ -960,6 +960,9 @@ build_replay_cmd() {
     # many launchers contend for the shared HF cache + tmpfs. Bump to
     # 900s — the post-setup measurement window is unaffected.
     export AIPERF_DATASET_CONFIGURATION_TIMEOUT=900
+    # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
+    # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
+    export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=900
     # Cap per-job reconstruction worker count. Default auto-picks
     # min(cpu_count-1, 16, num_traces) which means a 32-core node
     # spawns 16 subprocess workers per aiperf instance. With 16 parallel
