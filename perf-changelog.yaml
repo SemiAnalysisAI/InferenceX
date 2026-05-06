@@ -2214,10 +2214,3 @@
     - "Bump --speculative-config num_speculative_tokens from 1 to 2 (`{\"method\":\"mtp\",\"num_speculative_tokens\":2}`)"
     - "Re-test whether H200 MTP kernels accept 2 draft tokens — Blackwell MTP runs at 2 (per @wzhao18's vLLM Blackwell MTP submission); checking if H200 has parity now"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1279
-
-- config-keys:
-    - minimaxm2.5-fp8-mi355x-vllm
-  description:
-    - "Disable async scheduling for the 1k1k TP8/EP8 path; disable both AITER MoE via VLLM_ROCM_USE_AITER_MOE=0 and async scheduling for the 8k1k TP8/EP8 MiniMax-M2.5 FP8 MI355X vLLM path"
-    - "Local validation on vllm/vllm-openai-rocm:v0.19.0 completed the 8k1k TP8/EP8 CONC=2 serving benchmark; block_size=32 with shuffle disabled outperformed the tested shuffle-KV/block_size=16 variant"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1276
