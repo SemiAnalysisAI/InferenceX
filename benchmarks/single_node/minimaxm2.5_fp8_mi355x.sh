@@ -31,9 +31,9 @@ VLLM_BLOCK_SIZE=32
 ASYNC_SCHEDULING_ARGS=""
 
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
-    if (( CONC == 2 )) && [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+    if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-        echo "1k1k TP8/EP8 c2: using block size 32, shuffle disabled, async scheduling disabled."
+        echo "1k1k TP8/EP8: using block size 32, shuffle disabled, async scheduling disabled."
     elif (( CONC <= 128 )); then
         export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
         VLLM_BLOCK_SIZE=16
