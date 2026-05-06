@@ -533,7 +533,8 @@ kimik2.5-int4-mi355x-vllm-mtp:
   precision: int4
   framework: vllm
   multinode: false
-  seq-len-configs:
+  scenarios:
+    fixed-seq-len:
   - isl: 1024
     osl: 1024
     search-space:
@@ -551,7 +552,8 @@ kimik2.5-int4-mi300x-vllm-mtp:
   precision: int4
   framework: vllm
   multinode: false
-  seq-len-configs:
+  scenarios:
+    fixed-seq-len:
   - isl: 1024
     osl: 1024
     search-space:
@@ -569,7 +571,8 @@ kimik2.5-int4-mi325x-vllm-mtp:
   precision: int4
   framework: vllm
   multinode: false
-  seq-len-configs:
+  scenarios:
+    fixed-seq-len:
   - isl: 1024
     osl: 1024
     search-space:
