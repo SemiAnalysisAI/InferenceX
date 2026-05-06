@@ -980,15 +980,13 @@ build_replay_cmd() {
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"
-    # NOTE: --apply-chat-template was previously enabled here for client-side
-    # ISL counting via the HF chat template, but on minimax-m2.5 (and likely
-    # other large-vocab models) the per-record asyncio.to_thread(apply_chat_template)
-    # call in inference_result_parser.py serializes through the default thread
-    # pool fast enough at conc<=4 but wedges the records pipeline at conc>=16
-    # — only one record squeezed through before warmup hung indefinitely (see
-    # 2026-05-06 conc16 repro). Server-reported usage already covers ISL/OSL,
-    # so dropping the flag is lossless for our metrics. Re-enable only if a
-    # specific model lacks server usage AND a faster tokenizer path lands.
+    # Use server-reported usage fields (prompt_tokens / completion_tokens) for
+    # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
+    # stream_options.include_usage on the OpenAI chat endpoint. Skips the
+    # heavy per-record tokenization in the records pipeline that was pinning
+    # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
+    # usage is authoritative).
+    REPLAY_CMD+=" --use-server-token-count"
     # Default --num-dataset-entries is 100; the weka corpus has 739. Cap
     # at 739 so all unique traces are loaded (the loader treats this as a
     # ``min(cap, available)`` ceiling, not a target — see
