@@ -514,7 +514,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running SGLang GSM8K evaluation on Node 0..."
+        echo "Running lm-eval evaluation on Node 0..."
 
         # Health check: verify the router is still serving before running eval.
         # The throughput benchmark may have crashed/exhausted decode workers.
@@ -550,10 +550,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework sglang-gsm8k --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                # Run SGLang's GSM8K benchmark against the router on port 30000
-                run_eval --framework sglang-gsm8k --port 30000
+                # Run lm-eval against the router on port 30000
+                run_eval --framework lm-eval --port 30000
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
