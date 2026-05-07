@@ -1,4 +1,4 @@
-name: "conc512"
+name: "conc16384"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -36,9 +36,6 @@ model:
   container: "lmsysorg/sglang:deepseek-v4-grace-blackwell"
   precision: "fp4"
 
-# See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the dynamo pin
-# rationale. Hash bumped from PR #1213 to track the dynamo-sglang dsv4
-# dev branch.
 dynamo:
   hash: "9d3c913d300eb368cda28b3f98a23a5762621e0d"
   install: true
@@ -46,20 +43,10 @@ dynamo:
 slurm:
   time_limit: "03:00:00"
 
-# Match yangminl's working all-dynamo.yaml on the same gb300-cw cluster:
-#   cpus-per-task=144  — without this slurm hands out 1 CPU/task, which
-#     turns the dynamo `hash:` cold source build (~500 rust crates,
-#     ravif/exr/zip/pyo3 stack) into a 30+ min serial compile. With 144
-#     cargo finishes in ~5 min.
-#   mem=0              — slurm's "give the whole node's memory"; needed
-#     for sglang loading 671B FP4 weights + dynamo build at the same
-#     time without OOM.
 sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
 
-# Topology: 7 prefill (TP=4 / DP=4 / EP=4 / 1 node each) + 1 decode
-# (TP=8 / DP=8 / EP=8 / 2 nodes). 9 nodes total.
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -72,8 +59,15 @@ resources:
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: true
-  num_additional_frontends: 8
+  enable_multiple_frontends: false
+  env:
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1" 
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
 
 backend:
   type: sglang
@@ -93,8 +87,10 @@ backend:
     SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
     SGLANG_OPT_USE_FAST_MASK_EP: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
     SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_OPT_FP8_WO_A_GEMM: "1"
     SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -122,12 +118,14 @@ backend:
     SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
     SGLANG_OPT_USE_FAST_MASK_EP: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1152"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1280"
     SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
     SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: "8"
     MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
@@ -153,14 +151,14 @@ backend:
 
       enable-dp-attention: true
       moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      deepep-config: '{"normal_dispatch":{"num_sms":88,"num_max_nvl_chunked_send_tokens":28,"num_max_nvl_chunked_recv_tokens":512},"normal_combine": {"num_sms":88,"num_max_nvl_chunked_send_tokens":16,"num_max_nvl_chunked_recv_tokens":512}}'
+      moe-dense-tp-size: 1
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
 
       mem-fraction-static: 0.90
       max-running-requests: 512
-      cuda-graph-max-bs: 512
       chunked-prefill-size: 32768
 
     decode:
@@ -170,29 +168,30 @@ backend:
       skip-tokenizer-init: true
       stream-interval: 60
 
+      load-balance-method: "total_requests"
       moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
+      disaggregation-decode-polling-interval: 8
 
-      mem-fraction-static: 0.94
-      swa-full-tokens-ratio: 0.15
-      context-length: 16384
+      mem-fraction-static: 0.962
+      swa-full-tokens-ratio: 0.056
+      context-length: 9216
       tensor-parallel-size: 16
       data-parallel-size: 16
       expert-parallel-size: 16
       enable-dp-attention: true
       enable-dp-lm-head: true
-      moe-a2a-backend: deepep
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-      max-running-requests: 3072
-      cuda-graph-max-bs: 512
+      max-running-requests: 21504
+      cuda-graph-max-bs: 1280
+
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "512"
+  concurrencies: "8192"
   req_rate: "inf"
   use_chat_template: false
+  random_num_workers: 96
