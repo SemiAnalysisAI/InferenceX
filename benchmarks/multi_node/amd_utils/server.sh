@@ -343,6 +343,11 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]
     DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
     unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
     unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+    # NOTE: that currently with fp8_combine set, the evals do not pass on InferenceX eval harness
+    # or on SGLang native harness for high concurrency 4k and gets no where near the golden score of
+    # 0.95 on even basic GSM8k grade school math as confirmed by @billishyahao from AMD
+    # and as confirmed by @Oseltamivir. This was initally merged with @billishyahao promising 
+    # that an fast follow PR to fix the evals via having quant correction in the fp8 combine
 fi
 
 # =============================================================================
