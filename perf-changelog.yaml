@@ -2272,3 +2272,11 @@
     - "8k/1k TP8/EP8: keep block-size=32 and shuffled KV cache disabled; disable AITER MoE (VLLM_ROCM_USE_AITER_MOE=0); disable async scheduling"
     - "8k/1k non-TP8/EP8: disable async scheduling through c64; switch to block-size=16 with shuffled KV cache at c64 and above"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1276
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Overhaul the 8k/1k DSv4-Pro GB300 SGLang search space: switch decode to WideEP TP=16 across most concurrency points (TP=12 at the 21504 max-concurrency point), and scale concurrencies to 8192/1024/4096/8192/21504; keep a 1p1d TP=4 baseline at conc=1"
+    - "Rename and consolidate the per-concurrency recipe files to `disagg-gb300-{N}p1d-{topo}-{nodes}-c{conc}.yaml`"
+    - "Re-enable lm-eval scoring for dsv4-fp4-gb300-dynamo-sglang now that the srt-slurm pin includes the lm-eval orchestrator path"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
