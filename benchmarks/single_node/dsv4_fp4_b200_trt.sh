@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# DeepSeek-V4-Pro single-node TRTLLM recipe for B300. The configured image
+# DeepSeek-V4-Pro single-node TRTLLM recipe for B200. The configured image
 # already contains a TensorRT-LLM DeepSeek-V4 build; do not build TRTLLM at
 # runtime from this benchmark path.
 
@@ -100,9 +100,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
-
-export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-1}"
-echo "TRTLLM_MHC_ENABLE_FUSED_HC: $TRTLLM_MHC_ENABLE_FUSED_HC"
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
