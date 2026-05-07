@@ -137,12 +137,12 @@ def sample_infinitebench_requests(
     rendered_wrapper = _format_infinitebench_prompt(
         wrapper_prompt, tokenizer, use_chat_template
     )
-    wrapper_len = _token_count(tokenizer, rendered_wrapper)
-    context_budget = input_len - wrapper_len
+    system_prompt_len = _token_count(tokenizer, rendered_wrapper)
+    context_budget = input_len - system_prompt_len
     if context_budget <= 0:
         raise ValueError(
             f"InfiniteBench input length {input_len} is too short for the "
-            f"rendered prompt wrapper ({wrapper_len} tokens)."
+            f"rendered prompt wrapper ({system_prompt_len} tokens)."
         )
 
     contexts = _load_infinitebench_contexts(dataset_path, task)
@@ -161,21 +161,23 @@ def sample_infinitebench_requests(
         context_index = i % len(contexts)
         cached = prompt_cache.get(context_index)
         if cached is None:
-            context_ids = tokenizer.encode(contexts[context_index], add_special_tokens=False)
-            keep = min(len(context_ids), context_budget)
-
-            while True:
-                trimmed_context = tokenizer.decode(
-                    context_ids[:keep], skip_special_tokens=True
-                )
-                raw_prompt = INFINITEBENCH_PREFIX + trimmed_context + suffix
-                prompt = _format_infinitebench_prompt(
-                    raw_prompt, tokenizer, use_chat_template
-                )
-                prompt_len = _token_count(tokenizer, prompt)
-                if prompt_len <= input_len or keep == 0:
-                    break
-                keep = max(0, keep - (prompt_len - input_len))
+            # Mirror cann-recipes-infer build_dataset_input: tokenize the raw
+            # context with truncation to the system-prompt-adjusted budget,
+            # decode, then assemble — no iterative re-encode loop.
+            context_ids = tokenizer.encode(
+                contexts[context_index],
+                add_special_tokens=False,
+                truncation=True,
+                max_length=context_budget,
+            )
+            trimmed_context = tokenizer.decode(
+                context_ids, skip_special_tokens=True
+            )
+            raw_prompt = INFINITEBENCH_PREFIX + trimmed_context + suffix
+            prompt = _format_infinitebench_prompt(
+                raw_prompt, tokenizer, use_chat_template
+            )
+            prompt_len = _token_count(tokenizer, prompt)
 
             cached = (prompt, prompt_len, output_len, None)
             prompt_cache[context_index] = cached
