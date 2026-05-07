@@ -127,6 +127,9 @@ no_dp = prefill.get('no_dp', {})
 print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 24)}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_DP=\"{dp.get(\"cuda_graph_bs\", \"1 2 3\")}\"')
+print(f'PREFILL_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
+print(f'PREFILL_MAX_TOTAL_TOKENS_DP=\"{dp.get(\"max_total_tokens\", \"\")}\"')
+print(f'PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP=\"{dp.get(\"enable_two_batch_overlap\", False)}\"')
 print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
@@ -169,10 +172,16 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_cuda_graph_bs=($PREFILL_CUDA_GRAPH_BS_DP)
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_DP
     prefill_chunked_prefill_size=$PREFILL_CHUNKED_PREFILL_SIZE_DP
+    prefill_context_length=$PREFILL_CONTEXT_LENGTH_DP
+    prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_DP
+    prefill_enable_two_batch_overlap=$PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP
 else
     prefill_cuda_graph_bs=($(seq $PREFILL_CUDA_GRAPH_BS_NO_DP_START $PREFILL_CUDA_GRAPH_BS_NO_DP_END))
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_NO_DP
     prefill_chunked_prefill_size=$PREFILL_CHUNKED_PREFILL_SIZE_NO_DP
+    prefill_context_length=""
+    prefill_max_total_tokens=""
+    prefill_enable_two_batch_overlap="false"
 fi
 
 # Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
@@ -187,29 +196,31 @@ else
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
 fi
 
-# Use Decode configuration to configure different TP/DP size between P and D
-PREFILL_DECODE_DIFFERENT_TP=""
-if [[ "$PREFILL_ENABLE_DP" != "$DECODE_ENABLE_DP" ]]; then
-    if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
-        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp ${DECODE_TP_SIZE}"
-    else
-        PREFILL_DECODE_DIFFERENT_TP="--disaggregation-decode-tp ${DECODE_TP_SIZE} --disaggregation-decode-dp 1"
-    fi
-fi
-
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} ${PREFILL_DECODE_DIFFERENT_TP}"
+PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
+if [[ -n "$prefill_context_length" ]]; then
+    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --context-length ${prefill_context_length}"
+fi
+if [[ -n "$prefill_max_total_tokens" ]]; then
+    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --max-total-tokens ${prefill_max_total_tokens}"
+fi
+if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_two_batch_overlap" == "true" ]]; then
+    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --enable-two-batch-overlap"
+    PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
+fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]}"
+DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
+
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
+    MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
 # =============================================================================
@@ -327,6 +338,13 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
+if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
+    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
+    unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
+    unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+fi
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================
@@ -362,20 +380,27 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Decode  parallelism: TP=${DECODE_TP_SIZE},  EP enabled: ${DECODE_ENABLE_EP},  DP enabled: ${DECODE_ENABLE_DP},  MTP size=${DECODE_MTP_SIZE}"
     echo "Prefill servers ($((PREFILL_TP_SIZE/GPUS_PER_NODE)) nodes): ${PREFILL_ARGS}"
     echo "Decode servers  ($((DECODE_TP_SIZE/GPUS_PER_NODE))  nodes): ${DECODE_ARGS}"
-    echo "Prefill env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: ${MORI_MAX_DISPATCH_TOKENS_PREFILL}"
-    echo "Decode env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE}"
+    echo "Prefill env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL}"
+    echo "Decode  env: SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} "
+    echo "Decode  env: SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE} "
+
     echo "================================================"
 
     # start the head prefill server
-    PREFILL_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
+        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
+    fi
+    set +x
+    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         PREFILL_CMD="$PREFILL_CMD --dist-init-addr ${PREFILL_HEADNODE_URLS[0]} --nnodes ${PREFILL_NODES_PER_WORKER} --node-rank 0"
@@ -510,8 +535,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
 
+            # Override eval context length with model's configured context_length
+            if [[ -n "$prefill_context_length" ]]; then
+                export EVAL_MAX_MODEL_LEN="$prefill_context_length"
+            fi
+
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"
+                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
                 # Run lm-eval against the router on port 30000
                 run_eval --framework lm-eval --port 30000
@@ -589,15 +619,20 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
 
-    PREFILL_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
+        PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
+    fi
+    set +x
+    PREFILL_CMD="${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${PREFILL_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((NODE_RANK % PREFILL_NODES_PER_WORKER))
@@ -652,15 +687,20 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
-    DECODE_CMD="SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
+    DECODE_MORI_MOE_ENV=""
+    set -x
+    if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_DECODE" ]]; then
+        DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
+    fi
+    set +x
+    DECODE_CMD="${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
-        ${DECODE_SERVER_CONFIG} \
-        --log-level-http warning"
+        ${DECODE_SERVER_CONFIG} "
 
     if [ "$DECODE_NODES_PER_WORKER" -gt 1 ]; then
         rank=$((RANK % DECODE_NODES_PER_WORKER))

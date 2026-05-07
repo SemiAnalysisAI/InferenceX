@@ -34,39 +34,47 @@ export IBDEVICES
 export GLOO_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
 export NCCL_SOCKET_IFNAME=$(ip route | grep '^default' | awk '{print $5}' | head -n 1)
 
-set +x
 
 export NCCL_IB_HCA=$IBDEVICES
 
 export SGLANG_USE_AITER=1
-export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=1200
-export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=1200
+
+export SGLANG_MORI_DISPATCH_DTYPE=auto
+export SGLANG_MORI_FP8_COMB=true
+export SGLANG_MORI_QP_PER_TRANSFER=4
+export SGLANG_MORI_NUM_WORKERS=4
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+
+export MORI_IO_QP_MAX_SEND_WR=16384
+export MORI_IO_QP_MAX_CQE=32768 
+export MORI_IO_QP_MAX_SGE=4
+
+export MORI_IO_TC_DISABLE=0
+
+export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
+export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 
 # Disable allocating memory in one pass
 export MORI_SHMEM_MODE=ISOLATION
-export SGLANG_MORI_FP8_DISP=True
 
-if [[ "$MODEL_NAME" == *mxfp4* ]]; then
-export SGLANG_MORI_FP8_DISP=False
-fi
+# Enable spec v2 
+export SGLANG_ENABLE_SPEC_V2=1
+export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
 
-export SGLANG_MORI_FP4_DISP=False
-export SGLANG_MORI_FP8_COMB=False
+export SGLANG_LOG_MS=true
+export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
 
-# Per-role dispatch token limits (prefill uses higher throughput, decode uses lower)
-export MORI_MAX_DISPATCH_TOKENS_PREFILL=16384
-if [[ "$MODEL_NAME" == *mxfp4* ]]; then
-    export MORI_MAX_DISPATCH_TOKENS_PREFILL=12288
-fi
-export MORI_MAX_DISPATCH_TOKENS_DECODE=160
+export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
+export MORI_MAX_DISPATCH_TOKENS_DECODE=512
+
+export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=32768
+export MORI_MOE_MAX_INPUT_TOKENS_DECODE=2703
 
 # set MTP size=1 when EP16
 export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
 
 export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
-export MORI_IO_QP_MAX_SEND_WR=16384
-export MORI_IO_QP_MAX_CQE=32768
-export MORI_IO_QP_MAX_SGE=4
+
 
 export MORI_APP_LOG_LEVEL=INFO
 
@@ -89,17 +97,21 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
         TC=$(( 4 * ND_DSCP ))
         export MORI_RDMA_SL=$ND_PRIO
+        export MORI_IO_SL=$ND_PRIO
         export MORI_RDMA_TC=$TC
-        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL"
+        export MORI_IO_TC=$TC
+        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
     else
         echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
         # Fall back to hostname-based detection
         NODENAME=$(hostname -s)
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         else
             echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
@@ -110,9 +122,11 @@ else
     NODENAME=$(hostname -s)
     if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
         export MORI_RDMA_TC=96
+        export MORI_IO_TC=96
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     elif [[ $NODENAME == mia1* ]]; then
         export MORI_RDMA_TC=104
+        export MORI_IO_TC=104
         echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
     else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
@@ -124,3 +138,4 @@ fi
 export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
 
+set +x

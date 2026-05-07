@@ -2163,6 +2163,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1233
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Bump SGL mori image to lmsysorg/sglang-rocm"
+    - "Add more high tput / low latency sweep configs"
+    - "Enable v2 mxfp4 DSR1 0528 model"
+    - "Enable fp4 disp / fp8 combine feature on mori"
+    - "Enable Mori SDMA + two batch overlapping feature"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1236
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Tune DSv4 FP4 MI355X SGLang runtime envs: enable fused compress and TileLang MHC post, and drop the Torch fallback env overrides for top-k transform and FP8 paged MQA logits"
