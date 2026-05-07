@@ -72,16 +72,60 @@ new = '''        if libtype == "asm" and matched_m != m:
             return gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
 '''
 if old in source:
-    path.write_text(source.replace(old, new, 1))
+    source = source.replace(old, new, 1)
     print("Patched AITER FP8 blockscale BPRESHUFFLE: disable partial-M ASM dispatch")
 elif new not in source:
     raise SystemExit("FATAL: AITER partial-M ASM guard anchor not found")
 else:
     print("AITER FP8 blockscale BPRESHUFFLE partial-M ASM dispatch already disabled")
+
+anchor = '''    config = get_CKGEMM_config(
+        m, n, k, AITER_CONFIGS.AITER_CONFIG_GEMM_A8W8_BLOCKSCALE_BPRESHUFFLE_FILE
+    )
+'''
+patch = '''    # DSv4-Pro wkv uses [M, 7168] x [512, 7168]. Test the alternate
+    # CKTile BPRESHUFFLE backend for this narrow shape family because the
+    # standard dispatch still produced row-dependent drift for identical rows
+    # in high-concurrency eval diagnostics.
+    if dtype == dtypes.bf16 and n == 512 and k == 7168 and m != 20480:
+        return gemm_a8w8_blockscale_bpreshuffle_cktile(XQ, WQ, x_scale, w_scale, Y)
+
+'''
+if patch not in source:
+    if anchor not in source:
+        raise SystemExit("FATAL: AITER wkv CKTile guard anchor not found")
+    source = source.replace(anchor, patch + anchor, 1)
+    print("Patched AITER FP8 blockscale BPRESHUFFLE: route DSv4 wkv to CKTile")
+else:
+    print("AITER FP8 blockscale BPRESHUFFLE DSv4 wkv CKTile route already present")
+path.write_text(source)
 PYEOF
 
         PREBUILD_KERNELS=${AITER_PREBUILD_KERNELS:-0} \
         python3 -m pip install --no-deps --no-build-isolation --force-reinstall -e .
+
+        if [ "${AITER_DSV4_WKV_SELFTEST:-1}" = "1" ]; then
+            python3 - <<'PYEOF'
+import torch
+from aiter import QuantType, dtypes, get_hip_quant
+from aiter.ops.gemm_op_a8w8 import gemm_a8w8_blockscale_bpreshuffle
+from aiter.ops.shuffle import shuffle_weight
+
+m, n, k = 5544, 512, 7168
+torch.manual_seed(0)
+quant = get_hip_quant(QuantType.per_1x128)
+x_bf16 = torch.randn((1, k), device="cuda", dtype=dtypes.bf16).repeat(m, 1)
+xq, xs = quant(x_bf16, quant_dtype=dtypes.fp8, transpose_scale=True)
+wq = (torch.rand((n, k), device="cuda", dtype=dtypes.fp32) / 10).to(dtypes.fp8)
+wq = shuffle_weight(wq, layout=(16, 16))
+ws = torch.rand((n // 128, k // 128), device="cuda", dtype=dtypes.fp32)
+y = gemm_a8w8_blockscale_bpreshuffle(xq, wq, xs, ws, dtypes.bf16)
+diff = (y.float() - y[:1].float()).abs().max().item()
+print(f"AITER DSv4 wkv repeated-row self-test: M={m} N={n} K={k} max_abs={diff}")
+if diff > 1e-3:
+    raise SystemExit("FATAL: AITER DSv4 wkv repeated-row self-test failed")
+PYEOF
+        fi
     )
 
     python3 - <<'PYEOF'
