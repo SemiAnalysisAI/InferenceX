@@ -74,6 +74,8 @@ else
     git checkout sa-submission-q2-2026
 fi
 
+python3 "$GITHUB_WORKSPACE/benchmarks/multi_node/force_srt_infinitebench.py" "$PWD"
+
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
