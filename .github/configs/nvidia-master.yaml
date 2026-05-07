@@ -4331,7 +4331,7 @@ gptoss-fp4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 32 }
 
 minimaxm2.5-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.1-ubuntu2404
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200
@@ -4343,11 +4343,11 @@ minimaxm2.5-fp8-h200-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
