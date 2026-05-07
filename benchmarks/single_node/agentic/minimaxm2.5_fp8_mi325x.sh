@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for MiniMax-M2.5 FP8 on MI355X using vLLM.
+# Agentic trace replay benchmark for MiniMax-M2.5 FP8 on MI325X using vLLM.
 #
 # Required env vars:
 #   MODEL, TP, CONC, RESULT_DIR
@@ -59,7 +59,6 @@ if [ "$EP_SIZE" -gt 1 ]; then EP=" --enable-expert-parallel"; else EP=" "; fi
 
 echo "Starting vllm server..."
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export PYTHONNOUSERSITE=1
 
 vllm serve $MODEL \
