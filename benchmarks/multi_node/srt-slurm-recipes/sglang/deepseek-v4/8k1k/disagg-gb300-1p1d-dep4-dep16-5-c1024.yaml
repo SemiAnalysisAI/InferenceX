@@ -1,4 +1,4 @@
-name: "disagg-gb300-1p1d-dep4-dep16-5-c8192"
+name: "disagg-gb300-1p1d-dep4-dep16-5-c1024"
 
 # 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
 #
@@ -193,6 +193,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "8192"
+  concurrencies: "1024"
   req_rate: "inf"
   use_chat_template: false
