@@ -342,16 +342,9 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]
     PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
     DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--ep-dispatch-algorithm fake//g')
 
-    if [[ "$DECODE_ENABLE_DP" != "true" ]] && [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
-        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed 's/--speculative-num-steps [0-9]*/--speculative-num-steps 3/; s/--speculative-num-draft-tokens [0-9]*/--speculative-num-draft-tokens 4/')
-    fi
-
-    # Increase context-length for eval to accommodate R1 thinking chains
-    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed 's/--context-length [0-9]*/--context-length 16384/')
-
     unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
     unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
-    unset SGLANG_MORI_FP8_COMB
+    # unset SGLANG_MORI_FP8_COMB
 fi
 
 # =============================================================================
