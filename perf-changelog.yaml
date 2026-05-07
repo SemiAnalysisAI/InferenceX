@@ -2249,6 +2249,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1287
 
 - config-keys:
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 TensorRT-LLM MTP coverage using ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Mirror the B300 TRT STP search space with spec-decoding: mtp and TensorRT-LLM MTP num_nextn_predict_layers=2"
+    - "Benchmark serving uses the DeepSeek-V4 chat template for MTP acceptance-rate correctness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1291
+
+- config-keys:
     - qwen3.5-fp8-b200-sglang-mtp
   description:
     - "Re-run qwen3.5-fp8-b200-sglang-mtp sweep after the B200 DGXC Slurm partition change (gpu → gpu-2)"
