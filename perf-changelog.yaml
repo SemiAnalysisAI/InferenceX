@@ -2272,3 +2272,11 @@
     - "8k/1k TP8/EP8: keep block-size=32 and shuffled KV cache disabled; disable AITER MoE (VLLM_ROCM_USE_AITER_MOE=0); disable async scheduling"
     - "8k/1k non-TP8/EP8: disable async scheduling through c64; switch to block-size=16 with shuffled KV cache at c64 and above"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1276
+
+- config-keys:
+    - dsv4-fp4-b200-trt-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B200 TensorRT-LLM MTP coverage using ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715"
+    - "Mirror the B200 TRT STP search space with spec-decoding: mtp and TensorRT-LLM MTP num_nextn_predict_layers=2"
+    - "Benchmark serving uses the DeepSeek-V4 chat template for MTP acceptance-rate correctness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1294
