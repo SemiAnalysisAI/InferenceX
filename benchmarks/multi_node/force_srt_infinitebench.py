@@ -389,17 +389,6 @@ export SA_BENCH_TEMPERATURE=1.0
 ''',
     )
 
-    # Mirror cann-recipes-infer's batch_size=concurrency shape: one warmup batch
-    # then one timed batch, both at exactly `concurrency` prompts.
-    text = text.replace(
-        "    num_warmup_prompts=$((concurrency * 2))\n",
-        "    num_warmup_prompts=$concurrency\n",
-    )
-    text = text.replace(
-        "    num_prompts=$((concurrency * NUM_PROMPTS_MULT))\n",
-        "    num_prompts=$concurrency\n",
-    )
-
     path.write_text(text)
 
 

@@ -973,14 +973,6 @@ def save_to_pytorch_benchmark_format(args: argparse.Namespace,
 
 
 def main(args: argparse.Namespace):
-    # Mirror cann-recipes-infer InfiniteBench shape: a single batch_size=concurrency
-    # batch is run once for warmup then once timed, instead of the sustained
-    # concurrency*N pattern used for the random dataset. Cap before printing args
-    # so the run config logged matches what we actually execute.
-    if args.dataset_name == "infinitebench" and args.max_concurrency:
-        args.num_prompts = args.max_concurrency
-        args.num_warmups = args.max_concurrency
-
     print(args)
     random.seed(args.seed)
     np.random.seed(args.seed)
