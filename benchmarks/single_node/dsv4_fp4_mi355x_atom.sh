@@ -35,12 +35,12 @@ export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays a pinned AITER fork with ROCm/aiter#2998
-# plus the DSv4 FP8 blockscale wkv dispatch fix. Install AITER before ATOM
+# plus the DSv4 FP8 blockscale projection dispatch fix. Install AITER before ATOM
 # because the ATOM fork imports the DSv4 top-k/logits kernels at module load.
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-dsv4-fp8-blockscale-wkv-fix}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-2812328d0e35c7cf031f26fa7551f064bfea21cb}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-998e864b5ade4d37b2e63380f86145744898cfd5}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
