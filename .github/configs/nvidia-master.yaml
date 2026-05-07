@@ -4718,11 +4718,11 @@ minimaxm2.5-fp8-h200-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
 
 # Diverged from minimaxm2.5-fp8-h200-vllm (agentic-coding sibling). Metadata is
 # identical to origin/main's minimaxm2.5-fp8-h200-vllm; the split exists because this
