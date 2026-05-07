@@ -109,7 +109,8 @@ python3 -m sglang.launch_server \
     --max-running-requests ${CONC} \
     --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
-    --chunked-prefill-size 8192 \
+    --chunked-prefill-size 65536 \
+    --context-length 9216 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
