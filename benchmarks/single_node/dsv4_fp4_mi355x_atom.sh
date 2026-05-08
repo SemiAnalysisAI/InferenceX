@@ -40,7 +40,7 @@ export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-dsv4-fp8-blockscale-wkv-fix}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-41176653b38f45cacc89137127d370cef1c4f9f8}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-c3b57b6acdbb0e534c0fb8a6ff2f063b33a895eb}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
