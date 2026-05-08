@@ -2307,3 +2307,11 @@
     - "Mirror the base 8k/1k disagg search space (1p1d-tp4, 1p6d-dep4-tp4, 1p1d-dep4-dep8, 1p1d-dep4-dep16, 2p1d-dep4-dep8, 4p1d-dep4-dep8) with spec-decoding: mtp and EAGLE on the decode side (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
     - "Recipes adapted from elvischenv/srt-slurm@dsv4-gb300-disagg-8k1k-mtp:recipes/dsv4-pro/sglang/gb300-fp4/8k1k/disagg/mtp/, repointed at the public sglang-staging container and the deepseek-v4-pro model alias"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1297
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-bfd32b6-20260507-DSv4."
+    - "Tune DSv4 FP4 MI355X SGLang runtime envs: enable aiter MHC pre/post, and enable triton swa prepare kernel."
+    - "Add --context-length. Add --enable-prefill-delayer for dp config"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1300
