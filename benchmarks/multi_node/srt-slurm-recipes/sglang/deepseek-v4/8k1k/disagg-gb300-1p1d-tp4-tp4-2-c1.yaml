@@ -121,7 +121,6 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      disable-radix-cache: true
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
@@ -142,7 +141,6 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      disable-radix-cache: true
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
