@@ -14,11 +14,11 @@
   "tp": 16,
   "ep": 16,
   "dp_attention": "true",
-  "tput_per_gpu": 210.1944,
-  "output_tput_per_gpu": 210.1944,
+  "tput_per_gpu": 0,
+  "output_tput_per_gpu": 210.16,
   "input_tput_per_gpu": 0.0,
   "median_ttft": 0.0,
   "median_tpot": 0.01903,
-  "median_intvty": 52.5486,
+  "median_intvty": 52.54,
   "median_e2el": 0.0
 }
