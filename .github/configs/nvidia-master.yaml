@@ -1998,9 +1998,9 @@ dsv4-fp4-b300-sglang:
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
   #   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
-  #                     + EAGLE (3,1,4) + mem-fraction 0.90
+  #                     + EAGLE (3,1,3) + mem-fraction 0.90
   #   dp-attn: true  -> DP-attn  + flashinfer_mxfp4 + chunked-prefill 32768
-  #                     + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
+  #                     + EAGLE (1,1,3) + mem-fraction 0.92 + max-running 256
 dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2010,9 +2010,9 @@ dsv4-fp4-b300-sglang-mtp:
   framework: sglang
   multinode: false
   # Three CONC bands:
-  #   A: TP=8 ep=1            -- conc 1-8    EAGLE (3,1,4) TP-only fallback
-  #   B: TP=4 ep=1            -- conc 4-32   EAGLE (3,1,4) TP-only mid batch
-  #   C: TP=4 ep=1 dp-attn    -- conc 16-256 EAGLE (1,1,2) DP-attn flashinfer
+  #   A: TP=8 ep=1            -- conc 1-8    EAGLE (3,1,3) TP-only fallback
+  #   B: TP=4 ep=1            -- conc 4-32   EAGLE (3,1,3) TP-only mid batch
+  #   C: TP=4 ep=1 dp-attn    -- conc 16-256 EAGLE (1,1,3) DP-attn flashinfer
   scenarios:
     fixed-seq-len:
     - isl: 1024

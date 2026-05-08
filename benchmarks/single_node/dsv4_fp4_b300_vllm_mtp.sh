@@ -47,8 +47,7 @@ else
     SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
 fi
 
-# use 2 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=2
+NUM_SPEC_TOKENS=3
 
 start_gpu_monitor
 
