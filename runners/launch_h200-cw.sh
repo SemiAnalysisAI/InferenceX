@@ -4,8 +4,11 @@ export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
-FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
-SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+case "$SPEC_DECODING" in
+    mtp)     SPEC_SUFFIX='_mtp' ;;
+    offline) SPEC_SUFFIX='_offline' ;;
+    *)       SPEC_SUFFIX='' ;;
+esac
 
 PARTITION="h200"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -44,7 +47,13 @@ srun --jobid=$JOB_ID \
 --container-mount-home \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${SCENARIO_SUBDIR}${MODEL_CODE}_${PRECISION}_h200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${MODEL_CODE}_${PRECISION}_h200"
+BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+if [[ ! -f "$BENCH_SCRIPT" ]]; then
+    LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
+fi
+bash "$BENCH_SCRIPT"
 
 rmdir $SAGEMAKER_SHM_PATH
 scancel $JOB_ID

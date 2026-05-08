@@ -107,6 +107,8 @@ def main() -> None:
     parser.add_argument("--dsv4", action="store_true", default=True)
     parser.add_argument("--dsv4-thinking-mode", default="chat",
                         choices=["chat", "thinking"])
+    parser.add_argument("--moe-runner-backend", default="flashinfer_mxfp4",
+                        help="SGLang MoE runner backend (flashinfer_mxfp4 for FP4/Blackwell, marlin for FP8/Hopper)")
     parser.add_argument("--trust-remote-code", action="store_true", default=True)
     parser.add_argument("--tokenizer-mode", default="deepseek_v4",
                         help="Passed to vllm.get_tokenizer; use 'deepseek_v4' "

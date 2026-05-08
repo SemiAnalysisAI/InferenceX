@@ -103,7 +103,7 @@ def run(args: argparse.Namespace,
     else:
         parallel_kwargs = {
             "tp_size": args.tp,
-            "moe_runner_backend": "flashinfer_mxfp4",
+            "moe_runner_backend": getattr(args, "moe_runner_backend", "flashinfer_mxfp4"),
             "disable_flashinfer_autotune": True,
             "chunked_prefill_size": 8192,
         }
