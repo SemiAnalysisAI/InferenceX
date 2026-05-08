@@ -136,8 +136,10 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: "1"
     SGLANG_LOG_MS: "1"
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
-    # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
-    # is single-node only and corrupts results in 2-node decode setups.
+    # CAR_V2 is single-node only and segfaults during cuda graph capture
+    # on multi-node decode ('CustomAllReduceV2' object has no attribute
+    # 'obj' at custom_all_reduce_v2.py:97). Explicitly disable.
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"
 
   sglang_config:
     prefill:
