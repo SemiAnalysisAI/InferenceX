@@ -112,7 +112,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-deep-l0-diag}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-5f630d0fcf772647ba829fb74858c03cafe8c5fa}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-95d662ce113d288691b09c9389f78a1b40b34c54}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
