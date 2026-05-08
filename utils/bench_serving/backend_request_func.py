@@ -30,6 +30,7 @@ class RequestFuncInput:
     extra_body: Optional[dict] = None
     multi_modal_content: Optional[dict] = None
     ignore_eos: bool = False
+    temperature: float = 0.0
 
 
 @dataclass
@@ -246,7 +247,7 @@ async def async_request_openai_completions(
             "model": request_func_input.model_name \
                 if request_func_input.model_name else request_func_input.model,
             "prompt": request_func_input.prompt,
-            "temperature": 0.0,
+            "temperature": request_func_input.temperature,
             "best_of": request_func_input.best_of,
             "max_tokens": request_func_input.output_len,
             "logprobs": request_func_input.logprobs,

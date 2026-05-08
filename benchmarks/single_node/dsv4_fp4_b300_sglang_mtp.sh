@@ -9,9 +9,9 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 #                    Also selects MoE backend / chunked-prefill / EAGLE chain
 #                    / mem-fraction-static / max-running-requests:
 #                      true  -> flashinfer_mxfp4 + DP-attn + chunked-prefill 32768
-#                               + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
+#                               + EAGLE (2,1,3) + mem-fraction 0.92 + max-running 256
 #                      false -> flashinfer_mxfp4 (TP-only) + chunked-prefill 8192
-#                               + EAGLE (3,1,4) + mem-fraction 0.90 + max-running CONC*3/2
+#                               + EAGLE (2,1,3) + mem-fraction 0.90 + max-running CONC*3/2
 check_env_vars \
     MODEL \
     TP \
@@ -77,11 +77,12 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    # MTP-2 equivalent for 8K/256 (override depth via DSV4_EAGLE_NUM_STEPS).
     SPEC_FLAGS=(
         --speculative-algorithm EAGLE
-        --speculative-num-steps 1
+        --speculative-num-steps "${DSV4_EAGLE_NUM_STEPS:-2}"
         --speculative-eagle-topk 1
-        --speculative-num-draft-tokens 2
+        --speculative-num-draft-tokens "${DSV4_EAGLE_NUM_DRAFT_TOKENS:-3}"
     )
     PARALLEL_ARGS=(
         --dp-size "$TP"
@@ -96,11 +97,12 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_RUNNING_REQUESTS=256
 else
     # TP-only fallback for low-conc: flashinfer_mxfp4 + EAGLE (3,1,4).
+    # MTP-2 equivalent for 8K/256 (override depth via DSV4_EAGLE_NUM_STEPS).
     SPEC_FLAGS=(
         --speculative-algorithm EAGLE
-        --speculative-num-steps 3
+        --speculative-num-steps "${DSV4_EAGLE_NUM_STEPS:-2}"
         --speculative-eagle-topk 1
-        --speculative-num-draft-tokens 4
+        --speculative-num-draft-tokens "${DSV4_EAGLE_NUM_DRAFT_TOKENS:-3}"
     )
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
@@ -131,6 +133,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --max-running-requests "$MAX_RUNNING_REQUESTS" \
     --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio 0.1 \
+    --disable-radix-cache \
     "${SPEC_FLAGS[@]}" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
@@ -153,7 +156,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $((CONC * 10)) \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$PWD/" \

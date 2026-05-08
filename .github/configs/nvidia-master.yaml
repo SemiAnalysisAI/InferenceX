@@ -1797,8 +1797,31 @@ dsv4-fp4-b200-trt-mtp:
       - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128, spec-decoding: mtp }
 
+dsv4-fp4-b200-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+# --speculative-config '{"method":"mtp","num_speculative_tokens":3}'.
 dsv4-fp4-b200-vllm-mtp:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2845,6 +2868,68 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+
+# Offline (in-process engine.generate, CANN infer.sh shape) variants of the
+# above b300 dsv4 *-mtp configs. spec-decoding=offline routes the launcher to
+# benchmarks/single_node/dsv4_fp4_b300_<framework>_offline.sh, which uses
+# vllm.LLM / sgl.Engine / tensorrt_llm.LLM directly (no HTTP server) and
+# runs one warmup batch + one timed batch in lockstep. MTP depth is set
+# inside the offline harness via DSV4_MTP_SPEC_TOKENS (default 2).
+dsv4-fp4-b300-vllm-offline:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # TP-only and TP+EP rows. DP-attn is enabled via vllm's
+      # `enable_dp_attention=True` LLM kwarg (single-process — matches what
+      # `vllm serve --enable-dp-attention` does internally; no extra worker
+      # processes spawned).
+      - { tp: 8, conc-start: 32, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, conc-start: 64, conc-end: 512, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 512, spec-decoding: offline }
+
+dsv4-fp4-b300-sglang-offline:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 8192, spec-decoding: offline }
+
+dsv4-fp4-b300-trt-offline:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 32, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, conc-start: 64, conc-end: 512, spec-decoding: offline }
+      # DP-attn path: trtllm.LLM accepts enable_attention_dp via pytorch
+      # backend extra_config. The LLM API runs under mpirun -n 1 and spawns
+      # its own rank workers, so DP-attn works in offline single-process.
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 512, spec-decoding: offline }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.9-cu129-amd64
@@ -8034,6 +8119,77 @@ dsv4-fp4-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-max-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+dsv4-fp4-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Low concurrency: 1p (TP=4) + 1d (TP=4). 2 nodes total.
+      - conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # DP-attn wideep: 1p1d-dep4-dep8. 3 nodes.
+      - conc-list: [512]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc512.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # DP-attn wideep: 2p1d-dep4-dep8. 4 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1024.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # DP-attn wideep: 4p1d-dep4-dep8. 6 nodes.
+      - conc-list: [2048]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc2048.yaml"
         decode:
           num-worker: 1
           tp: 8

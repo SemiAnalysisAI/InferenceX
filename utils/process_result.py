@@ -55,7 +55,6 @@ data = {
     'isl': int(isl),
     'osl': int(osl),
 }
-
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
 
 if is_multinode:
@@ -98,7 +97,7 @@ if is_multinode:
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
+        'output_tput_per_gpu': (int(bmk_result['max_concurrency']) / output_tput_denominator) / (float(bmk_result['mean_tpot_ms']) / 1000.0),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
 
@@ -118,7 +117,7 @@ else:
         'ep': ep_size,
         'dp_attention': dp_attention,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
+        'output_tput_per_gpu': (int(bmk_result['max_concurrency']) / tp_size) / (float(bmk_result['mean_tpot_ms']) / 1000.0),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
     }
 
@@ -127,7 +126,11 @@ else:
 for key, value in bmk_result.items():
     if key.endswith('ms'):
         data[key.replace('_ms', '')] = float(value) / 1000.0
-    if 'tpot' in key:
+    # 1000/value for tpot→intvty conversion: only for *_ms latency fields
+    # (skip tpot_sample_count, std_tpot_ms which can be 0, and zero-valued
+    # tpot_fallback_ms when no fallback fired).
+    if (key.endswith('_ms') and 'tpot' in key and not key.startswith('std_')
+            and float(value) > 0):
         data[key.replace('_ms', '').replace(
             'tpot', 'intvty')] = 1000.0 / float(value)
 

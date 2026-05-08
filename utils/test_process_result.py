@@ -29,6 +29,7 @@ def sample_benchmark_result():
         "ttft_p99_ms": 250.3,
         "tpot_p50_ms": 25.0,
         "tpot_p99_ms": 45.0,
+        "std_tpot_ms": 5.0,
         "e2e_latency_p50_ms": 1500.0,
         "e2e_latency_p99_ms": 2500.0,
     }
@@ -202,6 +203,8 @@ class TestProcessResultScript:
         # Verify interactivity calculations (1000 / tpot_ms)
         assert output_data["intvty_p50"] == pytest.approx(1000.0 / 25.0)
         assert output_data["intvty_p99"] == pytest.approx(1000.0 / 45.0)
+        assert output_data["std_tpot"] == pytest.approx(0.005)
+        assert "std_intvty" not in output_data
 
         # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
@@ -341,6 +344,28 @@ class TestCalculations:
         output_data = json.loads(result.stdout)
         assert output_data["intvty_p50"] == pytest.approx(50.0)
         assert output_data["intvty_p99"] == pytest.approx(20.0)
+
+    def test_tpot_named_throughput_fields_are_not_converted(self, tmp_path, single_node_env_vars):
+        """TPOT-derived throughput fields are not latency fields."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 4,
+            "total_token_throughput": 6400.0,
+            "output_throughput": 200.0,
+            "mean_tpot_ms": 16.0,
+            "decode_throughput_from_mean_tpot": 250.0,
+            "decode_throughput_per_chip_from_mean_tpot": 31.25,
+        }
+
+        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["mean_intvty"] == pytest.approx(62.5)
+        assert output_data["decode_throughput_from_mean_tpot"] == pytest.approx(250.0)
+        assert output_data["decode_throughput_per_chip_from_mean_tpot"] == pytest.approx(31.25)
+        assert "decode_throughput_from_mean_intvty" not in output_data
+        assert "decode_throughput_per_chip_from_mean_intvty" not in output_data
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """Test throughput per GPU calculation for single node."""
