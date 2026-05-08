@@ -114,7 +114,7 @@ python3 -m sglang.launch_server \
     --page-size 256 \
     --context-length 9216 \
     --enable-prefill-delayer \
-    --chunked-prefill-size 8192 \
+    --chunked-prefill-size 65536 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
