@@ -2299,3 +2299,11 @@
     - "Rename and consolidate the per-concurrency recipe files to `disagg-gb300-{N}p1d-{topo}-{nodes}-c{conc}.yaml`"
     - "Re-enable lm-eval scoring for dsv4-fp4-gb300-dynamo-sglang now that the srt-slurm pin includes the lm-eval orchestrator path"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-bfd32b6-20260507-DSv4."
+    - "Tune DSv4 FP4 MI355X SGLang runtime envs: enable aiter MHC pre/post, and enable triton swa prepare kernel."
+    - "Add --context-length. Add --enable-prefill-delayer for dp config"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1300
