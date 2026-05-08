@@ -174,7 +174,7 @@ wait_for_server_ready() {
 #   --input-len: Random input sequence length
 #   --output-len: Random output sequence length
 #   --random-range-ratio: Ignored; random range ratio is hardcoded to 1.0
-#   --num-prompts: Ignored; number of prompts is hardcoded to max concurrency
+#   --num-prompts: Ignored; number of prompts is hardcoded to 5x max concurrency
 #   --max-concurrency: Max concurrency
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
@@ -319,10 +319,10 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
-    num_prompts="$max_concurrency"
+    num_prompts="$((5 * max_concurrency))"
+    local num_warmups="$((2 * max_concurrency))"
 
-    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
-    # and cap num_prompts to keep traces small.
+    # Profiling support: when PROFILE=1, ensure profiler dir exists and add --profile flag.
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
         local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
@@ -330,7 +330,6 @@ run_benchmark_serving() {
             mkdir -p "$_prof_dir"
         fi
         profile_flag+=(--profile)
-        num_prompts="$max_concurrency"
     fi
 
     # Build benchmark command
@@ -349,7 +348,7 @@ run_benchmark_serving() {
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((10 * max_concurrency))" \
+        --num-warmups "$num_warmups"
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
