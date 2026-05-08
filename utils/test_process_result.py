@@ -188,9 +188,9 @@ class TestProcessResultScript:
         assert output_data["ep"] == 1
         assert output_data["dp_attention"] == "false"
 
-        # Verify throughput calculations (divided by tp=8)
+        # Verify throughput calculations. Output TPUT/GPU uses (concurrency / chips) / TPOT.
         assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / 8)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)
+        assert output_data["output_tput_per_gpu"] == pytest.approx((64 / 8) / (25.0 / 1000.0))
         assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 8)
 
         # Verify latency conversions (ms to seconds)
@@ -233,10 +233,10 @@ class TestProcessResultScript:
         assert output_data["num_prefill_gpu"] == 20
         assert output_data["num_decode_gpu"] == 8
 
-        # Verify throughput calculations
+        # Verify throughput calculations. Output TPUT/GPU uses decode GPUs.
         total_gpus = 20 + 8  # prefill + decode
         assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / total_gpus)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
+        assert output_data["output_tput_per_gpu"] == pytest.approx((64 / 8) / (25.0 / 1000.0))
         assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
 
     def test_missing_base_env_vars(self, tmp_path, sample_benchmark_result):
@@ -315,6 +315,7 @@ class TestCalculations:
             "max_concurrency": 8,
             "total_token_throughput": 1000.0,
             "output_throughput": 800.0,
+            "median_tpot_ms": 20.0,
             "custom_metric_ms": 500.0,  # Should become custom_metric = 0.5
         }
 
@@ -349,6 +350,7 @@ class TestCalculations:
             "max_concurrency": 8,
             "total_token_throughput": 8000.0,
             "output_throughput": 6000.0,
+            "median_tpot_ms": 20.0,
         }
 
         env = single_node_env_vars.copy()
@@ -359,7 +361,7 @@ class TestCalculations:
 
         output_data = json.loads(result.stdout)
         assert output_data["tput_per_gpu"] == pytest.approx(2000.0)  # 8000 / 4
-        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 6000 / 4
+        assert output_data["output_tput_per_gpu"] == pytest.approx(100.0)  # (8 / 4) / 0.020
         assert output_data["input_tput_per_gpu"] == pytest.approx(500.0)  # (8000 - 6000) / 4
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
@@ -369,6 +371,7 @@ class TestCalculations:
             "max_concurrency": 64,
             "total_token_throughput": 28000.0,  # Will be divided by total GPUs
             "output_throughput": 16000.0,  # Will be divided by decode GPUs
+            "median_tpot_ms": 20.0,
         }
 
         env = multinode_env_vars.copy()
@@ -380,7 +383,7 @@ class TestCalculations:
 
         output_data = json.loads(result.stdout)
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
-        assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
+        assert output_data["output_tput_per_gpu"] == pytest.approx(400.0)  # (64 / 8) / 0.020
         assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
 
     def test_multinode_aggregate_decode_fields_zero(self, tmp_path, multinode_env_vars):
@@ -390,6 +393,7 @@ class TestCalculations:
             "max_concurrency": 1,
             "total_token_throughput": 8000.0,
             "output_throughput": 6000.0,
+            "median_tpot_ms": 10.0,
         }
 
         env = multinode_env_vars.copy()
@@ -414,7 +418,7 @@ class TestCalculations:
         assert output_data["num_decode_gpu"] == 0
         assert output_data["num_prefill_gpu"] == 8
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(750.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(12.5)
         assert output_data["input_tput_per_gpu"] == pytest.approx(250.0)
 
     def test_multinode_zero_total_gpus_fails(self, tmp_path, sample_benchmark_result, multinode_env_vars):
@@ -504,6 +508,7 @@ class TestEdgeCases:
             "max_concurrency": 32,
             "total_token_throughput": 5000.0,
             "output_throughput": 4000.0,
+            "median_tpot_ms": 20.0,
         }
 
         env = single_node_env_vars.copy()
@@ -526,6 +531,7 @@ class TestEdgeCases:
             "max_concurrency": 128,
             "total_token_throughput": 5000.0,
             "output_throughput": 4000.0,
+            "median_tpot_ms": 20.0,
         }
 
         result = run_script(tmp_path, single_node_env_vars, benchmark_result)

@@ -43,7 +43,7 @@ def sample_single_node_config():
                     },
                     {
                         "isl": 8192,
-                        "osl": 1024,
+                        "osl": 256,
                         "search-space": [
                             {"tp": 8, "conc-start": 4, "conc-end": 64}
                         ]
@@ -167,12 +167,12 @@ class TestSeqLenMappings:
     def test_seq_len_stoi_values(self):
         """Verify seq_len_stoi has expected mappings."""
         assert seq_len_stoi["1k1k"] == (1024, 1024)
-        assert seq_len_stoi["8k1k"] == (8192, 1024)
+        assert seq_len_stoi["8k256"] == (8192, 256)
 
     def test_seq_len_itos_reverse_mapping(self):
         """Verify seq_len_itos is reverse of stoi."""
         assert seq_len_itos[(1024, 1024)] == "1k1k"
-        assert seq_len_itos[(8192, 1024)] == "8k1k"
+        assert seq_len_itos[(8192, 256)] == "8k256"
 
 
 class TestSeqLenToStr:
@@ -181,7 +181,7 @@ class TestSeqLenToStr:
     def test_known_sequence_lengths(self):
         """Known sequence lengths should return short name."""
         assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(8192, 1024) == "8k1k"
+        assert seq_len_to_str(8192, 256) == "8k256"
 
     def test_unknown_sequence_lengths(self):
         """Unknown sequence lengths should return isl_osl format."""
@@ -205,7 +205,7 @@ class TestMarkEvalEntries:
                 "framework": "sglang",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "dp-attn": False,
                 "tp": 8,
@@ -217,7 +217,7 @@ class TestMarkEvalEntries:
                 "framework": "sglang",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "dp-attn": False,
                 "tp": 8,
@@ -229,7 +229,7 @@ class TestMarkEvalEntries:
                 "framework": "sglang",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "dp-attn": False,
                 "tp": 8,
@@ -241,7 +241,7 @@ class TestMarkEvalEntries:
                 "framework": "sglang",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "dp-attn": False,
                 "tp": 8,
@@ -265,7 +265,7 @@ class TestMarkEvalEntries:
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 1,
@@ -297,7 +297,7 @@ class TestMarkEvalEntries:
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 1,
@@ -319,7 +319,7 @@ class TestMarkEvalEntries:
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
-                "osl": 1024,
+                "osl": 256,
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 1,
@@ -344,16 +344,16 @@ class TestMarkEvalEntries:
         assert result[1]["run-eval"] is False
 
     def test_marks_highest_and_median_conc(self):
-        """Should mark highest and median concurrency for 8k1k entries."""
+        """Should mark highest and median concurrency for 8k256 entries."""
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 32,
+             'isl': 8192, 'osl': 256, 'tp': 2, 'conc': 32,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 128,
+             'isl': 8192, 'osl': 256, 'tp': 2, 'conc': 128,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'isl': 8192, 'osl': 256, 'tp': 2, 'conc': 512,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
         ]
         result = mark_eval_entries(entries)
@@ -362,8 +362,8 @@ class TestMarkEvalEntries:
         assert result[1]['run-eval'] is True    # conc=128 (median)
         assert result[2]['run-eval'] is True    # conc=512 (highest)
 
-    def test_non_8k1k_never_marked(self):
-        """Entries with non-8k1k seq lengths should never be eval-marked."""
+    def test_non_8k256_never_marked(self):
+        """Entries with non-8k256 seq lengths should never be eval-marked."""
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
              'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
@@ -377,11 +377,11 @@ class TestMarkEvalEntries:
         ensuring the e2e splitting logic can distinguish default from evals-only."""
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': c,
+             'isl': 8192, 'osl': 256, 'tp': 2, 'conc': c,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False}
             for c in [32, 64, 128, 256, 512]
         ] + [
-            # Non-8k1k entry that should never be marked
+            # Non-8k256 entry that should never be marked
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
              'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 64,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
@@ -1901,8 +1901,8 @@ class TestE2EConfigSplitting:
         return [
             {'exp-name': 'a', 'isl': 1024, 'osl': 1024, 'conc': 64, 'tp': 2, 'run-eval': False},
             {'exp-name': 'b', 'isl': 1024, 'osl': 1024, 'conc': 128, 'tp': 2, 'run-eval': False},
-            {'exp-name': 'c', 'isl': 8192, 'osl': 1024, 'conc': 256, 'tp': 2, 'run-eval': True},
-            {'exp-name': 'd', 'isl': 8192, 'osl': 1024, 'conc': 512, 'tp': 2, 'run-eval': True},
+            {'exp-name': 'c', 'isl': 8192, 'osl': 256, 'conc': 256, 'tp': 2, 'run-eval': True},
+            {'exp-name': 'd', 'isl': 8192, 'osl': 256, 'conc': 512, 'tp': 2, 'run-eval': True},
             {'exp-name': 'e', 'conc': 64, 'prefill': {'tp': 2, 'num-worker': 1}},
         ]
 
@@ -1953,7 +1953,7 @@ class TestE2EConfigSplitting:
 
     def test_all_eval_marked_without_eval_only_flag_still_benchmarked(self):
         """Default mode where mark_eval_entries marks every entry (e.g. only
-        8k1k with single conc). Without eval-only flag, SINGLE must still
+        8k256 with single conc). Without eval-only flag, SINGLE must still
         include them for benchmarking."""
         data = [
             {'exp-name': 'a', 'conc': 64, 'tp': 2, 'run-eval': True},

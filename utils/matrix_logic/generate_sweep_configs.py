@@ -17,7 +17,7 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "8k1k": (8192, 1024)
+    "8k256": (8192, 256)
 }
 
 MIN_EVAL_CONC = 16
@@ -36,20 +36,20 @@ def seq_len_to_str(isl: int, osl: int) -> str:
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy:
-    - Single-node: only consider 8k1k (isl=8192, osl=1024).
+    - Single-node: only consider 8k256 (isl=8192, osl=256).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
         - Ignore entries with conc < MIN_EVAL_CONC
         - Mark all entries at the highest CONC (all TPs)
         - Mark all entries at the median CONC (all TPs)
     - Multi-node: for each unique (model, runner, framework, precision,
-      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
+      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k256 entries.
       Ignore entries with all conc values < MIN_EVAL_CONC. Mark the entry with
       the highest max concurrency among the remaining entries. Sets eval-conc to
       the median of the eligible conc list to avoid OOM during eval.
     """
     from collections import defaultdict
 
-    target_isl, target_osl = seq_len_stoi["8k1k"]
+    target_isl, target_osl = seq_len_stoi["8k256"]
     eval_indices = set()
     mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
 
@@ -62,7 +62,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         return max(_eligible_eval_concs(ie[1]))
 
     # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only 8k1k entries with a top-level TP (single-node schema).
+    # Only 8k256 entries with a top-level TP (single-node schema).
     sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
@@ -92,7 +92,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 eval_indices.add(i)
 
     # Multi-node: group by (model, runner, framework, precision, spec-decoding, prefill-dp, decode-dp).
-    # Only 8k1k entries with a prefill key (multi-node schema).
+    # Only 8k256 entries with a prefill key (multi-node schema).
     # Pick the entry with the highest max concurrency per group.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
@@ -1125,7 +1125,7 @@ def main():
         nargs='+',
         choices=list(seq_len_stoi.keys()),
         required=False,
-        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
+        help='Only include these sequence length configurations (e.g., 1k1k 8k256)'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',

@@ -92,7 +92,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 16384
+      max-model-len: 8704
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -118,7 +118,7 @@ backend:
 #      data-parallel-size: 8
 #      data-parallel-rpc-port: 13345
 #      enable-expert-parallel: true
-      max-model-len: 16384
+      max-model-len: 8704
       max-num-seqs: 256
       max-cudagraph-capture-size: 256
       max-num-batched-tokens: 256
@@ -135,7 +135,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "1"
   req_rate: "inf"
   use_chat_template: true

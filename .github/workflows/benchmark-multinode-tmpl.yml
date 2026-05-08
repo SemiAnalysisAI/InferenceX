@@ -122,7 +122,7 @@ on:
         type: string
 
 env:
-  RANDOM_RANGE_RATIO: 0.8
+  RANDOM_RANGE_RATIO: 1.0
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}

@@ -584,17 +584,17 @@ class TestSeqLenConfigs:
         assert config.osl == 1024
         assert len(config.search_space) == 1
 
-    def test_single_node_seq_len_config_8k1k(self):
-        """Valid single node seq len config for 8k/1k."""
+    def test_single_node_seq_len_config_8k256(self):
+        """Valid single node seq len config for 8k/256."""
         config = SingleNodeSeqLenConfig(**{
             "isl": 8192,
-            "osl": 1024,
+            "osl": 256,
             "search-space": [
                 {"tp": 8, "conc-start": 4, "conc-end": 64}
             ]
         })
         assert config.isl == 8192
-        assert config.osl == 1024
+        assert config.osl == 256
 
     def test_multinode_seq_len_config(self):
         """Valid multinode seq len config."""

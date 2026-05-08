@@ -33,7 +33,7 @@ permissions:
 env:
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  RANDOM_RANGE_RATIO: '0.8'
+  RANDOM_RANGE_RATIO: '1.0'
   PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache

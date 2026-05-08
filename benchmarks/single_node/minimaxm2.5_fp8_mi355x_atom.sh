@@ -28,7 +28,7 @@ export OMP_NUM_THREADS=1
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     CALCULATED_MAX_MODEL_LEN=""
 else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $((ISL + OSL + 256)) "
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -65,7 +65,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

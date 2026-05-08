@@ -1,6 +1,6 @@
 name: "disagg-gb300-12p1d-dep4-dep12-15-c21504"
 
-# 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
+# 8k/256 high-throughput topology for the wideep DSV4-Pro setup.
 #
 # Schema/values come from PR #1213 (513cbef) — that PR introduced the
 # `dsv4-pro-gb300-fp4` upstream-style recipe with two `zip_override`
@@ -179,7 +179,7 @@ backend:
 
       mem-fraction-static: 0.94
       swa-full-tokens-ratio: 0.056
-      context-length: 9216
+      context-length: 8704
       tensor-parallel-size: 12
       data-parallel-size: 12
       expert-parallel-size: 12
@@ -192,7 +192,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "21504"
   req_rate: "inf"
   use_chat_template: false

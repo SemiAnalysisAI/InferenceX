@@ -17,7 +17,7 @@ fi
 
 hf download "$MODEL"
 
-MAX_MODEL_LEN=10240
+MAX_MODEL_LEN=$((ISL + OSL + 256))
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -60,7 +60,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

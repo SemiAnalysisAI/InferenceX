@@ -461,12 +461,11 @@ PYEOF
 # (~240 GiB consumed before the dummy forward, then sparse_attn's
 # torch.where wants another ~36 GiB and there isn't 36 GiB free). DSR1's
 # native context is only 128k, which is why the same blank pattern works
-# there. Set 1k1k explicitly; 8k1k retains the existing 10240 cap that's
-# already running successfully.
+# there. Set 1k1k explicitly; 8k256 uses only ISL + OSL + 256 context.
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     MAX_MODEL_LEN_VALUE=2304
 else
-    MAX_MODEL_LEN_VALUE=10240
+    MAX_MODEL_LEN_VALUE=$((ISL + OSL + 256))
 fi
 CALCULATED_MAX_MODEL_LEN=" --max-model-len $MAX_MODEL_LEN_VALUE "
 
@@ -523,7 +522,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

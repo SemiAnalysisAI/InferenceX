@@ -21,7 +21,7 @@ export SGLANG_USE_AITER=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 PREFILL_SIZE=196608
-if [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+if [[ "$ISL" == "8192" && "$OSL" == "256" ]]; then
 	if [[ "$CONC" -gt "32" ]]; then
 		PREFILL_SIZE=32768
 	fi
@@ -63,7 +63,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

@@ -44,23 +44,23 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
         VLLM_BLOCK_SIZE=16
         echo "1k1k c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
     fi
-elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+elif [[ "$ISL" == "8192" && "$OSL" == "256" ]]; then
     if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
         export VLLM_ROCM_USE_AITER_MOE=0
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-        echo "8k1k TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling disabled."
+        echo "8k256 TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling disabled."
     elif (( CONC < 64 )); then
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-        echo "8k1k c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
+        echo "8k256 c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
     elif (( CONC == 64 )); then
         ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
         export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
         VLLM_BLOCK_SIZE=16
-        echo "8k1k c64: using block size 16, shuffle enabled, async scheduling disabled."
+        echo "8k256 c64: using block size 16, shuffle enabled, async scheduling disabled."
     else
         export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
         VLLM_BLOCK_SIZE=16
-        echo "8k1k c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
+        echo "8k256 c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
     fi
 fi
 
@@ -106,7 +106,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

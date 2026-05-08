@@ -97,7 +97,7 @@ backend:
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
       enforce-eager: true
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -121,7 +121,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -138,7 +138,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "256x512x1024"
   req_rate: "inf"
   use_chat_template: true

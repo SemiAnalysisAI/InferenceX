@@ -190,7 +190,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: false
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - spec-decoding: "mtp"
         conc-list: [90]
@@ -628,7 +628,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations - Low latency (TP attention)
       - spec-decoding: "mtp"
@@ -1074,7 +1074,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - spec-decoding: "mtp"
         conc-list: [2198]
@@ -1473,9 +1473,9 @@ dsr1-fp8-b300-dynamo-trt:
           tp: 8
           ep: 1
           dp-attn: true
-    # 8k1k MTP configs
+    # 8k256 MTP configs
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - spec-decoding: "mtp"
         conc-list: [40]
@@ -1567,9 +1567,9 @@ dsr1-fp8-b300-dynamo-trt:
           tp: 8
           ep: 1
           dp-attn: true
-    # 8k1k STP configs
+    # 8k256 STP configs
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - conc-list: [64]
         prefill:
@@ -1685,7 +1685,7 @@ dsr1-fp4-b200-sglang:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
@@ -1724,7 +1724,7 @@ dsv4-fp4-b200-sglang:
       # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # low-latency (DP_ATTENTION=false)
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 32 }
@@ -1750,7 +1750,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 4096 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
@@ -1771,7 +1771,7 @@ dsv4-fp4-b200-trt:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 2048 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
@@ -1792,7 +1792,7 @@ dsv4-fp4-b200-trt-mtp:
       - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128, spec-decoding: mtp }
@@ -1816,9 +1816,9 @@ dsv4-fp4-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 4096, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
-      # 8k/1k TP=8 caps at conc=16 (not 32) to avoid OOM observed at conc=32:
+      # 8k/256 TP=8 caps at conc=16 (not 32) to avoid OOM observed at conc=32:
       # https://github.com/SemiAnalysisAI/InferenceX/actions/runs/25134892257/job/73670854021
       - { tp: 8, conc-start: 1, conc-end: 16, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
@@ -1842,7 +1842,7 @@ dsr1-fp4-b300-sglang:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
@@ -1869,7 +1869,7 @@ dsr1-fp4-b200-trt:
       - { tp: 8, ep: 8, conc-start: 64, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # low concurrency cases use TP only
       # concurrency 32 uses TP & EP
@@ -1902,7 +1902,7 @@ dsr1-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, conc-start: 32, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
         # TP=4 configurations
       - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
@@ -1927,7 +1927,7 @@ dsr1-fp8-b200-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
@@ -1950,7 +1950,7 @@ dsr1-fp8-b300-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
@@ -1986,7 +1986,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
@@ -2021,7 +2021,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
@@ -2041,7 +2041,7 @@ qwen3.5-bf16-b200-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
@@ -2060,7 +2060,7 @@ qwen3.5-bf16-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
@@ -2080,7 +2080,7 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
@@ -2101,7 +2101,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
@@ -2122,7 +2122,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
@@ -2142,7 +2142,7 @@ glm5-fp8-b200-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
@@ -2161,7 +2161,7 @@ glm5-fp8-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
@@ -2183,7 +2183,7 @@ glm5-fp8-b300-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
@@ -2202,7 +2202,7 @@ glm5-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
@@ -2222,7 +2222,7 @@ glm5-fp4-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
@@ -2243,7 +2243,7 @@ glm5-fp4-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -2267,7 +2267,7 @@ glm5-fp4-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
@@ -2288,7 +2288,7 @@ glm5-fp4-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -2309,7 +2309,7 @@ qwen3.5-fp8-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -2330,7 +2330,7 @@ qwen3.5-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
@@ -2349,7 +2349,7 @@ qwen3.5-fp8-b300-sglang:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
@@ -2369,7 +2369,7 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
@@ -2390,7 +2390,7 @@ qwen3.5-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
@@ -2411,7 +2411,7 @@ qwen3.5-bf16-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
@@ -2432,7 +2432,7 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
@@ -2452,7 +2452,7 @@ kimik2.5-int4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -2475,7 +2475,7 @@ kimik2.5-int4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
@@ -2495,7 +2495,7 @@ kimik2.5-int4-h200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -2515,7 +2515,7 @@ kimik2.5-fp4-b200-vllm:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
@@ -2539,7 +2539,7 @@ kimik2.5-fp4-b300-vllm:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
@@ -2559,7 +2559,7 @@ dsr1-fp8-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
@@ -2582,7 +2582,7 @@ dsr1-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
@@ -2603,7 +2603,7 @@ dsr1-fp8-b200-trt:
       - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 } 
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 64, conc-end: 256 }
       - { tp: 4, ep: 1, conc-start: 8, conc-end: 32 }
@@ -2628,7 +2628,7 @@ dsr1-fp8-b200-trt-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # TP8 for all points
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -2648,7 +2648,7 @@ dsr1-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -2671,7 +2671,7 @@ dsv4-fp8-h200-vllm:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
@@ -2695,7 +2695,7 @@ dsv4-fp8-h200-vllm-mtp:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
@@ -2719,7 +2719,7 @@ dsv4-fp8-h200-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
@@ -2743,7 +2743,7 @@ dsv4-fp8-h200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
@@ -2771,7 +2771,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 8192 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 8, conc-start: 1, conc-end: 4 }
@@ -2795,7 +2795,7 @@ dsv4-fp4-b300-trt:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 32 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
@@ -2818,7 +2818,7 @@ dsv4-fp4-b300-trt-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
@@ -2840,7 +2840,7 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
@@ -2861,7 +2861,7 @@ qwen3.5-fp8-h200-sglang:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
@@ -2880,7 +2880,7 @@ qwen3.5-fp8-h200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
@@ -2899,7 +2899,7 @@ glm5-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -2920,7 +2920,7 @@ dsr1-fp8-h200-trt:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       # If CONC > 32, then DP_ATTN=true
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
@@ -2944,7 +2944,7 @@ dsr1-fp8-h200-trt-mtp:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # If CONC >= 64, then DP_ATTN=true, MTP=1
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
@@ -3228,7 +3228,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations
       - spec-decoding: "mtp"
@@ -3772,7 +3772,7 @@ dsr1-fp8-h100-dynamo-trt:
           ep: 16
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations (6 points)
       - spec-decoding: "mtp"
@@ -3961,7 +3961,7 @@ gptoss-fp4-b200-trt:
       - { tp: 8, conc-start: 4, conc-end: 4 }
     # Low ==> high TP from Left to Right of pareto
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start:   4, conc-end: 256}
       - { tp: 2, conc-start:   4, conc-end: 256}
@@ -3986,7 +3986,7 @@ gptoss-fp4-b200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 8 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, conc-start: 4, conc-end: 128 }
@@ -4010,7 +4010,7 @@ minimaxm2.5-fp8-b200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 128 }
       - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 512 }
@@ -4036,7 +4036,7 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 16 }
       - { tp: 2, conc-start: 64, conc-end: 256 }
@@ -4063,7 +4063,7 @@ minimaxm2.5-fp4-b200-vllm:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
       - { tp: 8, conc-start: 4, conc-end: 8 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 32 }
       - { tp: 1, conc-start: 256, conc-end: 256 }
@@ -4094,7 +4094,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
       - { tp: 8, conc-start: 4, conc-end: 8 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 256 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
@@ -4118,7 +4118,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -4140,7 +4140,7 @@ minimaxm2.5-fp8-h100-vllm:
       # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
@@ -4218,7 +4218,7 @@ dsr1-fp8-h100-dynamo-sglang:
           ep: 16
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # # STP: Max throughput TEP (1 prefill, 1 decode)
       # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
@@ -4298,7 +4298,7 @@ gptoss-fp4-h200-trt:
       - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
       - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
@@ -4323,7 +4323,7 @@ gptoss-fp4-h200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 64 }
       - { tp: 2, conc-start: 4, conc-end: 64 }
@@ -4345,7 +4345,7 @@ minimaxm2.5-fp8-h200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
 
@@ -4542,7 +4542,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations (spec_decoding="mtp")
       - spec-decoding: "mtp"
@@ -4926,9 +4926,9 @@ dsr1-fp8-gb200-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: false
-    # 8k1k MTP configs
+    # 8k256 MTP configs
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - spec-decoding: "mtp"
         conc-list: [666]
@@ -5035,7 +5035,7 @@ dsr1-fp8-gb200-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: false
-    # 8k1k STP configs
+    # 8k256 STP configs
       - conc-list: [1229]
         prefill:
           num-worker: 5
@@ -5215,7 +5215,7 @@ dsr1-fp8-gb200-dynamo-sglang:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
      # "Low latency" (1 prefill worker at TP8 and 1 decode worker at TP8)
       - conc-list: [4, 8, 16]
@@ -5328,7 +5328,7 @@ dsr1-fp8-gb300-dynamo-sglang:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
      # "Low latency" (1 prefill worker at TP4 and 1 decode worker at TP4)
       - conc-list: [4, 8]
@@ -5441,9 +5441,9 @@ dsr1-fp4-gb200-dynamo-sglang:
           ep: 48
           dp-attn: true
 
-    # 8k1k configurations
+    # 8k256 configurations
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Low latency (1 prefill node, 4 decode nodes)
       - spec-decoding: "none"
@@ -5684,7 +5684,7 @@ dsr1-fp4-gb300-dynamo-trt:
           ep: 32
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations (spec_decoding="mtp")
       - spec-decoding: "mtp"
@@ -5983,9 +5983,9 @@ dsr1-fp4-gb300-dynamo-sglang:
           ep: 48
           dp-attn: true
 
-    # 8k1k configurations
+    # 8k256 configurations
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Low latency (1 prefill node, 4 decode nodes)
       - spec-decoding: "none"
@@ -6255,7 +6255,7 @@ dsr1-fp8-gb300-dynamo-trt:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations (spec_decoding="mtp")
       - spec-decoding: "mtp"
@@ -6601,7 +6601,7 @@ gptoss-fp4-gb200-dynamo-trt:
           - "DECODE_GPU_MEM_FRACTION=0.9"
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Right side of pareto
       - spec-decoding: "none"
@@ -6824,7 +6824,7 @@ dsr1-fp8-h200-dynamo-sglang:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # STP: Low latency TEP (1 prefill, 7 decode)
       - spec-decoding: "none"
@@ -7044,7 +7044,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Non-MTP configurations
       - conc-list: [64, 128]
@@ -7180,7 +7180,7 @@ dsr1-fp8-b200-dynamo-sglang:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # STP low-latency: resolved from 8k1k.yaml zip_override_stp_lowlat
       - conc-list: [128]
@@ -7373,7 +7373,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP low-latency: resolved from 8k1k.yaml zip_override_mtp_lowlat
       - spec-decoding: "mtp"
@@ -7560,7 +7560,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
 
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - spec-decoding: "mtp"
         conc-list: [64, 128]
@@ -7738,7 +7738,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
           dp-attn: true
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Non-MTP configurations (default spec_decoding="none")
       - conc-list: [ 4 ]
@@ -7883,7 +7883,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 4
           dp-attn: false
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - conc-list: [4, 8, 16, 32, 128]
         prefill:
@@ -7954,9 +7954,9 @@ dsv4-fp4-gb200-dynamo-vllm:
   scenarios:
     fixed-seq-len:
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
-      # Validated 8k/1k points mirrored from NVIDIA/srt-slurm
+      # Validated 8k/256 points mirrored from NVIDIA/srt-slurm
       # aflowers/vllm-gb200-v0.20.0 history. conc-list values match each
       # recipe's benchmark.concurrencies.
 
@@ -8041,7 +8041,7 @@ dsv4-fp4-gb200-dynamo-vllm:
           dp-attn: true
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
-# and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
+# and hand-picked 8k/256 Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
   image: vllm/vllm-openai:v0.20.1-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -8054,7 +8054,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
   scenarios:
     fixed-seq-len:
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # Aggregate low latency: TP=8, max-num-seqs=4.
       - conc-list: [1]
@@ -8134,7 +8134,7 @@ dsv4-fp4-gb300-dynamo-vllm:
   scenarios:
     fixed-seq-len:
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - conc-list: [192]
         prefill:
@@ -8227,7 +8227,7 @@ dsv4-fp4-gb300-dynamo-sglang:
   scenarios:
     fixed-seq-len:
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # WideEP TP=16 decode: 1p1d-dep4-dep16. 5 nodes (4P + 16D = 20 GPUs).
       - conc-list: [1024]

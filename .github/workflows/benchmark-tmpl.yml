@@ -62,7 +62,7 @@ on:
       random-range-ratio:
         required: false
         type: string
-        default: '0.8'
+        default: '1.0'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -88,7 +88,7 @@ on:
         type: string
         default: '1800'
 env:
-  RANDOM_RANGE_RATIO: 0.8
+  RANDOM_RANGE_RATIO: 1.0
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}

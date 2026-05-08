@@ -40,7 +40,7 @@ usage: generate_sweep_configs.py full-sweep
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
     [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
-    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
+    [--seq-lens {1k1k,8k256} [{1k1k,8k256} ...]]
     [--step-size STEP_SIZE]
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
@@ -62,9 +62,9 @@ full-sweep --config-files .github/configs/nvidia-master.yaml
 full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
 ```
 
-**Test all single-node fp8 precision configs for 8k1k workloads:**
+**Test all single-node fp8 precision configs for 8k256 workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --single-node --precision fp8 --seq-lens 8k256 --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**
@@ -74,7 +74,7 @@ full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-fi
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k256 --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**

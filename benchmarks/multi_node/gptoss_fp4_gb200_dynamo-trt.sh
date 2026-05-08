@@ -46,7 +46,7 @@ cd "$PERFORMANCE_SWEEPS_PATH"
 # Set up environment variables based on ISL/OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     export CACHE_TRANSCEIVER_MAX_NUM_TOKENS=1024
-elif [ "$ISL" = "8192" ] && [ "$OSL" = "1024" ]; then
+elif [ "$ISL" = "8192" ] && [ "$OSL" = "256" ]; then
     export CACHE_TRANSCEIVER_MAX_NUM_TOKENS=8448
 else
     echo "Unsupported ISL/OSL combination: $ISL/$OSL"

@@ -13,8 +13,8 @@ chosen_isl=${8:-1024}
 chosen_osl=${9:-1024}
 concurrency_list=${10:-"512x1"}
 chosen_req_rate=${11:-1}
-random_range_ratio=${12:-0.8}
-num_prompts_multiplier=${13:-10}
+random_range_ratio=1.0
+num_prompts_multiplier=${13:-1}
 
 IFS='x' read -r -a chosen_concurrencies <<< "$concurrency_list"
 
@@ -53,7 +53,7 @@ for max_concurrency in ${chosen_concurrencies[@]}; do
         --input-len ${chosen_isl} \
         --output-len ${chosen_osl} \
         --random-range-ratio ${random_range_ratio} \
-        --num-prompts $(( $max_concurrency * $num_prompts_multiplier )) \
+        --num-prompts "$max_concurrency" \
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
         --result-dir /workspace/ \

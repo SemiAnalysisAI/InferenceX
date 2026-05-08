@@ -142,7 +142,7 @@ When working with benchmark configurations, use these valid values:
 
 **Sequence Lengths (ISL/OSL)**:
 - `1k1k` - 1024 input / 1024 output
-- `8k1k` - 8192 input / 1024 output
+- `8k256` - 8192 input / 256 output
 
 ## Code Conventions
 
@@ -209,7 +209,7 @@ For disaggregated multi-node configurations (dynamo-sglang, dynamo-trt), recipes
 ```bash
 # Example: H200 sglang disagg recipes
 ls /path/to/srtslurm/recipes/h200/
-# 1k1k/  8k1k/
+# 1k1k/  8k256/
 ```
 
 **2. Analyze recipe structure:**
@@ -322,11 +322,11 @@ Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mo
 
 **Single-node** eval selection:
 - All TPs at **highest concurrency** and **median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
-- Only on `8k1k` sequence length
+- Only on `8k256` sequence length
 
 **Multi-node** eval selection:
 - Entry with **highest max eligible concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
-- Only `8k1k` sequence length
+- Only `8k256` sequence length
 - Eval runs at `eval-conc`, the upper median concurrency from the selected config
 
 This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
@@ -348,7 +348,7 @@ The default eval framework is [lm-evaluation-harness](https://github.com/Eleuthe
 ### Running Evals via CLI
 
 ```bash
-# Generate configs (evals marked by default on 8k1k subset)
+# Generate configs (evals marked by default on 8k256 subset)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files .github/configs/nvidia-master.yaml
 

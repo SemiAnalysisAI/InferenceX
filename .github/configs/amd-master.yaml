@@ -14,7 +14,7 @@ dsr1-fp4-mi355x-sglang:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     agentic-coding:
@@ -38,7 +38,7 @@ dsr1-fp4-mi355x-atom:
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
@@ -60,7 +60,7 @@ dsr1-fp4-mi355x-atom-mtp:
       - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       #- { tp: 4, conc-start: 32, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -80,7 +80,7 @@ dsr1-fp8-mi300x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -99,7 +99,7 @@ dsr1-fp8-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -118,7 +118,7 @@ dsr1-fp8-mi355x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 32, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
@@ -138,7 +138,7 @@ qwen3.5-bf16-mi355x-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
@@ -157,7 +157,7 @@ qwen3.5-bf16-mi355x-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
@@ -176,7 +176,7 @@ qwen3.5-bf16-mi300x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -195,7 +195,7 @@ qwen3.5-bf16-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -214,7 +214,7 @@ qwen3.5-fp8-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -235,7 +235,7 @@ qwen3.5-fp8-mi355x-sglang:
       - { tp: 8, ep: 8, conc-start: 64, conc-end: 256 }
       - { tp: 2, ep: 2, conc-start: 128, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 32 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
@@ -257,7 +257,7 @@ qwen3.5-fp8-mi355x-sglang-mtp:
       - { tp: 8, ep: 8, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 2, ep: 2, conc-start: 128, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 32, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 256, spec-decoding: mtp }
@@ -279,7 +279,7 @@ qwen3.5-fp8-mi355x-atom:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 256 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
@@ -301,7 +301,7 @@ qwen3.5-fp8-mi355x-atom-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
@@ -322,7 +322,7 @@ qwen3.5-fp4-mi355x-sglang:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
@@ -343,7 +343,7 @@ qwen3.5-fp4-mi355x-atom:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
@@ -363,7 +363,7 @@ qwen3.5-fp8-mi300x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -382,7 +382,7 @@ glm5-fp8-mi355x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -402,7 +402,7 @@ glm5-fp8-mi355x-sglang-mtp:
       - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
@@ -423,7 +423,7 @@ glm5-fp8-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 256 }
       - { tp: 8, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 256 }
       - { tp: 8, conc-start: 4, conc-end: 256 }
@@ -444,7 +444,7 @@ glm5.1-fp4-mi355x-sglang:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
@@ -464,7 +464,7 @@ glm5.1-fp4-mi355x-atom:
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 256 }
 
@@ -483,7 +483,7 @@ kimik2.5-int4-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -502,7 +502,7 @@ kimik2.5-int4-mi325x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -521,7 +521,7 @@ kimik2.5-int4-mi300x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -541,7 +541,7 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -562,7 +562,7 @@ kimik2.5-fp4-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
@@ -584,7 +584,7 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 256 }
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, ep: 2, conc-start: 2, conc-end: 256 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 512 }
@@ -606,7 +606,7 @@ minimaxm2.5-fp8-mi355x-atom:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 256 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 256 }
@@ -629,7 +629,7 @@ minimaxm2.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 1024 }
       - { tp: 2, conc-start: 4, conc-end: 1024 }
@@ -653,7 +653,7 @@ minimaxm2.5-fp4-mi355x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 32 }
       - { tp: 2, conc-start: 4, conc-end: 64 }
@@ -675,7 +675,7 @@ minimaxm2.5-fp8-mi300x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
@@ -696,7 +696,7 @@ minimaxm2.5-fp8-mi325x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 512 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
@@ -719,7 +719,7 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 1, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 64 }
       - { tp: 2, conc-start: 4, conc-end: 64 }
@@ -744,7 +744,7 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 64 }
       - { tp: 2, conc-start: 4, conc-end: 8 }
@@ -768,7 +768,7 @@ gptoss-fp4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 4 }
@@ -790,7 +790,7 @@ gptoss-fp4-mi355x-atom:
       - { tp: 1, conc-start: 16, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 256 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
@@ -811,7 +811,7 @@ dsr1-fp8-mi355x-atom:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
 
@@ -830,7 +830,7 @@ dsr1-fp8-mi355x-atom-mtp:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
 
@@ -928,7 +928,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # non-MTP configurations
       # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
@@ -1084,7 +1084,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations
       # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
@@ -1256,7 +1256,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # non-MTP configurations
       # 1P1D pure TP8
@@ -1467,7 +1467,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
 
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       # MTP configurations
       # 1P1D pure TP8
@@ -1582,7 +1582,7 @@ dsv4-fp8-mi355x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
@@ -1606,7 +1606,7 @@ dsv4-fp4-mi355x-sglang:
       - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
       - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 16 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 16 }
@@ -1632,7 +1632,7 @@ dsv4-fp8-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 1 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 1 }
 
@@ -1658,6 +1658,6 @@ dsv4-fp4-mi355x-atom:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
     - isl: 8192
-      osl: 1024
+      osl: 256
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }

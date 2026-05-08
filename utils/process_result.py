@@ -22,6 +22,25 @@ def get_required_env_vars(required_vars):
     return env_values
 
 
+def get_tpot_seconds(result):
+    """Return median TPOT in seconds from benchmark output."""
+    for key in ('median_tpot_ms', 'tpot_p50_ms', 'p50_tpot_ms'):
+        if key in result:
+            tpot_ms = float(result[key])
+            if tpot_ms <= 0:
+                raise ValueError(f"{key} must be positive to compute output TPUT per GPU.")
+            return tpot_ms / 1000.0
+    raise ValueError(
+        "Benchmark result must include median_tpot_ms to compute output TPUT per GPU.")
+
+
+def calculate_output_tput_per_gpu(concurrency, chips, tpot_seconds):
+    """Compute output throughput per GPU from concurrency, chip count, and TPOT."""
+    if chips <= 0:
+        raise ValueError("Output TPUT per GPU requires at least one chip.")
+    return (concurrency / chips) / tpot_seconds
+
+
 # Base required env vars
 base_env = get_required_env_vars([
     'RUNNER_TYPE', 'FRAMEWORK', 'PRECISION', 'SPEC_DECODING',
@@ -41,6 +60,8 @@ image = base_env['IMAGE']
 
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
+
+median_tpot_seconds = get_tpot_seconds(bmk_result)
 
 data = {
     'hw': hw,
@@ -98,7 +119,8 @@ if is_multinode:
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
+        'output_tput_per_gpu': calculate_output_tput_per_gpu(
+            data['conc'], output_tput_denominator, median_tpot_seconds),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
 
@@ -118,7 +140,8 @@ else:
         'ep': ep_size,
         'dp_attention': dp_attention,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
+        'output_tput_per_gpu': calculate_output_tput_per_gpu(
+            data['conc'], tp_size, median_tpot_seconds),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
     }
 

@@ -42,7 +42,7 @@ if [[ $TP -eq 8 ]]; then
   CHUNKED_PREFILL_SIZE=32768
   MAX_PREFILL_TOKENS=32768
 elif [[ $TP -eq 4 ]]; then
-  if [[ $ISL -ne 8192 ]] || [[ $OSL -ne 1024 ]]; then 
+  if [[ $ISL -ne 8192 ]] || [[ $OSL -ne 256 ]]; then
     echo "TP=4 not yet supported for ISL=$ISL OSL=$OSL!"
     exit 1
   fi
@@ -93,7 +93,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/

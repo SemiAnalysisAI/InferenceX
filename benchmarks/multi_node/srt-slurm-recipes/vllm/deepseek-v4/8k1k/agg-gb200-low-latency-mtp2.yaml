@@ -57,7 +57,7 @@ backend:
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       tokenizer-mode: deepseek_v4
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 4
       max-num-batched-tokens: 8192
       max-cudagraph-capture-size: 4
@@ -70,7 +70,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "1"
   req_rate: "inf"
   use_chat_template: true

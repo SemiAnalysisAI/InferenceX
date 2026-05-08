@@ -130,7 +130,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
+            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k256). Unless prompted otherwise, use `--seq-lens 1k1k`
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 

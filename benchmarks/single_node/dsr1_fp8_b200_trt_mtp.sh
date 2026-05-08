@@ -45,7 +45,7 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     if [[ $CONC -le 4 ]]; then
         PIECEWISE_CUDA_GRAPHS="false"
     fi
-elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+elif [[ "$ISL" == "8192" && "$OSL" == "256" ]]; then
     if [[ $CONC -le 16 ]]; then
         PIECEWISE_CUDA_GRAPHS="false"
     fi
@@ -139,7 +139,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

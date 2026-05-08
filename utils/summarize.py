@@ -61,6 +61,21 @@ def load_json(path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
+def output_tput_per_gpu_from_tpot(result: Dict[str, Any]) -> float:
+    """Compute Output TPUT/GPU as (concurrency / chips) / TPOT seconds."""
+    if result['is_multinode']:
+        chips = result.get('num_decode_gpu') or (
+            result.get('num_prefill_gpu', 0) + result.get('num_decode_gpu', 0))
+    else:
+        chips = result['tp']
+
+    if chips <= 0:
+        raise ValueError("Output TPUT per GPU requires at least one chip.")
+    if result['median_tpot'] <= 0:
+        raise ValueError("Output TPUT per GPU requires positive median TPOT.")
+    return (result['conc'] / chips) / result['median_tpot']
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python summarize.py <results_dir>")
@@ -119,7 +134,7 @@ def main():
                 f"{r.get('p99_e2el', 0):.4f}",
                 f"{r.get('p99.9_e2el', 0):.4f}",
                 f"{r['tput_per_gpu']:.4f}",
-                f"{r['output_tput_per_gpu']:.4f}",
+                f"{output_tput_per_gpu_from_tpot(r):.4f}",
                 f"{r['input_tput_per_gpu']:.4f}",
             ]
             for r in single_node_results
@@ -180,7 +195,7 @@ def main():
                 f"{r.get('p99_e2el', 0):.4f}",
                 f"{r.get('p99.9_e2el', 0):.4f}",
                 f"{r['tput_per_gpu']:.4f}",
-                f"{r['output_tput_per_gpu']:.4f}",
+                f"{output_tput_per_gpu_from_tpot(r):.4f}",
                 f"{r['input_tput_per_gpu']:.4f}",
             ]
             for r in multinode_results

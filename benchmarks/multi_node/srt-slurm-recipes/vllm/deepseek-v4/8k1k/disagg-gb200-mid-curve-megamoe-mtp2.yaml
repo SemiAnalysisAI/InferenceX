@@ -84,7 +84,7 @@ backend:
       enforce-eager: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 8
       max-num-batched-tokens: 16384
       trust-remote-code: true
@@ -111,7 +111,7 @@ backend:
       moe-backend: deep_gemm_mega_moe
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -129,7 +129,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "128"
   req_rate: "inf"
   use_chat_template: true

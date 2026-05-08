@@ -69,7 +69,7 @@ backend:
       attention-config: '{"use_fp4_indexer_cache": true}'
       moe-backend: "deep_gemm_mega_moe"
       enforce-eager: true
-      max-model-len: 16384
+      max-model-len: 8704
       max-num-seqs: 256
       max-num-batched-tokens: 16384
       trust-remote-code: true
@@ -92,7 +92,7 @@ backend:
       enable-expert-parallel: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       moe-backend: "deep_gemm_mega_moe"
-      max-model-len: 16384
+      max-model-len: 8704
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -112,7 +112,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "3072"
   req_rate: "inf"
   tokenizer_mode: "deepseek_v4"

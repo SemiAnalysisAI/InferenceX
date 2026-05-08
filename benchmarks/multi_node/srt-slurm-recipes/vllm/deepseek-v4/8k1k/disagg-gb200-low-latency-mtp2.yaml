@@ -77,7 +77,7 @@ backend:
       enforce-eager: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 8
       max-num-batched-tokens: 16384
       trust-remote-code: true
@@ -98,7 +98,7 @@ backend:
       pipeline-parallel-size: 1
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      max-model-len: 9280
+      max-model-len: 8704
       max-num-seqs: 256
       max-cudagraph-capture-size: 256
       max-num-batched-tokens: 256
@@ -115,7 +115,7 @@ backend:
 benchmark:
   type: sa-bench
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: 16x32x64
   req_rate: inf
   use_chat_template: true

@@ -173,8 +173,8 @@ wait_for_server_ready() {
 #   --endpoint: Optional API endpoint override
 #   --input-len: Random input sequence length
 #   --output-len: Random output sequence length
-#   --random-range-ratio: Random range ratio
-#   --num-prompts: Number of prompts
+#   --random-range-ratio: Ignored; random range ratio is hardcoded to 1.0
+#   --num-prompts: Ignored; number of prompts is hardcoded to max concurrency
 #   --max-concurrency: Max concurrency
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
@@ -198,7 +198,7 @@ run_benchmark_serving() {
     local endpoint=""
     local input_len=""
     local output_len=""
-    local random_range_ratio=""
+    local random_range_ratio="1.0"
     local num_prompts=""
     local max_concurrency=""
     local result_filename=""
@@ -236,11 +236,9 @@ run_benchmark_serving() {
                 shift 2
                 ;;
             --random-range-ratio)
-                random_range_ratio="$2"
                 shift 2
                 ;;
             --num-prompts)
-                num_prompts="$2"
                 shift 2
                 ;;
             --max-concurrency)
@@ -304,14 +302,6 @@ run_benchmark_serving() {
         echo "Error: --output-len is required"
         return 1
     fi
-    if [[ -z "$random_range_ratio" ]]; then
-        echo "Error: --random-range-ratio is required"
-        return 1
-    fi
-    if [[ -z "$num_prompts" ]]; then
-        echo "Error: --num-prompts is required"
-        return 1
-    fi
     if [[ -z "$max_concurrency" ]]; then
         echo "Error: --max-concurrency is required"
         return 1
@@ -328,6 +318,8 @@ run_benchmark_serving() {
     if [[ -z "$workspace_dir" ]]; then
         workspace_dir=$(pwd)
     fi
+
+    num_prompts="$max_concurrency"
 
     # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
     # and cap num_prompts to keep traces small.
@@ -357,7 +349,7 @@ run_benchmark_serving() {
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((2 * max_concurrency))" \
+        --num-warmups "$((10 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
