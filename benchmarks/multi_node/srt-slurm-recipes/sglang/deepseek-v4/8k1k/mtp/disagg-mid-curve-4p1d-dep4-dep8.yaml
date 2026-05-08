@@ -14,6 +14,10 @@ model:
   container: "lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
   precision: "mxfp4"
 
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
