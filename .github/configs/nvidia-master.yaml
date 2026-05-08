@@ -8216,7 +8216,7 @@ dsv4-fp4-gb300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev
+  image: lmsysorg/sglang:nightly-dev-cu13-20260508-2cf1a4ab
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
@@ -8316,7 +8316,7 @@ dsv4-fp4-gb300-dynamo-sglang:
 
 # MTP variant of dsv4-fp4-gb300-dynamo-sglang.
 dsv4-fp4-gb300-dynamo-sglang-mtp:
-  image: lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev
+  image: lmsysorg/sglang:nightly-dev-cu13-20260508-2cf1a4ab
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
