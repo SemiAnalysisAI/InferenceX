@@ -11,7 +11,8 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    MAX_MODEL_LEN
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -95,6 +96,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
+        --enable-prefill-delayer
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
@@ -112,8 +114,7 @@ python3 -m sglang.launch_server \
     --max-running-requests ${CONC} \
     --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
-    --context-length 9216 \
-    --enable-prefill-delayer \
+    --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
