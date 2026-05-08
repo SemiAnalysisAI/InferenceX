@@ -33,8 +33,15 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    # sglang main 2cf1a4ab silently ignores the old env names (the
+    # _print_deprecated_env helper only warns, it does not propagate
+    # the value to the new name). Set both: old names for the sa-bench
+    # client-side tokenizer (sa_bench_tokenizers.sglang_deepseek_v4),
+    # new names for the sglang server.
     SGLANG_ENABLE_THINKING: "1"
+    SGLANG_DEFAULT_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
@@ -62,8 +69,15 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    # sglang main 2cf1a4ab silently ignores the old env names (the
+    # _print_deprecated_env helper only warns, it does not propagate
+    # the value to the new name). Set both: old names for the sa-bench
+    # client-side tokenizer (sa_bench_tokenizers.sglang_deepseek_v4),
+    # new names for the sglang server.
     SGLANG_ENABLE_THINKING: "1"
+    SGLANG_DEFAULT_THINKING: "1"
     SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
