@@ -151,7 +151,7 @@ wait_for_server_ready() {
     done
 
     # Show logs until server is ready
-    tail -f -n +1 "$server_log" &
+    tail -f -n 5 "$server_log" &
     local TAIL_PID=$!
     until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
         if ! kill -0 "$server_pid" 2>/dev/null; then
@@ -725,6 +725,7 @@ run_lm_eval() {
     local eval_exit=$?
     set +x
     return $eval_exit
+      #--limit 16 \
 }
 
 append_lm_eval_summary() {

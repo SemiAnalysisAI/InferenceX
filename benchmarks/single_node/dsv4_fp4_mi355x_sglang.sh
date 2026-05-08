@@ -11,7 +11,8 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
+    RESULT_FILENAME \
+    MAX_MODEL_LEN
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -77,6 +78,7 @@ export SGLANG_OPT_USE_AITER_MHC_PRE=true
 export SGLANG_OPT_USE_AITER_MHC_POST=true
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -97,10 +99,14 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
     )
+    PREFILL_SIZE=65536
+else
+    PREFILL_SIZE=8192
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
+
 
 python3 -m sglang.launch_server \
     --model-path $MODEL \
@@ -113,7 +119,8 @@ python3 -m sglang.launch_server \
     --max-running-requests 256 \
     --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
-    --chunked-prefill-size 8192 \
+    --context-length ${MAX_MODEL_LEN} \
+    --chunked-prefill-size $PREFILL_SIZE \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
@@ -125,15 +132,15 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-export PROFILE=1
+#export PROFILE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
     --backend vllm \
     --input-len "$ISL" \
-    --output-len 50 \
+    --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC))" \
+    --num-prompts "$((CONC*ZCNT))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
