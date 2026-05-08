@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# DeepSeek-V4-Pro single-node TRTLLM recipe for B300. The configured image
-# already contains a TensorRT-LLM DeepSeek-V4 build; do not build TRTLLM at
-# runtime from this benchmark path.
+# DeepSeek-V4-Pro B200 TensorRT-LLM MTP variant. The configured image already
+# contains the DeepSeek-V4 TRTLLM build; this path only toggles speculative MTP.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -55,9 +54,10 @@ nvidia-smi
 
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
-EXTRA_CONFIG_FILE="dsv4-fp4-trt.yml"
+EXTRA_CONFIG_FILE="dsv4-fp4-trt-mtp.yml"
 
 MOE_BACKEND="TRTLLM"
+MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-2}"
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
 KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.50}"
@@ -86,13 +86,16 @@ stream_interval: 10
 num_postprocess_workers: 4
 moe_config:
     backend: $MOE_BACKEND
+speculative_config:
+    decoding_type: MTP
+    num_nextn_predict_layers: $MTP
 EOF
 
 echo "Generated config file contents:"
 cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
-MAX_NUM_TOKENS=$(( ISL + OSL + 256 ))
+MAX_NUM_TOKENS=$(( ISL + OSL + (MTP + 1) * MAX_BATCH_SIZE + 256 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -100,9 +103,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
-
-export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-1}"
-echo "TRTLLM_MHC_ENABLE_FUSED_HC: $TRTLLM_MHC_ENABLE_FUSED_HC"
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
@@ -137,8 +137,7 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
-    --backend openai-chat \
-    --endpoint /v1/chat/completions \
+    --backend openai \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
@@ -147,6 +146,8 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$PWD/" \
     --trust-remote-code \
+    --use-chat-template \
+    --dsv4 \
     --server-pid "$SERVER_PID"
 
 if [ "${RUN_EVAL}" = "true" ]; then

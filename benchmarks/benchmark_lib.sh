@@ -338,7 +338,7 @@ run_benchmark_serving() {
             mkdir -p "$_prof_dir"
         fi
         profile_flag+=(--profile)
-        num_prompts="$max_concurrency"
+        # num_prompts="$max_concurrency"
     fi
 
     # Build benchmark command

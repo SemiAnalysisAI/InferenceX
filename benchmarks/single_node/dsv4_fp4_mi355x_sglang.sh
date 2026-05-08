@@ -61,7 +61,9 @@ export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
 export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-export SGLANG_OPT_USE_TILELANG_MHC_POST=true
+export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+export SGLANG_OPT_USE_AITER_MHC_PRE=true
+export SGLANG_OPT_USE_AITER_MHC_POST=true
 export SGLANG_ENABLE_THINKING=1
 export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=1
@@ -74,10 +76,6 @@ export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
 export SGLANG_FORCE_TRITON_MOE_FP8=0
 export SGLANG_HACK_FLASHMLA_BACKEND=tilelang
 export SGLANG_OPT_USE_TILELANG_INDEXER=true
-export SGLANG_OPT_USE_AITER_MHC_PRE=true
-export SGLANG_OPT_USE_AITER_MHC_POST=true
-export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-export SGLANG_OPT_USE_TILELANG_MHC_POST=false
 export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
 
 SERVER_LOG=/workspace/server.log
@@ -98,15 +96,12 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
+        --enable-prefill-delayer
     )
-    PREFILL_SIZE=65536
-else
-    PREFILL_SIZE=8192
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
-
 
 python3 -m sglang.launch_server \
     --model-path $MODEL \
@@ -116,11 +111,11 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend compressed \
-    --max-running-requests 256 \
+    --max-running-requests ${CONC} \
     --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
-    --context-length ${MAX_MODEL_LEN} \
-    --chunked-prefill-size $PREFILL_SIZE \
+    --context-length $MAX_MODEL_LEN \
+    --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
@@ -132,7 +127,6 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-#export PROFILE=1
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \

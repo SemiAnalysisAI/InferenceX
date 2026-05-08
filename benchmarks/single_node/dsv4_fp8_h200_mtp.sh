@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-# Per https://vllm.ai/blog/deepseek-v4 the DeepSeek-V4-Pro H200 recipe uses
-# the cu129 image and omits the FP4 indexer cache flag (H200 has no FP4
-# path). Max-model-len is pinned at 800k per the recipe.
+# DeepSeek-V4-Pro H200 vLLM MTP variant of the recipe at
+# https://vllm.ai/blog/deepseek-v4. Mirrors dsv4_fp8_h200.sh but adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}' and
+# routes prompts through chat-formatted encoding via --dsv4 (required for
+# meaningful MTP acceptance numbers per AGENTS.md).
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -13,6 +15,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -31,11 +34,16 @@ PORT=${PORT:-8888}
 # 600s. Give it an hour to load.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
+# Skip the cudagraph-memory estimator during the worker memory profiling
+# phase — it overestimates and pushes us over the GPU memory budget on
+# H200 + MTP, even though the actual cudagraph capture works fine.
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN_ARG="--max-model-len $EVAL_MAX_MODEL_LEN"
 else
-    MAX_MODEL_LEN_ARG="--max-model-len 800000"
+    MAX_MODEL_LEN_ARG="--max-model-len $MAX_MODEL_LEN"
 fi
 
 # DP_ATTENTION=true runs DP-attention with expert parallel (DP size = TP);
@@ -67,6 +75,7 @@ $MAX_MODEL_LEN_ARG \
 --max-num-batched-tokens 512 \
 --no-enable-flashinfer-autotune \
 --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+--speculative-config '{"method":"mtp","num_speculative_tokens":2}' \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
@@ -79,6 +88,8 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 pip install -q datasets pandas
 
+# MTP acceptance rate degrades on raw random tokens; --dsv4 routes prompts
+# through chat-formatted encoding as required for speculative decoding benchmarks.
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -90,7 +101,8 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --trust-remote-code
+    --trust-remote-code \
+    --dsv4
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

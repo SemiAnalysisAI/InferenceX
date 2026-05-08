@@ -1,6 +1,6 @@
 export MODEL="/dev/shm/DeepSeek-V4-Pro/"
 export TP=8
-export CONC=128
+export CONC=32
 has_arg() {
     local target="$1"
     shift
@@ -23,13 +23,13 @@ export ISL=8192
 if has_arg p "$@"; then
     export PROFILE=1
     export ZCNT=1
-    export OSL=50
-    echo "PROFILE=1 ZCNT=1 OSL=5"
+    export OSL=40
+    echo "PROFILE=$PROFILE ZCNT=$ZCNT OSL=$OSL"
 else
     unset PROFILE
     export ZCNT=2
     export OSL=1024
-    echo "PROFILE=0 ZCNT=2 OSL=${OSL}"
+    echo "PROFILE=$PROFILE ZCNT=$ZCNT OSL=${OSL}"
 fi
 export RANDOM_RANGE_RATIO=1.0
 export RANDOM_RANGE_RATIO=0.8
@@ -41,6 +41,8 @@ rm /workspace/profiles/*
 
 export SGLANG_DEBUG_DSV4_ATTN=1
 export SGLANG_TORCH_PROFILER_DIR="${SGLANG_TORCH_PROFILER_DIR:-/workspace/profiles}"
+export SGLANG_PROFILE_WITH_STACK=False
+export TORCH_PROFILER_RECORD_SCOPES="${TORCH_PROFILER_RECORD_SCOPES:-USER_SCOPE}"
 export MAX_MODEL_LEN=$((ISL+OSL))
 mkdir -p "$SGLANG_TORCH_PROFILER_DIR"
 pkill -9 tail
