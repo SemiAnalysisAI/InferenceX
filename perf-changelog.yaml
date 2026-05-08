@@ -2283,3 +2283,11 @@
     - "Mirror the B200 TRT STP search space with spec-decoding: mtp and TensorRT-LLM MTP num_nextn_predict_layers=2"
     - "Benchmark serving uses the DeepSeek-V4 chat template for MTP acceptance-rate correctness"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1294
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Overhaul the 8k/1k DSv4-Pro GB300 SGLang search space: switch decode to WideEP TP=16 across most concurrency points (TP=12 at the 21504 max-concurrency point), and scale concurrencies to 1024/1024/4096/8192/21504; keep a 1p1d TP=4 baseline at conc=1"
+    - "Rename and consolidate the per-concurrency recipe files to `disagg-gb300-{N}p1d-{topo}-{nodes}-c{conc}.yaml`"
+    - "Re-enable lm-eval scoring for dsv4-fp4-gb300-dynamo-sglang now that the srt-slurm pin includes the lm-eval orchestrator path"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
