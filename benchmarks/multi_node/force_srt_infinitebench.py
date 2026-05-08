@@ -15,6 +15,8 @@ from pathlib import Path
 INFINITEBENCH_HELPERS = r'''
 
 INFINITEBENCH_REPO_ID = "xinrongzhang2022/InfiniteBench"
+DEFAULT_INFINITEBENCH_TASK = "infinitebench"
+DEFAULT_INFINITEBENCH_TASK_FILE = "longbook_qa_eng.jsonl"
 INFINITEBENCH_PREFIX = (
     "Please read a part of the book below, and then give me the summary.\n"
     "[start of the book]\n"
@@ -31,6 +33,8 @@ def _infinitebench_suffix(max_new_tokens: int) -> str:
 
 
 def _infinitebench_task_file(task: str) -> str:
+    if task == DEFAULT_INFINITEBENCH_TASK:
+        return DEFAULT_INFINITEBENCH_TASK_FILE
     if task.endswith(".jsonl"):
         return task
     return f"{task}.jsonl"
@@ -67,7 +71,7 @@ def _download_infinitebench_jsonl(task_file: str) -> Path:
     except ImportError as exc:
         raise RuntimeError(
             "huggingface_hub is required to download InfiniteBench. "
-            "Install it or pass --dataset-path pointing at longbook_qa_eng.jsonl."
+            "Install it or pass --dataset-path pointing at an InfiniteBench JSONL."
         ) from exc
 
     return Path(
@@ -131,7 +135,7 @@ def sample_infinitebench_requests(
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
 ) -> list[tuple[str, int, int, None]]:
-    """Build CANN-style InfiniteBench longbook summary requests."""
+    """Build CANN-style InfiniteBench summary requests."""
     suffix = _infinitebench_suffix(output_len)
     wrapper_prompt = INFINITEBENCH_PREFIX + suffix
     rendered_wrapper = _format_infinitebench_prompt(
@@ -276,7 +280,7 @@ def patch_benchmark_serving(path: Path) -> None:
     infinitebench_group.add_argument(
         "--infinitebench-task",
         type=str,
-        default="longbook_qa_eng",
+        default="infinitebench",
         help="InfiniteBench JSONL task/file to load.",
     )
     infinitebench_group.add_argument(
@@ -373,7 +377,7 @@ export SA_BENCH_TEMPERATURE=1.0
     text = text.replace(
         "        --dataset-name random \\\n",
         '''        --dataset-name infinitebench \\
-        --infinitebench-task longbook_qa_eng \\
+        --infinitebench-task infinitebench \\
         --infinitebench-input-len "$ISL" \\
         --infinitebench-output-len "$OSL" \\
         --num-chips "$TOTAL_GPUS" \\
@@ -382,7 +386,7 @@ export SA_BENCH_TEMPERATURE=1.0
     text = text.replace(
         '        "${DATASET_ARGS[@]}" \\\n',
         '''        "${DATASET_ARGS[@]}" \\
-        --infinitebench-task longbook_qa_eng \\
+        --infinitebench-task infinitebench \\
         --infinitebench-input-len "$ISL" \\
         --infinitebench-output-len "$OSL" \\
         --num-chips "$TOTAL_GPUS" \\

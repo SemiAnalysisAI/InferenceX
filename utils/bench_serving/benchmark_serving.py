@@ -313,6 +313,8 @@ def sample_random_requests(
 
 
 INFINITEBENCH_REPO_ID = "xinrongzhang2022/InfiniteBench"
+DEFAULT_INFINITEBENCH_TASK = "infinitebench"
+DEFAULT_INFINITEBENCH_TASK_FILE = "longbook_qa_eng.jsonl"
 INFINITEBENCH_PREFIX = (
     "Please read a part of the book below, and then give me the summary.\n"
     "[start of the book]\n"
@@ -329,6 +331,8 @@ def _infinitebench_suffix(max_new_tokens: int) -> str:
 
 
 def _infinitebench_task_file(task: str) -> str:
+    if task == DEFAULT_INFINITEBENCH_TASK:
+        return DEFAULT_INFINITEBENCH_TASK_FILE
     if task.endswith(".jsonl"):
         return task
     return f"{task}.jsonl"
@@ -366,7 +370,7 @@ def _download_infinitebench_jsonl(task_file: str) -> Path:
     except ImportError as exc:
         raise RuntimeError(
             "huggingface_hub is required to download InfiniteBench. "
-            "Install it or pass --dataset-path pointing at longbook_qa_eng.jsonl."
+            "Install it or pass --dataset-path pointing at an InfiniteBench JSONL."
         ) from exc
 
     return Path(
@@ -434,10 +438,10 @@ def sample_infinitebench_requests(
     dsv4: bool = False,
     dsv4_thinking_mode: str = "chat",
 ) -> List[Tuple[str, int, int]]:
-    """Build CANN-style InfiniteBench longbook summary requests.
+    """Build CANN-style InfiniteBench summary requests.
 
     This mirrors cann-recipes-infer's DeepSeek-V4 data path: load
-    longbook_qa_eng contexts, trim the book body to fit `input_len` after the
+    InfiniteBench contexts, trim the body to fit `input_len` after the
     fixed summary wrapper, and send each prompt with a fixed `output_len`.
     """
     if dsv4 and not use_chat_template:
@@ -455,6 +459,7 @@ def sample_infinitebench_requests(
             f"rendered prompt wrapper ({system_prompt_len} tokens).")
 
     contexts = _load_infinitebench_contexts(dataset_path, task, num_prompts)
+    prompt_cache = {}
     input_requests = []
     mismatches = []
 
@@ -465,6 +470,13 @@ def sample_infinitebench_requests(
         f"dsv4_thinking_mode={dsv4_thinking_mode}")
     t0 = time.perf_counter()
     for context in contexts:
+        cached = prompt_cache.get(context)
+        if cached is not None:
+            prompt, prompt_len, output_len_cached, extra = cached
+            mismatches.append(prompt_len - input_len)
+            input_requests.append((prompt, prompt_len, output_len_cached, extra))
+            continue
+
         # Mirror cann-recipes-infer build_dataset_input: tokenize raw context
         # with truncation to the system-prompt-adjusted budget, decode back,
         # and assemble. No iterative re-encode loop — the decode roundtrip
@@ -484,13 +496,16 @@ def sample_infinitebench_requests(
             dsv4_thinking_mode)
         prompt_len = _token_count(tokenizer, prompt)
 
+        cached = (prompt, prompt_len, output_len, None)
+        prompt_cache[context] = cached
         mismatches.append(prompt_len - input_len)
-        input_requests.append((prompt, prompt_len, output_len, None))
+        input_requests.append(cached)
 
     elapsed = time.perf_counter() - t0
     header_str = f'{"-"*16}  InfiniteBench Input/Output Statistics  {"-"*16}'
     print(header_str)
     print(f" prompt_build_time_s: {elapsed:.2f}")
+    print(f" unique_contexts: {len(prompt_cache)} / {len(contexts)}")
     print(
         f' input_lens : '
         f'min={min(r[1] for r in input_requests):<4d}  '
@@ -1438,9 +1453,8 @@ if __name__ == "__main__":
     infinitebench_group.add_argument(
         "--infinitebench-task",
         type=str,
-        default="longbook_qa_eng",
-        help="InfiniteBench JSONL task/file to load. Default mirrors the "
-        "CANN DeepSeek-V4 recipe.",
+        default=DEFAULT_INFINITEBENCH_TASK,
+        help="InfiniteBench JSONL task/file to load.",
     )
     infinitebench_group.add_argument(
         "--infinitebench-input-len",

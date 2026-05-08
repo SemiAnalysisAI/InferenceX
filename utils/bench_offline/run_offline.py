@@ -39,7 +39,7 @@ _BENCH_SERVING = _UTILS_DIR / "bench_serving"
 if str(_BENCH_SERVING) not in sys.path:
     sys.path.insert(0, str(_BENCH_SERVING))
 
-from prompts import build_infinitebench_prompts
+from prompts import DEFAULT_INFINITEBENCH_TASK, build_infinitebench_prompts
 
 
 def _load_tokenizer(model: str, tokenizer_mode: str = "auto",
@@ -96,7 +96,7 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--ignore-eos", action="store_true", default=True)
     # Workload
-    parser.add_argument("--infinitebench-task", default="longbook_qa_eng")
+    parser.add_argument("--infinitebench-task", default=DEFAULT_INFINITEBENCH_TASK)
     parser.add_argument("--infinitebench-input-len", type=int, default=8192)
     parser.add_argument("--infinitebench-output-len", type=int, default=256)
     parser.add_argument("--dataset-path", default=None)

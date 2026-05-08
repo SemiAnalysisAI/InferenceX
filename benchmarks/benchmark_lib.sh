@@ -180,7 +180,7 @@ wait_for_server_ready() {
 #   --result-dir: Result directory
 #   --dataset-name: Optional dataset, 'random' or 'infinitebench'
 #   --dataset-path: Optional InfiniteBench JSONL file/directory
-#   --infinitebench-task: Optional InfiniteBench task/file, defaults to longbook_qa_eng
+#   --infinitebench-task: Optional InfiniteBench task/file, defaults to infinitebench
 #   --use-chat-template: Optional flag to enable chat template
 #   --dsv4: Optional flag to use the DeepSeek-V4 chat template
 #           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
@@ -212,7 +212,7 @@ run_benchmark_serving() {
     local workspace_dir=""
     local dataset_name="${BENCHMARK_DATASET_NAME:-${BENCHMARK_DATASET:-random}}"
     local dataset_path="${INFINITEBENCH_DATASET_PATH:-${DATASET_PATH:-}}"
-    local infinitebench_task="${INFINITEBENCH_TASK:-longbook_qa_eng}"
+    local infinitebench_task="${INFINITEBENCH_TASK:-infinitebench}"
     local use_chat_template=false
     local dsv4=false
     local dsv4_thinking_mode="${DSV4_THINKING_MODE:-}"
@@ -323,7 +323,7 @@ run_benchmark_serving() {
     # dataset and input/output lengths, and always run the CANN-style 8K/256
     # InfiniteBench workload. This branch is not intended for main.
     dataset_name="infinitebench"
-    infinitebench_task="longbook_qa_eng"
+    infinitebench_task="infinitebench"
     temperature="1.0"
     random_range_ratio="1.0"
     input_len=8192

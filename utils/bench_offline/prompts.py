@@ -2,7 +2,7 @@
 
 Mirrors cann-recipes-infer's executor/utils/data_utils.py::build_dataset_input
 and models/deepseek-v4/models/model_infer.py::get_inputs flow:
-  1. Load longbook_qa_eng contexts.
+  1. Load InfiniteBench contexts.
   2. Compute system_prompt_len from chat-templated `prefix + suffix`.
   3. Tokenize each raw context with truncation to context_budget.
   4. Decode, assemble `prefix + ctx + suffix`, apply chat template (DSV4 chat
@@ -23,6 +23,8 @@ import numpy as np
 from transformers import PreTrainedTokenizerBase
 
 INFINITEBENCH_REPO_ID = "xinrongzhang2022/InfiniteBench"
+DEFAULT_INFINITEBENCH_TASK = "infinitebench"
+DEFAULT_INFINITEBENCH_TASK_FILE = "longbook_qa_eng.jsonl"
 INFINITEBENCH_PREFIX = (
     "Please read a part of the book below, and then give me the summary.\n"
     "[start of the book]\n"
@@ -39,6 +41,8 @@ def infinitebench_suffix(max_new_tokens: int) -> str:
 
 
 def _task_file(task: str) -> str:
+    if task == DEFAULT_INFINITEBENCH_TASK:
+        return DEFAULT_INFINITEBENCH_TASK_FILE
     if task.endswith(".jsonl"):
         return task
     return f"{task}.jsonl"
@@ -167,10 +171,18 @@ def build_infinitebench_prompts(
             f"({system_prompt_len} tokens).")
 
     contexts = load_infinitebench_contexts(dataset_path, task, num_prompts)
+    prompt_cache: dict[str, Tuple[str, int, int]] = {}
     out: List[Tuple[str, int, int]] = []
     mismatches: List[int] = []
     t0 = time.perf_counter()
     for ctx in contexts:
+        cached = prompt_cache.get(ctx)
+        if cached is not None:
+            prompt, plen, out_len = cached
+            mismatches.append(plen - input_len)
+            out.append((prompt, plen, out_len))
+            continue
+
         ctx_ids = tokenizer.encode(
             ctx, add_special_tokens=False,
             truncation=True, max_length=context_budget)
@@ -179,13 +191,16 @@ def build_infinitebench_prompts(
         prompt = _format_prompt(
             raw, tokenizer, use_chat_template, dsv4, dsv4_thinking_mode)
         plen = _token_count(tokenizer, prompt)
+        cached = (prompt, plen, output_len)
+        prompt_cache[ctx] = cached
         mismatches.append(plen - input_len)
-        out.append((prompt, plen, output_len))
+        out.append(cached)
 
     elapsed = time.perf_counter() - t0
     header = f'{"-"*16}  InfiniteBench Input/Output Statistics  {"-"*16}'
     print(header)
     print(f" prompt_build_time_s: {elapsed:.2f}")
+    print(f" unique_contexts: {len(prompt_cache)} / {len(contexts)}")
     print(
         f" input_lens : "
         f"min={min(r[1] for r in out):<4d}  "
