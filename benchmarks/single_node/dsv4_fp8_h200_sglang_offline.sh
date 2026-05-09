@@ -64,26 +64,21 @@ SGLANG_MAX_RUNNING_REQUESTS="${SGLANG_MAX_RUNNING_REQUESTS:-$CONC}"
 DPA_ENGINE_ARGS=()
 MOE_RUNNER_ARGS=(--moe-runner-backend marlin)
 
-# H200 cannot fit the DeepSeek-V4-Pro FP8 SGLang EP+DPA weight layout with
-# useful KV/runtime headroom fully resident on GPU. Keep EP+DPA and offload a
-# small slice of early-layer weights so scheduler initialization can complete.
-# FlashInfer TRTLLM's standard-a2a paths are not usable here: the non-routed
-# path expects bypassed top-k output, and the routed path rejects DeepSeek-V4's
-# routed-scaling HashTopK. Force the converted-FP8 expert layout so H200 avoids
-# DeepGEMM's FP4 recipe, which is Blackwell-only.
+# H200 cannot use the DeepEP+DeepGEMM FP4 path for DSV4 because that FP4 recipe
+# is Blackwell-only. It also cannot fit the converted-FP8 expert layout. Keep
+# the native MXFP4 expert layout and use Marlin with the standard EP path.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
-    SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.90}"
-    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-48}"
+    SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
+    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-0}"
     DPA_ENGINE_ARGS=(
-        --moe-dense-tp-size 1
-        --enable-dp-lm-head
         --dpa-size 2
-        --deepep-mode normal
-        --sglang-dpa-env-preset fp8
+        --dpa-moe-a2a-backend none
+        --dpa-moe-runner-backend marlin
+        --sglang-dpa-env-preset none
     )
     MOE_RUNNER_ARGS=()
     export SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1
-    export SGLANG_DSV4_FP4_EXPERTS=0
+    export SGLANG_DSV4_FP4_EXPERTS=1
 else
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-0}"
