@@ -4,8 +4,8 @@ name: "svf-vllm-disagg-gb200-high-tpt-megamoe"
 #   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-high-tpt-megamoe.yaml
 #
 # Topology: 2 prefill (DEP=8 each) + 1 decode (DEP=8). 7 nodes total with a
-# dedicated NATS/etcd infra node. MegaMOE high-throughput point at concurrency
-# 4096 with no CPU/NVMe offload.
+# dedicated NATS/etcd infra node. MegaMOE high-throughput points at
+# concurrencies 1, 64, 256, 512, 2048, 4096, 8192 with no CPU/NVMe offload.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -139,7 +139,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "4096"
+  concurrencies: "1x64x256x512x2048x4096x8192"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
