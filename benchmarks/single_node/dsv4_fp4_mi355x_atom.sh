@@ -41,7 +41,7 @@ export AITER_DSV4_MOE_DEBUG_BLOCKS="${AITER_DSV4_MOE_DEBUG_BLOCKS:-1}"
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-dsv4-fp8-blockscale-wkv-fix}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-6bcd4cd2223e1ba208dd3955aaba2eb3386a2648}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-6c6e49a0fe79302df58da29a99e9d23ef342de1b}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
