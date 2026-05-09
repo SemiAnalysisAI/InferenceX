@@ -65,7 +65,6 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
       max-model-len: 9280
@@ -94,7 +93,6 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       attention-config: '{"use_fp4_indexer_cache": true}'
       max-model-len: 9280
       max-num-seqs: 512

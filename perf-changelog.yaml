@@ -2327,3 +2327,10 @@
     - "Remove unsupported Dynamo vLLM tool-call CLI flags from B300 recipes: --enable-auto-tool-choice and --tool-call-parser"
     - "Keep DeepSeek-V4 tokenizer-mode and reasoning-parser settings for chat/reasoning compatibility"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm
+  description:
+    - "Turn off explicit deep_gemm_mega_moe backend selection in B300 Dynamo vLLM throughput recipes"
+    - "Let vLLM choose the MoE backend automatically to avoid CUDA symmetric-memory rendezvous failures during startup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
