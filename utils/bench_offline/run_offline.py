@@ -108,7 +108,7 @@ def main() -> None:
     parser.add_argument("--dsv4-thinking-mode", default="chat",
                         choices=["chat", "thinking"])
     parser.add_argument("--moe-runner-backend", default="flashinfer_mxfp4",
-                        help="SGLang MoE runner backend (flashinfer_mxfp4 for FP4/Blackwell, marlin for FP8/Hopper)")
+                        help="SGLang MoE runner backend (flashinfer_mxfp4 for FP4/Blackwell, triton/deep_gemm/cutlass for FP8)")
     parser.add_argument("--dpa-moe-runner-backend", default=None,
                         help="SGLang MoE runner backend override used only with --dp-attn.")
     parser.add_argument("--dpa-size", type=int, default=None,

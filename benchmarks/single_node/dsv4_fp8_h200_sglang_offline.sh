@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # DeepSeek-V4-Pro H200 single-node SGLang **offline** benchmark via sgl.Engine.
-# FP8 variant of dsv4_fp4_b300_sglang_offline.sh — uses marlin MoE backend
-# (Hopper FP8) instead of flashinfer_mxfp4 (Blackwell FP4).
+# H200 must use the FP8 routed-expert layout. MXFP4/FP4 expert kernels are
+# Blackwell-only and must not be forced on Hopper.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -62,14 +62,13 @@ fi
 SGLANG_CHUNKED_PREFILL_SIZE="${SGLANG_CHUNKED_PREFILL_SIZE:-32768}"
 SGLANG_MAX_RUNNING_REQUESTS="${SGLANG_MAX_RUNNING_REQUESTS:-$CONC}"
 DPA_ENGINE_ARGS=()
-MOE_RUNNER_ARGS=(--moe-runner-backend marlin)
+MOE_RUNNER_ARGS=(--moe-runner-backend triton)
 
 patch_sglang_dsv4_empty_attn_allreduce() {
     PYTHONNOUSERSITE=1 python3 - <<'PY'
 from pathlib import Path
 
 import sglang.srt.models.deepseek_v4 as deepseek_v4
-import sglang.srt.layers.moe.moe_runner.marlin as marlin_runner
 
 path = Path(deepseek_v4.__file__)
 text = path.read_text()
@@ -98,53 +97,32 @@ elif old in text:
     print(f"[dsv4-sglang-patch] Patched {path}")
 else:
     raise RuntimeError(f"Unable to patch DSV4 empty attention allreduce in {path}")
-
-path = Path(marlin_runner.__file__)
-text = path.read_text()
-old = """    hidden_states = dispatch_output.hidden_states
-    topk_output = dispatch_output.topk_output
-
-    assert runner_config.activation == "silu", "Only SiLU activation is supported."
-"""
-new = """    hidden_states = dispatch_output.hidden_states
-    if hidden_states.shape[0] == 0:
-        return StandardCombineInput(hidden_states=hidden_states)
-    topk_output = dispatch_output.topk_output
-
-    assert runner_config.activation == "silu", "Only SiLU activation is supported."
-"""
-
-if new in text:
-    print(f"[dsv4-sglang-patch] Already patched {path}")
-elif old in text:
-    path.write_text(text.replace(old, new))
-    print(f"[dsv4-sglang-patch] Patched {path}")
-else:
-    raise RuntimeError(f"Unable to patch Marlin empty MoE dispatch in {path}")
 PY
 }
 
-# H200 cannot use the DeepEP+DeepGEMM FP4 path for DSV4 because that FP4 recipe
-# is Blackwell-only. It also cannot fit the converted-FP8 expert layout. Keep
-# the native MXFP4 expert layout and use Marlin with the standard EP path.
-# Keep DP-attn at size 2 so the model fits on H200, and patch SGLang empty
-# DPA shards out of zero-token attention and Marlin CUDA kernel paths.
+# Keep DP-attn at size 2 so the dense replicated state is smaller on H200. Use
+# the FP8 Triton MoE path with A2A disabled while we isolate the EP+DPA failure.
+# Patch SGLang's empty attention shards so zero-token DPA ranks still enter the
+# all-reduce instead of hanging.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-0}"
     DPA_ENGINE_ARGS=(
         --dpa-size 2
         --dpa-moe-a2a-backend none
-        --dpa-moe-runner-backend marlin
-        --sglang-dpa-env-preset none
+        --dpa-moe-runner-backend triton
+        --moe-dense-tp-size 1
+        --enable-dp-lm-head
+        --sglang-dpa-env-preset fp8
     )
     MOE_RUNNER_ARGS=()
     patch_sglang_dsv4_empty_attn_allreduce
     export SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1
-    export SGLANG_DSV4_FP4_EXPERTS=1
+    export SGLANG_DSV4_FP4_EXPERTS=false
 else
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-0}"
+    export SGLANG_DSV4_FP4_EXPERTS=false
 fi
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
