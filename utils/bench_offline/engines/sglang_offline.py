@@ -92,6 +92,7 @@ def run(args: argparse.Namespace,
             "dp_size": args.tp,           # DP across all TP ranks
             "ep_size": args.ep if args.ep > 1 else args.tp,
             "enable_dp_attention": True,
+            "disable_flashinfer_autotune": True,
             "chunked_prefill_size": (
                 args.chunked_prefill_size
                 if args.chunked_prefill_size is not None
