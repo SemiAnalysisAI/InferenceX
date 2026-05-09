@@ -97,6 +97,15 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
+      # sglang main 2cf1a4ab gates the dsv4 chat-encoding spec
+      # (which routes DSV4 prompts through encoding_dsv4.py with the
+      # proper thinking-mode + reasoning-effort handling) on
+      # tool_call_parser=="deepseekv4". Without this flag the server
+      # falls back to the vanilla HF chat template, the prompt is
+      # rendered without DSV4 special tokens, generations come out
+      # with junk "Weapon:" prefixes, and gsm8k accuracy collapses
+      # from ~95% to ~40% (run 25583345967 eval_results_all).
+      tool-call-parser: deepseekv4
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
@@ -120,6 +129,15 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
+      # sglang main 2cf1a4ab gates the dsv4 chat-encoding spec
+      # (which routes DSV4 prompts through encoding_dsv4.py with the
+      # proper thinking-mode + reasoning-effort handling) on
+      # tool_call_parser=="deepseekv4". Without this flag the server
+      # falls back to the vanilla HF chat template, the prompt is
+      # rendered without DSV4 special tokens, generations come out
+      # with junk "Weapon:" prefixes, and gsm8k accuracy collapses
+      # from ~95% to ~40% (run 25583345967 eval_results_all).
+      tool-call-parser: deepseekv4
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
