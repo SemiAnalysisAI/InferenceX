@@ -2307,3 +2307,12 @@
     - "Tune DSv4 FP4 MI355X SGLang runtime envs: enable aiter MHC pre/post, and enable triton swa prepare kernel."
     - "Add --context-length. Add --enable-prefill-delayer for dp config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1300
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B200 disaggregated multi-node coverage using Dynamo vLLM"
+    - "9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4"
+    - "Adapt the existing DSV4 GB200 vLLM disagg recipes to B200 by mapping each worker to one full 8-GPU B200 node"
+    - "Update the B200 DGXC Slurm launcher to support dsv4/fp4 with dynamo-vllm and local recipe overlays"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1303
