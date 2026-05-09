@@ -2320,3 +2320,10 @@
     - "Update B300 Dynamo vLLM recipes from vllm/vllm-openai:v0.20.0-cu130 to vllm/vllm-openai:v0.20.1"
     - "Align recipe identity metadata with the nvidia-master image so srt-slurm launches the v0.20.1 stack"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm
+  description:
+    - "Remove unsupported Dynamo vLLM tool-call CLI flags from B300 recipes: --enable-auto-tool-choice and --tool-call-parser"
+    - "Keep DeepSeek-V4 tokenizer-mode and reasoning-parser settings for chat/reasoning compatibility"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304

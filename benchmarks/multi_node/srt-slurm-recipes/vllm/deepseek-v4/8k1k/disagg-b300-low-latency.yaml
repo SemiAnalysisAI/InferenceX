@@ -84,8 +84,6 @@ backend:
       offload-num-in-group: 1
       offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
-      tool-call-parser: deepseek_v4
-      enable-auto-tool-choice: true
       reasoning-parser: deepseek_v4
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -107,8 +105,6 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-      tool-call-parser: deepseek_v4
-      enable-auto-tool-choice: true
       reasoning-parser: deepseek_v4
 
 benchmark:
