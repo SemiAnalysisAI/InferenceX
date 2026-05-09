@@ -104,6 +104,49 @@ embed_new = """        self.embed_tokens = VocabParallelEmbedding(
         )
 """
 
+layer_offload_old = """        self.self_attn = MQALayer(
+            config=config,
+            layer_id=layer_id,
+            quant_config=quant_config,
+            prefix=add_prefix("self_attn", prefix),
+            alt_streams=alt_streams,
+            compress_ratio_override=compress_ratio_override,
+        )
+        self.mlp = deepseek_v2.DeepseekV2MoE(
+            config=config,
+            quant_config=moe_quant_config_override or quant_config,
+            prefix=add_prefix("mlp", prefix),
+            layer_id=self.layer_id,
+            alt_stream=alt_streams[0] if alt_streams is not None else None,
+            is_nextn=is_nextn,
+            is_deepseek_v4=True,
+        )
+"""
+layer_offload_new = """        self.self_attn = MQALayer(
+            config=config,
+            layer_id=layer_id,
+            quant_config=quant_config,
+            prefix=add_prefix("self_attn", prefix),
+            alt_streams=alt_streams,
+            compress_ratio_override=compress_ratio_override,
+        )
+        if is_dp_attention_enabled():
+            from sglang.srt.utils.offloader import get_offloader
+
+            self.self_attn = get_offloader().maybe_offload_to_cpu(self.self_attn)
+        self.mlp = deepseek_v2.DeepseekV2MoE(
+            config=config,
+            quant_config=moe_quant_config_override or quant_config,
+            prefix=add_prefix("mlp", prefix),
+            layer_id=self.layer_id,
+            alt_stream=alt_streams[0] if alt_streams is not None else None,
+            is_nextn=is_nextn,
+            is_deepseek_v4=True,
+        )
+        if is_dp_attention_enabled():
+            self.mlp = get_offloader().maybe_offload_to_cpu(self.mlp)
+"""
+
 changed = False
 if allreduce_new in text:
     print(f"[dsv4-sglang-patch] Empty attention allreduce already patched in {path}")
@@ -123,6 +166,15 @@ elif embed_old in text:
 else:
     raise RuntimeError(f"Unable to patch DSV4 DPA embedding sharding in {path}")
 
+if layer_offload_new in text:
+    print(f"[dsv4-sglang-patch] DPA early layer offload already patched in {path}")
+elif layer_offload_old in text:
+    text = text.replace(layer_offload_old, layer_offload_new)
+    changed = True
+    print(f"[dsv4-sglang-patch] Patched DPA early layer offload in {path}")
+else:
+    raise RuntimeError(f"Unable to patch DSV4 DPA early layer offload in {path}")
+
 if changed:
     path.write_text(text)
 PY
@@ -133,7 +185,8 @@ PY
 # during FP8 MoE weight construction, so offload a small slice of
 # weights to keep EP+DPA resident enough to start. Patch SGLang's empty attention
 # shards so zero-token DPA ranks still enter the all-reduce instead of hanging,
-# and shard the input embedding over attention TP to reduce the first MoE peak.
+# shard the input embedding over attention TP, and apply offload inside layer
+# construction so H200 can clear the first FP8 MoE allocation peak.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-16}"
