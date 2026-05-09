@@ -19,7 +19,7 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         # ``TypeError: 'SGLangDeepseekV4Tokenizer' object is not callable``.
         # Revert to ``NVIDIA/srt-slurm.git`` @ ``main`` once #144 merges.
         SRT_SLURM_RECIPES_REPO="https://github.com/ch-wan/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="c901ad38ac917a21ddc150d15c2d8cdeff6aa381"
+        SRT_SLURM_RECIPES_REF="518476323f19226513a1691714c550582cffe343"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then

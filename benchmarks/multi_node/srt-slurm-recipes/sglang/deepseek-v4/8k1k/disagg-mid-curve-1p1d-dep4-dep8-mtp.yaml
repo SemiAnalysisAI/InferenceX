@@ -35,14 +35,7 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    # sglang main 2cf1a4ab silently ignores the old env names (the
-    # _print_deprecated_env helper only warns, it does not propagate
-    # the value to the new name). Set both: old names for the sa-bench
-    # client-side tokenizer (sa_bench_tokenizers.sglang_deepseek_v4),
-    # new names for the sglang server.
-    SGLANG_ENABLE_THINKING: "1"
     SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
@@ -71,14 +64,7 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    # sglang main 2cf1a4ab silently ignores the old env names (the
-    # _print_deprecated_env helper only warns, it does not propagate
-    # the value to the new name). Set both: old names for the sa-bench
-    # client-side tokenizer (sa_bench_tokenizers.sglang_deepseek_v4),
-    # new names for the sglang server.
-    SGLANG_ENABLE_THINKING: "1"
     SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
@@ -101,25 +87,14 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    # CAR_V2 is single-node only and segfaults during cuda graph capture
-    # on multi-node decode ('CustomAllReduceV2' object has no attribute
-    # 'obj' at custom_all_reduce_v2.py:97). Explicitly disable.
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"  # CAR_V2 is single-node only.
 
   sglang_config:
     prefill:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      # sglang main 2cf1a4ab gates the dsv4 chat-encoding spec
-      # (which routes DSV4 prompts through encoding_dsv4.py with the
-      # proper thinking-mode + reasoning-effort handling) on
-      # tool_call_parser=="deepseekv4". Without this flag the server
-      # falls back to the vanilla HF chat template, the prompt is
-      # rendered without DSV4 special tokens, generations come out
-      # with junk "Weapon:" prefixes, and gsm8k accuracy collapses
-      # from ~95% to ~40% (run 25583345967 eval_results_all).
-      tool-call-parser: deepseekv4
+      tool-call-parser: deepseekv4  # gates the dsv4 chat-encoding spec.
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
@@ -144,15 +119,7 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      # sglang main 2cf1a4ab gates the dsv4 chat-encoding spec
-      # (which routes DSV4 prompts through encoding_dsv4.py with the
-      # proper thinking-mode + reasoning-effort handling) on
-      # tool_call_parser=="deepseekv4". Without this flag the server
-      # falls back to the vanilla HF chat template, the prompt is
-      # rendered without DSV4 special tokens, generations come out
-      # with junk "Weapon:" prefixes, and gsm8k accuracy collapses
-      # from ~95% to ~40% (run 25583345967 eval_results_all).
-      tool-call-parser: deepseekv4
+      tool-call-parser: deepseekv4  # gates the dsv4 chat-encoding spec.
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
