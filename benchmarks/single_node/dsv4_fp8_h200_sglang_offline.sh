@@ -69,6 +69,7 @@ patch_sglang_dsv4_empty_attn_allreduce() {
 from pathlib import Path
 
 import sglang.srt.models.deepseek_v4 as deepseek_v4
+import sglang.srt.layers.moe.moe_runner.marlin as marlin_runner
 
 path = Path(deepseek_v4.__file__)
 text = path.read_text()
@@ -97,15 +98,37 @@ elif old in text:
     print(f"[dsv4-sglang-patch] Patched {path}")
 else:
     raise RuntimeError(f"Unable to patch DSV4 empty attention allreduce in {path}")
+
+path = Path(marlin_runner.__file__)
+text = path.read_text()
+old = """    hidden_states = dispatch_output.hidden_states
+    topk_output = dispatch_output.topk_output
+
+    assert runner_config.activation == "silu", "Only SiLU activation is supported."
+"""
+new = """    hidden_states = dispatch_output.hidden_states
+    if hidden_states.shape[0] == 0:
+        return StandardCombineInput(hidden_states=hidden_states)
+    topk_output = dispatch_output.topk_output
+
+    assert runner_config.activation == "silu", "Only SiLU activation is supported."
+"""
+
+if new in text:
+    print(f"[dsv4-sglang-patch] Already patched {path}")
+elif old in text:
+    path.write_text(text.replace(old, new))
+    print(f"[dsv4-sglang-patch] Patched {path}")
+else:
+    raise RuntimeError(f"Unable to patch Marlin empty MoE dispatch in {path}")
 PY
 }
 
 # H200 cannot use the DeepEP+DeepGEMM FP4 path for DSV4 because that FP4 recipe
 # is Blackwell-only. It also cannot fit the converted-FP8 expert layout. Keep
 # the native MXFP4 expert layout and use Marlin with the standard EP path.
-# Keep DP-attn at size 2 so the model fits on H200, and patch SGLang so empty
-# attention TP shards still participate in the output allreduce instead of
-# asserting when a DP shard receives no tokens.
+# Keep DP-attn at size 2 so the model fits on H200, and patch SGLang empty
+# DPA shards out of zero-token attention and Marlin CUDA kernel paths.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-0}"
