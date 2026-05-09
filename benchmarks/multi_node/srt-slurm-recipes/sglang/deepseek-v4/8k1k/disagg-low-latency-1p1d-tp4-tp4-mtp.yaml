@@ -6,12 +6,12 @@ frontend:
   num_additional_frontends: 8
 
 dynamo:
-  hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
+  hash: "34d55a596fb8d3d44daefe425ec1e303131f4d2c"
   install: true
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260508-2cf1a4ab"
   precision: "mxfp4"
 
 sbatch_directives:
@@ -33,8 +33,8 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
@@ -51,8 +51,8 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_USE_JIT_NORM: "1"
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
@@ -72,6 +72,7 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
+      tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
@@ -92,6 +93,7 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
+      tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
