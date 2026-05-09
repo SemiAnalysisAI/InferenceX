@@ -73,7 +73,7 @@ MOE_RUNNER_ARGS=(--moe-runner-backend marlin)
 # DeepGEMM's FP4 recipe, which is Blackwell-only.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.94}"
-    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-16}"
+    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-32}"
     DPA_ENGINE_ARGS=(
         --moe-dense-tp-size 1
         --enable-dp-lm-head
