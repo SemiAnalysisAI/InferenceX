@@ -2313,3 +2313,10 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 disaggregated multi-node coverage using Dynamo vLLM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm
+  description:
+    - "Update B300 Dynamo vLLM recipes from vllm/vllm-openai:v0.20.0-cu130 to vllm/vllm-openai:v0.20.1"
+    - "Align recipe identity metadata with the nvidia-master image so srt-slurm launches the v0.20.1 stack"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
