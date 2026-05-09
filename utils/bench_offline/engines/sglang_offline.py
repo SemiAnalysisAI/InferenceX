@@ -15,7 +15,7 @@ from latency_utils import to_seconds
 # Re-imported below where used.
 
 
-def _sgl_env_for_dsv4(dp_attn: bool) -> None:
+def _sgl_env_for_dsv4(dp_attn: bool, dpa_env_preset: str) -> None:
     """Mirror the SGLANG_* env exports the b300 sglang_mtp launch script
     sets before `sglang serve`. Apply before `sgl.Engine` init."""
     common = {
@@ -32,23 +32,30 @@ def _sgl_env_for_dsv4(dp_attn: bool) -> None:
     # N tokens. Force per-token flushes so request timing has real decode
     # latency instead of only final wall-clock latency.
     os.environ["SGLANG_FORCE_STREAM_INTERVAL"] = "1"
-    if dp_attn:
+    if not dp_attn:
+        return
+
+    if dpa_env_preset == "fp4":
         for k, v in {
             "SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN": "1",
-            "SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE": "0",
-            "SGLANG_OPT_FIX_HASH_MEGA_MOE": "0",
+            "SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE": "1",
+            "SGLANG_OPT_FIX_HASH_MEGA_MOE": "1",
             "SGLANG_OPT_USE_FAST_MASK_EP": "1",
             "SGLANG_OPT_FIX_MEGA_MOE_MEMORY": "1",
+            "SGLANG_OPT_USE_JIT_EP_ACTIVATION": "1",
             "SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK": "4096",
             "SGLANG_OPT_FIX_NEXTN_MEGA_MOE": "1",
             "SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK": "0",
+            "SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2": "1",
         }.items():
-            os.environ.setdefault(k, v)
+            os.environ[k] = v
+    elif dpa_env_preset == "fp8":
+        os.environ.setdefault("SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK", "1")
 
 
 def run(args: argparse.Namespace,
         prompts: List[Tuple[str, int, int]]) -> Dict[str, Any]:
-    _sgl_env_for_dsv4(args.dp_attn)
+    _sgl_env_for_dsv4(args.dp_attn, args.sglang_dpa_env_preset)
     import sglang as sgl
 
     output_len = args.infinitebench_output_len
@@ -73,22 +80,8 @@ def run(args: argparse.Namespace,
 
     # sgl.Engine supports DP-attn natively in single-process: it spawns
     # `dp_size` scheduler subprocesses internally (one per DP rank), each
-    # replicating attention while sharing experts via EP. Mirrors the
-    # b300 sglang_mtp.sh DP-attn path (mega_moe env exports + deepep a2a).
+    # replicating attention while sharing experts via EP.
     if args.dp_attn:
-        # Mega MoE env knobs from dsv4_fp4_b300_sglang_mtp.sh DP-attn branch.
-        for k, v in {
-            "SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE": "1",
-            "SGLANG_OPT_FIX_HASH_MEGA_MOE": "1",
-            "SGLANG_OPT_USE_FAST_MASK_EP": "1",
-            "SGLANG_OPT_FIX_MEGA_MOE_MEMORY": "1",
-            "SGLANG_OPT_USE_JIT_EP_ACTIVATION": "1",
-            "SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK": "4096",
-            "SGLANG_OPT_FIX_NEXTN_MEGA_MOE": "1",
-            "SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK": "0",
-            "SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2": "1",
-        }.items():
-            os.environ[k] = v
         deepep_config = (
             '{"normal_dispatch":{"num_sms":96},'
             '"normal_combine":{"num_sms":96}}'

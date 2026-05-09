@@ -116,6 +116,9 @@ def main() -> None:
     parser.add_argument("--deepep-mode", default=None,
                         choices=["auto", "normal", "low_latency"],
                         help="SGLang DeepEP mode.")
+    parser.add_argument("--sglang-dpa-env-preset", default="fp4",
+                        choices=["fp4", "fp8", "none"],
+                        help="SGLang DP-attention environment preset.")
     parser.add_argument("--cpu-offload-gb", type=int, default=0,
                         help="SGLang CPU offload budget in GiB.")
     parser.add_argument("--kv-cache-dtype", default=None,
