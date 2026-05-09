@@ -97,7 +97,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 4
       data-parallel-size: 4
@@ -122,7 +122,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 16
       data-parallel-size: 16
@@ -142,7 +142,7 @@ backend:
       mem-fraction-static: 0.94
       max-running-requests: 3072
       cuda-graph-max-bs: 256
-      swa-full-tokens-ratio: 0.15
+      swa-full-tokens-ratio: 0.3
       context-length: 16384
       stream-interval: 60
 
