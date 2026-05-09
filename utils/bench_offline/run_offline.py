@@ -109,6 +109,8 @@ def main() -> None:
                         choices=["chat", "thinking"])
     parser.add_argument("--moe-runner-backend", default="flashinfer_mxfp4",
                         help="SGLang MoE runner backend (flashinfer_mxfp4 for FP4/Blackwell, marlin for FP8/Hopper)")
+    parser.add_argument("--dpa-moe-runner-backend", default=None,
+                        help="SGLang MoE runner backend override used only with --dp-attn.")
     parser.add_argument("--moe-dense-tp-size", type=int, default=None,
                         help="SGLang dense MoE TP size for DP-attention layouts.")
     parser.add_argument("--enable-dp-lm-head", action="store_true",

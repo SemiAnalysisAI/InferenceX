@@ -99,6 +99,8 @@ def run(args: argparse.Namespace,
                 else 32768
             ),
         }
+        if args.dpa_moe_runner_backend is not None:
+            parallel_kwargs["moe_runner_backend"] = args.dpa_moe_runner_backend
         if args.moe_dense_tp_size is not None:
             parallel_kwargs["moe_dense_tp_size"] = args.moe_dense_tp_size
         if args.enable_dp_lm_head:
