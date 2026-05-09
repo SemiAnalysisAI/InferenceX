@@ -2787,7 +2787,7 @@ dsv4-fp8-h200-vllm-offline:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2, conc-end: 256, spec-decoding: offline }
 
 dsv4-fp8-h200-sglang-offline:
-  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  image: lmsysorg/sglang:nightly-dev-cu13-20260509-9ee83034@sha256:cda453db57f05b3311dfc3ad5e393ae5605f7e8280aaa51c847693280ba5393a
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200-dgxc
@@ -2799,7 +2799,7 @@ dsv4-fp8-h200-sglang-offline:
     - isl: 8192
       osl: 256
       search-space:
-      - { tp: 8, ep: 1, conc-start: 2, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 2, conc-end: 128, spec-decoding: offline }
 
   # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
   # pareto sweep. The single-node schema has no explicit data-parallel-size
