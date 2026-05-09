@@ -69,9 +69,12 @@ patch_sglang_dsv4_h200_dpa() {
 from pathlib import Path
 
 import sglang.srt.models.deepseek_v4 as deepseek_v4
+import sglang.srt.layers.quantization.fp8 as fp8_quant
 
 path = Path(deepseek_v4.__file__)
 text = path.read_text()
+fp8_path = Path(fp8_quant.__file__)
+fp8_text = fp8_path.read_text()
 allreduce_old = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
             assert (
                 not self.wo_b.reduce_results
@@ -140,16 +143,22 @@ layer_offload_new = """        self.self_attn = MQALayer(
         else:
             construct_mlp_on_cpu = False
         if construct_mlp_on_cpu:
+            from sglang.srt.layers.quantization import fp8 as fp8_quant
+
+            fp8_quant._SGLANG_FORCE_FP8_MOE_WEIGHT_DEVICE = "cpu"
             with torch.device("cpu"):
-                self.mlp = deepseek_v2.DeepseekV2MoE(
-                    config=config,
-                    quant_config=moe_quant_config_override or quant_config,
-                    prefix=add_prefix("mlp", prefix),
-                    layer_id=self.layer_id,
-                    alt_stream=alt_streams[0] if alt_streams is not None else None,
-                    is_nextn=is_nextn,
-                    is_deepseek_v4=True,
-                )
+                try:
+                    self.mlp = deepseek_v2.DeepseekV2MoE(
+                        config=config,
+                        quant_config=moe_quant_config_override or quant_config,
+                        prefix=add_prefix("mlp", prefix),
+                        layer_id=self.layer_id,
+                        alt_stream=alt_streams[0] if alt_streams is not None else None,
+                        is_nextn=is_nextn,
+                        is_deepseek_v4=True,
+                    )
+                finally:
+                    fp8_quant._SGLANG_FORCE_FP8_MOE_WEIGHT_DEVICE = None
         else:
             self.mlp = deepseek_v2.DeepseekV2MoE(
                 config=config,
@@ -159,6 +168,47 @@ layer_offload_new = """        self.self_attn = MQALayer(
                 alt_stream=alt_streams[0] if alt_streams is not None else None,
                 is_nextn=is_nextn,
                 is_deepseek_v4=True,
+            )
+"""
+
+fp8_device_old = """            w13_weight = torch.nn.Parameter(
+                torch.empty(
+                    num_experts,
+                    w13_up_dim,
+                    hidden_size,
+                    dtype=params_dtype,
+                ),
+                requires_grad=False,
+            )
+            w2_weight = torch.nn.Parameter(
+                torch.empty(
+                    num_experts,
+                    hidden_size,
+                    w2_up_dim,
+                    dtype=params_dtype,
+                ),
+                requires_grad=False,
+            )
+"""
+fp8_device_new = """            w13_weight = torch.nn.Parameter(
+                torch.empty(
+                    num_experts,
+                    w13_up_dim,
+                    hidden_size,
+                    dtype=params_dtype,
+                    device=globals().get("_SGLANG_FORCE_FP8_MOE_WEIGHT_DEVICE", None),
+                ),
+                requires_grad=False,
+            )
+            w2_weight = torch.nn.Parameter(
+                torch.empty(
+                    num_experts,
+                    hidden_size,
+                    w2_up_dim,
+                    dtype=params_dtype,
+                    device=globals().get("_SGLANG_FORCE_FP8_MOE_WEIGHT_DEVICE", None),
+                ),
+                requires_grad=False,
             )
 """
 
@@ -192,6 +242,19 @@ else:
 
 if changed:
     path.write_text(text)
+
+fp8_changed = False
+if fp8_device_new in fp8_text:
+    print(f"[dsv4-sglang-patch] FP8 MoE CPU device override already patched in {fp8_path}")
+elif fp8_device_old in fp8_text:
+    fp8_text = fp8_text.replace(fp8_device_old, fp8_device_new)
+    fp8_changed = True
+    print(f"[dsv4-sglang-patch] Patched FP8 MoE CPU device override in {fp8_path}")
+else:
+    raise RuntimeError(f"Unable to patch FP8 MoE CPU device override in {fp8_path}")
+
+if fp8_changed:
+    fp8_path.write_text(fp8_text)
 PY
 }
 
