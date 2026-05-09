@@ -82,6 +82,7 @@ def run(args: argparse.Namespace,
     # `dp_size` scheduler subprocesses internally (one per DP rank), each
     # replicating attention while sharing experts via EP.
     if args.dp_attn:
+        a2a_backend = args.dpa_moe_a2a_backend
         deepep_config = (
             '{"normal_dispatch":{"num_sms":96},'
             '"normal_combine":{"num_sms":96}}'
@@ -91,21 +92,23 @@ def run(args: argparse.Namespace,
             "dp_size": args.tp,           # DP across all TP ranks
             "ep_size": args.ep if args.ep > 1 else args.tp,
             "enable_dp_attention": True,
-            "moe_a2a_backend": "deepep",
-            "deepep_config": deepep_config,
             "chunked_prefill_size": (
                 args.chunked_prefill_size
                 if args.chunked_prefill_size is not None
                 else 32768
             ),
         }
+        if a2a_backend != "none":
+            parallel_kwargs["moe_a2a_backend"] = a2a_backend
+        if a2a_backend == "deepep":
+            parallel_kwargs["deepep_config"] = deepep_config
         if args.dpa_moe_runner_backend is not None:
             parallel_kwargs["moe_runner_backend"] = args.dpa_moe_runner_backend
         if args.moe_dense_tp_size is not None:
             parallel_kwargs["moe_dense_tp_size"] = args.moe_dense_tp_size
         if args.enable_dp_lm_head:
             parallel_kwargs["enable_dp_lm_head"] = True
-        if args.deepep_mode is not None:
+        if args.deepep_mode is not None and a2a_backend != "none":
             parallel_kwargs["deepep_mode"] = args.deepep_mode
     else:
         parallel_kwargs = {
