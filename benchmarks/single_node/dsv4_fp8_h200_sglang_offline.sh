@@ -272,7 +272,6 @@ if [[ "${DP_ATTENTION}" == "true" ]]; then
         --dpa-size 2
         --dpa-moe-a2a-backend none
         --dpa-moe-runner-backend triton
-        --moe-dense-tp-size 1
         --enable-dp-lm-head
         --sglang-dpa-env-preset fp8
     )
