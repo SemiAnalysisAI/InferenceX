@@ -133,18 +133,33 @@ layer_offload_new = """        self.self_attn = MQALayer(
         if is_dp_attention_enabled():
             from sglang.srt.utils.offloader import get_offloader
 
-            self.self_attn = get_offloader().maybe_offload_to_cpu(self.self_attn)
-        self.mlp = deepseek_v2.DeepseekV2MoE(
-            config=config,
-            quant_config=moe_quant_config_override or quant_config,
-            prefix=add_prefix("mlp", prefix),
-            layer_id=self.layer_id,
-            alt_stream=alt_streams[0] if alt_streams is not None else None,
-            is_nextn=is_nextn,
-            is_deepseek_v4=True,
-        )
-        if is_dp_attention_enabled():
-            self.mlp = get_offloader().maybe_offload_to_cpu(self.mlp)
+            offloader = get_offloader()
+            construct_mlp_on_cpu = getattr(
+                offloader, "_cpu_offload_bytes", 0
+            ) < getattr(offloader, "_cpu_offload_max_bytes", 0)
+        else:
+            construct_mlp_on_cpu = False
+        if construct_mlp_on_cpu:
+            with torch.device("cpu"):
+                self.mlp = deepseek_v2.DeepseekV2MoE(
+                    config=config,
+                    quant_config=moe_quant_config_override or quant_config,
+                    prefix=add_prefix("mlp", prefix),
+                    layer_id=self.layer_id,
+                    alt_stream=alt_streams[0] if alt_streams is not None else None,
+                    is_nextn=is_nextn,
+                    is_deepseek_v4=True,
+                )
+        else:
+            self.mlp = deepseek_v2.DeepseekV2MoE(
+                config=config,
+                quant_config=moe_quant_config_override or quant_config,
+                prefix=add_prefix("mlp", prefix),
+                layer_id=self.layer_id,
+                alt_stream=alt_streams[0] if alt_streams is not None else None,
+                is_nextn=is_nextn,
+                is_deepseek_v4=True,
+            )
 """
 
 changed = False
@@ -167,13 +182,13 @@ else:
     raise RuntimeError(f"Unable to patch DSV4 DPA embedding sharding in {path}")
 
 if layer_offload_new in text:
-    print(f"[dsv4-sglang-patch] DPA early layer offload already patched in {path}")
+    print(f"[dsv4-sglang-patch] DPA CPU MoE construction already patched in {path}")
 elif layer_offload_old in text:
     text = text.replace(layer_offload_old, layer_offload_new)
     changed = True
-    print(f"[dsv4-sglang-patch] Patched DPA early layer offload in {path}")
+    print(f"[dsv4-sglang-patch] Patched DPA CPU MoE construction in {path}")
 else:
-    raise RuntimeError(f"Unable to patch DSV4 DPA early layer offload in {path}")
+    raise RuntimeError(f"Unable to patch DSV4 DPA CPU MoE construction in {path}")
 
 if changed:
     path.write_text(text)
@@ -185,8 +200,8 @@ PY
 # during FP8 MoE weight construction, so offload a small slice of
 # weights to keep EP+DPA resident enough to start. Patch SGLang's empty attention
 # shards so zero-token DPA ranks still enter the all-reduce instead of hanging,
-# shard the input embedding over attention TP, and apply offload inside layer
-# construction so H200 can clear the first FP8 MoE allocation peak.
+# shard the input embedding over attention TP, and construct CPU-offloaded MoE
+# layers on CPU so H200 can clear the first FP8 MoE allocation peak.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-16}"
