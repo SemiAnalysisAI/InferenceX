@@ -1714,21 +1714,79 @@ dsr1-fp4-mi355x-sglang-disagg-mtp-exp:
       osl: 1024
       search-space:
       # MTP configurations
-      # 2*DEP8 + 1*DEP8
+      # 1P1D pure TP8
       - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
+        conc-list: [ 1, 2, 4, 8 ]
         prefill:
-          num-worker: 2
+          num-worker: 1
           tp: 8
-          ep: 8
-          dp-attn: true
+          ep: 1
+          dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=2"
+          - "PREFILL_NODES=1"
         decode:
           num-worker: 1
           tp: 8
-          ep: 8
-          dp-attn: true
+          ep: 1
+          dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
+
+
+      # 1P2D TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1P2D TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=2"
+
+      # 1P2D TP4
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=2"
