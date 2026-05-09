@@ -264,10 +264,10 @@ PY
 # weights to keep EP+DPA resident enough to start. Patch SGLang's empty attention
 # shards so zero-token DPA ranks still enter the all-reduce instead of hanging,
 # shard the input embedding over attention TP, and construct CPU-offloaded MoE
-# layers on CPU so H200 can clear the first FP8 MoE allocation peak.
+# layers on CPU so H200 can clear the FP8 MoE allocation peaks.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
-    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-16}"
+    SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-32}"
     DPA_ENGINE_ARGS=(
         --dpa-size 2
         --dpa-moe-a2a-backend none
