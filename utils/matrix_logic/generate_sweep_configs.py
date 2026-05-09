@@ -17,7 +17,8 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "8k1k": (8192, 1024)
+    "8k1k": (8192, 1024),
+    "8k256": (8192, 256),
 }
 
 MIN_EVAL_CONC = 16
@@ -33,6 +34,14 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
+
+def exp_name_seq_len_to_str(isl: int, osl: int) -> str:
+    """Convert configured sequence lengths to the effective benchmark label."""
+    if (isl, osl) in (seq_len_stoi["8k1k"], seq_len_stoi["8k256"]):
+        return "8k256"
+    return seq_len_to_str(isl, osl)
+
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy:
@@ -269,7 +278,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_values = filtered_conc
 
-                    seq_len_str = seq_len_to_str(isl, osl)
+                    seq_len_str = exp_name_seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
                     for runner_value in runners_for_entry:
@@ -338,7 +347,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_end = min(conc_end, args.max_conc)
 
-                    seq_len_str = seq_len_to_str(isl, osl)
+                    seq_len_str = exp_name_seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
                     conc = conc_start
@@ -689,7 +698,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
             if seq_lens_filter and (isl, osl) not in seq_lens_filter:
                 continue
 
-            seq_len_str = seq_len_to_str(isl, osl)
+            seq_len_str = exp_name_seq_len_to_str(isl, osl)
 
             for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
                 if is_multinode:

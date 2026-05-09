@@ -6,6 +6,7 @@ from generate_sweep_configs import (
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
+    exp_name_seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
     generate_test_config_sweep,
@@ -187,6 +188,11 @@ class TestSeqLenToStr:
         """Unknown sequence lengths should return isl_osl format."""
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
+
+    def test_effective_infinitebench_exp_name_sequence_length(self):
+        """InfiniteBench experiment names reflect the effective output length."""
+        assert exp_name_seq_len_to_str(8192, 1024) == "8k256"
+        assert exp_name_seq_len_to_str(1024, 1024) == "1k1k"
 
 
 # =============================================================================
@@ -1970,4 +1976,3 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-

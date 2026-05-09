@@ -36,7 +36,10 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+# Sized for one in-flight prefill at ISL+OSL (no double-prefill overlap).
+# 8K/256 is prefill-dominated; the prior 2*ISL budget over-reserved KV pool
+# for a worst-case OSL=1024 decode stream we don't have.
+MAX_NUM_BATCHED_TOKENS=$(( ISL + OSL ))
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -47,8 +50,11 @@ else
     SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
 fi
 
-# use 2 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=2
+# MTP-2 for 8K/256: with only ~85 decode steps per request, MTP-3's draft
+# overhead doesn't amortize. MTP-2 is the apples-to-apples middle ground
+# vs the cann-recipes-infer A3 reference (next_n=1) and A950 (next_n=3).
+# Override via DSV4_MTP_SPEC_TOKENS env if you want to sweep.
+NUM_SPEC_TOKENS="${DSV4_MTP_SPEC_TOKENS:-2}"
 
 start_gpu_monitor
 
@@ -67,7 +73,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-cudagraph-capture-size 2048 \
+    --max-cudagraph-capture-size 256 \
     --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
@@ -87,7 +93,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$CONC" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

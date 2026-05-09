@@ -37,6 +37,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+from pathlib import Path
 from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -105,18 +106,18 @@ def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
     )
 
 
-def _apply_chat_template(prompt, tokenizer, dsv4):
+def _apply_chat_template(prompt, tokenizer, dsv4, dsv4_thinking_mode: str = "thinking"):
     """Render a single user message into the appropriate chat-template prompt.
 
     When `dsv4` is True we use the self-contained DeepSeek-V4 encoder
-    (encoding_dsv4.encode_messages) which emits the
-    <bos><User>...<Assistant><think> framing the model expects. Otherwise we
+    (encoding_dsv4.encode_messages), with the requested chat/thinking mode,
+    instead of depending on tokenizer-bundled jinja. Otherwise we
     fall back to the tokenizer's built-in jinja chat template.
     """
     if dsv4:
         return dsv4_encode_messages(
             [{"role": "user", "content": prompt}],
-            thinking_mode="thinking",
+            thinking_mode=dsv4_thinking_mode,
         )
     return tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt}],
@@ -128,7 +129,8 @@ def _apply_chat_template(prompt, tokenizer, dsv4):
 def _process_prompt_chunk(chunk_args):
     """Generate a chunk of random prompts in a worker process."""
     (indices, prefix_token_ids, input_lens, output_lens, offsets,
-     prefix_len, vocab_size, use_chat_template, dsv4, seed) = chunk_args
+     prefix_len, vocab_size, use_chat_template, dsv4,
+     dsv4_thinking_mode, seed) = chunk_args
 
     rng = np.random.RandomState(seed)
     tokenizer = _worker_tokenizer
@@ -156,7 +158,8 @@ def _process_prompt_chunk(chunk_args):
             prompt = tokenizer.decode(prompt_token_ids)
 
         if use_chat_template:
-            prompt = _apply_chat_template(prompt, tokenizer, dsv4)
+            prompt = _apply_chat_template(
+                prompt, tokenizer, dsv4, dsv4_thinking_mode)
 
         prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
         mismatch = prompt_len - tgt_prompt_len
@@ -174,6 +177,7 @@ def sample_random_requests(
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
     dsv4: bool = False,
+    dsv4_thinking_mode: str = "thinking",
     tokenizer_id: Optional[str] = None,
     tokenizer_mode: str = "auto",
     trust_remote_code: bool = False,
@@ -186,7 +190,8 @@ def sample_random_requests(
         raise ValueError("--dsv4 requires --use-chat-template to be set.")
 
     if use_chat_template:
-        chat_template_dummy = _apply_chat_template("a", tokenizer, dsv4)
+        chat_template_dummy = _apply_chat_template(
+            "a", tokenizer, dsv4, dsv4_thinking_mode)
         tokenized_chat_template_dummy = tokenizer.encode(chat_template_dummy, add_special_tokens=False)
         chat_template_len = len(tokenized_chat_template_dummy) - 1
         input_len = input_len - chat_template_len
@@ -233,6 +238,7 @@ def sample_random_requests(
                 vocab_size,
                 use_chat_template,
                 dsv4,
+                dsv4_thinking_mode,
                 int(local_rng.randint(0, 2**31)),
             ))
 
@@ -279,7 +285,8 @@ def sample_random_requests(
                 prompt = tokenizer.decode(prompt_token_ids)
 
             if use_chat_template:
-                prompt = _apply_chat_template(prompt, tokenizer, dsv4)
+                prompt = _apply_chat_template(
+                    prompt, tokenizer, dsv4, dsv4_thinking_mode)
 
             prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
             mismatches.append(prompt_len - tgt_prompt_len)
@@ -300,6 +307,216 @@ def sample_random_requests(
         f'max={max(r[2] for r in input_requests):<4d}  '
         f'mean={np.mean([r[2] for r in input_requests]):<7.2f} '
     )
+    print('-' * len(header_str), '\n')
+
+    return input_requests
+
+
+INFINITEBENCH_REPO_ID = "xinrongzhang2022/InfiniteBench"
+DEFAULT_INFINITEBENCH_TASK = "infinitebench"
+DEFAULT_INFINITEBENCH_TASK_FILE = "longbook_qa_eng.jsonl"
+INFINITEBENCH_PREFIX = (
+    "Please read a part of the book below, and then give me the summary.\n"
+    "[start of the book]\n"
+)
+
+
+def _infinitebench_suffix(max_new_tokens: int) -> str:
+    return (
+        "\n[end of the book]\n\n"
+        "Now you have read it. Please summarize it for me. "
+        "First, tell me the title and the author, and then tell the story "
+        f"in {max_new_tokens} words.\n\n "
+    )
+
+
+def _infinitebench_task_file(task: str) -> str:
+    if task == DEFAULT_INFINITEBENCH_TASK:
+        return DEFAULT_INFINITEBENCH_TASK_FILE
+    if task.endswith(".jsonl"):
+        return task
+    return f"{task}.jsonl"
+
+
+def _resolve_infinitebench_jsonl(dataset_path: Optional[str],
+                                 task_file: str) -> Optional[Path]:
+    candidates: List[Path] = []
+    if dataset_path:
+        root = Path(dataset_path)
+        if root.is_file():
+            candidates.append(root)
+        else:
+            candidates.extend([
+                root / task_file,
+                root / "InfiniteBench" / task_file,
+            ])
+    else:
+        candidates.extend([
+            Path.cwd() / "dataset" / "InfiniteBench" / task_file,
+            Path.cwd() / "data" / "InfiniteBench" / task_file,
+            Path("/workspace/dataset/InfiniteBench") / task_file,
+            Path("/workspace/data/InfiniteBench") / task_file,
+        ])
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _download_infinitebench_jsonl(task_file: str) -> Path:
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as exc:
+        raise RuntimeError(
+            "huggingface_hub is required to download InfiniteBench. "
+            "Install it or pass --dataset-path pointing at an InfiniteBench JSONL."
+        ) from exc
+
+    return Path(
+        hf_hub_download(
+            repo_id=INFINITEBENCH_REPO_ID,
+            repo_type="dataset",
+            filename=task_file,
+        ))
+
+
+def _load_infinitebench_contexts(dataset_path: Optional[str],
+                                 task: str,
+                                 num_prompts: int) -> List[str]:
+    task_file = _infinitebench_task_file(task)
+    jsonl_path = _resolve_infinitebench_jsonl(dataset_path, task_file)
+    if jsonl_path is None:
+        jsonl_path = _download_infinitebench_jsonl(task_file)
+
+    contexts: List[str] = []
+    with open(jsonl_path, "r", encoding="utf-8") as fin:
+        for line in fin:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            context = row.get("context", row.get("content"))
+            if context is None:
+                raise ValueError(
+                    f"Expected 'context' or 'content' in {jsonl_path}, got keys "
+                    f"{sorted(row.keys())}")
+            contexts.append(context)
+            if len(contexts) >= num_prompts:
+                break
+
+    if not contexts:
+        raise ValueError(f"No InfiniteBench contexts loaded from {jsonl_path}")
+
+    if len(contexts) < num_prompts:
+        contexts = (contexts * (num_prompts // len(contexts) + 1))[:num_prompts]
+    return contexts
+
+
+def _format_infinitebench_prompt(raw_prompt: str,
+                                 tokenizer: PreTrainedTokenizerBase,
+                                 use_chat_template: bool,
+                                 dsv4: bool,
+                                 dsv4_thinking_mode: str) -> str:
+    if use_chat_template:
+        return _apply_chat_template(raw_prompt, tokenizer, dsv4,
+                                    dsv4_thinking_mode)
+    return raw_prompt
+
+
+def _token_count(tokenizer: PreTrainedTokenizerBase, text: str) -> int:
+    return len(tokenizer.encode(text, add_special_tokens=False))
+
+
+def sample_infinitebench_requests(
+    dataset_path: Optional[str],
+    task: str,
+    input_len: int,
+    output_len: int,
+    num_prompts: int,
+    tokenizer: PreTrainedTokenizerBase,
+    use_chat_template: bool = False,
+    dsv4: bool = False,
+    dsv4_thinking_mode: str = "chat",
+) -> List[Tuple[str, int, int]]:
+    """Build CANN-style InfiniteBench summary requests.
+
+    This mirrors cann-recipes-infer's DeepSeek-V4 data path: load
+    InfiniteBench contexts, trim the body to fit `input_len` after the
+    fixed summary wrapper, and send each prompt with a fixed `output_len`.
+    """
+    if dsv4 and not use_chat_template:
+        raise ValueError("--dsv4 requires --use-chat-template to be set.")
+
+    suffix = _infinitebench_suffix(output_len)
+    wrapper_prompt = INFINITEBENCH_PREFIX + suffix
+    rendered_wrapper = _format_infinitebench_prompt(
+        wrapper_prompt, tokenizer, use_chat_template, dsv4, dsv4_thinking_mode)
+    system_prompt_len = _token_count(tokenizer, rendered_wrapper)
+    context_budget = input_len - system_prompt_len
+    if context_budget <= 0:
+        raise ValueError(
+            f"InfiniteBench input length {input_len} is too short for the "
+            f"rendered prompt wrapper ({system_prompt_len} tokens).")
+
+    contexts = _load_infinitebench_contexts(dataset_path, task, num_prompts)
+    prompt_cache = {}
+    input_requests = []
+    mismatches = []
+
+    print(
+        "Building InfiniteBench requests: "
+        f"task={task}, input_len={input_len}, output_len={output_len}, "
+        f"num_prompts={num_prompts}, dsv4={dsv4}, "
+        f"dsv4_thinking_mode={dsv4_thinking_mode}")
+    t0 = time.perf_counter()
+    for context in contexts:
+        cached = prompt_cache.get(context)
+        if cached is not None:
+            prompt, prompt_len, output_len_cached, extra = cached
+            mismatches.append(prompt_len - input_len)
+            input_requests.append((prompt, prompt_len, output_len_cached, extra))
+            continue
+
+        # Mirror cann-recipes-infer build_dataset_input: tokenize raw context
+        # with truncation to the system-prompt-adjusted budget, decode back,
+        # and assemble. No iterative re-encode loop — the decode roundtrip
+        # may shift the final length by a few tokens, but that fits within
+        # the model's max-seq-len headroom.
+        context_ids = tokenizer.encode(
+            context,
+            add_special_tokens=False,
+            truncation=True,
+            max_length=context_budget,
+        )
+        trimmed_context = tokenizer.decode(
+            context_ids, skip_special_tokens=True)
+        raw_prompt = INFINITEBENCH_PREFIX + trimmed_context + suffix
+        prompt = _format_infinitebench_prompt(
+            raw_prompt, tokenizer, use_chat_template, dsv4,
+            dsv4_thinking_mode)
+        prompt_len = _token_count(tokenizer, prompt)
+
+        cached = (prompt, prompt_len, output_len, None)
+        prompt_cache[context] = cached
+        mismatches.append(prompt_len - input_len)
+        input_requests.append(cached)
+
+    elapsed = time.perf_counter() - t0
+    header_str = f'{"-"*16}  InfiniteBench Input/Output Statistics  {"-"*16}'
+    print(header_str)
+    print(f" prompt_build_time_s: {elapsed:.2f}")
+    print(f" unique_contexts: {len(prompt_cache)} / {len(contexts)}")
+    print(
+        f' input_lens : '
+        f'min={min(r[1] for r in input_requests):<4d}  '
+        f'max={max(r[1] for r in input_requests):<4d}  '
+        f'mean={np.mean([r[1] for r in input_requests]):<7.2f}  '
+        f'avg_token_mismatch={np.mean(mismatches):<5.2f} ')
+    print(
+        f' output_lens: '
+        f'min={min(r[2] for r in input_requests):<4d}  '
+        f'max={max(r[2] for r in input_requests):<4d}  '
+        f'mean={np.mean([r[2] for r in input_requests]):<7.2f} ')
     print('-' * len(header_str), '\n')
 
     return input_requests
@@ -475,6 +692,7 @@ async def benchmark(
     selected_percentile_metrics: List[str],
     selected_percentiles: List[str],
     ignore_eos: bool,
+    temperature: float,
     goodput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
     lora_modules: Optional[List[str]],
@@ -502,6 +720,7 @@ async def benchmark(
         best_of=best_of,
         multi_modal_content=test_mm_content,
         ignore_eos=ignore_eos,
+        temperature=temperature,
     )
 
     if num_warmups > 0:
@@ -523,6 +742,9 @@ async def benchmark(
 
         if warmup_pbar is not None:
             warmup_pbar.close()
+        # Brief settle delay so any in-flight scheduler/decoder cleanup
+        # from warmup completes before timed requests start.
+        await asyncio.sleep(2.0)
         print("Warmup completed.")
 
     if lora_modules:
@@ -542,7 +764,8 @@ async def benchmark(
                                          logprobs=logprobs,
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,
-                                         ignore_eos=ignore_eos)
+                                         ignore_eos=ignore_eos,
+                                         temperature=temperature)
         profile_output = await request_func(request_func_input=profile_input)
         if profile_output.success:
             print("Profiler started")
@@ -589,7 +812,8 @@ async def benchmark(
                                               logprobs=logprobs,
                                               best_of=best_of,
                                               multi_modal_content=mm_content,
-                                              ignore_eos=ignore_eos)
+                                              ignore_eos=ignore_eos,
+                                              temperature=temperature)
         tasks.append(
             asyncio.create_task(
                 limited_request_func(request_func_input=request_func_input,
@@ -606,6 +830,7 @@ async def benchmark(
             output_len=test_output_len,
             logprobs=logprobs,
             best_of=best_of,
+            temperature=temperature,
         )
         profile_output = await request_func(request_func_input=profile_input)
         if profile_output.success:
@@ -798,10 +1023,24 @@ def main(args: argparse.Namespace):
             tokenizer=tokenizer,
             use_chat_template=args.use_chat_template,
             dsv4=args.dsv4,
+            dsv4_thinking_mode=args.dsv4_thinking_mode,
             tokenizer_id=tokenizer_id,
             tokenizer_mode=tokenizer_mode,
             trust_remote_code=args.trust_remote_code,
             num_workers=args.random_num_workers,
+        )
+
+    elif args.dataset_name == "infinitebench":
+        input_requests = sample_infinitebench_requests(
+            dataset_path=args.dataset_path,
+            task=args.infinitebench_task,
+            input_len=args.infinitebench_input_len,
+            output_len=args.infinitebench_output_len,
+            num_prompts=args.num_prompts,
+            tokenizer=tokenizer,
+            use_chat_template=args.use_chat_template,
+            dsv4=args.dsv4,
+            dsv4_thinking_mode=args.dsv4_thinking_mode,
         )
 
     else:
@@ -834,6 +1073,7 @@ def main(args: argparse.Namespace):
                 float(p) for p in args.metric_percentiles.split(",")
             ],
             ignore_eos=args.ignore_eos,
+            temperature=args.temperature,
             goodput_config_dict=goodput_config_dict,
             max_concurrency=args.max_concurrency,
             lora_modules=args.lora_modules,
@@ -851,6 +1091,13 @@ def main(args: argparse.Namespace):
         result_json["tokenizer_id"] = tokenizer_id
         result_json["best_of"] = args.best_of
         result_json["num_prompts"] = args.num_prompts
+        result_json["dataset_name"] = args.dataset_name
+        result_json["temperature"] = args.temperature
+        if args.dataset_name == "infinitebench":
+            result_json["infinitebench_task"] = args.infinitebench_task
+            result_json["infinitebench_input_len"] = args.infinitebench_input_len
+            result_json["infinitebench_output_len"] = args.infinitebench_output_len
+            result_json["dsv4_thinking_mode"] = args.dsv4_thinking_mode
 
         # Metadata
         if args.metadata:
@@ -871,6 +1118,15 @@ def main(args: argparse.Namespace):
 
         # Merge with benchmark result
         result_json = {**result_json, **benchmark_result}
+
+        if args.num_chips is not None:
+            result_json["num_chips"] = args.num_chips
+            mean_tpot_ms = result_json.get("mean_tpot_ms")
+            if args.max_concurrency and mean_tpot_ms:
+                decode_tput = args.max_concurrency * 1000.0 / mean_tpot_ms
+                result_json["decode_throughput_from_mean_tpot"] = decode_tput
+                result_json["decode_throughput_per_chip_from_mean_tpot"] = (
+                    decode_tput / args.num_chips)
         
         if not args.save_detailed:
             # Remove fields with too many data points
@@ -928,8 +1184,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset-name",
         type=str,
-        default="sharegpt",
-        choices=["random"],
+        default="random",
+        choices=["random", "infinitebench"],
         help="Name of the dataset to benchmark on.",
     )
     parser.add_argument("--dataset-path",
@@ -1006,6 +1262,12 @@ if __name__ == "__main__":
         "A lower burstiness value (0 < burstiness < 1) results in more "
         "bursty requests. A higher burstiness value (burstiness > 1) "
         "results in a more uniform arrival of requests.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature sent to the serving backend.",
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -1177,7 +1439,41 @@ if __name__ == "__main__":
         action="store_true",
         help="Use the DeepSeek-V4 chat template (encoding_dsv4.py) instead of "
         "the tokenizer's built-in jinja chat template. Requires "
-        "--use-chat-template to also be set. Applies to the random dataset.",
+        "--use-chat-template to also be set.",
+    )
+    dsv4_group.add_argument(
+        "--dsv4-thinking-mode",
+        type=str,
+        default="thinking",
+        choices=["chat", "thinking"],
+        help="DeepSeek-V4 encoding mode to use with --dsv4.",
+    )
+
+    infinitebench_group = parser.add_argument_group("InfiniteBench options")
+    infinitebench_group.add_argument(
+        "--infinitebench-task",
+        type=str,
+        default=DEFAULT_INFINITEBENCH_TASK,
+        help="InfiniteBench JSONL task/file to load.",
+    )
+    infinitebench_group.add_argument(
+        "--infinitebench-input-len",
+        type=int,
+        default=8192,
+        help="Maximum rendered prompt tokens for InfiniteBench.",
+    )
+    infinitebench_group.add_argument(
+        "--infinitebench-output-len",
+        type=int,
+        default=256,
+        help="Fixed max_tokens value for each InfiniteBench request.",
+    )
+    infinitebench_group.add_argument(
+        "--num-chips",
+        type=int,
+        default=None,
+        help="Chip/GPU count used to compute CANN guide-style per-chip "
+        "decode throughput from mean TPOT.",
     )
 
     hf_group = parser.add_argument_group("hf dataset options")

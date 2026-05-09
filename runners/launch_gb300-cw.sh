@@ -106,6 +106,8 @@ git checkout "$SRT_SLURM_RECIPES_REF"
 mkdir -p "$SRT_RECIPE_DST"
 cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
 
+python3 "$GITHUB_WORKSPACE/benchmarks/multi_node/force_srt_infinitebench.py" "$PWD"
+
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
 # Runner pod is x86 but compute nodes are aarch64, and /mnt/home is

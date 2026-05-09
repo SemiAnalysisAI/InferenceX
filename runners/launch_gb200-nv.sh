@@ -184,6 +184,8 @@ else
     git checkout sa-submission-q1-2026
 fi
 
+python3 "$GITHUB_WORKSPACE/benchmarks/multi_node/force_srt_infinitebench.py" "$PWD"
+
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env

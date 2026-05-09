@@ -64,8 +64,8 @@ else
     SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
 fi
 
-# use 2 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=2
+# MTP-3 to align with cann-recipes-infer A950 reference for InfiniteBench.
+NUM_SPEC_TOKENS=3
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
