@@ -80,7 +80,7 @@ old = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 
 """
 new = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
             if self.wo_b.reduce_results:
-                empty_o = x.new_empty((0, self.n_groups * self.o_lora_rank))
+                empty_o = x.new_empty((0, self.n_local_groups * self.o_lora_rank))
                 o, _ = self.wo_b(empty_o)
                 return o
             return x
