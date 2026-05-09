@@ -2903,8 +2903,8 @@ dsv4-fp4-b300-vllm-mtp:
 # above b300 dsv4 *-mtp configs. spec-decoding=offline routes the launcher to
 # benchmarks/single_node/dsv4_fp4_b300_<framework>_offline.sh, which uses
 # vllm.LLM / sgl.Engine / tensorrt_llm.LLM directly (no HTTP server) and
-# runs one warmup batch + one timed batch in lockstep. MTP depth is set
-# inside the offline harness via DSV4_MTP_SPEC_TOKENS (default 2).
+# runs one warmup batch + one timed batch in lockstep. MTP stays disabled for
+# spec-decoding=offline; DSV4_MTP_SPEC_TOKENS only applies to mtp configs.
 dsv4-fp4-b300-vllm-offline:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro

@@ -26,7 +26,7 @@ fi
 
 nvidia-smi
 
-NUM_SPEC_TOKENS="${DSV4_MTP_SPEC_TOKENS:-2}"
+NUM_SPEC_TOKENS="$(dsv4_mtp_spec_tokens_for_spec_decoding)"
 DPA_FLAG=()
 [[ "${DP_ATTENTION}" == "true" ]] && DPA_FLAG=(--dp-attn)
 export TRTLLM_MHC_ENABLE_FUSED_HC="${TRTLLM_MHC_ENABLE_FUSED_HC:-1}"

@@ -87,6 +87,14 @@ check_env_vars() {
     fi
 }
 
+dsv4_mtp_spec_tokens_for_spec_decoding() {
+    if [[ "${SPEC_DECODING:-none}" == "mtp" ]]; then
+        printf '%s\n' "${DSV4_MTP_SPEC_TOKENS:-2}"
+    else
+        printf '0\n'
+    fi
+}
+
 # Wait for server to be ready by polling the health endpoint
 # All parameters are required
 # Parameters:

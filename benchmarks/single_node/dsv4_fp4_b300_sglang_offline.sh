@@ -27,7 +27,7 @@ fi
 
 nvidia-smi
 
-NUM_SPEC_TOKENS="${DSV4_MTP_SPEC_TOKENS:-2}"
+NUM_SPEC_TOKENS="$(dsv4_mtp_spec_tokens_for_spec_decoding)"
 DPA_FLAG=()
 [[ "${DP_ATTENTION}" == "true" ]] && DPA_FLAG=(--dp-attn)
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
