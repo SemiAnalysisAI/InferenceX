@@ -64,7 +64,7 @@ SGLANG_MAX_RUNNING_REQUESTS="${SGLANG_MAX_RUNNING_REQUESTS:-$CONC}"
 DPA_ENGINE_ARGS=()
 MOE_RUNNER_ARGS=(--moe-runner-backend triton)
 
-patch_sglang_dsv4_empty_attn_allreduce() {
+patch_sglang_dsv4_h200_dpa() {
     PYTHONNOUSERSITE=1 python3 - <<'PY'
 from pathlib import Path
 
@@ -72,13 +72,13 @@ import sglang.srt.models.deepseek_v4 as deepseek_v4
 
 path = Path(deepseek_v4.__file__)
 text = path.read_text()
-old = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
+allreduce_old = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
             assert (
                 not self.wo_b.reduce_results
             ), "short-circuiting allreduce will lead to hangs"
             return x
 """
-new = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
+allreduce_new = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 0:
             if self.wo_b.reduce_results:
                 from sglang.srt.layers.dp_attention import get_attention_tp_group
 
@@ -90,13 +90,41 @@ new = """        if not get_attn_tp_context().input_scattered and x.shape[0] == 
             return x
 """
 
-if new in text:
-    print(f"[dsv4-sglang-patch] Already patched {path}")
-elif old in text:
-    path.write_text(text.replace(old, new))
-    print(f"[dsv4-sglang-patch] Patched {path}")
+embed_old = """        self.embed_tokens = VocabParallelEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            enable_tp=not is_dp_attention_enabled(),
+        )
+"""
+embed_new = """        self.embed_tokens = VocabParallelEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            enable_tp=True,
+            use_attn_tp_group=is_dp_attention_enabled(),
+        )
+"""
+
+changed = False
+if allreduce_new in text:
+    print(f"[dsv4-sglang-patch] Empty attention allreduce already patched in {path}")
+elif allreduce_old in text:
+    text = text.replace(allreduce_old, allreduce_new)
+    changed = True
+    print(f"[dsv4-sglang-patch] Patched empty attention allreduce in {path}")
 else:
     raise RuntimeError(f"Unable to patch DSV4 empty attention allreduce in {path}")
+
+if embed_new in text:
+    print(f"[dsv4-sglang-patch] DPA embedding sharding already patched in {path}")
+elif embed_old in text:
+    text = text.replace(embed_old, embed_new)
+    changed = True
+    print(f"[dsv4-sglang-patch] Patched DPA embedding sharding in {path}")
+else:
+    raise RuntimeError(f"Unable to patch DSV4 DPA embedding sharding in {path}")
+
+if changed:
+    path.write_text(text)
 PY
 }
 
@@ -104,7 +132,8 @@ PY
 # the FP8 Triton MoE path with A2A disabled. H200 still lands close to capacity
 # during FP8 MoE weight construction, so offload a small slice of
 # weights to keep EP+DPA resident enough to start. Patch SGLang's empty attention
-# shards so zero-token DPA ranks still enter the all-reduce instead of hanging.
+# shards so zero-token DPA ranks still enter the all-reduce instead of hanging,
+# and shard the input embedding over attention TP to reduce the first MoE peak.
 if [[ "${DP_ATTENTION}" == "true" ]]; then
     SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.85}"
     SGLANG_CPU_OFFLOAD_GB="${SGLANG_CPU_OFFLOAD_GB:-16}"
@@ -117,7 +146,7 @@ if [[ "${DP_ATTENTION}" == "true" ]]; then
         --sglang-dpa-env-preset fp8
     )
     MOE_RUNNER_ARGS=()
-    patch_sglang_dsv4_empty_attn_allreduce
+    patch_sglang_dsv4_h200_dpa
     export SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1
     export SGLANG_DSV4_FP4_EXPERTS=false
     export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
