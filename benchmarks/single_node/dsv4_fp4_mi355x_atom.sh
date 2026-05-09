@@ -35,12 +35,12 @@ export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays a pinned AITER fork with ROCm/aiter#2998
-# plus the DSv4 FP8 blockscale projection dispatch fix. Install AITER before ATOM
-# because the ATOM fork imports the DSv4 top-k/logits kernels at module load.
+# plus DSv4 FP8 blockscale and MXFP4 routed-MoE correctness fixes. Install
+# AITER before ATOM because the ATOM fork imports DSv4 kernels at module load.
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-dsv4-fp8-blockscale-wkv-fix}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-c3b57b6acdbb0e534c0fb8a6ff2f063b33a895eb}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-31a6a01a3b09626ae9d26ad535c0a7ca316c84d5}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
@@ -112,7 +112,7 @@ fi
 if [ "${ATOM_DSV4_PR650:-1}" = "1" ]; then
     ATOM_PR650_REPO=${ATOM_PR650_REPO:-https://github.com/Oseltamivir/ATOM.git}
     ATOM_PR650_REF=${ATOM_PR650_REF:-dsv4-deep-l0-diag}
-    ATOM_PR650_SHA=${ATOM_PR650_SHA:-48fbc7e96f70a23e5d65e658334a2698d8c7691f}
+    ATOM_PR650_SHA=${ATOM_PR650_SHA:-595135af6b95565b11711893ca8898bdc850a56c}
     ATOM_PR650_DIR=${ATOM_PR650_DIR:-/tmp/atom-dsv4-pr650}
 
     rm -rf "$ATOM_PR650_DIR"
@@ -283,6 +283,8 @@ if [ "${EVAL_ONLY}" = "true" ]; then
         export ATOM_DSV4_PREFILL_DIAG_REF_LAYERS="${ATOM_DSV4_PREFILL_DIAG_REF_LAYERS:-0}"
         export ATOM_DSV4_PREFILL_DIAG_LINEAR_LAYERS="${ATOM_DSV4_PREFILL_DIAG_LINEAR_LAYERS:-0}"
         export ATOM_DSV4_PREFILL_DIAG_LINEAR_COMPARE="${ATOM_DSV4_PREFILL_DIAG_LINEAR_COMPARE:-1}"
+        export ATOM_DSV4_PREFILL_DIAG_MOE_REPLAY="${ATOM_DSV4_PREFILL_DIAG_MOE_REPLAY:-1}"
+        export ATOM_DSV4_PREFILL_DIAG_MOE_REPLAY_TOKENS="${ATOM_DSV4_PREFILL_DIAG_MOE_REPLAY_TOKENS:-0,44}"
         export ATOM_DSV4_PREFILL_DIAG_VERBOSE="${ATOM_DSV4_PREFILL_DIAG_VERBOSE:-0}"
         export ATOM_DSV4_PREFILL_DIAG_TOL="${ATOM_DSV4_PREFILL_DIAG_TOL:-1e-3}"
         export ATOM_DSV4_PREFILL_DIAG_SPARSE_COMPARE="${ATOM_DSV4_PREFILL_DIAG_SPARSE_COMPARE:-0}"
