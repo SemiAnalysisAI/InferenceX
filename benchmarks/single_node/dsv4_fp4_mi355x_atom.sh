@@ -32,6 +32,7 @@ export AITER_LOG_LEVEL=WARNING
 # Use torch/RCCL TP reductions for DSv4. AITER's current TP reduce path was
 # observed to corrupt equal-prompt batches at high concurrency.
 export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
+export AITER_DSV4_MOE_DEBUG_BLOCKS="${AITER_DSV4_MOE_DEBUG_BLOCKS:-1}"
 
 # Keep the runtime overlay narrow: this benchmark uses the updated ATOM image
 # from amd-master.yaml and overlays a pinned AITER fork with ROCm/aiter#2998
@@ -40,7 +41,7 @@ export ATOM_DSV4_TP_REDUCE_BACKEND="${ATOM_DSV4_TP_REDUCE_BACKEND:-torch}"
 if [ "${AITER_DSV4_PR2998:-1}" = "1" ]; then
     AITER_PR2998_REPO=${AITER_PR2998_REPO:-https://github.com/Oseltamivir/aiter.git}
     AITER_PR2998_REF=${AITER_PR2998_REF:-dsv4-fp8-blockscale-wkv-fix}
-    AITER_PR2998_SHA=${AITER_PR2998_SHA:-172cb6b0ee33e11705019932b9e5352fb40120a1}
+    AITER_PR2998_SHA=${AITER_PR2998_SHA:-ab8cfdf4aa16b7cdd26b2fbd92727126cd8120cf}
     AITER_PR2998_DIR=${AITER_PR2998_DIR:-/tmp/aiter-dsv4-pr2998}
 
     rm -rf "$AITER_PR2998_DIR"
