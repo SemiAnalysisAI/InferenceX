@@ -1,6 +1,6 @@
-name: "svf-vllm-disagg-b300-low-latency-mtp2"
+name: "svf-vllm-disagg-b300-low-latency-mtp1"
 
-# B300 MTP2 adaptation of the DSV4 vLLM disagg recipe. Prefill uses DEP4 and
+# B300 MTP1 adaptation of the DSV4 vLLM disagg recipe. Prefill uses DEP4 and
 # decode keeps the PR 1304 topology, plus a dedicated NATS/etcd infra node.
 model:
   path: "deepseek-v4-pro"
@@ -66,7 +66,7 @@ backend:
       enable-expert-parallel: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
-      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":1}'
       max-model-len: 16384
       max-num-seqs: 16
       max-cudagraph-capture-size: 2048
@@ -92,7 +92,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":1}'
       max-model-len: 16384
       max-num-seqs: 256
       max-cudagraph-capture-size: 2048
