@@ -12,13 +12,8 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/dsv4/"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # Pinned to the NVIDIA/srt-slurm main commit that merged #144
-        # (sa-bench: make SGLangDeepseekV4Tokenizer callable). Without
-        # that fix, multi-node DSv4-Pro MTP sa-bench runs failed in
-        # calculate_metrics with ``TypeError: 'SGLangDeepseekV4Tokenizer'
-        # object is not callable``.
         SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="0cbc7eb43ca31c9b1744a46e959e00d43c6946b4"
+        SRT_SLURM_RECIPES_REF="main"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
