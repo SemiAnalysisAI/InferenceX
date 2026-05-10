@@ -1,7 +1,8 @@
-name: "svf-vllm-disagg-b300-mid-curve-megamoe-mtp3"
+name: "svf-vllm-disagg-b300-high-tpt-megamoe-mtp3-prefill-dep4"
 
-# B300 MTP3 adaptation of the DSV4 vLLM disagg recipe. Each worker uses one
-# full 8-GPU B300 node, plus a dedicated NATS/etcd infra node.
+# B300 MTP3 high-throughput variant with DEP4 prefill workers. The two prefill
+# workers share one 8-GPU B300 node; decode uses one full 8-GPU node, plus a
+# dedicated NATS/etcd infra node.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.20.1"
@@ -25,9 +26,9 @@ resources:
   gpus_per_node: 8
   prefill_nodes: 1
   decode_nodes: 1
-  prefill_workers: 1
+  prefill_workers: 2
   decode_workers: 1
-  gpus_per_prefill: 8
+  gpus_per_prefill: 4
   gpus_per_decode: 8
 
 infra:
@@ -61,7 +62,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
@@ -116,7 +117,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  concurrencies: "8192"
+  concurrencies: "8192x16384"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
