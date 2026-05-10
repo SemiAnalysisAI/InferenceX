@@ -35,12 +35,12 @@ jobs:
 
             const body = `${marker}
             Thanks for the contribution! For vLLM & SGLang, please ensure that your recipes is similar to the official vLLM recipes and/or the SGLang cookbook
-            - https://cookbook.sglang.io/
-            - https://docs.vllm.ai/projects/recipes/en/latest/
+            - https://docs.sglang.io/cookbook/intro
+            - https://recipes.vllm.ai/
 
-            If it is not, please create a PR first before we can merge your PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
+            If it is not, please create a PR first before we can merge your single node PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
             - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sgl-cookbook
+            - https://github.com/sgl-project/sglang/tree/main/docs_new
 
             **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. If re-running failed jobs is attempted, PR authors are responsible for ensuring it passes. See GitHub's docs on re-running failed jobs: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
 
