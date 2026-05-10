@@ -2298,3 +2298,10 @@
     - "Add GB200 SGLang DeepSeek-V4-Pro 8k/256 srt-slurm recipes for conc 1, 512, 1024, 2048x4096, and 4096x8192"
     - "Use GB200-specific recipe filenames so the shared DSV4 SGLang overlay does not shadow GB300 conc recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Restore the GB200 DeepSeek-V4-Pro Dynamo vLLM topology rows from main and convert them to InfiniteBench 8192/256 offline"
+    - "Set spec-decoding: offline on the low-latency, low-middle, mid-curve, high-throughput, and max-throughput recipe set"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

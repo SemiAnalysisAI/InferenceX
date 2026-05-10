@@ -135,7 +135,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
+  osl: 256
   concurrencies: "1"
   req_rate: "inf"
   use_chat_template: true
