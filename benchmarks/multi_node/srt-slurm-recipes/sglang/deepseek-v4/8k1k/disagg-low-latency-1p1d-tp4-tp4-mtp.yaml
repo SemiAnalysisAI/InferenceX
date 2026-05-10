@@ -41,6 +41,7 @@ backend:
     SGLANG_OPT_USE_TOPK_V2: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
     MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
@@ -58,6 +59,7 @@ backend:
     SGLANG_OPT_USE_TOPK_V2: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
     MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
@@ -73,7 +75,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
 
       tensor-parallel-size: 4
       data-parallel-size: 1
@@ -94,7 +96,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: nixl
+      disaggregation-transfer-backend: mooncake
 
       tensor-parallel-size: 4
       data-parallel-size: 1
