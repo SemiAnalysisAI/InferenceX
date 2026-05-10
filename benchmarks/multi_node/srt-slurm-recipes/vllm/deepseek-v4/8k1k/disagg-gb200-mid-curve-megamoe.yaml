@@ -5,7 +5,7 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe"
 #
 # Topology: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes total with a
 # dedicated NATS/etcd infra node. MegaMOE mid-curve points at concurrency
-# 256/512/1024 with no CPU/NVMe offload.
+# 4096/8192 with no CPU/NVMe offload.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -139,7 +139,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  concurrencies: "256x512x1024x4096"
+  concurrencies: "4096x8192"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"

@@ -4,7 +4,8 @@ name: "svf-vllm-disagg-gb200-low-latency"
 #   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-low-latency.yaml
 #
 # Topology: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with a
-# dedicated NATS/etcd infra node. Single-concurrency point for low latency.
+# dedicated NATS/etcd infra node. Low-latency points at concurrencies
+# 2048/8192.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -136,7 +137,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  concurrencies: "1"
+  concurrencies: "2048x8192"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
