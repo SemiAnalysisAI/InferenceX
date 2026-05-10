@@ -2323,3 +2323,11 @@
     - "Turn off explicit deep_gemm_mega_moe backend selection in B300 Dynamo vLLM throughput recipes"
     - "Let vLLM choose the MoE backend automatically to avoid CUDA symmetric-memory rendezvous failures during startup"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm-mtp3
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 Dynamo vLLM MTP3 disaggregated multi-node coverage"
+    - "Mirror the PR 1304 B300 disagg topology while enabling vLLM speculative-config mtp with num_speculative_tokens=3 in both prefill and decode"
+    - "Benchmark serving keeps the DeepSeek-V4 chat template path for MTP acceptance-rate correctness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1306
