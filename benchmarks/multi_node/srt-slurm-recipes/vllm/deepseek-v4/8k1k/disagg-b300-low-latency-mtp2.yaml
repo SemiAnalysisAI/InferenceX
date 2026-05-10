@@ -1,7 +1,7 @@
-name: "svf-vllm-disagg-b300-low-latency-mtp3"
+name: "svf-vllm-disagg-b300-low-latency-mtp2"
 
-# B300 MTP3 adaptation of the DSV4 vLLM disagg recipe. Each worker uses one
-# full 8-GPU B300 node, plus a dedicated NATS/etcd infra node.
+# B300 MTP2 adaptation of the DSV4 vLLM disagg recipe. Prefill uses DEP4 and
+# decode keeps the PR 1304 topology, plus a dedicated NATS/etcd infra node.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.20.1"
@@ -27,7 +27,7 @@ resources:
   decode_nodes: 1
   prefill_workers: 1
   decode_workers: 1
-  gpus_per_prefill: 8
+  gpus_per_prefill: 4
   gpus_per_decode: 8
 
 infra:
@@ -61,12 +61,12 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       max-model-len: 16384
       max-num-seqs: 16
       max-cudagraph-capture-size: 2048
@@ -92,7 +92,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       max-model-len: 16384
       max-num-seqs: 256
       max-cudagraph-capture-size: 2048
