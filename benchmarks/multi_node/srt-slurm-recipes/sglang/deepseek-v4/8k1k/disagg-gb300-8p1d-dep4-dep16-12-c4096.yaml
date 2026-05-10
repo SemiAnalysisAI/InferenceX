@@ -179,7 +179,7 @@ backend:
 
       mem-fraction-static: 0.94
       swa-full-tokens-ratio: 0.056
-      context-length: 9216
+      context-length: 8704
       tensor-parallel-size: 16
       data-parallel-size: 16
       expert-parallel-size: 16
@@ -192,7 +192,7 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
-  concurrencies: "4096"
+  osl: 256
+  concurrencies: "4096x8192x16384"
   req_rate: "inf"
   use_chat_template: false

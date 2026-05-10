@@ -154,16 +154,16 @@ backend:
       moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
 
-      mem-fraction-static: 0.85
+      mem-fraction-static: 0.9
       max-running-requests: 1024
       cuda-graph-max-bs:    512
       swa-full-tokens-ratio: 0.1
-      context-length: 9472
+      context-length: 8704
 
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
-  concurrencies: "1"
+  osl: 256
+  concurrencies: "8192x16384"
   req_rate: "inf"
   use_chat_template: false
