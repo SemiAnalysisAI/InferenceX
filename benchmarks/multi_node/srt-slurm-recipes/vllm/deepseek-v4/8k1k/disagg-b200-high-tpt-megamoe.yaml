@@ -122,7 +122,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "4096"
+  concurrencies: "256x512x1024"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"

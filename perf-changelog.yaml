@@ -2323,3 +2323,10 @@
     - "Turn off explicit deep_gemm_mega_moe backend selection in B300 Dynamo vLLM throughput recipes"
     - "Let vLLM choose the MoE backend automatically to avoid CUDA symmetric-memory rendezvous failures during startup"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Fix B200 Dynamo vLLM recipe benchmark concurrencies to match the nvidia-master.yaml search space"
+    - "Propagate low-latency concurrencies 1/64/128, high-throughput concurrencies 1024/2048/4096/8192, and max-throughput concurrency 8192 into the srt-slurm recipe files"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1305

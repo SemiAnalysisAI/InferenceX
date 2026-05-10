@@ -7958,7 +7958,7 @@ dsv4-fp4-b200-dynamo-vllm:
       search-space:
       # B200 adaptation of the DSV4 GB200 vLLM disagg recipes. Each worker
       # maps to one full 8-GPU B200 node.
-      - conc-list: [1, 64, 128]
+      - conc-list: [1, 16, 32, 64, 128]
         prefill:
           num-worker: 1
           tp: 8
@@ -7971,7 +7971,7 @@ dsv4-fp4-b200-dynamo-vllm:
           tp: 8
           ep: 1
           dp-attn: false
-      - conc-list: [1024, 2048, 4096, 8192]
+      - conc-list: [256, 512, 1024]
         prefill:
           num-worker: 2
           tp: 8
@@ -7984,7 +7984,7 @@ dsv4-fp4-b200-dynamo-vllm:
           tp: 8
           ep: 8
           dp-attn: true
-      - conc-list: [8192]
+      - conc-list: [8192, 12345]
         prefill:
           num-worker: 3
           tp: 8
