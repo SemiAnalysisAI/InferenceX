@@ -8190,7 +8190,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
       osl: 256
       search-space:
       # Aggregate low latency: TP=8, max-num-seqs=4.
-      - conc-list: [64, 256, 1024, 2048]
+      - conc-list: [1]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8206,7 +8206,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           dp-attn: false
 
       # Low-latency bridge: 1 prefill (DEP=8) + 4 decode (TP=8), no offload.
-      - conc-list: [16, 32, 64, 512, 2048]
+      - conc-list: [16, 32, 64]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8223,7 +8223,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
 
       # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
       # 5 nodes total with a dedicated NATS/etcd infra node.
-      - conc-list: [128, 1024, 4096]
+      - conc-list: [128]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8240,7 +8240,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
 
       # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
       # 7 nodes total with a dedicated NATS/etcd infra node.
-      - conc-list: [1024, 4096, 8192, 16384]
+      - conc-list: [1024]
         spec-decoding: mtp
         prefill:
           num-worker: 2
