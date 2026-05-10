@@ -8345,9 +8345,10 @@ dsv4-fp4-b300-dynamo-vllm-mtp3:
     - isl: 8192
       osl: 256
       search-space:
-      # B300 MTP3 adaptation of the DSV4 Dynamo vLLM disagg recipes. Each
-      # full-node prefill/decode worker maps to one 8-GPU B300 node.
-      - conc-list: [128]
+      # B300 MTP3 frontier for InfiniteBench 8k/256. The highest-throughput
+      # point is the validated 2P/1D DEP8 conc=4096 run from 25635462833; the
+      # lower-throughput points add decode workers to move right on interactivity.
+      - conc-list: [2048]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8355,13 +8356,13 @@ dsv4-fp4-b300-dynamo-vllm-mtp3:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-low-latency-mtp3.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-low-latency-4d-mtp3.yaml"
         decode:
-          num-worker: 1
+          num-worker: 4
           tp: 8
           ep: 1
           dp-attn: false
-      - conc-list: [8192]
+      - conc-list: [4096]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8369,13 +8370,13 @@ dsv4-fp4-b300-dynamo-vllm-mtp3:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-mid-curve-megamoe-mtp3.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-mid-curve-megamoe-2d-mtp3.yaml"
         decode:
-          num-worker: 1
+          num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
-      - conc-list: [16384]
+      - conc-list: [4096]
         spec-decoding: mtp
         prefill:
           num-worker: 2
@@ -8384,20 +8385,6 @@ dsv4-fp4-b300-dynamo-vllm-mtp3:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-high-tpt-megamoe-mtp3.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - conc-list: [16384]
-        spec-decoding: mtp
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-high-tpt-megamoe-mtp3-prefill-dep4.yaml"
         decode:
           num-worker: 1
           tp: 8
