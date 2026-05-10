@@ -12,14 +12,13 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/dsv4/"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # Pinned to ch-wan/srt-slurm fork @ cwan/fix-sglang-dsv4-tokenizer-callable
-        # while NVIDIA/srt-slurm#144 (sa-bench: make SGLangDeepseekV4Tokenizer
-        # callable) is in review. Without the fix, multi-node DSv4-Pro MTP
-        # sa-bench runs fail in calculate_metrics with
-        # ``TypeError: 'SGLangDeepseekV4Tokenizer' object is not callable``.
-        # Revert to ``NVIDIA/srt-slurm.git`` @ ``main`` once #144 merges.
-        SRT_SLURM_RECIPES_REPO="https://github.com/ch-wan/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="518476323f19226513a1691714c550582cffe343"
+        # Pinned to the NVIDIA/srt-slurm main commit that merged #144
+        # (sa-bench: make SGLangDeepseekV4Tokenizer callable). Without
+        # that fix, multi-node DSv4-Pro MTP sa-bench runs failed in
+        # calculate_metrics with ``TypeError: 'SGLangDeepseekV4Tokenizer'
+        # object is not callable``.
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="0cbc7eb43ca31c9b1744a46e959e00d43c6946b4"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
