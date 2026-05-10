@@ -2283,3 +2283,11 @@
     - "8k/1k TP8/EP8: keep block-size=32 and shuffled KV cache disabled; disable AITER MoE (VLLM_ROCM_USE_AITER_MOE=0); disable async scheduling"
     - "8k/1k non-TP8/EP8: disable async scheduling through c64; switch to block-size=16 with shuffled KV cache at c64 and above"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1276
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-offline
+  description:
+    - "Enable MTP=3 for the B300 SGLang offline InfiniteBench 8192/256 harness while keeping spec-decoding: offline for launcher routing"
+    - "Switch to the B300 SGLang MTP-capable image digest used by dsv4-fp4-b300-sglang-mtp"
+    - "Propagate raw offline mtp metadata into aggregated benchmark results"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

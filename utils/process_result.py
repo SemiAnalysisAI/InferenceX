@@ -55,7 +55,59 @@ data = {
     'isl': int(isl),
     'osl': int(osl),
 }
+
+# Preserve selected raw benchmark metadata that is not represented by the
+# matrix environment. This is especially important for offline harnesses where
+# SPEC_DECODING must remain "offline" for launcher routing while the in-process
+# engine can still run with MTP/speculative decoding enabled.
+optional_result_fields = [
+    'engine',
+    'engine_mode',
+    'mtp',
+    'max_model_len',
+    'dataset_name',
+    'infinitebench_task',
+    'infinitebench_input_len',
+    'infinitebench_output_len',
+    'dsv4_thinking_mode',
+    'batch_size',
+    'latency_metrics_source',
+    'ttft_sample_count',
+    'tpot_sample_count',
+    'e2el_sample_count',
+    'used_ttft_fallback',
+    'used_tpot_fallback',
+    'used_e2el_fallback',
+    'decode_throughput',
+    'decode_throughput_from_mean_tpot',
+    'decode_throughput_per_chip_from_mean_tpot',
+    'wall_clock_output_throughput',
+    'wall_clock_output_throughput_per_chip',
+    'wall_clock_total_throughput',
+    'decode_iters_total',
+    'decode_tokens_total',
+    'spec_tokens_per_step_observed',
+]
+for field in optional_result_fields:
+    if field in bmk_result:
+        data[field] = bmk_result[field]
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
+
+
+def output_tput_per_gpu(denominator: int) -> float:
+    """Compute output throughput per GPU.
+
+    Newer benchmark clients report `mean_tpot_ms`, which is the canonical
+    decode-only source. Older/raw fixtures only report aggregate
+    `output_throughput`; keep supporting that shape as a fallback.
+    """
+    mean_tpot_ms = bmk_result.get('mean_tpot_ms')
+    if mean_tpot_ms is not None and float(mean_tpot_ms) > 0:
+        return (int(bmk_result['max_concurrency']) / denominator) / (
+            float(mean_tpot_ms) / 1000.0
+        )
+    return float(bmk_result['output_throughput']) / denominator
+
 
 if is_multinode:
     # TODO: Eventually will have to have a separate condition in here for multinode disagg and
@@ -97,7 +149,7 @@ if is_multinode:
         'num_prefill_gpu': prefill_gpus,
         'num_decode_gpu': decode_gpus,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
-        'output_tput_per_gpu': (int(bmk_result['max_concurrency']) / output_tput_denominator) / (float(bmk_result['mean_tpot_ms']) / 1000.0),
+        'output_tput_per_gpu': output_tput_per_gpu(output_tput_denominator),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
 
@@ -117,7 +169,7 @@ else:
         'ep': ep_size,
         'dp_attention': dp_attention,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': (int(bmk_result['max_concurrency']) / tp_size) / (float(bmk_result['mean_tpot_ms']) / 1000.0),
+        'output_tput_per_gpu': output_tput_per_gpu(tp_size),
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
     }
 

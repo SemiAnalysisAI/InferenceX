@@ -367,6 +367,33 @@ class TestCalculations:
         assert "decode_throughput_from_mean_intvty" not in output_data
         assert "decode_throughput_per_chip_from_mean_intvty" not in output_data
 
+    def test_optional_offline_mtp_metadata_is_preserved(self, tmp_path, single_node_env_vars):
+        """Offline harnesses should preserve numeric MTP metadata."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 4,
+            "total_token_throughput": 6400.0,
+            "output_throughput": 200.0,
+            "mean_tpot_ms": 16.0,
+            "engine": "sglang",
+            "engine_mode": "offline",
+            "mtp": 3,
+            "spec_tokens_per_step_observed": 3.2,
+        }
+
+        env = single_node_env_vars.copy()
+        env["SPEC_DECODING"] = "offline"
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["spec_decoding"] == "offline"
+        assert output_data["engine"] == "sglang"
+        assert output_data["engine_mode"] == "offline"
+        assert output_data["mtp"] == 3
+        assert output_data["spec_tokens_per_step_observed"] == pytest.approx(3.2)
+
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """Test throughput per GPU calculation for single node."""
         benchmark_result = {

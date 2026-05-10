@@ -2903,8 +2903,9 @@ dsv4-fp4-b300-vllm-mtp:
 # above b300 dsv4 *-mtp configs. spec-decoding=offline routes the launcher to
 # benchmarks/single_node/dsv4_fp4_b300_<framework>_offline.sh, which uses
 # vllm.LLM / sgl.Engine / tensorrt_llm.LLM directly (no HTTP server) and
-# runs one warmup batch + one timed batch in lockstep. MTP stays disabled for
-# spec-decoding=offline; DSV4_MTP_SPEC_TOKENS only applies to mtp configs.
+# runs one warmup batch + one timed batch in lockstep. B300 SGLang offline
+# enables MTP=3 by default in its benchmark script while keeping
+# spec-decoding=offline so launcher routing still selects the offline harness.
 dsv4-fp4-b300-vllm-offline:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2927,7 +2928,7 @@ dsv4-fp4-b300-vllm-offline:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 512, spec-decoding: offline }
 
 dsv4-fp4-b300-sglang-offline:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
