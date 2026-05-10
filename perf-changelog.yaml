@@ -2335,4 +2335,4 @@
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1308
