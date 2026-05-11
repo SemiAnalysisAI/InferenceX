@@ -2328,3 +2328,10 @@
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1308
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
