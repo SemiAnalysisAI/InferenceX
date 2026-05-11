@@ -2399,7 +2399,12 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  # Bumped from v0.19.1 — that release tripped a bug in
+  # `flashinfer_trtllm_mxint4_moe` ('list' object has no attribute 'to')
+  # during warmup `profile_run` on the agentic-coding path
+  # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
+  # flashinfer fix.
+  image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200-dgxc
