@@ -9,42 +9,64 @@ InferenceX is an open-source, automated benchmarking system that continuously tr
 ## Directory Structure
 
 ```
-├── benchmarks/              # Shell scripts for running benchmarks
-│   ├── benchmark_lib.sh     # Shared benchmarking/eval utilities
-│   ├── dsr1_*.sh            # Deepseek R1-specific benchmark scripts
-│   └── gptoss_*.sh          # gptoss-specific benchmark scripts
-├── runners/                 # Launch scripts for different hardware
-│   ├── launch_b200/h100/h200-*.sh     # NVIDIA launcher scripts
-│   └── launch_mi*.sh                  # AMD launcher scripts
-├── utils/                   # Python utilities
-│   ├── matrix_logic/        # Config generation and validation
-│   │   ├── generate_sweep_configs.py  # CLI for generating benchmark matrix
-│   │   ├── validation.py              # Pydantic validation models
-│   │   └── test_*.py                  # Unit tests
-│   ├── bench_serving/       # Benchmark serving client (upstreamed from vLLM)
-│   │   ├── benchmark_serving.py       # Main benchmark client script
-│   │   ├── backend_request_func.py    # Backend-specific request functions
-│   │   └── benchmark_utils.py         # Utility functions
-│   ├── evals/               # Eval task definitions for lm-eval
-│   │   ├── EVALS.md         # Evals documentation
-│   │   ├── gsm8k.yaml
-│   │   └── gpqa_diamond.yaml
-│   ├── collect_eval_results.py  # Aggregates eval results
-│   ├── process_result.py    # Post-processes benchmark results
-│   ├── process_changelog.py # Processes perf-changelog.yaml
-│   └── summarize.py         # Generates markdown summaries
-├── .github/
-│   ├── workflows/           # GitHub Actions CI/CD
-│   │   ├── run-sweep.yml    # Main performance sweep
-│   │   ├── e2e-tests.yml    # End-to-end testing
-│   │   ├── benchmark-tmpl.yml           # Single-node benchmark job template
-│   │   ├── benchmark-multinode-tmpl.yml # Multi-node benchmark job template
-│   │   └── collect-evals.yml            # Eval results collection
-│   └── configs/             # Master configuration files
-│       ├── nvidia-master.yaml
-│       ├── amd-master.yaml
-│       └── runners.yaml
-└── perf-changelog.yaml      # Triggers benchmarks on changes
+.
+├─AGENTS.md                         # agent instructions
+├─perf-changelog.yaml               # benchmark trigger log; append-only; preserve whitespace
+├─benchmarks/
+│ ├─benchmark_lib.sh                # shared benchmark/eval/server helpers
+│ ├─single_node/                    # single-node benchmark entrypoints
+│ │ ├─agentic/                      # agentic benchmark scripts
+│ │ ├─chat_templates/               # model chat templates, e.g. DeepSeek-V4 thinking
+│ │ ├─*_mtp.sh                      # MTP/spec-decoding scripts
+│ │ └─*.sh                          # per model/precision/hardware/framework scripts
+│ └─multi_node/                     # multinode benchmark entrypoints
+│   ├─agentic_srt.sh
+│   ├─amd_utils/                    # AMD multinode Slurm/server/bench helpers
+│   │ ├─bench.sh
+│   │ ├─env.sh
+│   │ ├─job.slurm
+│   │ ├─models.yaml
+│   │ ├─server.sh
+│   │ ├─submit.sh
+│   │ └─sync.py
+│   ├─*_sglang-disagg.sh            # SGLang disaggregated multinode scripts
+│   ├─*_dynamo-trt.sh               # Dynamo/TensorRT multinode scripts
+│   └─srt-slurm-recipes/            # checked-in external recipe YAMLs
+│     ├─sglang/deepseek-v4/8k1k/
+│     └─vllm/deepseek-v4/8k1k/
+├─runners/                          # hardware launcher scripts
+├─utils/
+│ ├─matrix_logic/                   # benchmark matrix generation/validation/tests
+│ │ ├─generate_sweep_configs.py     # full-sweep/test-config CLI
+│ │ ├─validation.py                 # Pydantic schemas
+│ │ ├─test_generate_sweep_configs.py
+│ │ └─test_validation.py
+│ ├─bench_serving/                  # serving benchmark client
+│ │ ├─benchmark_serving.py
+│ │ ├─backend_request_func.py
+│ │ ├─benchmark_utils.py
+│ │ ├─encoding_dsv4.py
+│ │ └─KNOWN_LIMITATION.md
+│ ├─evals/                          # lm-eval task configs and score validation
+│ │ ├─EVALS.md
+│ │ ├─gsm8k.yaml
+│ │ ├─gpqa_diamond.yaml
+│ │ ├─thresholds.json
+│ │ ├─utils.py
+│ │ └─validate_scores.py
+│ ├─agentic-benchmark/              # agentic benchmark collection/analysis helpers
+│ ├─trace-replay/                   # trace replay utilities
+│ ├─constants.py
+│ ├─collect_results.py
+│ ├─collect_eval_results.py
+│ ├─compare_results.py
+│ ├─calc_success_rate.py
+│ ├─process_result.py               # benchmark aggregation/normalization
+│ ├─process_agentic_result.py
+│ ├─process_changelog.py            # perf-changelog parsing and trim_conc
+│ ├─summarize.py                    # markdown summary generation
+│ └─test_process_result.py
+└─experimental/                     # non-core experiments
 ```
 
 ## Terminology
@@ -54,13 +76,13 @@ InferenceX is an open-source, automated benchmarking system that continuously tr
 
 ## Key Technologies
 
-- **Python 3.13**: Core automation and config generation
-- **Pydantic**: Configuration validation (V2 with strict mode)
-- **Bash**: Benchmark execution and infrastructure orchestration
-- **YAML**: Configuration files
-- **GitHub Actions**: CI/CD workflows
-- **Evals**: lm-eval validation of benchmark results
-- **pytest**: Testing framework
+- Python 3.13: Core automation and config generation
+- Pydantic Configuration validation (V2 with strict mode)
+- Bash**: Benchmark execution and infrastructure orchestration
+- YAML: Configuration files
+- GitHub Actions: CI/CD workflows
+- Evals: lm-eval validation of benchmark results
+- pytest: Testing framework
 
 ## Development Workflow
 
@@ -110,15 +132,6 @@ python utils/summarize.py
 
 When working with benchmark configurations, use these valid values:
 
-**Models (model-prefix)**:
-- `dsr1` - DeepSeek-R1-0528
-- `dsv4` - DeepSeek-V4-Pro
-- `gptoss` - GPT-OSS-120B
-
-**Precisions**:
-- `fp4`
-- `fp8`
-
 **Frameworks**:
 - `sglang` - SGLang inference engine
 - `trt` - TensorRT-LLM
@@ -127,18 +140,6 @@ When working with benchmark configurations, use these valid values:
 - `dynamo-trt` - NVIDIA Dynamo with TensorRT-LLM backend
 - `dynamo-sglang` - NVIDIA Dynamo with SGLang backend
 - `sglang-disagg` - SGLang disaggregated inference
-
-**Runners (NVIDIA)**:
-- `b200` - NVIDIA B200 GPU
-- `b200-trt` - NVIDIA B200 with TensorRT
-- `h100` - NVIDIA H100 GPU
-- `h200` - NVIDIA H200 GPU
-- `gb200` - NVIDIA GB200 (multi-node)
-
-**Runners (AMD)**:
-- `mi300x` - AMD MI300X GPU
-- `mi325x` - AMD MI325X GPU
-- `mi355x` - AMD MI355X GPU
 
 **Sequence Lengths (ISL/OSL)**:
 - `1k1k` - 1024 input / 1024 output
@@ -177,17 +178,35 @@ When working with benchmark configurations, use these valid values:
 
 PRs do **not** run the sweep automatically — `run-sweep.yml` is gated on a label. Pick exactly one of the two; setting both is rejected by the workflow.
 
-| Label | Behavior | When to use |
-|-------|----------|-------------|
-| `sweep-enabled` | Runs the sweep with `--trim-conc`: each parallelism config is reduced to its single highest configured concurrency point. | Default for most PRs — validates the change runs end-to-end without consuming the full cluster. |
-| `full-sweep-enabled` | Runs the full intermediate concurrency sweep, identical to a push-to-main run. | Use when intermediate concurrency points actually matter for the PR (e.g., a recipe change expected to shift the throughput/latency curve, not just its endpoints). |
+`sweep-enabled` - Runs the sweep with `--trim-conc`: each parallelism config is reduced to its single highest configured concurrency point. Default for most PRs — validates the change runs end-to-end without consuming the full cluster.
+`full-sweep-enabled` - Runs the full intermediate concurrency sweep, identical to a push-to-main run. Use when intermediate concurrency points actually matter for the PR (e.g., a recipe change expected to shift the throughput/latency curve, not just its endpoints).
 
 Notes:
 - The two labels are mutually exclusive — `run-sweep.yml`'s `setup` job fails fast with an explicit error if both are present.
-- Push-to-main always runs the full (untrimmed) sweep unless `[skip-sweep]` is in the commit message; the trim only applies to PR runs that opt in via `sweep-enabled`.
+- Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message; the trim only applies to PR runs that opt in via `sweep-enabled`.
 - The trimming logic lives in `trim_conc()` in `utils/process_changelog.py` — single-node entries are grouped by every non-`conc` field and only the highest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[max(conc)]`.
 
 ## Common Tasks
+
+### Dispatching jobs
+
+When asked to do a run or a sweep,
+```
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='<ref>' \
+  -f 'inputs[ref]=<input ref>' \
+  -f 'inputs[test-name]=<name>' \
+  -f 'inputs[generate-cli-command]=command'
+```
+Input meanings:
+
+* ref: workflow ref to dispatch from; usually the branch containing the workflow.
+* inputs[ref]: checkout ref used by jobs and matrix generation.
+* inputs[test-name]: display name in GitHub Actions.
+* inputs[generate-cli-command]: arguments passed to utils/matrix_logic/generate_sweep_configs.py. Can be tested locally.
+
+To monitor: `gh run watch <RUN_ID> --repo SemiAnalysisAI/InferenceX --exit-status`
 
 ### Adding a New Benchmark Configuration
 
@@ -314,38 +333,15 @@ When upgrading Docker images in benchmark scripts and master configs .yaml:
 
 ## Evals (Accuracy Validation)
 
-Evals run optional accuracy checks to ensure model outputs aren't degraded by inference optimizations. They can run alongside benchmarks or independently in eval-only mode.
+Evals are optional accuracy checks that ensure inference optimizations do not degrade model outputs. Keep detailed eval reference material in `utils/evals/EVALS.md`; this top-level file should only carry the essentials needed during routine agent runs.
 
-### When Evals Run
+Quick pointers:
+- Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
+- Eval workflow jobs run separately from throughput jobs in eval-only mode (`EVAL_ONLY=true`).
+- Generate normal configs with eval markings by default, skip evals with `--no-evals`, or generate only eval jobs with `--evals-only`.
+- Benchmark/eval helpers live in `benchmarks/benchmark_lib.sh`; aggregated eval output is produced by `utils/collect_eval_results.py`.
 
-Evals run as **separate workflow jobs** from throughput benchmarks (eval-only mode). The `EVAL_ONLY` flag skips throughput benchmarking and only runs lm-eval.
-
-**Single-node** eval selection:
-- All TPs at **highest concurrency** and **median concurrency** per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn)
-- Only on `8k1k` sequence length
-
-**Multi-node** eval selection:
-- Entry with **highest max eligible concurrency** per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn)
-- Only `8k1k` sequence length
-- Eval runs at `eval-conc`, the upper median concurrency from the selected config
-
-This selection logic is in `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`.
-
-**Workflow separation**: Eval jobs are independent from benchmark jobs:
-- `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
-- `e2e-tests.yml`: `test-sweep-evals` and `test-sweep-multi-node-evals`
-- Both use their respective benchmark templates with `eval-only: true`
-- `collect-evals` depends only on eval jobs, not benchmark jobs
-
-**Multi-node eval infrastructure**:
-- AMD (MI355X): `server.sh` skips `bench.sh` when `EVAL_ONLY=true`, runs lm-eval directly
-- NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200): srt-slurm invokes its `lm-eval` runner from `do_sweep.py` as a post/eval-only step using `INFMAX_WORKSPACE`
-
-### Eval Framework: lm-eval
-
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`).
-
-### Running Evals via CLI
+### CLI
 
 ```bash
 # Generate configs (evals marked by default on 8k1k subset)
@@ -357,117 +353,11 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files .github/configs/nvidia-master.yaml \
   --no-evals
 
-# Generate ONLY the eval subset (excludes non-eval configs)
+# Generate only the eval subset (excludes non-eval configs)
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files .github/configs/nvidia-master.yaml \
   --evals-only
 ```
-
-### Eval Integration in Benchmark Scripts
-
-All benchmark scripts in `benchmarks/` follow one of two flows:
-
-```bash
-# Combined mode (benchmark + eval):
-# 1. Start server (with --context-length expansion if EVAL_ONLY=true)
-# 2. wait_for_server_ready
-# 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
-# 4. Run evals:
-if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
-    append_lm_eval_summary  # Writes meta_env.json and moves artifacts
-fi
-
-# Eval-only mode (EVAL_ONLY=true):
-# 1. Compute eval context via compute_eval_context_length
-# 2. Start server with that context (--context-length or --max-model-len)
-# 3. wait_for_server_ready
-# 4. run_benchmark_serving returns immediately (skipped)
-# 5. run_eval + append_lm_eval_summary
-```
-
-**Multi-node AMD** (`benchmarks/multi_node/amd_utils/server.sh`):
-- Skips `bench.sh` when `EVAL_ONLY=true`
-- Runs lm-eval via `run_eval` against the router on port 30000
-- Copies eval artifacts to `/run_logs/slurm_job-*/eval_results/`
-
-**Multi-node NVIDIA Slurm** (GB200, GB300, B200, B300, H100, H200 via srt-slurm):
-- Uses the srt-slurm `lm-eval` runner as a post/eval-only step from `do_sweep.py`
-- Mounts the InferenceX checkout from `INFMAX_WORKSPACE` at `/infmax-workspace`
-- `lm-eval` runner sources `benchmark_lib.sh` from `/infmax-workspace`
-
-### Key Eval Functions in `benchmarks/benchmark_lib.sh`
-
-| Function | Description |
-|----------|-------------|
-| `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
-| `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
-| `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
-| `_install_lm_eval_deps` | Installs lm-eval dependencies |
-| `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
-| `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
-| `get_native_max_context_length` | Extracts model's native max context length from HF config |
-
-### Eval Results Collection
-
-Eval results are collected by `.github/workflows/collect-evals.yml`:
-
-1. Downloads all `eval_*` artifacts
-2. Runs `utils/collect_eval_results.py` to aggregate results
-3. Outputs `agg_eval_<exp_name>.json` with all eval metrics
-4. Publishes summary table to GitHub Step Summary
-
-### Fetching Eval Results
-
-```bash
-# Download eval results artifact
-gh run download <RUN_ID> --repo SemiAnalysisAI/InferenceX -n eval_results_all -D ./evals
-
-# View eval summary
-cat ./evals/agg_eval_all.json | jq -r '
-  .[] | [.hw, .framework, .precision, .tp, .conc, .task, (.score * 100 | round | . / 100)]
-  | @tsv' | column -t
-
-# Filter to specific hardware
-cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
-```
-
-### Eval Metrics
-
-| Field | Description |
-|-------|-------------|
-| `score` | Primary metric (exact match for GSM8K) |
-| `em_strict` | Strict exact match (requires `####` format) |
-| `em_flexible` | Flexible extraction (looser number matching) |
-| `n_eff` | Number of samples evaluated |
-| `task` | Eval task name (e.g., `gsm8k`) |
-
-### Environment Variables for Evals
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
-| `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
-| `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
-| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
-
-### Adding a New Eval Task
-
-1. Create a task YAML in `utils/evals/` (follow lm-eval task format)
-2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks
-3. Update `utils/collect_eval_results.py` if new metrics need extraction
-
-### lm-eval Patches
-
-The codebase includes patches for lm-eval compatibility (`_patch_lm_eval`):
-
-1. **Reasoning token handling**: Extracts `reasoning_content` when `message.content` is empty
-2. **TRT compatibility**: Avoids injecting `{"type": "text"}` for non-HF tokenizers
-
-These patches are applied via `sitecustomize.py` in `PYTHONPATH`.
 
 ## Key Files to Understand
 
@@ -499,9 +389,7 @@ Markers available: `slow`, `integration`
 
 ## Fetching GitHub Actions Benchmark Results
 
-When asked to analyze benchmark results from a GitHub Actions run URL, use the `gh` CLI.
-
-### Commands
+When asked to analyze benchmark results from a GitHub Actions run:
 ```bash
 # List artifacts for a run
 gh api /repos/SemiAnalysisAI/InferenceX/actions/runs/<RUN_ID>/artifacts --jq '.artifacts[].name'
