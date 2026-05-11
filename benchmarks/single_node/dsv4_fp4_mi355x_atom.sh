@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #TODO: srok, remove later, workaround for removing faulty cache
 set -x
-rm -rf /root/.cache/atom/torch_compile_cache/839506a2e5/
+rm -rf /home/cameronamd@semianalysis.com/.cache/atom/torch_compile_cache/839506a2e5
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
