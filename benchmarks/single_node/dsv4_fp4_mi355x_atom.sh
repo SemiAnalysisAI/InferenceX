@@ -23,15 +23,6 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-export OMP_NUM_THREADS=1
-
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
-else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
-fi
-
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -42,6 +33,7 @@ fi
 start_gpu_monitor
 
 set -x
+#export OMP_NUM_THREADS=1
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
@@ -49,7 +41,7 @@ python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    --kv_cache_dtype fp8 $EP \
     --trust-remote-code \
     > $SERVER_LOG 2>&1 &
 
