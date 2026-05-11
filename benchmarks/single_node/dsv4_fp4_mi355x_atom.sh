@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-#TODO: srok, remove later, workaround for removing faulty cache
-set -x
-rm -rf /home/cameronamd@semianalysis.com/.cache/atom/torch_compile_cache/839506a2e5
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -35,7 +32,6 @@ fi
 start_gpu_monitor
 
 set -x
-#export OMP_NUM_THREADS=1
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
@@ -44,6 +40,7 @@ python3 -m atom.entrypoints.openai_server \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $EP \
+    --trust-remote-code \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -61,7 +58,8 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ 
+    --result-dir /workspace/ \
+    --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
