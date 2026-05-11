@@ -49,11 +49,8 @@ python3 -m atom.entrypoints.openai_server \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --block-size $BLOCK_SIZE \
-    --enforce-eager \
-    --max-num-seqs $MAX_NUM_SEQS \
-    --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS \
-    --trust-remote-code > $SERVER_LOG 2>&1 &
+    --trust-remote-code \
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
