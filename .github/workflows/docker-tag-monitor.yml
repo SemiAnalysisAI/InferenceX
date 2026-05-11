@@ -159,9 +159,11 @@ jobs:
             echo ""
             echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
-            echo "3. Create a PR with these changes"
+            echo "3. Create separate PRs grouped by framework and image family, and link each PR."
             echo ""
-            echo "Focus on updating single-node configurations. For each framework, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+            echo "Group by framework plus CUDA/ROCm image family (for example sglang-cuda, sglang-rocm, vllm-cuda, vllm-rocm, atom, trt), not by individual GPU. Split by GPU only when an update is genuinely hardware-specific."
+            echo ""
+            echo "Focus on updating single-node configurations. For each framework/image family, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
           } > "$BODY_FILE"
 
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
@@ -172,7 +174,7 @@ jobs:
       - name: Create issue for updates
         if: steps.check.outputs.has_updates == 'true' && inputs.dry_run != true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
         run: |
           DATE=$(date +%Y-%m-%d)
           BODY_FILE="${{ steps.check.outputs.body_file }}"
@@ -180,13 +182,14 @@ jobs:
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label "docker-update" --state open --json number --jq '.[0].number // empty')
           if [[ -n "$EXISTING" ]]; then
             echo "Updating existing issue #$EXISTING"
-            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
+            jq -Rs '{body: .}' "$BODY_FILE" \
+              | gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$EXISTING/comments" --input -
           else
-            gh issue create \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "[Auto] Docker Image Updates Available - $DATE" \
-              --label "docker-update,claude-task" \
-              --body-file "$BODY_FILE"
+            jq -n \
+              --arg title "[Auto] Docker Image Updates Available - $DATE" \
+              --rawfile body "$BODY_FILE" \
+              '{title: $title, body: $body, labels: ["docker-update", "claude-task"]}' \
+              | gh api --method POST "repos/$GITHUB_REPOSITORY/issues" --input -
           fi
 
       - name: Dry run output

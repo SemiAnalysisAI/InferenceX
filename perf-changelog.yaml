@@ -2293,6 +2293,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang MTP coverage using lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
+    - "Mirror the base 8k/1k disagg search space (1p1d-tp4, 1p6d-dep4-tp4, 1p1d-dep4-dep8, 1p1d-dep4-dep16, 2p1d-dep4-dep8, 4p1d-dep4-dep8) with spec-decoding: mtp and EAGLE on the decode side (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Recipes adapted from elvischenv/srt-slurm@dsv4-gb300-disagg-8k1k-mtp:recipes/dsv4-pro/sglang/gb300-fp4/8k1k/disagg/mtp/, repointed at the public sglang-staging container and the deepseek-v4-pro model alias"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1297
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-bfd32b6-20260507-DSv4."
@@ -2337,3 +2345,9 @@
     - "Benchmark serving keeps the DeepSeek-V4 chat template path for MTP acceptance-rate correctness"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1307
 
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
