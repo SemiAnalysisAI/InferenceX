@@ -42,7 +42,6 @@ python3 -m atom.entrypoints.openai_server \
     --server-port $PORT \
     -tp $TP \
     --kv_cache_dtype fp8 $EP \
-    --trust-remote-code \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -60,8 +59,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --trust-remote-code
+    --result-dir /workspace/ 
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
