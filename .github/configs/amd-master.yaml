@@ -1,5 +1,5 @@
 dsr1-fp4-mi355x-sglang:
-  image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
+  image: lmsysorg/sglang:v0.5.11-rocm700-mi35x
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
@@ -66,7 +66,7 @@ dsr1-fp4-mi355x-atom-mtp:
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x
@@ -85,7 +85,7 @@ dsr1-fp8-mi300x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
@@ -104,7 +104,7 @@ dsr1-fp8-mi325x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi355x-sglang:
-  image: lmsysorg/sglang:v0.5.9-rocm700-mi35x
+  image: lmsysorg/sglang:v0.5.11-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
@@ -124,7 +124,7 @@ dsr1-fp8-mi355x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: mi355x
@@ -143,7 +143,7 @@ qwen3.5-bf16-mi355x-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-bf16-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: mi355x
@@ -162,7 +162,7 @@ qwen3.5-bf16-mi355x-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-bf16-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: mi300x
@@ -181,7 +181,7 @@ qwen3.5-bf16-mi300x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: mi325x
@@ -200,7 +200,7 @@ qwen3.5-bf16-mi325x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi325x
@@ -219,7 +219,7 @@ qwen3.5-fp8-mi325x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
@@ -241,7 +241,7 @@ qwen3.5-fp8-mi355x-sglang:
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
 
 qwen3.5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
@@ -349,7 +349,7 @@ qwen3.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
 qwen3.5-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.10-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.11-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi300x
@@ -368,7 +368,7 @@ qwen3.5-fp8-mi300x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -387,7 +387,7 @@ glm5-fp8-mi355x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -429,7 +429,7 @@ glm5-fp8-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 256 }
 
 glm5.1-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260511
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x

@@ -2343,3 +2343,15 @@
   description:
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
+
+- config-keys:
+    - dsr1-*-mi3*-sglang
+    - qwen3.5-*-mi3*-sglang
+    - qwen3.5-*-mi3*-sglang-mtp
+    - glm5-fp8-mi355x-sglang
+    - glm5-fp8-mi355x-sglang-mtp
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang ROCm images from v0.5.9/v0.5.10/v0.5.10rc0 to v0.5.11"
+    - "rocm700-mi35x/mi30x and rocm720-mi35x/mi30x variants all updated"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
