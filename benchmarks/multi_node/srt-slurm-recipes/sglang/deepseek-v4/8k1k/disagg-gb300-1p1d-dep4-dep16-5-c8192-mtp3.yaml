@@ -188,7 +188,7 @@ backend:
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
       max-running-requests: 21504
-      cuda-graph-max-bs: 1280
+      cuda-graph-max-bs: 512
 
 
 benchmark:
