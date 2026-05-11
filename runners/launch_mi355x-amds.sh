@@ -214,6 +214,7 @@ else
 
     # to prevent reading, outdated saved model. read
     if [[ "$FRAMEWORK" == "atom" ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+        sudo mkdir -p /var/lib/hf-hub-cache-clean
         export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache-clean"
     fi
 
