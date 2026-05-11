@@ -1437,14 +1437,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1036
 
 - config-keys:
-    - qwen3.5-fp8-mi355x-atom
-    - qwen3.5-fp8-mi355x-atom-mtp
-  description:
-    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1040
-
-
-- config-keys:
     - qwen3.5-fp4-mi355x-sglang
   description:
     - "Update SGLang image from 'lmsysorg/sglang:v0.5.10-rocm720-mi35x' to 'rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413'"
@@ -2301,6 +2293,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang MTP coverage using lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
+    - "Mirror the base 8k/1k disagg search space (1p1d-tp4, 1p6d-dep4-tp4, 1p1d-dep4-dep8, 1p1d-dep4-dep16, 2p1d-dep4-dep8, 4p1d-dep4-dep8) with spec-decoding: mtp and EAGLE on the decode side (num-steps=3, eagle-topk=1, num-draft-tokens=4)"
+    - "Recipes adapted from elvischenv/srt-slurm@dsv4-gb300-disagg-8k1k-mtp:recipes/dsv4-pro/sglang/gb300-fp4/8k1k/disagg/mtp/, repointed at the public sglang-staging container and the deepseek-v4-pro model alias"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1297
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-bfd32b6-20260507-DSv4."
@@ -2316,3 +2316,30 @@
     - "Adapt the existing DSV4 GB200 vLLM disagg recipes to B200 by mapping each worker to one full 8-GPU B200 node"
     - "Update the B200 DGXC Slurm launcher to support dsv4/fp4 with dynamo-vllm and local recipe overlays"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1303
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm
+  description:
+    - "Turn off explicit deep_gemm_mega_moe backend selection in B300 Dynamo vLLM throughput recipes"
+    - "Let vLLM choose the MoE backend automatically to avoid CUDA symmetric-memory rendezvous failures during startup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1304
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Fix B200 Dynamo vLLM recipe benchmark concurrencies to match the nvidia-master.yaml search space"
+    - "Propagate low-latency concurrencies 1/64/128, high-throughput concurrencies 1024/2048/4096/8192, and max-throughput concurrency 8192 into the srt-slurm recipe files"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1305
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1308
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
