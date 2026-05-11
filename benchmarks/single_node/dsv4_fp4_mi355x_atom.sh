@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -eo pipefail
+#TODO: srok, remove later, workaround for removing faulty cache
+set -x
+rm -rf /root/.cache/atom/torch_compile_cache/839506a2e5/
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
