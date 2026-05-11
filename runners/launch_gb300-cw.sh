@@ -8,8 +8,8 @@
 set -x
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Weights staged on compute-node-local NVMe.
-    export MODEL_PATH="/scratch/models/dsv4/"
+    # Weights staged on shared storage; avoid node-local /scratch symlink drift.
+    export MODEL_PATH="/mnt/vast/models/dsv4"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
