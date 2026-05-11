@@ -44,6 +44,8 @@ start_gpu_monitor
 set -x
 export ATOM_DISABLE_MMAP=true
 export ATOM_USE_TRITON_MOE=1
+export AITER_BF16_FP8_MOE_BOUND=0
+export ATOM_MOE_GU_ITLV=1
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
