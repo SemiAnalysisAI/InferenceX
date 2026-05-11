@@ -1,6 +1,6 @@
 name: "svf-vllm-disagg-b300-low-latency-4d-mtp3"
 
-# B300 MTP3 low-latency frontier point: 1 DEP8 prefill worker plus 4 TP8
+# B300 MTP3 low-latency frontier point: 1 DEP8 prefill worker plus 4 DEP8
 # decode workers. Each worker uses one full 8-GPU B300 node, plus a dedicated
 # NATS/etcd infra node.
 model:
@@ -65,10 +65,11 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      max-model-len: 16384
+      max-model-len: 9280
       max-num-seqs: 16
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 32768
@@ -78,32 +79,34 @@ backend:
       no-async-scheduling: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-      gpu-memory-utilization: 0.8
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       numa-bind: true
-      offload-group-size: 3
-      offload-num-in-group: 1
-      offload-prefetch-step: 2
       tokenizer-mode: deepseek_v4
       reasoning-parser: deepseek_v4
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      attention-config: '{"use_fp4_indexer_cache": true}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      max-model-len: 16384
-      max-num-seqs: 256
+      max-model-len: 9280
+      max-num-seqs: 512
       max-cudagraph-capture-size: 2048
-      max-num-batched-tokens: 1024
+      max-num-batched-tokens: 2048
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.85
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
