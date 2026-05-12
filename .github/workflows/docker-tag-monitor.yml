@@ -1,5 +1,7 @@
 name: Docker Tag Monitor
 
+# trigger: re-run after token/allowed_bots fix
+
 on:
   push:
     paths:
