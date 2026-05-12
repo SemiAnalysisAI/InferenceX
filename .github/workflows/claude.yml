@@ -53,6 +53,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
