@@ -2338,8 +2338,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1308
 
 - config-keys:
+    - dsv4-fp4-b300-dynamo-vllm-mtp1
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 Dynamo vLLM MTP1 disaggregated multi-node coverage"
+    - "Use DEP8 prefill and enable vLLM speculative-config mtp with num_speculative_tokens=1 in both prefill and decode"
+    - "Use FULL_DECODE_ONLY decode graph settings to avoid the vLLM MTP sparse-indexer metadata failure seen under load"
+    - "Benchmark serving keeps the DeepSeek-V4 chat template path for MTP acceptance-rate correctness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1307
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom
     - qwen3.5-fp8-mi355x-atom-mtp
   description:
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm-mtp1
+  description:
+    - "Disable the vLLM FP4 indexer cache in B300 MTP recipes to avoid the DeepGEMM context_lens.is_contiguous() failure"
+    - "Apply the setting to both prefill and decode so eval-only and throughput jobs take the non-DeepGEMM path"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1307
