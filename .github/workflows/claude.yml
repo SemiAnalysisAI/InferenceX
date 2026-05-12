@@ -31,6 +31,21 @@ jobs:
           pip3 install -r .claude/requirements-mcp.txt
           mkdir -p /tmp/inferencemax-mcp
 
+      - name: Debug CLAUDE_PAT actor permission check
+        env:
+          PAT: ${{ secrets.CLAUDE_PAT }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -u
+          echo "actor=$ACTOR  repo=$GITHUB_REPOSITORY  pat_len=${#PAT}"
+          status=$(curl -sS -o /tmp/perm.json -w "%{http_code}" \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission")
+          echo "HTTP $status"
+          cat /tmp/perm.json
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
