@@ -2343,3 +2343,9 @@
   description:
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
+
+- config-keys:
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.18.0 to v0.20.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
