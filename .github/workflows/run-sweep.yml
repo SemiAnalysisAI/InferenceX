@@ -392,12 +392,12 @@ jobs:
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+            GITHUB_TOKEN: ${{ secrets.REPO_PAT || github.token }}
 
         steps:
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
-                  token: ${{ secrets.REPO_PAT }}
+                  token: ${{ secrets.REPO_PAT || github.token }}
                   fetch-depth: 0
 
             - name: Download results artifacts
@@ -488,6 +488,7 @@ jobs:
             always() &&
             github.event_name == 'pull_request' &&
             !github.event.pull_request.draft &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
