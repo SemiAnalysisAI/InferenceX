@@ -157,7 +157,7 @@ jobs:
                 | map(
                     .label as $l
                     | .summary as $s
-                    | (($s.idleRunners > 0) and ($s.pressureLevel != "backlogged") and ($s.offlineRunners < $s.totalRunners)) as $ok
+                    | (($s.idleRunners > 0) and ($s.offlineRunners < $s.totalRunners)) as $ok
                     | "| `\($l)` | \($s.totalRunners) | \($s.busyRunners) | \($s.idleRunners) | \($s.offlineRunners) | \($s.pressureLevel) | \(if $ok then "yes" else "no" end) |"
                   )
               )
@@ -165,7 +165,7 @@ jobs:
             ' /tmp/ci.json > "$RUNNERS_TABLE"
             jq -r '
               .skus[]
-              | select((.summary.idleRunners > 0) and (.summary.pressureLevel != "backlogged") and (.summary.offlineRunners < .summary.totalRunners))
+              | select((.summary.pressureLevel == "clear") and (.summary.idleRunners > 0) and (.summary.offlineRunners < .summary.totalRunners))
               | .label
             ' /tmp/ci.json | paste -sd, - > "$ALLOWED_SKUS_FILE"
           else
@@ -208,9 +208,11 @@ jobs:
             echo ""
             echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
-            echo "3. Create one PR per config-key changed (each top-level key in the master config, e.g. \`dsr1-fp4-b200-dynamo-trt\`), and link each PR."
+            echo "3. For each eligible config-key, push a branch and actually open a PR — do not stop at the \"Create a pull request for ...\" remote hint that \`git push\` prints. Run \`gh pr create\` (or the equivalent MCP tool) and verify the returned PR URL. Link every PR back to this issue in a comment."
             echo ""
-            echo "**Runner gating:** Only open PRs for config-keys whose runner SKU is listed as Available=yes in the snapshot above (\`$ALLOWED_SKUS\`). The runner SKU is the hardware segment in the config-key (e.g. \`dsr1-fp4-b200-sglang\` → \`b200\`). For any config-key whose SKU is not in the allowed list, skip it and list the skipped keys plus the reason (backlogged / all-offline / no idle capacity) in a single comment on this issue."
+            echo "**Required PR label:** Every PR you open from this issue MUST carry the \`full-sweep-enabled\` label. Apply it at creation time via \`gh pr create --label full-sweep-enabled\` (or add it immediately after with \`gh pr edit <num> --add-label full-sweep-enabled\`). Do not skip this — downstream automation keys off the label."
+            echo ""
+            echo "**Runner gating:** Only open PRs for config-keys whose runner SKU is in the allowed list (\`$ALLOWED_SKUS\`). The runner SKU is the hardware segment in the config-key (e.g. \`dsr1-fp4-b200-sglang\` → \`b200\`). For any config-key whose SKU is not in the allowed list, skip it and list the skipped keys plus the reason (not clear / all-offline / no idle capacity) in a single comment on this issue."
             echo ""
             echo "**Single-node only:** Skip any config-key whose master-config entry has \`multinode: true\` or otherwise targets a multinode runner. Only update single-node configurations."
             echo ""
