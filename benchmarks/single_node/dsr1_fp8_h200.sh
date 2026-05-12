@@ -17,7 +17,7 @@ fi
 
 pip3 install --user --break-system-packages sentencepiece
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 

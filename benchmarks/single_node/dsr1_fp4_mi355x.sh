@@ -15,7 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export SGLANG_USE_AITER=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4

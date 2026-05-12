@@ -22,7 +22,7 @@ fi
 
 nvidia-smi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}

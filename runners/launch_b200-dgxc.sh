@@ -6,6 +6,70 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
+# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
+# Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
+# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
+# downloading on every dgxc node. Runs for both single-node and multinode
+# launches.
+# NOTE: per-node /raid/models/* would be faster but is only populated on a
+# subset of dgxc nodes today, so we use Lustre for reliability.
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
+    export SRT_SLURM_MODEL_PREFIX="dsr1"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
+    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
+    export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
+    export SRT_SLURM_MODEL_PREFIX="kimik2.5"
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
+    export SRT_SLURM_MODEL_PREFIX="minimaxm2.5"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimaxm2.5-fp4"
+elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
+    export SRT_SLURM_MODEL_PREFIX="gptoss"
+else
+    echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
+    echo "Available models under /lustre/fsw/models:"
+    ls -la /lustre/fsw/models
+    exit 1
+fi
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Validate framework
@@ -14,33 +78,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # MODEL_PATH: Override with pre-downloaded paths on B200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared B200 cluster.
-    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
-        export SRT_SLURM_MODEL_PREFIX="dsr1"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
-        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-        SELECTED_MODEL_PATH=""
-        if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-            SELECTED_MODEL_PATH="$MODEL_PATH"
-        else
-            for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
-                if [[ -d "$candidate" ]]; then
-                    SELECTED_MODEL_PATH="$candidate"
-                    break
-                fi
-            done
-        fi
-        export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-    else
-        echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
+    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
         exit 1
     fi
+
     export SERVED_MODEL_NAME=$MODEL
 
     echo "Cloning srt-slurm repository..."
@@ -281,8 +324,11 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/scratch/fsw/gharunners/hf-hub-cache"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # Point the bench script at the local MODEL_PATH resolved above instead of
+    # pulling from the HF hub cache. Bench scripts skip `hf download` when
+    # MODEL is a local path.
+    export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -326,7 +372,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \

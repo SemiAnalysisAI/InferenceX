@@ -20,7 +20,7 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # ========= Determine other parameters based on ISL, OSL, CONC =========
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC

@@ -18,7 +18,7 @@ fi
 
 nvidia-smi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export SGLANG_ENABLE_JIT_DEEPGEMM=false
 
