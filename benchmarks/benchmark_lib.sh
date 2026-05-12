@@ -905,9 +905,10 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-042026"
+    local dataset="semianalysisai/cc-traces-weka-no-subagents-051226"
     # aiperf reads the corpus via its public-dataset registry; the loader
-    # under the hood pulls from semianalysisai/cc-traces-weka-042026.
+    # under the hood pulls from semianalysisai/cc-traces-weka-no-subagents-051226
+    # (949 traces, no-subagents variant — see plugins.yaml).
     TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka"
     echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
@@ -948,15 +949,14 @@ build_replay_cmd() {
     # turn 0 — which is exactly what we want for benchmark numbers.
     #
     # The scenario plugin locks: --cache-bust first_turn_prefix,
-    # --num-dataset-entries 739, --inter-turn-delay-cap-seconds 60, etc.,
-    # and auto-injects them — so we do not pass them. See
-    # utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # --inter-turn-delay-cap-seconds 60, etc., and auto-injects them — so
+    # we do not pass them. See utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="${DURATION:-1800}"
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the 739-trace weka corpus. The default
+    # routinely takes 4-5 min for the 949-trace weka corpus. The default
     # 300s timeout flips parallel jobs into TimeoutError mid-setup when
     # many launchers contend for the shared HF cache + tmpfs. Bump to
     # 900s — the post-setup measurement window is unaffected.
@@ -995,11 +995,11 @@ build_replay_cmd() {
     # need trust_remote_code=True to load. Benign for models without
     # custom tokenizer code, so we set it unconditionally.
     REPLAY_CMD+=" --tokenizer-trust-remote-code"
-    # Default --num-dataset-entries is 100; the weka corpus has 739. Cap
-    # at 739 so all unique traces are loaded (the loader treats this as a
+    # Default --num-dataset-entries is 100; the weka corpus has 949. Cap
+    # at 949 so all unique traces are loaded (the loader treats this as a
     # ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 739"
+    REPLAY_CMD+=" --num-dataset-entries 949"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0

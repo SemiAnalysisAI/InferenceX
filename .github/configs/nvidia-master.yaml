@@ -2541,10 +2541,13 @@ kimik2.5-int4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.17.0
+  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
+  # cleared the agentic-coding warmup crash on max_model_len=131072 +
+  # prefix caching.
+  image: vllm/vllm-openai:v0.20.2
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
-  runner: b200
+  runner: b200-dgxc
   precision: fp4
   framework: vllm
   multinode: false
@@ -2560,6 +2563,18 @@ kimik2.5-fp4-b200-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+    # agentic-coding mirrors the fixed-seq-len TP layouts (tp=8 + tp=4,
+    # ep=1) and conc range. Adds offloading variants since agentic traces
+    # have much larger ISL (mean ~178k tokens) than fixed-seq-len; cpu
+    # offload is gated on SimpleCPUOffloadConnector enabled via
+    # VLLM_USE_SIMPLE_KV_OFFLOAD=1 in the launcher.
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [4] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [4, 8, 16, 32, 64] }
+      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [4] }
+      - { tp: 4, ep: 1, offloading: cpu,  conc-list: [64, 96, 128] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
