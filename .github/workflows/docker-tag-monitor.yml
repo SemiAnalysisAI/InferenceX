@@ -139,6 +139,38 @@ jobs:
 
           echo "has_updates=true" >> "$GITHUB_OUTPUT"
 
+          # Snapshot self-hosted runner availability from the CI tracker.
+          # Used to constrain which SKUs Claude is allowed to open PRs against.
+          RUNNERS_TABLE=$(mktemp)
+          ALLOWED_SKUS_FILE=$(mktemp)
+          if curl -sf --max-time 10 "https://inferencex-ci-tracker.vercel.app/api/ci" -o /tmp/ci.json; then
+            jq -r '
+              [
+                "| SKU | Total | Busy | Idle | Offline | Pressure | Available |",
+                "|-----|-------|------|------|---------|----------|-----------|"
+              ] + (
+                .skus
+                | sort_by(.label)
+                | map(
+                    .label as $l
+                    | .summary as $s
+                    | (($s.idleRunners > 0) and ($s.pressureLevel != "backlogged") and ($s.offlineRunners < $s.totalRunners)) as $ok
+                    | "| `\($l)` | \($s.totalRunners) | \($s.busyRunners) | \($s.idleRunners) | \($s.offlineRunners) | \($s.pressureLevel) | \(if $ok then "yes" else "no" end) |"
+                  )
+              )
+              | .[]
+            ' /tmp/ci.json > "$RUNNERS_TABLE"
+            jq -r '
+              .skus[]
+              | select((.summary.idleRunners > 0) and (.summary.pressureLevel != "backlogged") and (.summary.offlineRunners < .summary.totalRunners))
+              | .label
+            ' /tmp/ci.json | paste -sd, - > "$ALLOWED_SKUS_FILE"
+          else
+            echo "_Could not reach https://inferencex-ci-tracker.vercel.app/api/ci — proceed cautiously._" > "$RUNNERS_TABLE"
+            : > "$ALLOWED_SKUS_FILE"
+          fi
+          ALLOWED_SKUS=$(cat "$ALLOWED_SKUS_FILE")
+
           # Build issue body and write to file
           BODY_FILE=$(mktemp)
           {
@@ -155,6 +187,18 @@ jobs:
               echo "| \`$repo\` | \`$tag\` | $tag_ver | $cur_ver | $pub_date |"
             done <<< "$UPDATES"
             echo ""
+            echo "### Self-Hosted Runner Snapshot"
+            echo ""
+            echo "_Source: https://inferencex-ci-tracker.vercel.app/api/ci at $(date -u +%Y-%m-%dT%H:%M:%SZ)_"
+            echo ""
+            cat "$RUNNERS_TABLE"
+            echo ""
+            if [[ -n "$ALLOWED_SKUS" ]]; then
+              echo "**Allowed SKUs for this run:** \`$ALLOWED_SKUS\`"
+            else
+              echo "**Allowed SKUs for this run:** _none — skip PR creation and post a comment explaining the runner shortage._"
+            fi
+            echo ""
             echo "---"
             echo ""
             echo "@claude Please update the configurations:"
@@ -163,10 +207,16 @@ jobs:
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
             echo "3. Create one PR per config-key changed (each top-level key in the master config, e.g. \`dsr1-fp4-b200-dynamo-trt\`), and link each PR."
             echo ""
-            echo "One PR per config-key: if a single image tag bump touches N config-keys, open N PRs. Do not bundle multiple config-keys into one PR even when they share a framework or image family."
+            echo "**Runner gating:** Only open PRs for config-keys whose runner SKU is listed as Available=yes in the snapshot above (\`$ALLOWED_SKUS\`). The runner SKU is the hardware segment in the config-key (e.g. \`dsr1-fp4-b200-sglang\` → \`b200\`). For any config-key whose SKU is not in the allowed list, skip it and list the skipped keys plus the reason (backlogged / all-offline / no idle capacity) in a single comment on this issue."
             echo ""
-            echo "Focus on updating single-node configurations. For each config-key, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+            echo "**Single-node only:** Skip any config-key whose master-config entry has \`multinode: true\` or otherwise targets a multinode runner. Only update single-node configurations."
+            echo ""
+            echo "One PR per config-key: if a single image tag bump touches N eligible config-keys, open N PRs. Do not bundle multiple config-keys into one PR even when they share a framework or image family."
+            echo ""
+            echo "For each eligible config-key, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
           } > "$BODY_FILE"
+
+          rm -f "$RUNNERS_TABLE" "$ALLOWED_SKUS_FILE" /tmp/ci.json
 
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
