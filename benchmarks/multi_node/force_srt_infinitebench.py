@@ -245,12 +245,19 @@ def patch_benchmark_serving(path: Path) -> None:
                 f"    {line}" if line else line
                 for line in random_branch.splitlines()
             ) + "\n"
-            if indented_random_branch not in text:
-                raise RuntimeError(
-                    f"Expected random dataset branch not found in {path}"
-                )
-            random_branch = indented_random_branch
-            indent = "        "
+            if indented_random_branch in text:
+                random_branch = indented_random_branch
+                indent = "        "
+            else:
+                random_marker = '        elif args.dataset_name == "random":\n'
+                start = text.find(random_marker)
+                end = text.find('        else:\n', start)
+                if start == -1 or end == -1:
+                    raise RuntimeError(
+                        f"Expected random dataset branch not found in {path}"
+                    )
+                random_branch = text[start:end]
+                indent = "        "
 
         infinite_branch = f'''{indent}elif args.dataset_name == "infinitebench":
 {indent}    input_requests = sample_infinitebench_requests(
