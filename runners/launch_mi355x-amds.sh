@@ -176,14 +176,7 @@ PY
 else
 
     export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
-    # Persistent mmap-cache for aiperf's tokenized dataset artifacts. Reuses
-    # the same /it-share path that already hosts the vllm cache below — likely
-    # NFS-shared across MI355X nodes (verify with `mount | grep it-share` on
-    # the host), so the first agentic job's tokenize cycle is reused by
-    # subsequent jobs on every runner. Per-host fallback is still a win:
-    # repeat jobs on the same runner skip the 4-5 min cycle.
-    export AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/it-share/gharunners/.cache/aiperf_mmap}"
-    mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+    export AIPERF_MMAP_CACHE_HOST_PATH="/it-share/aiperf-cache/"
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
