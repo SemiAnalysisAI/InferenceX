@@ -2188,7 +2188,7 @@ glm5-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
