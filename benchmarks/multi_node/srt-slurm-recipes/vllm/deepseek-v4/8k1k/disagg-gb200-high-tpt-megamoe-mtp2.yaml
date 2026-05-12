@@ -129,8 +129,9 @@ backend:
 benchmark:
   type: "sa-bench"
   isl: 8192
-  osl: 1024
-  concurrencies: "4096x8192x12288"
+  osl: 256
+  random-ratio: 1.0
+  concurrencies: "8192"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
