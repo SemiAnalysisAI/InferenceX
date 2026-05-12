@@ -2343,3 +2343,11 @@
   description:
     - "Add Qwen3.5-397B-A17B FP8 MI355X ATOM benchmark configs with and without MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Reduce mid-curve MTP disagg concurrency to match system capacity"
+    - "1P8D 256->160, 1P16D 256->160, 2P8D 512->320, 4P8D 1024->640"
+    - "Set num_prompts_mult=16 to keep total prompt count unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1316
