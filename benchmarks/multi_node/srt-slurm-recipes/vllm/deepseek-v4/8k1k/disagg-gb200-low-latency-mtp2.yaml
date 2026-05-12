@@ -37,6 +37,7 @@ backend:
   connector: null
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+    VLLM_USE_DEEP_GEMM: '0'
     TILELANG_CLEANUP_TEMP_FILES: '1'
     VLLM_USE_NCCL_SYMM_MEM: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -52,6 +53,7 @@ backend:
     NCCL_P2P_LEVEL: NVL
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+    VLLM_USE_DEEP_GEMM: '0'
     TILELANG_CLEANUP_TEMP_FILES: '1'
     VLLM_USE_NCCL_SYMM_MEM: '1'
     NCCL_CUMEM_ENABLE: '1'

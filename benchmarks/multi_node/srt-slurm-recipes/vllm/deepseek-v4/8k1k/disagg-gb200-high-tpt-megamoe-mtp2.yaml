@@ -39,6 +39,7 @@ backend:
   connector: null
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_USE_DEEP_GEMM: "0"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -57,6 +58,7 @@ backend:
     NCCL_P2P_LEVEL: NVL
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_USE_DEEP_GEMM: "0"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -82,7 +84,6 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       enforce-eager: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
@@ -109,7 +110,6 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       max-model-len: 9280
