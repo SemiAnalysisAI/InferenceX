@@ -135,7 +135,7 @@ benchmark:
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8
-  concurrencies: "16x64x128"
+  concurrencies: "64x256x512"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
