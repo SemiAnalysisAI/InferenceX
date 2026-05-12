@@ -4,6 +4,12 @@ frontend:
   type: dynamo
   enable_multiple_frontends: true
   num_additional_frontends: 8
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
 
 dynamo:
   hash: "34d55a596fb8d3d44daefe425ec1e303131f4d2c"
