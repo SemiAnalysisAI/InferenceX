@@ -2465,7 +2465,7 @@
     - dsv4-fp4-mi355x-atom
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM benchmark config; bump image to rocm/atom-dev:nightly_202605101539, expand concurrency range (conc 4–1024), and simplify runtime script"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311  
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311
 
 - config-keys:
     - glm5-fp8-mi355x-sglang
@@ -2486,7 +2486,7 @@
   description:
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm-mtp
@@ -2574,3 +2574,9 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1417
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.15.1 to v0.20.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1394
