@@ -1670,7 +1670,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
