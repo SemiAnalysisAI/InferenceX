@@ -1,6 +1,9 @@
 name: Docker Tag Monitor
 
 on:
+  push:
+    paths:
+      - '.github/workflows/docker-tag-monitor.yml'
   schedule:
     - cron: '0 7 * * 6'
   workflow_dispatch:
@@ -159,11 +162,11 @@ jobs:
             echo ""
             echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
-            echo "3. Create separate PRs grouped by framework and image family, and link each PR."
+            echo "3. Create one PR per config-key changed (each top-level key in the master config, e.g. \`dsr1-fp4-b200-dynamo-trt\`), and link each PR."
             echo ""
-            echo "Group by framework plus CUDA/ROCm image family (for example sglang-cuda, sglang-rocm, vllm-cuda, vllm-rocm, atom, trt), not by individual GPU. Split by GPU only when an update is genuinely hardware-specific."
+            echo "One PR per config-key: if a single image tag bump touches N config-keys, open N PRs. Do not bundle multiple config-keys into one PR even when they share a framework or image family."
             echo ""
-            echo "Focus on updating single-node configurations. For each framework/image family, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+            echo "Focus on updating single-node configurations. For each config-key, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
           } > "$BODY_FILE"
 
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
