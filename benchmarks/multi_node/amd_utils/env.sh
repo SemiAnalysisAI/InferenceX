@@ -54,9 +54,9 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     set -x
 
-    # UCX_NET_DEVICES: Use the first benic interface for UCX TCP transport
+    # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
     if [[ -z "$UCX_NET_DEVICES" ]]; then
-        UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/benic1p1/{print $2}' | head -1)
+        UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/tw-eth/{print $2}' | head -1)
         if [[ -n "$UCX_NET_DEV" ]]; then
             export UCX_NET_DEVICES="$UCX_NET_DEV"
         else
