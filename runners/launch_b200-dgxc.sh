@@ -70,6 +70,15 @@ else
     exit 1
 fi
 
+# Shared mmap-cache for aiperf's tokenized dataset artifacts. /lustre/fsw is
+# the same Lustre mount used for model weights — visible at the same path
+# from every b200-dgxc slurm node, so the first agentic job to fill the
+# cache lets every subsequent job (same matrix or future runs) skip the
+# 4-5 min tokenize-and-reconstruct step. The aiperf populate is flock-
+# serialized so concurrent fillers don't race.
+export AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/lustre/fsw/aiperf_mmap_cache}"
+mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Validate framework
@@ -376,9 +385,9 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
-        --no-container-entrypoint --export=ALL,PORT=8888 \
+        --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCH_SCRIPT"
 fi
