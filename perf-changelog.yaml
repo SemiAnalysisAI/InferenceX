@@ -2312,3 +2312,10 @@
     - "Retune GB200 Dynamo vLLM InfiniteBench 8192/256 concurrency lists and mirror them into the srt-slurm recipes"
     - "Add a 1-prefill/2-decode MegaMOE mid-curve recipe at conc 4096x8192"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp3
+  description:
+    - "Double GB300 Dynamo SGLang MTP3 8k/256 matrix concurrencies and mirror the values into the referenced srt-slurm recipes"
+    - "New conc targets: 2, 128, 512, 512, 1024, 2048"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

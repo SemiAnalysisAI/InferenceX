@@ -8552,7 +8552,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
       # Recipes sourced from successful run 25648796829 / PR #1297.
       # Low-latency baseline: 1p1d-tp4-tp4. 2 nodes.
       - spec-decoding: mtp
-        conc-list: [1]
+        conc-list: [2]
         prefill:
           num-worker: 1
           tp: 4
@@ -8566,9 +8566,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           ep: 1
           dp-attn: false
       # Low-latency 1p6d-dep4-tp4: 1P (DEP=4) + 6 TP=4 decode workers. 7 nodes.
-      # Recipe runs concurrencies=8x32x64; matrix tracks the max.
+      # Recipe runs concurrencies=16x64x128; matrix tracks the max.
       - spec-decoding: mtp
-        conc-list: [64]
+        conc-list: [128]
         prefill:
           num-worker: 1
           tp: 4
@@ -8583,7 +8583,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           dp-attn: false
       # Mid curve 1p1d-dep4-dep8. 3 nodes.
       - spec-decoding: mtp
-        conc-list: [256]
+        conc-list: [512]
         prefill:
           num-worker: 1
           tp: 4
@@ -8598,7 +8598,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           dp-attn: true
       # Mid curve 1p1d-dep4-dep16. 5 nodes.
       - spec-decoding: mtp
-        conc-list: [256]
+        conc-list: [512]
         prefill:
           num-worker: 1
           tp: 4
@@ -8613,7 +8613,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           dp-attn: true
       # Mid curve 2p1d-dep4-dep8. 4 nodes.
       - spec-decoding: mtp
-        conc-list: [512]
+        conc-list: [1024]
         prefill:
           num-worker: 2
           tp: 4
@@ -8628,7 +8628,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           dp-attn: true
       # Mid curve 4p1d-dep4-dep8. 6 nodes.
       - spec-decoding: mtp
-        conc-list: [1024]
+        conc-list: [2048]
         prefill:
           num-worker: 4
           tp: 4
