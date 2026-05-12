@@ -4,8 +4,8 @@ name: "svf-vllm-disagg-gb200-low-middle-curve"
 #   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-low-middle-curve.yaml
 #
 # Topology: 1 prefill (DEP=8) + 4 decode (TP=8). 11 nodes total with a
-# dedicated NATS/etcd infra node. Low-middle curve points at concurrencies
-# 2048/4096.
+# dedicated NATS/etcd infra node. Low-middle curve point at concurrency
+# 4096.
 #
 # Local deltas vs upstream:
 #   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
@@ -138,7 +138,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  concurrencies: "2048x4096"
+  concurrencies: "4096"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
