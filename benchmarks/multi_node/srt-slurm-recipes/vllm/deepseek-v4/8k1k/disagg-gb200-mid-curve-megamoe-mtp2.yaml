@@ -130,7 +130,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  random-ratio: 1.0
   concurrencies: "4096"
   req_rate: "inf"
   use_chat_template: true
