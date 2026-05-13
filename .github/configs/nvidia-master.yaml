@@ -8726,7 +8726,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           dp-attn: true
       # Mid curve 8p1d-dep8-dep8. 18 nodes.
       - spec-decoding: mtp
-        conc-list: [32768, 65536]
+        conc-list: [40960, 65536]
         prefill:
           num-worker: 8
           tp: 8
