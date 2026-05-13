@@ -1351,7 +1351,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: aigmkt/vllm-dev:ainic2
+  image: ghcr.io/simondanielsson/vllm-dev:ainic-test-hydra
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
