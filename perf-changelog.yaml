@@ -2350,4 +2350,4 @@
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-339e36e-20260512-DSv4."
     - "Enabled Triton attention backend, FlyDSL MoE, and fused hash topk."
     - "Concurrency sweep up to 1024."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/xxxx
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1355
