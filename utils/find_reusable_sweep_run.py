@@ -134,6 +134,48 @@ def find_latest_successful_run(
     return None
 
 
+def find_latest_successful_run_for_pr(
+    repo: str,
+    workflow_id: str,
+    pr_number: int,
+    token: str,
+) -> dict[str, Any] | None:
+    """Return the latest successful PR run for any commit on the given PR."""
+    encoded_workflow = urllib.parse.quote(workflow_id, safe="")
+    runs = paginated_github_api(
+        repo,
+        f"/actions/workflows/{encoded_workflow}/runs",
+        token,
+        "workflow_runs",
+        {
+            "event": "pull_request",
+            "status": "completed",
+        },
+    )
+    for run in runs:
+        if run.get("conclusion") != "success":
+            continue
+        run_prs = run.get("pull_requests", [])
+        for run_pr in run_prs:
+            if run_pr.get("number") == pr_number:
+                return run
+    return None
+
+
+def get_file_at_commit(repo: str, path: str, ref: str, token: str) -> str | None:
+    """Fetch file contents at a specific commit. Returns None if not found."""
+    encoded_path = urllib.parse.quote(path, safe="")
+    try:
+        data = github_api(repo, f"/contents/{encoded_path}", token, {"ref": ref})
+        if data.get("encoding") == "base64":
+            import base64
+
+            return base64.b64decode(data["content"]).decode("utf-8")
+        return None
+    except RuntimeError:
+        return None
+
+
 def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
     """Return artifact names from a workflow run."""
     artifacts = paginated_github_api(
@@ -222,12 +264,31 @@ def main() -> int:
 
     run = find_latest_successful_run(args.repo, args.workflow_id, head_sha, token)
     if not run:
+        run = find_latest_successful_run_for_pr(
+            args.repo, args.workflow_id, pr_number, token
+        )
+        if run:
+            run_head_sha = str(run.get("head_sha") or "")
+            if run_head_sha and run_head_sha != head_sha:
+                current_changelog = get_file_at_commit(
+                    args.repo, "perf-changelog.yaml", head_sha, token
+                )
+                run_changelog = get_file_at_commit(
+                    args.repo, "perf-changelog.yaml", run_head_sha, token
+                )
+                if current_changelog is None or run_changelog is None:
+                    run = None
+                elif current_changelog != run_changelog:
+                    run = None
+    if not run:
         raise RuntimeError(
             f"PR #{pr_number} is approved for reuse, but no successful "
-            f"{args.workflow_id} pull_request run was found for {head_sha}."
+            f"{args.workflow_id} pull_request run was found with matching "
+            f"perf-changelog.yaml content."
         )
 
     run_id = int(run["id"])
+    source_head_sha = str(run.get("head_sha") or head_sha)
     names = artifact_names(args.repo, run_id, token)
     if "results_bmk" not in names and "eval_results_all" not in names:
         raise RuntimeError(
@@ -241,7 +302,7 @@ def main() -> int:
         source_run_attempt=str(run.get("run_attempt") or "1"),
         source_run_url=str(run.get("html_url") or ""),
         source_pr_number=str(pr_number),
-        source_head_sha=head_sha,
+        source_head_sha=source_head_sha,
     )
     write_outputs(args.github_output, outputs)
     print(json.dumps(outputs, indent=2))
