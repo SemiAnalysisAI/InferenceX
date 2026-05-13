@@ -1,4 +1,4 @@
-name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-8p1d-dep8-dep8-mtp-c32768"
+name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-8p1d-dep8-dep8-mtp-c65536"
 
 frontend:
   type: dynamo
@@ -151,7 +151,9 @@ benchmark:
   isl: 8192
   osl: 256
   random_range_ratio: 1.0
-  concurrencies: "40960"
+  concurrencies: "65536"
+  num_prompts_mult: 2
+  num_warmup_mult: 1
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
