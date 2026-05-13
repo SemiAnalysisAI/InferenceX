@@ -2844,10 +2844,10 @@ dsv4-fp4-b300-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [64, 70, 76, 82] }
-      - { tp: 8, offloading: none, conc-list: [64, 70, 76, 82] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [64, 70, 76, 82] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [64, 70, 76, 82] }
+      - { tp: 4, offloading: none, conc-list: [16, 32, 64, 70, 76] }
+      - { tp: 8, offloading: none, conc-list: [16, 32, 64, 70, 76] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 32, 64, 70, 76] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [16, 32, 64, 70, 76] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
