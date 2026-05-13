@@ -31,9 +31,6 @@ ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
 EP_SIZE=${EP_SIZE:-1}
 DP_ATTENTION=${DP_ATTENTION:-false}
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=1000000
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -136,7 +133,6 @@ vllm serve "$MODEL" \
 --reasoning-parser deepseek_v4 \
 --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
---max-model-len "$MAX_MODEL_LEN" \
 --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS" \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
