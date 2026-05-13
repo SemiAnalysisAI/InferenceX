@@ -161,6 +161,55 @@ if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi
 
+# =============================================================================
+# Reuse existing allocation (skip sbatch)
+# =============================================================================
+# When SLURM_REUSE_JOBID is set, run job.slurm directly in the current shell,
+# attaching to the existing allocation. Inner `srun` calls pick up the
+# allocation via SLURM_JOB_ID; SLURM_OVERLAP=1 lets them share task slots with
+# the interactive shell already holding the allocation.
+if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
+    REUSE_JID="$SLURM_REUSE_JOBID"
+    echo "Reusing existing Slurm allocation ${REUSE_JID} (skipping sbatch)" >&2
+
+    # Resolve allocation's nodelist if not already provided.
+    ALLOC_NODELIST="${SLURM_JOB_NODELIST:-$(squeue -h -j "$REUSE_JID" -o '%N' 2>/dev/null)}"
+    if [[ -z "$ALLOC_NODELIST" ]]; then
+        echo "Error: could not resolve nodelist for job ${REUSE_JID}" >&2
+        exit 1
+    fi
+    ALLOC_NNODES=$(scontrol show hostnames "$ALLOC_NODELIST" | wc -l)
+    if [[ "$ALLOC_NNODES" -lt "$NUM_NODES" ]]; then
+        echo "Error: allocation ${REUSE_JID} has ${ALLOC_NNODES} nodes, need ${NUM_NODES}" >&2
+        exit 1
+    fi
+
+    export SLURM_JOB_ID="$REUSE_JID"
+    export SLURM_JOBID="$REUSE_JID"
+    export SLURM_JOB_NODELIST="$ALLOC_NODELIST"
+    export SLURM_NODELIST="$ALLOC_NODELIST"
+    export SLURM_NNODES="$ALLOC_NNODES"
+    export SLURM_JOB_NUM_NODES="$ALLOC_NNODES"
+    export SLURM_NTASKS="$ALLOC_NNODES"
+    export SLURM_NPROCS="$ALLOC_NNODES"
+    export SLURM_NTASKS_PER_NODE=1
+    export SLURM_TASKS_PER_NODE="1(x${ALLOC_NNODES})"
+    export SLURM_OVERLAP=1
+    export SLURM_SUBMIT_DIR="$(pwd)"
+
+    STDOUT_LOG="${BENCHMARK_LOGS_DIR}/slurm_job-${REUSE_JID}.out"
+    STDERR_LOG="${BENCHMARK_LOGS_DIR}/slurm_job-${REUSE_JID}.err"
+    rm -f "$STDOUT_LOG" "$STDERR_LOG"
+
+    nohup bash "$(dirname "$0")/job.slurm" >"$STDOUT_LOG" 2>"$STDERR_LOG" &
+    INLINE_PID=$!
+    echo "$INLINE_PID" > "${BENCHMARK_LOGS_DIR}/slurm_job-${REUSE_JID}.pid"
+    echo "Started job.slurm (pid=${INLINE_PID}); logs: ${STDOUT_LOG}" >&2
+
+    echo "$REUSE_JID"
+    exit 0
+fi
+
 # Construct the sbatch command
 sbatch_cmd=(
     sbatch
