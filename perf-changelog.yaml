@@ -2367,3 +2367,9 @@
   description:
     - "Update SGLang image from v0.5.10.post1 to v0.5.11"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1347
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Rerun update SGLang image from v0.5.10.post1 to v0.5.11"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1347
