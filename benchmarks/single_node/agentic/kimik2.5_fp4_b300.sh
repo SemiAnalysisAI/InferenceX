@@ -42,9 +42,11 @@ case "$OFFLOADING" in
     none)
         ;;
     cpu)
-        # B300 NV nodes have ~3 TB DRAM available. Override the workflow input
-        # default (600) so the simple offload connector gets the full capacity.
-        TOTAL_CPU_DRAM_GB=3000
+        # B300 NV nodes have 3.0 TiB total host DRAM. Leave ~800 GB headroom
+        # for the vLLM worker RSS + page cache + slurm cgroup overhead so the
+        # KV offload pool mmap doesn't OOM the worker during init. Matches the
+        # DSv4 B300 launcher value (proven on this cluster).
+        TOTAL_CPU_DRAM_GB=2200
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
         ;;
