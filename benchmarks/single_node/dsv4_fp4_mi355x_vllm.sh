@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4-Pro FP8 on MI355X via vLLM with AITER MLA decode.
+# DeepSeek-V4-Pro on MI355X via vLLM with AITER MLA decode.
+# The DeepSeek-V4-Pro checkpoint is mixed-precision FP4+FP8: MoE expert
+# weights are stored in FP4 (the dominant storage class for this
+# ~960GB model), with attention/norm/router params in FP8 and KV cache
+# in FP8 at runtime. InferenceX classifies this as the fp4 variant.
+#
 # Based on vllm-project/vllm#40889 (AITER-accelerated sparse MLA decode,
 # stacked on #40871 which adds base DSv4 ROCm support).
+#
+# Serving flags follow the validated MI355X recipe from
+# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8): AITER + AITER_LINEAR,
+# triton_unfused MoE, mp executor, async scheduling, max-num-seqs=128,
+# max-num-batched-tokens=8192, gpu-mem-util=0.6.
 #
 # Uses the ATOM MI355X image as the base (ROCm 7.2.2, PyTorch 2.10,
 # aiter with MLA decode, MI355X GPU detection). vLLM is rebuilt from
@@ -33,6 +43,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_LINEAR=1
 export VLLM_TARGET_DEVICE=rocm
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_PLUGINS=""
@@ -487,17 +498,18 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
     --tensor-parallel-size $TP \
-    --gpu-memory-utilization 0.90 \
+    --distributed-executor-backend mp \
+    --gpu-memory-utilization 0.6 \
     --max-model-len $MAX_MODEL_LEN \
+    --max-num-seqs 128 \
+    --max-num-batched-tokens 8192 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
     --enforce-eager \
+    --async-scheduling \
     --moe-backend "triton_unfused" \
     --no-enable-prefix-caching \
-    --max-num-seqs 32 \
     --tokenizer-mode deepseek_v4 \
-    --tool-call-parser deepseek_v4 \
-    --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
