@@ -134,13 +134,13 @@ def find_latest_successful_run(
     return None
 
 
-def find_latest_successful_run_for_pr(
+def iter_successful_runs_for_pr(
     repo: str,
     workflow_id: str,
     pr_number: int,
     token: str,
-) -> dict[str, Any] | None:
-    """Return the latest successful PR run for any commit on the given PR."""
+) -> list[dict[str, Any]]:
+    """Return all successful PR runs for any commit on the given PR, newest first."""
     encoded_workflow = urllib.parse.quote(workflow_id, safe="")
     runs = paginated_github_api(
         repo,
@@ -152,14 +152,16 @@ def find_latest_successful_run_for_pr(
             "status": "completed",
         },
     )
+    matching: list[dict[str, Any]] = []
     for run in runs:
         if run.get("conclusion") != "success":
             continue
         run_prs = run.get("pull_requests", [])
         for run_pr in run_prs:
             if run_pr.get("number") == pr_number:
-                return run
-    return None
+                matching.append(run)
+                break
+    return matching
 
 
 def get_file_at_commit(repo: str, path: str, ref: str, token: str) -> str | None:
@@ -264,27 +266,44 @@ def main() -> int:
 
     run = find_latest_successful_run(args.repo, args.workflow_id, head_sha, token)
     if not run:
-        run = find_latest_successful_run_for_pr(
+        current_changelog: str | None = None
+        candidate_runs = iter_successful_runs_for_pr(
             args.repo, args.workflow_id, pr_number, token
         )
-        if run:
-            run_head_sha = str(run.get("head_sha") or "")
-            if run_head_sha and run_head_sha != head_sha:
+        if not candidate_runs:
+            raise RuntimeError(
+                f"PR #{pr_number} is approved for reuse, but no successful "
+                f"{args.workflow_id} pull_request run was found."
+            )
+        for candidate in candidate_runs:
+            run_head_sha = str(candidate.get("head_sha") or "")
+            if not run_head_sha:
+                continue
+            if run_head_sha == head_sha:
+                run = candidate
+                break
+            if current_changelog is None:
                 current_changelog = get_file_at_commit(
                     args.repo, "perf-changelog.yaml", head_sha, token
                 )
-                run_changelog = get_file_at_commit(
-                    args.repo, "perf-changelog.yaml", run_head_sha, token
-                )
-                if current_changelog is None or run_changelog is None:
-                    run = None
-                elif current_changelog != run_changelog:
-                    run = None
+                if current_changelog is None:
+                    raise RuntimeError(
+                        f"PR #{pr_number}: could not fetch perf-changelog.yaml "
+                        f"at head SHA {head_sha}."
+                    )
+            run_changelog = get_file_at_commit(
+                args.repo, "perf-changelog.yaml", run_head_sha, token
+            )
+            if run_changelog is None:
+                continue
+            if current_changelog == run_changelog:
+                run = candidate
+                break
     if not run:
         raise RuntimeError(
             f"PR #{pr_number} is approved for reuse, but no successful "
             f"{args.workflow_id} pull_request run was found with matching "
-            f"perf-changelog.yaml content."
+            f"perf-changelog.yaml content for head SHA {head_sha}."
         )
 
     run_id = int(run["id"])
