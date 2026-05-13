@@ -2319,3 +2319,11 @@
     - "Double GB300 Dynamo SGLang MTP3 8k/256 matrix concurrencies and mirror the values into the referenced srt-slurm recipes"
     - "New conc targets: 2, 128, 512, 512, 1024, 2048"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-mtp3
+  description:
+    - "Add GB200 Dynamo SGLang MTP3 InfiniteBench 8192/256 recipes extrapolated from GB300 run 25761192586"
+    - "Use the GB200 deepseek-v4-pro model alias and widen TP4/DEP4 recipe points to TP8/DEP8"
+    - "Halve recipe concurrencies above 8192 to 12288, 16384, and 8192"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
