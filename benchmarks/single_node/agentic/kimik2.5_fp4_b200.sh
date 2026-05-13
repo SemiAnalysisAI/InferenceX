@@ -16,11 +16,6 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-# Agentic matrix entries don't set max-model-len, so the workflow passes 0.
-# ${:-DEFAULT} only fires on unset/empty, so handle 0 explicitly.
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -42,10 +37,10 @@ case "$OFFLOADING" in
     none)
         ;;
     cpu)
-        # B200 DGXC nodes have ~1.8 TB DRAM available. Override the workflow
-        # input default (600) so the simple offload connector gets the full
-        # capacity. Same value used by the INT4 launcher.
-        TOTAL_CPU_DRAM_GB=1800
+        # B200 DGXC runner pool was memory-bumped; cluster now exposes ~3 TB
+        # of usable host DRAM per node. Override the workflow input default
+        # (600) so the simple offload connector reserves the full capacity.
+        TOTAL_CPU_DRAM_GB=3000
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
         ;;
@@ -64,7 +59,6 @@ vllm serve $MODEL \
 --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
