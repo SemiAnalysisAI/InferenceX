@@ -153,13 +153,20 @@ def find_reuse_authorization(
     return False, None
 
 
-def find_latest_successful_run(
+def find_latest_successful_pr_run(
     repo: str,
     workflow_id: str,
-    head_sha: str,
+    head_branch: str,
+    valid_shas: set[str],
     token: str,
 ) -> dict[str, Any] | None:
-    """Return the latest successful PR sweep run for the given head SHA."""
+    """Latest successful PR sweep run whose head_sha is in ``valid_shas``.
+
+    Filters by branch (rather than head SHA) so that runs for earlier commits
+    on the PR remain discoverable after an additional commit lands on it.
+    """
+    if not head_branch or not valid_shas:
+        return None
     encoded_workflow = urllib.parse.quote(workflow_id, safe="")
     runs = paginated_github_api(
         repo,
@@ -168,12 +175,15 @@ def find_latest_successful_run(
         "workflow_runs",
         {
             "event": "pull_request",
-            "head_sha": head_sha,
+            "branch": head_branch,
             "status": "completed",
         },
     )
+    # GitHub returns runs newest-first.
     for run in runs:
-        if run.get("conclusion") == "success" and run.get("head_sha") == head_sha:
+        if run.get("conclusion") != "success":
+            continue
+        if str(run.get("head_sha") or "") in valid_shas:
             return run
     return None
 
@@ -357,17 +367,24 @@ def main() -> int:
         run = github_api(args.repo, f"/actions/runs/{pinned_run_id}", token)
         reason = f"PR #{pr_number} approved reusable full sweep from pinned run {pinned_run_id}"
     else:
-        head_sha = str(pr.get("head", {}).get("sha") or "")
-        if not head_sha:
-            raise RuntimeError(f"PR #{pr_number} has no head SHA.")
-        run = find_latest_successful_run(args.repo, args.workflow_id, head_sha, token)
+        head_branch = str(pr.get("head", {}).get("ref") or "")
+        pr_shas = pr_commit_shas(args.repo, pr_number, token)
+        if not pr_shas:
+            raise RuntimeError(f"PR #{pr_number} has no commits.")
+        run = find_latest_successful_pr_run(
+            args.repo, args.workflow_id, head_branch, pr_shas, token
+        )
         if not run:
             raise RuntimeError(
                 f"PR #{pr_number} has {args.pinned_run_command} authorization but no "
-                f"successful {args.workflow_id} pull_request run was found for {head_sha}; "
-                f"pin a specific run with `{args.pinned_run_command} <run_id>`."
+                f"successful {args.workflow_id} pull_request run was found for any of "
+                f"its {len(pr_shas)} commit(s); pin a specific run with "
+                f"`{args.pinned_run_command} <run_id>`."
             )
-        reason = f"PR #{pr_number} approved reusable full sweep from latest run on {head_sha}"
+        reason = (
+            f"PR #{pr_number} approved reusable full sweep from latest run on "
+            f"{run.get('head_sha')}"
+        )
 
     run_id = int(run["id"])
     validate_reusable_run(args.repo, args.workflow_id, pr_number, run, token)

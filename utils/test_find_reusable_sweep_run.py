@@ -283,7 +283,7 @@ def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path
             return {
                 "merged_at": "2026-05-13T00:01:00Z",
                 "labels": [{"name": "full-sweep-enabled"}],
-                "head": {"sha": "abc123"},
+                "head": {"sha": "abc123", "ref": "feature-branch"},
             }
         raise AssertionError(f"unexpected GitHub API path: {path}")
 
@@ -293,7 +293,7 @@ def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path
         if path == "/pulls/1321/commits":
             return [{"sha": "abc123"}]
         if path == "/actions/workflows/run-sweep.yml/runs":
-            assert params["head_sha"] == "abc123"
+            assert params["branch"] == "feature-branch"
             return [run]
         if path == "/actions/runs/25763404168/artifacts":
             return [{"name": "results_bmk"}]
@@ -328,6 +328,92 @@ def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path
     assert outputs["reuse-source-run-id"] == "25763404168"
     assert outputs["reuse-source-pr-number"] == "1321"
     assert outputs["reuse-source-head-sha"] == "abc123"
+
+
+def test_main_no_arg_picks_run_for_older_pr_commit(monkeypatch, tmp_path) -> None:
+    """Regression: no-arg /reuse-sweep-run finds a run for an earlier PR commit.
+
+    After a sweep succeeds on commit A, an additional commit B can land on the
+    PR (e.g. a main merge to resolve perf-changelog.yaml). The current head is
+    now B; no sweep ever ran for B, but A's run is still reusable.
+    """
+    comments = [
+        {
+            "created_at": "2026-05-13T00:00:00Z",
+            "author_association": "OWNER",
+            "body": "/reuse-sweep-run",
+        },
+    ]
+    older_run = {
+        "id": 25763466401,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "path": ".github/workflows/run-sweep.yml",
+        "pull_requests": [],
+        "run_attempt": 1,
+        "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/25763466401",
+        "head_sha": "f6b43f745a7df3653d677b30372b05d3bec6f153",
+    }
+
+    def fake_github_api(repo, path, token, params=None):
+        if path == "/commits/merge-sha/pulls":
+            return [{"number": 1347}]
+        if path == "/pulls/1347":
+            return {
+                "merged_at": "2026-05-13T00:01:00Z",
+                "labels": [{"name": "full-sweep-enabled"}],
+                "head": {
+                    "sha": "f862cb8b126e2437ee793951919f40c23bba3a6f",
+                    "ref": "claude/issue-1154-qwen3.5-fp8-h200-sglang-mtp",
+                },
+            }
+        raise AssertionError(f"unexpected GitHub API path: {path}")
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        if path == "/issues/1347/comments":
+            return comments
+        if path == "/pulls/1347/commits":
+            return [
+                {"sha": "f6b43f745a7df3653d677b30372b05d3bec6f153"},
+                {"sha": "f862cb8b126e2437ee793951919f40c23bba3a6f"},
+            ]
+        if path == "/actions/workflows/run-sweep.yml/runs":
+            assert params["branch"] == "claude/issue-1154-qwen3.5-fp8-h200-sglang-mtp"
+            return [older_run]
+        if path == "/actions/runs/25763466401/artifacts":
+            return [{"name": "results_bmk"}]
+        raise AssertionError(f"unexpected paginated GitHub API path: {path}")
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "github_api", fake_github_api)
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "merge-sha",
+            "--event-name",
+            "push",
+            "--ref",
+            "refs/heads/main",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    assert reuse.main() == 0
+
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-run-id"] == "25763466401"
+    assert outputs["reuse-source-pr-number"] == "1347"
+    assert outputs["reuse-source-head-sha"] == "f6b43f745a7df3653d677b30372b05d3bec6f153"
 
 
 def test_main_disables_reuse_without_pinned_comment(monkeypatch, tmp_path) -> None:
