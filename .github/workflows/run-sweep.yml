@@ -2,7 +2,15 @@ name: "Run Sweep"
 run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
 
 concurrency:
-    group: sweep-${{ github.event.pull_request.number || github.sha }}
+    group: >-
+        sweep-${{ github.event.pull_request.number || github.sha }}-${{
+          github.event_name == 'pull_request' &&
+          (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+          github.event.label.name != 'sweep-enabled' &&
+          github.event.label.name != 'full-sweep-enabled' &&
+          github.run_id ||
+          'active'
+        }}
     cancel-in-progress: true
 
 on:
