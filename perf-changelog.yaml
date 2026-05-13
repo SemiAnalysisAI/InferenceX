@@ -2345,9 +2345,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
 
 - config-keys:
-    - qwen3.5-fp4-b300-sglang-mtp
+    - gptoss-fp4-h100-vllm
   description:
-    - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
+    - "Update vLLM image from v0.18.0 to v0.20.2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   
 - config-keys:
@@ -2355,5 +2355,3 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1344
-
-    
