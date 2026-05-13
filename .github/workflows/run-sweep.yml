@@ -25,7 +25,14 @@ on:
 jobs:
     check-newline:
         runs-on: ubuntu-latest
-        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        if: >-
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled'
+            )
         steps:
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -47,6 +54,11 @@ jobs:
               (
                 contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
                 contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              ) &&
+              (
+                (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+                github.event.label.name == 'sweep-enabled' ||
+                github.event.label.name == 'full-sweep-enabled'
               )
             ) ||
             (
@@ -573,6 +585,11 @@ jobs:
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+            ) &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled'
             )
         runs-on: ubuntu-latest
         permissions:
