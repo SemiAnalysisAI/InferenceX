@@ -2481,7 +2481,7 @@ kimik2.5-int4-b300-vllm:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-h200-vllm:
-  image: vllm/vllm-openai:v0.16.0
+  image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: h200
@@ -4306,7 +4306,7 @@ gptoss-fp4-h200-trt:
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
