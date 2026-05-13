@@ -103,7 +103,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size: 8
@@ -128,7 +128,7 @@ backend:
       tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
 
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size: 8
