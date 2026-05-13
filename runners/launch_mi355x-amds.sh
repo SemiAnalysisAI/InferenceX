@@ -108,12 +108,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
-sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+sgl_job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
+for path in sorted([f"{sgl_job_dir}/logs/{name}/{framework}_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/{framework}_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
-        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
+        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1 "$FRAMEWORK")
         if [ -z "$LOGS_DIR" ]; then
             echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
             exit 1
