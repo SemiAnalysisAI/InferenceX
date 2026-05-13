@@ -3,7 +3,7 @@
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
 reuse when the merge commit maps unambiguously to one pull request and a human
-has left both the full-sweep label and the reuse authorization label on that PR.
+has left the full-sweep label plus a maintainer reuse command on that PR.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -19,6 +20,7 @@ from typing import Any
 
 
 API_BASE = "https://api.github.com"
+DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 
 
 def github_api(
@@ -60,7 +62,12 @@ def paginated_github_api(
         if params:
             page_params.update(params)
         data = github_api(repo, path, token, page_params)
-        items = data.get(item_key, data if isinstance(data, list) else [])
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            items = data.get(item_key, [])
+        else:
+            items = []
         if not isinstance(items, list):
             raise RuntimeError(f"GitHub API {path} returned an unexpected shape")
         out.extend(items)
@@ -109,29 +116,76 @@ def result(
     }
 
 
-def find_latest_successful_run(
+def find_authorized_reuse_run_id(
+    repo: str,
+    pr_number: int,
+    token: str,
+    command: str,
+    allowed_author_associations: set[str],
+) -> int | None:
+    """Return the latest maintainer-authorized pinned source run ID, if any."""
+    command_pattern = re.compile(rf"(?m)^\s*{re.escape(command)}\s+(\d+)\s*$")
+    comments = paginated_github_api(
+        repo,
+        f"/issues/{pr_number}/comments",
+        token,
+        "",
+    )
+    comments.sort(key=lambda comment: str(comment.get("created_at") or ""))
+    for comment in reversed(comments):
+        association = str(comment.get("author_association") or "")
+        if association not in allowed_author_associations:
+            continue
+        body = str(comment.get("body") or "")
+        matches = command_pattern.findall(body)
+        if matches:
+            return int(matches[-1])
+    return None
+
+
+def workflow_path(workflow_id: str) -> str:
+    """Return the Actions run path expected for a workflow id/path."""
+    if workflow_id.startswith(".github/"):
+        return workflow_id
+    return f".github/workflows/{workflow_id}"
+
+
+def run_pr_numbers(run: dict[str, Any]) -> set[int]:
+    """Return pull request numbers associated with an Actions run."""
+    numbers: set[int] = set()
+    for pull in run.get("pull_requests", []) or []:
+        if isinstance(pull, dict) and isinstance(pull.get("number"), int):
+            numbers.add(int(pull["number"]))
+    return numbers
+
+
+def validate_reusable_run(
     repo: str,
     workflow_id: str,
-    head_sha: str,
+    pr_number: int,
+    run: dict[str, Any],
     token: str,
-) -> dict[str, Any] | None:
-    """Return the latest successful PR run for the exact source head SHA."""
-    encoded_workflow = urllib.parse.quote(workflow_id, safe="")
-    runs = paginated_github_api(
-        repo,
-        f"/actions/workflows/{encoded_workflow}/runs",
-        token,
-        "workflow_runs",
-        {
-            "event": "pull_request",
-            "head_sha": head_sha,
-            "status": "completed",
-        },
-    )
-    for run in runs:
-        if run.get("conclusion") == "success" and run.get("head_sha") == head_sha:
-            return run
-    return None
+) -> None:
+    """Fail closed unless an Actions run is a valid reusable source run."""
+    run_id = int(run["id"])
+    if run.get("event") != "pull_request":
+        raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        raise RuntimeError(f"Reusable source run {run_id} did not complete successfully.")
+    expected_path = workflow_path(workflow_id)
+    run_path = str(run.get("path") or "")
+    if run_path and run_path != expected_path:
+        raise RuntimeError(
+            f"Reusable source run {run_id} is from {run_path}, expected {expected_path}."
+        )
+    if pr_number not in run_pr_numbers(run):
+        raise RuntimeError(f"Reusable source run {run_id} is not associated with PR #{pr_number}.")
+
+    names = artifact_names(repo, run_id, token)
+    if "results_bmk" not in names and "eval_results_all" not in names:
+        raise RuntimeError(
+            f"Reusable source run {run_id} has no results_bmk or eval_results_all artifact."
+        )
 
 
 def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
@@ -156,14 +210,24 @@ def main() -> int:
     parser.add_argument("--event-name", required=True)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--workflow-id", default="run-sweep.yml")
-    parser.add_argument("--reuse-label", default="reuse-full-sweep-results")
     parser.add_argument("--full-sweep-label", default="full-sweep-enabled")
+    parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
+    parser.add_argument(
+        "--allowed-author-associations",
+        default=",".join(DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS),
+        help="Comma-separated GitHub author_association values allowed to pin a source run.",
+    )
     parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     args = parser.parse_args()
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
+    allowed_author_associations = {
+        value.strip()
+        for value in args.allowed_author_associations.split(",")
+        if value.strip()
+    }
 
     if args.event_name != "push" or args.ref != "refs/heads/main":
         outputs = result(enabled=False, reason="not a push to main")
@@ -179,17 +243,26 @@ def main() -> int:
         return 0
 
     if len(pulls) > 1:
-        detailed_prs = [
-            github_api(args.repo, f"/pulls/{int(pr['number'])}", token)
-            for pr in pulls
-            if pr.get("number")
-        ]
-        any_reuse = args.reuse_label in set().union(*(label_names(pr) for pr in detailed_prs))
-        if any_reuse:
+        pinned_prs: list[tuple[int, int]] = []
+        for pr in pulls:
+            if not pr.get("number"):
+                continue
+            pr_number = int(pr["number"])
+            pinned_run_id = find_authorized_reuse_run_id(
+                args.repo,
+                pr_number,
+                token,
+                args.pinned_run_command,
+                allowed_author_associations,
+            )
+            if pinned_run_id:
+                pinned_prs.append((pr_number, pinned_run_id))
+        if pinned_prs:
             numbers = ", ".join(str(pr.get("number")) for pr in pulls)
+            pinned = ", ".join(f"#{number} -> {run_id}" for number, run_id in pinned_prs)
             raise RuntimeError(
                 f"Commit {args.commit_sha} maps to multiple PRs ({numbers}); "
-                f"refusing to reuse artifacts."
+                f"found reuse authorization on {pinned}; refusing to reuse artifacts."
             )
         outputs = result(enabled=False, reason="multiple associated pull requests")
         write_outputs(args.github_output, outputs)
@@ -197,51 +270,47 @@ def main() -> int:
         return 0
 
     pr_number = int(pulls[0]["number"])
-    pr = github_api(args.repo, f"/pulls/{pr_number}", token)
-    labels = label_names(pr)
-    if args.reuse_label not in labels:
+    pinned_run_id = find_authorized_reuse_run_id(
+        args.repo,
+        pr_number,
+        token,
+        args.pinned_run_command,
+        allowed_author_associations,
+    )
+    if not pinned_run_id:
         outputs = result(
             enabled=False,
-            reason=f"PR #{pr_number} does not have {args.reuse_label}",
+            reason=f"PR #{pr_number} has no {args.pinned_run_command} authorization",
             source_pr_number=str(pr_number),
         )
         write_outputs(args.github_output, outputs)
         print(json.dumps(outputs, indent=2))
         return 0
 
+    pr = github_api(args.repo, f"/pulls/{pr_number}", token)
+    labels = label_names(pr)
     if args.full_sweep_label not in labels:
         raise RuntimeError(
-            f"PR #{pr_number} has {args.reuse_label} but not {args.full_sweep_label}."
+            f"PR #{pr_number} has {args.pinned_run_command} authorization but not "
+            f"{args.full_sweep_label}."
         )
     if not pr.get("merged_at"):
         raise RuntimeError(f"PR #{pr_number} is not marked as merged.")
 
-    head_sha = str(pr.get("head", {}).get("sha") or "")
-    if not head_sha:
-        raise RuntimeError(f"PR #{pr_number} has no head SHA.")
-
-    run = find_latest_successful_run(args.repo, args.workflow_id, head_sha, token)
-    if not run:
-        raise RuntimeError(
-            f"PR #{pr_number} is approved for reuse, but no successful "
-            f"{args.workflow_id} pull_request run was found for {head_sha}."
-        )
+    run = github_api(args.repo, f"/actions/runs/{pinned_run_id}", token)
+    reason = f"PR #{pr_number} approved reusable full sweep from pinned run {pinned_run_id}"
 
     run_id = int(run["id"])
-    names = artifact_names(args.repo, run_id, token)
-    if "results_bmk" not in names and "eval_results_all" not in names:
-        raise RuntimeError(
-            f"Reusable source run {run_id} has no results_bmk or eval_results_all artifact."
-        )
+    validate_reusable_run(args.repo, args.workflow_id, pr_number, run, token)
 
     outputs = result(
         enabled=True,
-        reason=f"PR #{pr_number} approved reusable full sweep",
+        reason=reason,
         source_run_id=str(run_id),
         source_run_attempt=str(run.get("run_attempt") or "1"),
         source_run_url=str(run.get("html_url") or ""),
         source_pr_number=str(pr_number),
-        source_head_sha=head_sha,
+        source_head_sha=str(run.get("head_sha") or ""),
     )
     write_outputs(args.github_output, outputs)
     print(json.dumps(outputs, indent=2))

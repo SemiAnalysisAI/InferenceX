@@ -181,21 +181,29 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 ## Reusing an Approved PR Full Sweep
 
 If a PR has already run the full untrimmed sweep, a maintainer can avoid running
-the same sweep again after merge by leaving both labels on the PR before merging:
+the same sweep again after merge by leaving the full-sweep label on the PR:
 
 - `full-sweep-enabled`
-- `reuse-full-sweep-results`
 
-On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
-commit, finds the latest successful PR `Run Sweep` run for that exact PR head
-SHA, downloads the ingest-relevant artifacts, validates that `results_bmk`
-covers the merge run's expected benchmark matrix, and uploads them as
-`reused-ingest-artifacts`. The normal database ingest then publishes those
-artifacts with the merge run's changelog metadata.
+A maintainer must also pin the reusable source run with a PR comment before
+merging:
 
-Reuse fails closed: if the label is present but the matching PR run or artifacts
-cannot be validated, the push-to-main workflow fails instead of falling back to a
-cluster sweep.
+```
+/reuse-sweep-run <run_id>
+```
+
+The comment is the reuse authorization, so adding it does not trigger or cancel a
+PR sweep. On the push-to-main run, `run-sweep.yml` resolves the merged PR from
+the merge commit, verifies that the pinned run is a successful `pull_request`
+`run-sweep.yml` run for the same PR, downloads the ingest-relevant artifacts,
+validates that `results_bmk` covers the merge run's expected benchmark matrix,
+and uploads them as `reused-ingest-artifacts`. The normal database ingest then
+publishes those artifacts with the merge run's changelog metadata.
+
+Reuse fails closed: if the comment is present but the full-sweep label, pinned
+PR run, or artifacts cannot be validated, the push-to-main workflow fails
+instead of falling back to a cluster sweep. Without the comment, the push-to-main
+workflow runs the normal full sweep.
 
 ## Validation Architecture
 
