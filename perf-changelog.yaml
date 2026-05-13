@@ -2333,3 +2333,10 @@
   description:
     - "Install cargo and maturin in the GB200 Dynamo SGLang setup script before srt-slurm builds Dynamo from source"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-mtp3
+  description:
+    - "Stage the DeepSeek-V4 sa-bench custom tokenizer package for GB200 Dynamo SGLang InfiniteBench runs"
+    - "Pass the chat template during InfiniteBench warmup and lower 1P1D decode graph memory pressure for MTP draft-worker startup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

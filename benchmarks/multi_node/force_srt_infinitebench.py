@@ -212,6 +212,114 @@ def sample_infinitebench_requests(
 '''
 
 
+CUSTOM_TOKENIZER_INIT = '''"""Custom sa-bench tokenizers staged by InferenceX."""
+'''
+
+
+CUSTOM_TOKENIZER_DEEPSEEK_V4 = r'''"""DeepSeek-V4 tokenizer loader for sa-bench custom_tokenizer recipes."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+_SAFE_CONFIG_KEYS = (
+    "pad_token",
+    "pad_token_id",
+    "eos_token",
+    "eos_token_id",
+    "bos_token",
+    "bos_token_id",
+    "unk_token",
+    "unk_token_id",
+    "model_max_length",
+    "padding_side",
+    "truncation_side",
+)
+
+
+def _load_init_kwargs(path: Path) -> dict:
+    init_kwargs: dict = {}
+    config_path = path / "tokenizer_config.json"
+    if not config_path.exists():
+        return init_kwargs
+
+    with open(config_path, encoding="utf-8") as fin:
+        config = json.load(fin)
+
+    for key in _SAFE_CONFIG_KEYS:
+        if key in config:
+            init_kwargs[key] = config[key]
+
+    extra_special_tokens = config.get("extra_special_tokens")
+    if isinstance(extra_special_tokens, list):
+        init_kwargs["additional_special_tokens"] = extra_special_tokens
+    return init_kwargs
+
+
+def _attach_chat_template(tokenizer, model_path: Path):
+    candidates = [
+        model_path / "chat_template.jinja",
+        Path("/infmax-workspace")
+        / "benchmarks"
+        / "single_node"
+        / "chat_templates"
+        / "deepseek_v4_thinking.jinja",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            tokenizer.chat_template = candidate.read_text(encoding="utf-8")
+            print(f"[sa-bench] Loaded DeepSeek-V4 chat template from {candidate}", flush=True)
+            break
+    return tokenizer
+
+
+class SGLangDeepseekV4Tokenizer:
+    """Factory class used by sa-bench custom_tokenizer loading."""
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        trust_remote_code: bool = False,
+        **kwargs,
+    ):
+        model_path = Path(str(pretrained_model_name_or_path))
+        tokenizer_json = model_path / "tokenizer.json"
+
+        if tokenizer_json.exists():
+            from tokenizers import Tokenizer as RustTokenizer
+            from transformers import PreTrainedTokenizerFast
+
+            tokenizer = PreTrainedTokenizerFast(
+                tokenizer_object=RustTokenizer.from_file(str(tokenizer_json)),
+                **_load_init_kwargs(model_path),
+            )
+            return _attach_chat_template(tokenizer, model_path)
+
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path,
+            trust_remote_code=trust_remote_code,
+            **kwargs,
+        )
+        if model_path.exists():
+            _attach_chat_template(tokenizer, model_path)
+        return tokenizer
+'''
+
+
+CUSTOM_TOKENIZER_VLLM_DEEPSEEK_V4 = '''"""vLLM DeepSeek-V4 sa-bench tokenizer alias."""
+
+from .sglang_deepseek_v4 import SGLangDeepseekV4Tokenizer
+
+
+VLLMDeepseekV4Tokenizer = SGLangDeepseekV4Tokenizer
+'''
+
+
 def replace_once(text: str, old: str, new: str, path: Path) -> str:
     if old not in text:
         raise RuntimeError(f"Expected text not found in {path}: {old[:80]!r}")
@@ -364,6 +472,18 @@ def patch_backend_request_func(path: Path) -> None:
     path.write_text(text)
 
 
+def install_custom_tokenizers(bench_dir: Path) -> None:
+    package_dir = bench_dir / "sa_bench_tokenizers"
+    package_dir.mkdir(exist_ok=True)
+    (package_dir / "__init__.py").write_text(CUSTOM_TOKENIZER_INIT, encoding="utf-8")
+    (package_dir / "sglang_deepseek_v4.py").write_text(
+        CUSTOM_TOKENIZER_DEEPSEEK_V4, encoding="utf-8"
+    )
+    (package_dir / "vllm_deepseek_v4.py").write_text(
+        CUSTOM_TOKENIZER_VLLM_DEEPSEEK_V4, encoding="utf-8"
+    )
+
+
 def patch_bench_sh(path: Path) -> None:
     text = path.read_text()
 
@@ -399,6 +519,17 @@ export SA_BENCH_TEMPERATURE=1.0
         --num-chips "$TOTAL_GPUS" \\
 ''',
     )
+    warmup_without_chat = '''        --trust-remote-code \\
+        "${CUSTOM_TOKENIZER_ARGS[@]}"
+
+    num_prompts='''
+    warmup_with_chat = '''        --trust-remote-code \\
+        "${CHAT_TEMPLATE_ARGS[@]}" \\
+        "${CUSTOM_TOKENIZER_ARGS[@]}"
+
+    num_prompts='''
+    if warmup_with_chat not in text:
+        text = replace_once(text, warmup_without_chat, warmup_with_chat, path)
 
     path.write_text(text)
 
@@ -420,6 +551,7 @@ def main() -> int:
 
     patch_benchmark_serving(benchmark_serving)
     patch_backend_request_func(backend_request_func)
+    install_custom_tokenizers(bench_dir)
     patch_bench_sh(bench_sh)
 
     print(f"Patched srt-slurm sa-bench for InfiniteBench 8192/256 at {bench_dir}")

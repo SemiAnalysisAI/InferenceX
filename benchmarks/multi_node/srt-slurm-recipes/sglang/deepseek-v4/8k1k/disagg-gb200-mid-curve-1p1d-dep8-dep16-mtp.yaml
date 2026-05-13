@@ -139,9 +139,9 @@ backend:
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
 
-      mem-fraction-static: 0.94
+      mem-fraction-static: 0.88
       max-running-requests: 3072
-      cuda-graph-max-bs: 256
+      cuda-graph-max-bs: 128
       swa-full-tokens-ratio: 0.15
       context-length: 16384
       stream-interval: 60
