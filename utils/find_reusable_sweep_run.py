@@ -185,13 +185,27 @@ def workflow_path(workflow_id: str) -> str:
     return f".github/workflows/{workflow_id}"
 
 
-def run_pr_numbers(run: dict[str, Any]) -> set[int]:
-    """Return pull request numbers associated with an Actions run."""
-    numbers: set[int] = set()
-    for pull in run.get("pull_requests", []) or []:
-        if isinstance(pull, dict) and isinstance(pull.get("number"), int):
-            numbers.add(int(pull["number"]))
-    return numbers
+def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
+    """Return the set of commit SHAs currently on a PR.
+
+    The Actions ``run.pull_requests`` field is dynamically recomputed and only
+    lists PRs whose *current* head matches the run's ``head_sha``.  After any
+    additional commit lands on the PR (e.g. a ``main`` merge to resolve a
+    ``perf-changelog.yaml`` conflict), the pinned source run drops out of that
+    field even though its commit is still part of the PR.  Checking the PR
+    commit list directly survives that case.
+    """
+    commits = paginated_github_api(
+        repo,
+        f"/pulls/{pr_number}/commits",
+        token,
+        "",
+    )
+    return {
+        str(commit.get("sha"))
+        for commit in commits
+        if isinstance(commit, dict) and commit.get("sha")
+    }
 
 
 def validate_reusable_run(
@@ -213,8 +227,15 @@ def validate_reusable_run(
         raise RuntimeError(
             f"Reusable source run {run_id} is from {run_path}, expected {expected_path}."
         )
-    if pr_number not in run_pr_numbers(run):
-        raise RuntimeError(f"Reusable source run {run_id} is not associated with PR #{pr_number}.")
+    run_head_sha = str(run.get("head_sha") or "")
+    if not run_head_sha:
+        raise RuntimeError(f"Reusable source run {run_id} has no head_sha.")
+    pr_shas = pr_commit_shas(repo, pr_number, token)
+    if run_head_sha not in pr_shas:
+        raise RuntimeError(
+            f"Reusable source run {run_id} head {run_head_sha} is not in PR #{pr_number}'s "
+            f"commit list; pin a run whose commit is still part of the PR."
+        )
 
     names = artifact_names(repo, run_id, token)
     if "results_bmk" not in names and "eval_results_all" not in names:

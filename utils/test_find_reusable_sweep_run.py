@@ -104,6 +104,7 @@ def test_find_reuse_authorization_ignores_inline_mentions(monkeypatch) -> None:
 
 def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> None:
     monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
 
     reuse.validate_reusable_run(
         "SemiAnalysisAI/InferenceX",
@@ -115,14 +116,50 @@ def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> No
             "status": "completed",
             "conclusion": "success",
             "path": ".github/workflows/run-sweep.yml",
+            "head_sha": "abc123",
             "pull_requests": [{"number": 1321}],
         },
         "token",
     )
 
 
-def test_validate_reusable_run_rejects_wrong_pr(monkeypatch) -> None:
+def test_validate_reusable_run_accepts_run_for_older_pr_commit(monkeypatch) -> None:
+    """Regression: pinned run survives an additional commit landing on the PR.
+
+    GitHub recomputes ``run.pull_requests`` to empty once the PR head moves past
+    the run's commit, but the run's commit is still part of the PR's history and
+    should remain reusable.
+    """
     monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(
+        reuse,
+        "pr_commit_shas",
+        lambda *args: {
+            "e36afac48cc6165f4e1f8ea7e1977b01ef29787c",
+            "5c7d7df8ce125e6c725eb37db123269380b7c97d",
+        },
+    )
+
+    reuse.validate_reusable_run(
+        "SemiAnalysisAI/InferenceX",
+        "run-sweep.yml",
+        1321,
+        {
+            "id": 25763404168,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "path": ".github/workflows/run-sweep.yml",
+            "head_sha": "e36afac48cc6165f4e1f8ea7e1977b01ef29787c",
+            "pull_requests": [],
+        },
+        "token",
+    )
+
+
+def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> None:
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"def456"})
 
     try:
         reuse.validate_reusable_run(
@@ -135,14 +172,15 @@ def test_validate_reusable_run_rejects_wrong_pr(monkeypatch) -> None:
                 "status": "completed",
                 "conclusion": "success",
                 "path": ".github/workflows/run-sweep.yml",
-                "pull_requests": [{"number": 9999}],
+                "head_sha": "abc123",
+                "pull_requests": [],
             },
             "token",
         )
     except RuntimeError as error:
-        assert "not associated with PR #1321" in str(error)
+        assert "is not in PR #1321's commit list" in str(error)
     else:
-        raise AssertionError("expected wrong-PR run to be rejected")
+        raise AssertionError("expected orphaned-commit run to be rejected")
 
 
 def test_main_enables_pinned_reuse_without_extra_label(monkeypatch, tmp_path) -> None:
@@ -181,6 +219,8 @@ def test_main_enables_pinned_reuse_without_extra_label(monkeypatch, tmp_path) ->
     def fake_paginated_github_api(repo, path, token, item_key, params=None):
         if path == "/issues/1321/comments":
             return comments
+        if path == "/pulls/1321/commits":
+            return [{"sha": "abc123"}]
         if path == "/actions/runs/25763404168/artifacts":
             return [{"name": "results_bmk"}]
         raise AssertionError(f"unexpected paginated GitHub API path: {path}")
@@ -250,6 +290,8 @@ def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path
     def fake_paginated_github_api(repo, path, token, item_key, params=None):
         if path == "/issues/1321/comments":
             return comments
+        if path == "/pulls/1321/commits":
+            return [{"sha": "abc123"}]
         if path == "/actions/workflows/run-sweep.yml/runs":
             assert params["head_sha"] == "abc123"
             return [run]
