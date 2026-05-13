@@ -2345,7 +2345,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1310
 
 - config-keys:
-    - minimaxm2.5-fp8-h200-vllm
+    - gptoss-fp4-h100-vllm
   description:
     - "Update vLLM image from v0.18.0 to v0.20.2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update vLLM image from v0.18.0 to v0.20.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1340
