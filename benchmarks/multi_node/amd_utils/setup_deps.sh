@@ -144,28 +144,26 @@ install_libionic() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. MoRI-IO proxy deps (Python packages for the MoRI-IO-aware proxy server)
-#    The proxy replaces vllm-router: it handles both HTTP routing AND the
-#    MoRI-IO ZMQ registration/request-enrichment protocol.
-#    Only needed on NODE_RANK=0 (proxy node).
+# 5. Container RDMA/net tools
+#    - ibv_devinfo comes from ibverbs-utils
+#    - iproute2 provides the `ip` command
+#    Used for in-container NIC/RDMA validation and routing checks.
 # ---------------------------------------------------------------------------
-install_mori_proxy_deps() {
-    if python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
-        echo "[SETUP] MoRI-IO proxy Python deps already present"
+install_recipe_deps() {
+    if command -v ibv_devinfo >/dev/null 2>&1 && command -v ip >/dev/null 2>&1; then
+        echo "[SETUP] Container RDMA/net tools already present"
         return 0
     fi
 
-    echo "[SETUP] Installing MoRI-IO proxy Python deps..."
-    # v0.18.0 ships aiohttp, pyzmq, blinker(distutils); only quart and msgpack
-    # are missing.  --ignore-installed blinker avoids pip's distutils uninstall
-    # error when quart pulls a newer blinker version.
-    pip install --quiet --ignore-installed blinker
-    pip install --quiet quart msgpack
+    echo "[SETUP] Installing ibv_devinfo + iproute2 in container..."
+    apt-get update -q -y && apt-get install -q -y \
+        ibverbs-utils iproute2 \
+        && rm -rf /var/lib/apt/lists/*
 
-    if ! python3 -c "import quart, aiohttp, msgpack, zmq" 2>/dev/null; then
-        echo "[SETUP] ERROR: MoRI-IO proxy deps install failed"; exit 1
+    if ! command -v ibv_devinfo >/dev/null 2>&1 || ! command -v ip >/dev/null 2>&1; then
+        echo "[SETUP] ERROR: Failed to install ibv_devinfo/iproute2"; exit 1
     fi
-    _SETUP_INSTALLED+=("mori-proxy-deps")
+    _SETUP_INSTALLED+=("ibverbs-utils+iproute2")
 }
 
 # ---------------------------------------------------------------------------
@@ -885,6 +883,7 @@ except Exception as e:
 # install_etcd
 # install_libionic
 # install_mori
+install_recipe_deps
 install_amd_quark
 patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
