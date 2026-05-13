@@ -421,10 +421,13 @@ async def async_request_openai_chat_completions(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+        finally:
+            if _own_session:
+                await session.close()
 
-    if pbar:
-        pbar.update(1)
-    return output
+        if pbar:
+            pbar.update(1)
+        return output
 
 
 def get_model(pretrained_model_name_or_path: str) -> str:
