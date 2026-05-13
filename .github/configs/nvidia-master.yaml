@@ -1755,6 +1755,48 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
+dsv4-fp4-b200-trt:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 2048 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
+
+dsv4-fp4-b200-trt-mtp:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 128, spec-decoding: mtp }
+
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-vllm-mtp:
@@ -1785,7 +1827,7 @@ dsv4-fp4-b200-vllm-mtp:
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b300
@@ -1894,7 +1936,7 @@ dsr1-fp8-b200-sglang:
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b300
@@ -2065,7 +2107,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260402-d7256eb6
+  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2077,11 +2119,13 @@ qwen3.5-fp4-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+      - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
+      - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
@@ -2125,7 +2169,7 @@ glm5-fp8-b200-sglang-mtp:
   # does not have a B300-specific recipe, so this config reuses the existing GLM5 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
 glm5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2144,7 +2188,7 @@ glm5-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2208,7 +2252,7 @@ glm5-fp4-b200-sglang-mtp:
   # does not have a B300-specific recipe, so this config reuses the existing
   # GLM-5 FP4 B200 SGLang recipe as-is until B300-specific tuning is available.
 glm5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b300
@@ -2229,7 +2273,7 @@ glm5-fp4-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b300
@@ -2272,7 +2316,7 @@ qwen3.5-fp8-b200-sglang-mtp:
     
 
 qwen3.5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b300
@@ -2310,7 +2354,7 @@ qwen3.5-fp8-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2331,7 +2375,7 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2352,7 +2396,7 @@ qwen3.5-fp4-b300-sglang-mtp:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 qwen3.5-bf16-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b300
@@ -2373,7 +2417,7 @@ qwen3.5-bf16-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b300
@@ -2394,7 +2438,7 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.15.1
+  image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200
@@ -2437,7 +2481,7 @@ kimik2.5-int4-b300-vllm:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-h200-vllm:
-  image: vllm/vllm-openai:v0.16.0
+  image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: h200
@@ -2590,7 +2634,7 @@ dsr1-fp8-b200-trt-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
+  image: lmsysorg/sglang:v0.5.11-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -2624,11 +2668,13 @@ dsv4-fp8-h200-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
 
 # MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
@@ -2646,11 +2692,13 @@ dsv4-fp8-h200-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
 # Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
@@ -2731,7 +2779,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-4999884
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -2752,6 +2800,29 @@ dsv4-fp4-b300-trt:
       - { tp: 4, conc-start: 1, conc-end: 32 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
+dsv4-fp4-b300-trt-mtp:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
 
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.20.0-cu130
@@ -2795,7 +2866,7 @@ qwen3.5-fp8-h200-sglang:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1
+  image: lmsysorg/sglang:v0.5.11
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -4031,7 +4102,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -4054,7 +4125,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.2
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -4235,7 +4306,7 @@ gptoss-fp4-h200-trt:
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.2
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -4260,7 +4331,7 @@ gptoss-fp4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 32 }
 
 minimaxm2.5-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.18.0
+  image: vllm/vllm-openai:v0.20.2
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200
@@ -7871,6 +7942,62 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 16
           dp-attn: true
 
+dsv4-fp4-b200-dynamo-vllm:
+  image: vllm/vllm-openai:v0.20.1
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-multinode
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # B200 adaptation of the DSV4 GB200 vLLM disagg recipes. Each worker
+      # maps to one full 8-GPU B200 node.
+      - conc-list: [1, 16, 32, 64, 128]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-low-latency.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [256, 512, 1024]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-high-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - conc-list: [8192, 12345]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-max-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb200-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -8051,6 +8178,62 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           ep: 8
           dp-attn: true
 
+dsv4-fp4-b300-dynamo-vllm:
+  image: vllm/vllm-openai:v0.20.1
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # B300 adaptation of the DSV4 B200/GB200 vLLM disagg recipes. Each
+      # prefill/decode worker maps to one full 8-GPU B300 node.
+      - conc-list: [1, 32, 64, 128]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-low-latency.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [256, 1024]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-mid-curve-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - conc-list: [4096]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-high-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -8145,7 +8328,7 @@ dsv4-fp4-gb300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+  image: lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
@@ -8159,48 +8342,48 @@ dsv4-fp4-gb300-dynamo-sglang:
       osl: 1024
       search-space:
       # WideEP TP=16 decode: 1p1d-dep4-dep16. 5 nodes (4P + 16D = 20 GPUs).
-      - conc-list: [512]
+      - conc-list: [1024]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc512-20.yaml"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep16-5-c1024.yaml"
         decode:
           num-worker: 1
           tp: 16
           ep: 16
           dp-attn: true
-      # DP-attn wideep: 1p1d-dep4-dep8. 3 nodes.
-      - conc-list: [512]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc512.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      # DP-attn wideep: 2p1d-dep4-dep8. 4 nodes.
+      # WideEP TP=16 decode: 4p1d-dep4-dep16. 8 nodes.
       - conc-list: [1024]
         prefill:
-          num-worker: 2
+          num-worker: 4
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1024.yaml"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-4p1d-dep4-dep16-8-c1024.yaml"
         decode:
           num-worker: 1
-          tp: 8
-          ep: 8
+          tp: 16
+          ep: 16
           dp-attn: true
-      # Low concurrency
+      # WideEP TP=16 decode: 8p1d-dep4-dep16. 12 nodes.
+      - conc-list: [4096]
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-8p1d-dep4-dep16-12-c4096.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # Low concurrency: 1p1d-tp4-tp4. 2 nodes.
       - conc-list: [1]
         prefill:
           num-worker: 1
@@ -8208,37 +8391,144 @@ dsv4-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc1.yaml"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
-      # Mid concurrency
-      - conc-list: [2048]
+      # Mid concurrency: 10p1d-dep4-dep16. 14 nodes.
+      - conc-list: [8192]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-10p1d-dep4-dep16-14-c8192.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # Max concurrency: 12p1d-dep4-dep12. 15 nodes.
+      - conc-list: [21504]
+        prefill:
+          num-worker: 12
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-gb300-12p1d-dep4-dep12-15-c21504.yaml"
+        decode:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+
+# MTP variant of dsv4-fp4-gb300-dynamo-sglang.
+dsv4-fp4-gb300-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260509-9ee83034
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-cw
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Low-latency baseline: 1p1d-tp4-tp4. 2 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-low-latency-1p1d-tp4-tp4-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # Low-latency 1p6d-dep4-tp4: 1P (DEP=4) + 6 TP=4 decode workers. 7 nodes.
+      # Recipe runs concurrencies=8x32x64; matrix tracks the max.
+      - spec-decoding: "mtp"
+        conc-list: [64]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-low-latency-1p6d-dep4-tp4-mtp.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # Mid curve 1p1d-dep4-dep8. 3 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-mid-curve-1p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # Mid curve 1p1d-dep4-dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-mid-curve-1p1d-dep4-dep16-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # Mid curve 2p1d-dep4-dep8. 4 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-mid-curve-2p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # Mid curve 4p1d-dep4-dep8. 6 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1024]
         prefill:
           num-worker: 4
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc2048.yaml"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-mid-curve-4p1d-dep4-dep8-mtp.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 8
-          dp-attn: true
-      # Max concurrency
-      - conc-list: [16384]
-        prefill:
-          num-worker: 14
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/conc16384.yaml"
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
           dp-attn: true

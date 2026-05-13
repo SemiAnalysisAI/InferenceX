@@ -16,7 +16,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -41,7 +41,6 @@ vllm serve $MODEL --port $PORT \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
---disable-log-requests \
 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 

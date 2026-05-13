@@ -8,22 +8,12 @@
 set -x
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Weights staged on compute-node-local NVMe.
-    export MODEL_PATH="/scratch/models/dsv4/"
+    # Weights staged on shared storage; avoid node-local /scratch symlink drift.
+    export MODEL_PATH="/mnt/vast/models/dsv4"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # Pin to fzyzcjy/srt-slurm fork branch `feat/random-num-workers`
-        # (= NVIDIA/srt-slurm@9d75f82 + sa-bench parallel random prompt
-        # generation). The single-threaded random prompt generator in the
-        # upstream sa-bench dominates bench startup on the 7p1d/conc=8192
-        # sweep (~50 min for the main pass alone before the first HTTP
-        # request leaves the client). The fork bumps that to ~1 min via
-        # multiprocessing.Pool with `--random-num-workers 48`.
-        #
-        # TODO: revert to a NVIDIA/srt-slurm pin once the upstream PR
-        # (https://github.com/NVIDIA/srt-slurm/pull/114) merges.
-        SRT_SLURM_RECIPES_REPO="https://github.com/fzyzcjy/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="4249d168208ff5ff1f30b3c1158d893cc0615bb5"
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="main"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then

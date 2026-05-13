@@ -79,17 +79,10 @@ b200:
 - 'b200-dgxc_07'
 - 'b200-dgxc_08'
 - 'b200-dgxc_09'
-- 'b200-dgxc_10'
-- 'b200-dgxc_11'
-- 'b200-dgxc_12'
-- 'b200-dgxc_13'
-- 'b200-dgxc_14'
-- 'b200-dgxc_15'
-- 'b200-dgxc_16'
 b200-multinode:
-- 'b200-dgxc-slurm_6'
 - 'b200-dgxc-slurm_7'
 - 'b200-dgxc-slurm_8'
+- 'b200-dgxc-slurm_9'
 mi300x:
 - 'mi300x-amds_00'
 - 'mi300x-amds_01'

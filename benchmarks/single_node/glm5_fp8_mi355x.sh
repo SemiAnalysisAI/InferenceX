@@ -20,7 +20,7 @@ fi
 python3 -m pip install -U --no-cache-dir \
   "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # ROCm / SGLang performance tuning for MI355X
 export SGLANG_ROCM_FUSED_DECODE_MLA=0
