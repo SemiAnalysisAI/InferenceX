@@ -8430,7 +8430,7 @@ glm5-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
-  runner: b200
+  runner: b200-dgxc
   precision: fp8
   framework: dynamo-sglang
   multinode: true
