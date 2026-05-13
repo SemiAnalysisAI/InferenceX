@@ -2449,4 +2449,4 @@
     - "Add GLM-5 FP8 B200 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
     - "Vendor the 1k1k and 8k1k STP low-latency and max-throughput srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/b200-fp8/"
     - "Use the B200 local model alias glm5-fp8 mapped to /scratch/fsw/models/GLM-5-FP8"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1372
