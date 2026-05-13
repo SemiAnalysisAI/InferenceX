@@ -56,7 +56,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" || "$FRAMEWORK" == "vllm-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node"
