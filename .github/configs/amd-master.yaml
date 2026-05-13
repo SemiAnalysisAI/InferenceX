@@ -1644,7 +1644,7 @@ dsv4-fp8-mi355x-vllm:
 # the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
 # the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
 dsv4-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202605101539
+  image: rocm/atom-dev:nightly_202605130853
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1656,8 +1656,8 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
