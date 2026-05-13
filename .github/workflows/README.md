@@ -180,30 +180,39 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 
 ## Reusing an Approved PR Full Sweep
 
-If a PR has already run the full untrimmed sweep, a maintainer can avoid running
-the same sweep again after merge by leaving the full-sweep label on the PR:
+If a PR has already run the full untrimmed sweep (`full-sweep-enabled` label),
+a maintainer can avoid running the same sweep again after merge by leaving a
+PR comment before merging:
 
-- `full-sweep-enabled`
+```
+/reuse-sweep-run
+```
 
-A maintainer must also pin the reusable source run with a PR comment before
-merging:
+That reuses the latest successful `run-sweep.yml` `pull_request` run for the
+PR's current head SHA. If the PR was rebased or had to merge `main` after the
+successful sweep — so the current head no longer has a matching run — pin the
+source run explicitly:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
-The comment is the reuse authorization, so adding it does not trigger or cancel a
-PR sweep. On the push-to-main run, `run-sweep.yml` resolves the merged PR from
-the merge commit, verifies that the pinned run is a successful `pull_request`
+The comment is the reuse authorization, so adding it does not trigger or cancel
+a PR sweep. On the push-to-main run, `run-sweep.yml` resolves the merged PR
+from the merge commit, verifies the source run is a successful `pull_request`
 `run-sweep.yml` run for the same PR, downloads the ingest-relevant artifacts,
 validates that `results_bmk` covers the merge run's expected benchmark matrix,
 and uploads them as `reused-ingest-artifacts`. The normal database ingest then
 publishes those artifacts with the merge run's changelog metadata.
 
-Reuse fails closed: if the comment is present but the full-sweep label, pinned
-PR run, or artifacts cannot be validated, the push-to-main workflow fails
-instead of falling back to a cluster sweep. Without the comment, the push-to-main
-workflow runs the normal full sweep.
+Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
+The most recent matching comment wins, so a maintainer can supersede an earlier
+pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
+
+Reuse fails closed: if the comment is present but the `full-sweep-enabled`
+label, source PR run, or artifacts cannot be validated, the push-to-main
+workflow fails instead of falling back to a cluster sweep. Without the comment,
+the push-to-main workflow runs the normal full sweep.
 
 ## Validation Architecture
 

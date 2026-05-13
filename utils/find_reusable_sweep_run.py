@@ -2,8 +2,10 @@
 """Find an approved pull-request sweep run that can be reused after merge.
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
-reuse when the merge commit maps unambiguously to one pull request and a human
-has left the full-sweep label plus a maintainer reuse command on that PR.
+reuse when the merge commit maps unambiguously to one pull request and a
+maintainer has left a ``/reuse-sweep-run`` comment on that PR.  The comment
+may include a specific source run ID; without one, the latest successful
+``pull_request`` ``run-sweep.yml`` run for the PR head is used.
 """
 
 from __future__ import annotations
@@ -116,15 +118,20 @@ def result(
     }
 
 
-def find_authorized_reuse_run_id(
+def find_reuse_authorization(
     repo: str,
     pr_number: int,
     token: str,
     command: str,
     allowed_author_associations: set[str],
-) -> int | None:
-    """Return the latest maintainer-authorized pinned source run ID, if any."""
-    command_pattern = re.compile(rf"(?m)^\s*{re.escape(command)}\s+(\d+)\s*$")
+) -> tuple[bool, int | None]:
+    """Find the most recent maintainer-authorized reuse comment on a PR.
+
+    Returns ``(authorized, pinned_run_id)``.  ``pinned_run_id`` is ``None`` when
+    the comment had no run ID argument — the caller should resolve the source
+    run from the PR head SHA in that case.
+    """
+    command_pattern = re.compile(rf"(?m)^\s*{re.escape(command)}(?:\s+(\d+))?\s*$")
     comments = paginated_github_api(
         repo,
         f"/issues/{pr_number}/comments",
@@ -138,8 +145,36 @@ def find_authorized_reuse_run_id(
             continue
         body = str(comment.get("body") or "")
         matches = command_pattern.findall(body)
-        if matches:
-            return int(matches[-1])
+        if not matches:
+            continue
+        # The last matching command in this comment is the maintainer's final intent.
+        last = matches[-1]
+        return True, int(last) if last else None
+    return False, None
+
+
+def find_latest_successful_run(
+    repo: str,
+    workflow_id: str,
+    head_sha: str,
+    token: str,
+) -> dict[str, Any] | None:
+    """Return the latest successful PR sweep run for the given head SHA."""
+    encoded_workflow = urllib.parse.quote(workflow_id, safe="")
+    runs = paginated_github_api(
+        repo,
+        f"/actions/workflows/{encoded_workflow}/runs",
+        token,
+        "workflow_runs",
+        {
+            "event": "pull_request",
+            "head_sha": head_sha,
+            "status": "completed",
+        },
+    )
+    for run in runs:
+        if run.get("conclusion") == "success" and run.get("head_sha") == head_sha:
+            return run
     return None
 
 
@@ -243,26 +278,26 @@ def main() -> int:
         return 0
 
     if len(pulls) > 1:
-        pinned_prs: list[tuple[int, int]] = []
+        authorized_prs: list[int] = []
         for pr in pulls:
             if not pr.get("number"):
                 continue
             pr_number = int(pr["number"])
-            pinned_run_id = find_authorized_reuse_run_id(
+            authorized, _ = find_reuse_authorization(
                 args.repo,
                 pr_number,
                 token,
                 args.pinned_run_command,
                 allowed_author_associations,
             )
-            if pinned_run_id:
-                pinned_prs.append((pr_number, pinned_run_id))
-        if pinned_prs:
+            if authorized:
+                authorized_prs.append(pr_number)
+        if authorized_prs:
             numbers = ", ".join(str(pr.get("number")) for pr in pulls)
-            pinned = ", ".join(f"#{number} -> {run_id}" for number, run_id in pinned_prs)
+            authorized = ", ".join(f"#{n}" for n in authorized_prs)
             raise RuntimeError(
                 f"Commit {args.commit_sha} maps to multiple PRs ({numbers}); "
-                f"found reuse authorization on {pinned}; refusing to reuse artifacts."
+                f"found reuse authorization on {authorized}; refusing to reuse artifacts."
             )
         outputs = result(enabled=False, reason="multiple associated pull requests")
         write_outputs(args.github_output, outputs)
@@ -270,14 +305,14 @@ def main() -> int:
         return 0
 
     pr_number = int(pulls[0]["number"])
-    pinned_run_id = find_authorized_reuse_run_id(
+    authorized, pinned_run_id = find_reuse_authorization(
         args.repo,
         pr_number,
         token,
         args.pinned_run_command,
         allowed_author_associations,
     )
-    if not pinned_run_id:
+    if not authorized:
         outputs = result(
             enabled=False,
             reason=f"PR #{pr_number} has no {args.pinned_run_command} authorization",
@@ -297,8 +332,21 @@ def main() -> int:
     if not pr.get("merged_at"):
         raise RuntimeError(f"PR #{pr_number} is not marked as merged.")
 
-    run = github_api(args.repo, f"/actions/runs/{pinned_run_id}", token)
-    reason = f"PR #{pr_number} approved reusable full sweep from pinned run {pinned_run_id}"
+    if pinned_run_id is not None:
+        run = github_api(args.repo, f"/actions/runs/{pinned_run_id}", token)
+        reason = f"PR #{pr_number} approved reusable full sweep from pinned run {pinned_run_id}"
+    else:
+        head_sha = str(pr.get("head", {}).get("sha") or "")
+        if not head_sha:
+            raise RuntimeError(f"PR #{pr_number} has no head SHA.")
+        run = find_latest_successful_run(args.repo, args.workflow_id, head_sha, token)
+        if not run:
+            raise RuntimeError(
+                f"PR #{pr_number} has {args.pinned_run_command} authorization but no "
+                f"successful {args.workflow_id} pull_request run was found for {head_sha}; "
+                f"pin a specific run with `{args.pinned_run_command} <run_id>`."
+            )
+        reason = f"PR #{pr_number} approved reusable full sweep from latest run on {head_sha}"
 
     run_id = int(run["id"])
     validate_reusable_run(args.repo, args.workflow_id, pr_number, run, token)
