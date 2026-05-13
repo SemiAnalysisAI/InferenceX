@@ -224,19 +224,7 @@ import json
 from pathlib import Path
 
 
-_SAFE_CONFIG_KEYS = (
-    "pad_token",
-    "pad_token_id",
-    "eos_token",
-    "eos_token_id",
-    "bos_token",
-    "bos_token_id",
-    "unk_token",
-    "unk_token_id",
-    "model_max_length",
-    "padding_side",
-    "truncation_side",
-)
+_SAFE_CONFIG_KEYS = ("model_max_length", "padding_side", "truncation_side")
 
 
 def _load_init_kwargs(path: Path) -> dict:
@@ -252,9 +240,6 @@ def _load_init_kwargs(path: Path) -> dict:
         if key in config:
             init_kwargs[key] = config[key]
 
-    extra_special_tokens = config.get("extra_special_tokens")
-    if isinstance(extra_special_tokens, list):
-        init_kwargs["additional_special_tokens"] = extra_special_tokens
     return init_kwargs
 
 
