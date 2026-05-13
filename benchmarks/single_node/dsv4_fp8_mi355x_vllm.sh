@@ -5,6 +5,13 @@ set -eo pipefail
 # Based on vllm-project/vllm#40889 (AITER-accelerated sparse MLA decode,
 # stacked on #40871 which adds base DSv4 ROCm support).
 #
+# Serving flags follow the validated MI355X recipe from
+# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8): AITER + AITER_LINEAR,
+# triton_unfused MoE, mp executor, async scheduling, max-num-seqs=128,
+# max-num-batched-tokens=8192, gpu-mem-util=0.6. Tool-call flags from the
+# previous revision are dropped — the recipe omits them and throughput
+# benchmarks here do not exercise tool calling.
+#
 # Uses the ATOM MI355X image as the base (ROCm 7.2.2, PyTorch 2.10,
 # aiter with MLA decode, MI355X GPU detection). vLLM is rebuilt from
 # the PR branch on top. Once both PRs merge into a release, switch to
@@ -33,6 +40,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_LINEAR=1
 export VLLM_TARGET_DEVICE=rocm
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_PLUGINS=""
@@ -487,17 +495,18 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
     --tensor-parallel-size $TP \
-    --gpu-memory-utilization 0.90 \
+    --distributed-executor-backend mp \
+    --gpu-memory-utilization 0.6 \
     --max-model-len $MAX_MODEL_LEN \
+    --max-num-seqs 128 \
+    --max-num-batched-tokens 8192 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
     --enforce-eager \
+    --async-scheduling \
     --moe-backend "triton_unfused" \
     --no-enable-prefix-caching \
-    --max-num-seqs 32 \
     --tokenizer-mode deepseek_v4 \
-    --tool-call-parser deepseek_v4 \
-    --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

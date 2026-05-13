@@ -2442,3 +2442,14 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1329
+
+- config-keys:
+    - dsv4-fp8-mi355x-vllm
+  description:
+    - "Adopt validated MI355X serving recipe from vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8)"
+    - "Add env: VLLM_ROCM_USE_AITER_LINEAR=1 (alongside existing VLLM_ROCM_USE_AITER=1)"
+    - "Add server flags: --distributed-executor-backend mp, --max-num-batched-tokens 8192, --async-scheduling"
+    - "Tune: --gpu-memory-utilization 0.90 -> 0.6, --max-num-seqs 32 -> 128"
+    - "Drop --tool-call-parser deepseek_v4 / --enable-auto-tool-choice (not in recipe; benchmark doesn't exercise tool calling)"
+    - "Expand search space from conc=1 to conc 4-64 to match dsv4-fp8-mi355x-sglang for vLLM<->SGLang comparability now that max-num-seqs=128 supports it"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

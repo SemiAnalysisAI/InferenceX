@@ -1617,6 +1617,11 @@ dsv4-fp4-mi355x-sglang:
 # at runtime by benchmarks/single_node/dsv4_fp8_mi355x_vllm.sh at a
 # pinned SHA. Once both PRs merge into a release, switch to a vLLM ROCm
 # MI355X image and remove the build step.
+#
+# Serving flags follow vllm-project/recipes#433: AITER+AITER_LINEAR,
+# mp executor, triton_unfused MoE, async scheduling, max-num-seqs=128,
+# max-num-batched-tokens=8192, gpu-mem-util=0.6. Sweep matches the
+# sister sglang config (conc 4-64) so vLLM↔SGLang are comparable.
 dsv4-fp8-mi355x-vllm:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1630,11 +1635,11 @@ dsv4-fp8-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 1 }
+      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 1 }
+      - { tp: 8, conc-start: 4, conc-end: 64 }
 
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
