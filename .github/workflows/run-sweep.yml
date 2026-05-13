@@ -55,6 +55,12 @@ jobs:
             )
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            reuse-enabled: ${{ steps.setup.outputs.reuse-enabled }}
+            reuse-source-run-id: ${{ steps.setup.outputs.reuse-source-run-id }}
+            reuse-source-run-attempt: ${{ steps.setup.outputs.reuse-source-run-attempt }}
+            reuse-source-run-url: ${{ steps.setup.outputs.reuse-source-run-url }}
+            reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
+            reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
             - name: Reject conflicting sweep labels
               if: >-
@@ -72,6 +78,7 @@ jobs:
 
             - id: setup
               env:
+                  GH_TOKEN: ${{ github.token }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -101,10 +108,16 @@ jobs:
                   CONFIG_JSON=$("${CMD[@]}")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
+                    --repo "${{ github.repository }}" \
+                    --commit-sha "${{ github.sha }}" \
+                    --event-name "${{ github.event_name }}" \
+                    --ref "${{ github.ref }}" \
+                    --workflow-id "run-sweep.yml"
 
     sweep-multi-node-1k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
@@ -142,7 +155,7 @@ jobs:
 
     sweep-multi-node-8k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
@@ -154,7 +167,7 @@ jobs:
 
     sweep-single-node-1k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
@@ -183,7 +196,7 @@ jobs:
 
     sweep-single-node-8k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
@@ -195,7 +208,7 @@ jobs:
 
     sweep-agentic:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -221,13 +234,13 @@ jobs:
             osl: '0'
             max-model-len: '0'
             spec-decoding: 'none'
-            disagg: 'false'
+            disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
 
     sweep-multi-node-agentic:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
@@ -266,7 +279,7 @@ jobs:
 
     sweep-evals:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
@@ -296,7 +309,7 @@ jobs:
 
     sweep-multi-node-evals:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -365,6 +378,70 @@ jobs:
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
+    reuse-ingest-artifacts:
+        needs: setup
+        if: ${{ needs.setup.outputs.reuse-enabled == 'true' }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Download reusable source artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+                  SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
+              run: |
+                  gh run download "$SOURCE_RUN_ID" \
+                    --repo "${{ github.repository }}" \
+                    -D source-artifacts
+
+                  # Keep only artifacts consumed by the official ingest path.
+                  # The merge run uploads its own changelog metadata; reusable
+                  # benchmark/eval rows are attributed to the source PR sweep.
+                  rm -rf source-artifacts/changelog-metadata
+                  for artifact_dir in source-artifacts/*; do
+                      [ -e "$artifact_dir" ] || continue
+                      name=$(basename "$artifact_dir")
+                      case "$name" in
+                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|server_logs_*|multinode_server_logs_*|agentic_aggregated)
+                              ;;
+                          *)
+                              rm -rf "$artifact_dir"
+                              ;;
+                      esac
+                  done
+
+                  mkdir -p source-artifacts/reused-ingest-metadata
+                  cat > source-artifacts/reused-ingest-metadata/reuse_source_run.json <<'JSON'
+                  {
+                    "source_run_id": "${{ needs.setup.outputs.reuse-source-run-id }}",
+                    "source_run_attempt": "${{ needs.setup.outputs.reuse-source-run-attempt }}",
+                    "source_run_url": "${{ needs.setup.outputs.reuse-source-run-url }}",
+                    "source_pr_number": "${{ needs.setup.outputs.reuse-source-pr-number }}",
+                    "source_head_sha": "${{ needs.setup.outputs.reuse-source-head-sha }}",
+                    "ingest_run_id": "${{ github.run_id }}",
+                    "ingest_run_attempt": "${{ github.run_attempt }}",
+                    "ingest_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                  JSON
+
+                  echo "Reusing artifacts from $SOURCE_RUN_ID:"
+                  find source-artifacts -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort
+
+            - name: Validate reusable artifacts
+              run: |
+                  cat <<'CONFIGEOF' > _full_config.json
+                  ${{ needs.setup.outputs.search-space-config }}
+                  CONFIGEOF
+                  python3 utils/validate_reusable_sweep_artifacts.py \
+                    --config-json _full_config.json \
+                    --artifacts-dir source-artifacts
+
+            - name: Upload reusable ingest artifacts
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: reused-ingest-artifacts
+                  path: source-artifacts/*
+
     upload-changelog-metadata:
         needs: [setup, collect-results]
         if: ${{ always() && needs.setup.result == 'success' }}
@@ -410,7 +487,7 @@ jobs:
               run: pip install PyGithub
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -445,7 +522,7 @@ jobs:
               run: pip install psycopg2-binary tabulate
 
             - name: Compare results against main
-              run: python3 utils/compare_results.py results/ >> $GITHUB_STEP_SUMMARY
+              run: python3 utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
 
     trigger-ingest:
         needs:
@@ -454,12 +531,17 @@ jobs:
                 collect-evals,
                 calc-success-rate,
                 upload-changelog-metadata,
+                reuse-ingest-artifacts,
             ]
         if: >-
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
-            (needs.collect-results.result != 'skipped' || needs.collect-evals.result != 'skipped')
+            (
+              needs.collect-results.result != 'skipped' ||
+              needs.collect-evals.result != 'skipped' ||
+              needs.reuse-ingest-artifacts.result == 'success'
+            )
         runs-on: ubuntu-latest
         steps:
             - name: Trigger database ingest
