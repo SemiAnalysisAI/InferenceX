@@ -2349,3 +2349,11 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1344
+
+    
