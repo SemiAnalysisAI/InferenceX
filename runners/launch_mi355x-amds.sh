@@ -122,7 +122,7 @@ for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
-        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
+        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1 "$FRAMEWORK")
         if [ -z "$LOGS_DIR" ]; then
             echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
             exit 1
