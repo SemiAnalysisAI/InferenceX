@@ -6,17 +6,18 @@ frontend:
   num_additional_frontends: 8
 
 dynamo:
-  install: false  # NGC sglang-runtime image ships dynamo prebuilt.
+  hash: "34d55a596fb8d3d44daefe425ec1e303131f4d2c"
+  install: true
 
-# 100-min readiness wall (default 30 min) tolerates first-time NGC
-# image pull on each worker node plus DSV4-Pro multi-node load.
+# 100-min readiness wall (default 30 min) so the per-worker dynamo
+# source build has room to finish before health-poll gives up.
 health_check:
   max_attempts: 600
   interval_seconds: 10
 
 model:
   path: "deepseek-v4-pro"
-  container: "nvcr.io/nvidia/ai-dynamo/sglang-runtime:1.2.0-deepseek-v4-cuda13-dev.3"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260510-2473659e"
   precision: "mxfp4"
 
 sbatch_directives:
