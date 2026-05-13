@@ -178,6 +178,25 @@ test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/co
 test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
 ```
 
+## Reusing an Approved PR Full Sweep
+
+If a PR has already run the full untrimmed sweep, a maintainer can avoid running
+the same sweep again after merge by leaving both labels on the PR before merging:
+
+- `full-sweep-enabled`
+- `reuse-full-sweep-results`
+
+On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
+commit, finds the latest successful PR `Run Sweep` run for that exact PR head
+SHA, downloads the ingest-relevant artifacts, validates that `results_bmk`
+covers the merge run's expected benchmark matrix, and uploads them as
+`reused-ingest-artifacts`. The normal database ingest then publishes those
+artifacts with the merge run's changelog metadata.
+
+Reuse fails closed: if the label is present but the matching PR run or artifacts
+cannot be validated, the push-to-main workflow fails instead of falling back to a
+cluster sweep.
+
 ## Validation Architecture
 
 The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
