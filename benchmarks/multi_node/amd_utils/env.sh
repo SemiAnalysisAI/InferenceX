@@ -56,7 +56,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 
     # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
     if [[ -z "$UCX_NET_DEVICES" ]]; then
+<<<<<<< Updated upstream
         UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/tw-eth/{print $2}' | head -1)
+=======
+        UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/tw-eth0/{print $2}' | head -1)
+>>>>>>> Stashed changes
         if [[ -n "$UCX_NET_DEV" ]]; then
             export UCX_NET_DEVICES="$UCX_NET_DEV"
         else
