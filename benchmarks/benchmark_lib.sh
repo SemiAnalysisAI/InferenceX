@@ -956,14 +956,15 @@ build_replay_cmd() {
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the 949-trace weka corpus. The default
-    # 300s timeout flips parallel jobs into TimeoutError mid-setup when
-    # many launchers contend for the shared HF cache + tmpfs. Bump to
-    # 900s — the post-setup measurement window is unaffected.
-    export AIPERF_DATASET_CONFIGURATION_TIMEOUT=900
+    # routinely takes 4-5 min for the 949-trace weka corpus on fast /tmp
+    # (B300) but can stretch to 14 min on slower /tmp + parallel contention
+    # (observed on H200 where all 14 R3 jobs hit aiperf's 900s Configure
+    # Profiling timeout simultaneously). Bump to 1800s to absorb 3x
+    # worst-case slowdown — the post-setup measurement window is unaffected.
+    export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
     # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
-    export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=900
+    export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
     REPLAY_CMD="aiperf profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url http://localhost:$PORT"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
