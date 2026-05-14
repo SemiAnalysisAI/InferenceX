@@ -43,7 +43,7 @@ import numpy as np
 from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,
                                   RequestFuncOutput)
 from tqdm.asyncio import tqdm
-from transformers import PreTrainedTokenizerBase
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 try:
     from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -98,11 +98,20 @@ _worker_tokenizer = None
 def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
     """Initialize tokenizer once per worker process."""
     global _worker_tokenizer
-    _worker_tokenizer = get_tokenizer(
-        tokenizer_id,
-        tokenizer_mode=tokenizer_mode,
-        trust_remote_code=trust_remote_code,
-    )
+    try:
+        _worker_tokenizer = get_tokenizer(
+            tokenizer_id,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+        )
+    except AttributeError as exc:
+        if "all_special_tokens_extended" not in str(exc):
+            raise
+        _worker_tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_id,
+            trust_remote_code=trust_remote_code,
+            use_fast=True,
+        )
 
 
 def _apply_chat_template(prompt, tokenizer, dsv4):
@@ -783,9 +792,18 @@ def main(args: argparse.Namespace):
         api_url = f"http://{args.host}:{args.port}{args.endpoint}"
         base_url = f"http://{args.host}:{args.port}"
 
-    tokenizer = get_tokenizer(tokenizer_id,
-                              tokenizer_mode=tokenizer_mode,
-                              trust_remote_code=args.trust_remote_code)
+    try:
+        tokenizer = get_tokenizer(tokenizer_id,
+                                  tokenizer_mode=tokenizer_mode,
+                                  trust_remote_code=args.trust_remote_code)
+    except AttributeError as exc:
+        if "all_special_tokens_extended" not in str(exc):
+            raise
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_id,
+            trust_remote_code=args.trust_remote_code,
+            use_fast=True,
+        )
 
 
     if args.dataset_name == "random":

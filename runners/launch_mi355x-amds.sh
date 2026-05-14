@@ -53,7 +53,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Ensure root-owned files are cleaned up even on early exit to prevent
     # EACCES errors when the next GH Actions job checks out on this runner
-    trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+    if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
+        trap '' EXIT
+    else
+        trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+    fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
