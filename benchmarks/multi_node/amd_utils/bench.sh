@@ -37,6 +37,9 @@ IFS='x' read -r -a chosen_concurrencies <<< "$concurrency_list"
 
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 
+export TRANSFORMERS_VERBOSITY=error
+export TOKENIZERS_PARALLELISM=false
+
 echo "Config ${chosen_isl}; ${chosen_osl}; ${chosen_concurrencies[0]}; ${chosen_req_rate}"
 
 profile_folder="${log_path}/${ENGINE}_isl_${chosen_isl}_osl_${chosen_osl}"
