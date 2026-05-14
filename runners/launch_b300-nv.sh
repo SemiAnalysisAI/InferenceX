@@ -9,8 +9,8 @@ set -x
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
 # Validate framework
-if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
-    echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
+    echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
     exit 1
 fi
 
@@ -25,8 +25,22 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/data/models/dsr1-fp8"
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /data/models/dsv4-pro /data/models/deepseek-v4-pro /data/models/DeepSeek-V4-Pro; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm"
     exit 1
 fi
 
@@ -37,9 +51,21 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-cd "$SRT_REPO_DIR" || exit 1
-git checkout sa-submission-q2-2026
+# TODO(CJQ): make first class upon srt-slurm upstream refactor
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout aflowers/vllm-gb200-v0.20.0
+    mkdir -p recipes/vllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+else
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout sa-submission-q2-2026
+fi
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -90,6 +116,8 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
+  "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
 default_mounts:
@@ -196,16 +224,20 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
             for result_file in $RESULT_FILES; do
                 if [ -f "$result_file" ]; then
                     # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
                     filename=$(basename "$result_file")
                     concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
                     ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
                     gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
                     echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    else
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
+                    fi
                     cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
                     echo "Copied result file to: $WORKSPACE_RESULT_FILE"
@@ -248,30 +280,69 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
 
-    HF_HUB_CACHE_MOUNT="/scratch/models"
-    # Qwen3.5-397B-A17B-FP8 is pre-staged under /scratch/models on the B300 cluster,
-    # so point MODEL at the local copy. Other models fall through and use `hf download`
-    # against the mounted cache from their benchmark script.
+    # Pre-staged models on the B300 cluster live under /data/models. Point MODEL
+    # at the local copy so the benchmark skips `hf download` and reads from the
+    # mounted dir. Other models fall through and use `hf download` from their
+    # benchmark script.
+    HF_HUB_CACHE_MOUNT="/data/models"
     if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
-        export MODEL="/scratch/models/${MODEL#*/}"
+        export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
+    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
-    SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
+    # with multiple inference engines can coexist; fall back to the historical
+    # name without an engine suffix (`_trt` for trt, bare for everyone else)
+    # for scripts that haven't been retagged yet.
+    BENCH_BASE="benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b300"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
+        BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
+    fi
+
+    LOCK_FILE="${SQUASH_FILE}.lock"
+
+    # TODO(Cam): the deepseek-v4 sglang images (lmsysorg/sglang:deepseek-v4-blackwell
+    # and its B300-recompiled forks like yhyang201/sglang-b300) install sglang
+    # editable at /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang),
+    # so the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install
+    # and breaks `import sglang`. Mount these images at /ix instead; drop the
+    # conditional once the image stops installing editable under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* || "$IMAGE" == *deepseek-v4-bw-ultra* || "$IMAGE" == *deepseek-v4-b300* || "$IMAGE" == *sglang-b300* ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
+
+    # Import the squash file on the head node (outside any srun) under flock.
+    # Parallel GH jobs target the same shared squash path; flock serializes
+    # imports so only one job pulls and writes the file while the rest wait.
+    (
+        exec 9>"$LOCK_FILE"
+        flock -w 600 9 || { echo "Failed to acquire lock for $SQUASH_FILE" >&2; exit 1; }
+        if unsquashfs -l "$SQUASH_FILE" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import"
+        else
+            rm -f "$SQUASH_FILE"
+            enroot import -o "$SQUASH_FILE" "docker://$IMAGE"
+        fi
+    )
 
     # Pin to one of the known-good B300 nodes; others have hardware/network
     # issues that cause benchmarks to hang or fail to start.
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-
     srun --jobid=$JOB_ID \
+        --mpi=none \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b300${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash "$BENCH_SCRIPT"
 
 fi

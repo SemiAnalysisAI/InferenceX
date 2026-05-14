@@ -41,6 +41,47 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     return "\n".join(added_lines)
 
 
+def trim_conc(entries: list[dict]) -> list[dict]:
+    """Trim each parallelism config's concurrency sweep to its highest point.
+
+    Non-full-sweep PRs only need a single concurrency point per parallelism
+    config to validate a change runs end-to-end, so the shared cluster stays
+    clear. Push-to-main and ``full-sweep-enabled`` PRs skip this reduction.
+
+    The retained value is the maximum configured concurrency — independent of
+    the source ordering of ``conc-list`` / ``conc-start``.
+
+    Input comes from ``json.loads(subprocess.stdout)`` so ``conc`` is always
+    ``int`` (single-node) or ``list`` (multi-node); other single-node fields
+    are hashable scalars.
+
+    - Single-node entries: group by every other field and keep only the entry
+      with the highest ``conc`` per group.
+    - Multi-node entries: trim the ``conc`` list in place to ``[max(conc)]``.
+    """
+    groups: dict[tuple, list[int]] = {}
+    out: list[dict] = []
+
+    for entry in entries:
+        if entry.get("prefill") is not None:
+            conc = entry.get("conc")
+            if isinstance(conc, list) and len(conc) > 1:
+                entry = {**entry, "conc": [max(conc)]}
+            out.append(entry)
+            continue
+
+        key = tuple(sorted((k, v) for k, v in entry.items() if k != "conc"))
+        groups.setdefault(key, []).append(len(out))
+        out.append(entry)
+
+    drop: set[int] = set()
+    for idxs in groups.values():
+        if len(idxs) > 1:
+            keep = max(idxs, key=lambda i: out[i]["conc"])
+            drop.update(i for i in idxs if i != keep)
+    return [e for i, e in enumerate(out) if i not in drop]
+
+
 def get_config_keys_from_master(
     config_keys: list[str], master_config: dict
 ) -> list[str]:
@@ -66,6 +107,7 @@ def main():
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
+    parser.add_argument("--trim-conc", action="store_true")
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -119,6 +161,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
+                if entry.scenario_type:
+                    base_cmd.extend(["--scenario-type", *entry.scenario_type])
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -145,6 +189,8 @@ def main():
                 *MASTER_CONFIGS,
                 "--evals-only",
             ]
+            if entry.scenario_type:
+                base_cmd.extend(["--scenario-type", *entry.scenario_type])
             try:
                 eval_result = subprocess.run(
                     base_cmd,
@@ -157,11 +203,20 @@ def main():
                 raise
             all_eval_results.extend(json.loads(eval_result.stdout))
 
+    if args.trim_conc:
+        all_benchmark_results = trim_conc(all_benchmark_results)
+
     for result in all_benchmark_results:
-        seq_len_str = seq_len_to_str(result["isl"], result["osl"])
-        if "prefill" in result and result["prefill"] is not None:
+        if result.get("scenario-type") == "agentic-coding":
+            if result.get("prefill") is not None:
+                final_results["multi_node"]["agentic"].append(result)
+            else:
+                final_results["single_node"]["agentic"].append(result)
+        elif "prefill" in result and result["prefill"] is not None:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["multi_node"][seq_len_str].append(result)
         else:
+            seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
     final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]

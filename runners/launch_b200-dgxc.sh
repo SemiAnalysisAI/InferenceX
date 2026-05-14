@@ -1,32 +1,89 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu"
+SLURM_PARTITION="gpu-2"
 SLURM_ACCOUNT="benchmark"
 
 set -x
 
+# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
+# Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
+# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
+# downloading on every dgxc node. Runs for both single-node and multinode
+# launches.
+# NOTE: per-node /raid/models/* would be faster but is only populated on a
+# subset of dgxc nodes today, so we use Lustre for reliability.
+if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
+    export SRT_SLURM_MODEL_PREFIX="dsr1"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
+    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
+    export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
+    export SRT_SLURM_MODEL_PREFIX="kimik2.5"
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
+    export SRT_SLURM_MODEL_PREFIX="minimaxm2.5"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimaxm2.5-fp4"
+elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
+    export SRT_SLURM_MODEL_PREFIX="gptoss"
+else
+    echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
+    echo "Available models under /lustre/fsw/models:"
+    ls -la /lustre/fsw/models
+    exit 1
+fi
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Validate framework
-    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
-    # MODEL_PATH: Override with pre-downloaded paths on B200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared B200 cluster.
-    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
-        export SRT_SLURM_MODEL_PREFIX="dsr1"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
-        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-    else
-        echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
+    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
         exit 1
     fi
+
     export SERVED_MODEL_NAME=$MODEL
 
     echo "Cloning srt-slurm repository..."
@@ -36,9 +93,21 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
+    # TODO(CJQ): make first class upon srt-slurm upstream refactor
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout aflowers/vllm-gb200-v0.20.0
+        mkdir -p recipes/vllm/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    else
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout sa-submission-q2-2026
+    fi
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -89,6 +158,8 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
+  "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
 EOF
@@ -197,16 +268,20 @@ EOF
                 for result_file in $RESULT_FILES; do
                     if [ -f "$result_file" ]; then
                         # Extract metadata from filename
-                        # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                        # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
                         filename=$(basename "$result_file")
                         concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
                         ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
                         gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
                         echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                        if [ -n "$ctx" ] && [ -n "$gen" ]; then
+                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                        else
+                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
+                        fi
                         cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
                         echo "Copied result file to: $WORKSPACE_RESULT_FILE"
@@ -249,12 +324,33 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/scratch/fsw/models"
-    export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # Point the bench script at the local MODEL_PATH resolved above instead of
+    # pulling from the HF hub cache. Bench scripts skip `hf download` when
+    # MODEL is a local path.
+    export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
+    # with multiple inference engines can coexist; fall back to the historical
+    # name without an engine suffix (`_trt` for trt, bare for everyone else).
+    BENCH_BASE="benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    fi
     LOCK_FILE="${SQUASH_FILE}.lock"
+
+    # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
+    # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang), so
+    # the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install and
+    # breaks `import sglang`. Mount this one image at /ix instead; drop the
+    # conditional once the image stops installing editable under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
@@ -276,9 +372,9 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
-        bash benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh
+        bash "$BENCH_SCRIPT"
 fi

@@ -15,6 +15,12 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
+    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        # Same compute-node-local NVMe path as the dynamo-vllm dsv4
+        # branch — see that branch for rationale. SRT_SLURM_MODEL_PREFIX
+        # matches the model.path alias in our DSV4 sglang recipes.
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -42,8 +48,14 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
+        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
+        # model.path alias in our DSV4 recipes.
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
         exit 1
     fi
 else
@@ -134,7 +146,31 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+# TODO(CJQ): make first class upon srt-slurm upstream refactor
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout aflowers/vllm-gb200-v0.20.0
+    # Use `cp -rT` so if the upstream branch ever ships a stub
+    # `recipes/vllm/deepseek-v4/` directory, we overlay our recipes onto
+    # it rather than nesting (`cp -r src dst` would create
+    # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
+    mkdir -p recipes/vllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
+    # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
+    # and overlay our hand-rolled DSV4 sglang recipes. NVIDIA/srt-slurm
+    # has no upstream sglang DSV4 disagg recipes yet, hence the overlay.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
@@ -291,16 +327,20 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
             for result_file in $RESULT_FILES; do
                 if [ -f "$result_file" ]; then
                     # Extract metadata from filename
-                    # Files are of the format "results_concurrency_gpus_{num gpus}_ctx_{num ctx}_gen_{num gen}.json"
+                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
                     filename=$(basename "$result_file")
                     concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9]*\)_ctx_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
                     ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
                     gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
                     echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                    else
+                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
+                    fi
                     cp "$result_file" "$WORKSPACE_RESULT_FILE"
 
                     echo "Copied result file to: $WORKSPACE_RESULT_FILE"

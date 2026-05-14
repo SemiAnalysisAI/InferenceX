@@ -8,6 +8,7 @@ from generate_sweep_configs import (
     seq_len_to_str,
     generate_full_sweep,
     generate_runner_model_sweep_config,
+    generate_test_config_sweep,
     mark_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
@@ -30,22 +31,25 @@ def sample_single_node_config():
             "framework": "sglang",
             "runner": "mi300x",
             "multinode": False,
-            "seq-len-configs": [
-                {
-                    "isl": 1024,
-                    "osl": 1024,
-                    "search-space": [
-                        {"tp": 8, "conc-start": 4, "conc-end": 64}
-                    ]
-                },
-                {
-                    "isl": 8192,
-                    "osl": 1024,
-                    "search-space": [
-                        {"tp": 8, "conc-start": 4, "conc-end": 64}
-                    ]
-                }
-            ]
+            "scenarios": {
+                "fixed-seq-len": [
+
+                    {
+                        "isl": 1024,
+                        "osl": 1024,
+                        "search-space": [
+                            {"tp": 8, "conc-start": 4, "conc-end": 64}
+                        ]
+                    },
+                    {
+                        "isl": 8192,
+                        "osl": 1024,
+                        "search-space": [
+                            {"tp": 8, "conc-start": 4, "conc-end": 64}
+                        ]
+                    }
+                ]
+            }
         }
     }
 
@@ -63,37 +67,40 @@ def sample_multinode_config():
             "runner": "gb200",
             "multinode": True,
             "disagg": True,
-            "seq-len-configs": [
-                {
-                    "isl": 1024,
-                    "osl": 1024,
-                    "search-space": [
-                        {
-                            "conc-list": [2150],
-                            "prefill": {
-                                "num-worker": 5,
-                                "tp": 4,
-                                "ep": 4,
-                                "dp-attn": True,
-                                "additional-settings": [
-                                    "PREFILL_MAX_NUM_TOKENS=8448",
-                                    "PREFILL_MAX_BATCH_SIZE=1",
-                                ],
-                            },
-                            "decode": {
-                                "num-worker": 1,
-                                "tp": 8,
-                                "ep": 8,
-                                "dp-attn": True,
-                                "additional-settings": [
-                                    "DECODE_MAX_NUM_TOKENS=256",
-                                    "DECODE_MAX_BATCH_SIZE=256",
-                                ],
-                            },
-                        }
-                    ]
-                }
-            ]
+            "scenarios": {
+                "fixed-seq-len": [
+
+                    {
+                        "isl": 1024,
+                        "osl": 1024,
+                        "search-space": [
+                            {
+                                "conc-list": [2150],
+                                "prefill": {
+                                    "num-worker": 5,
+                                    "tp": 4,
+                                    "ep": 4,
+                                    "dp-attn": True,
+                                    "additional-settings": [
+                                        "PREFILL_MAX_NUM_TOKENS=8448",
+                                        "PREFILL_MAX_BATCH_SIZE=1",
+                                    ],
+                                },
+                                "decode": {
+                                    "num-worker": 1,
+                                    "tp": 8,
+                                    "ep": 8,
+                                    "dp-attn": True,
+                                    "additional-settings": [
+                                        "DECODE_MAX_NUM_TOKENS=256",
+                                        "DECODE_MAX_BATCH_SIZE=256",
+                                    ],
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
         }
     }
 
@@ -566,16 +573,19 @@ class TestGenerateFullSweepSingleNode:
                 "framework": "sglang",
                 "runner": "mi300x",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 4, "conc-start": 4, "conc-end": 64},  # should remain
-                            {"tp": 8, "conc-start": 4, "conc-end": 64},  # should be skipped
-                        ],
-                    }
-                ],
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 4, "conc-start": 4, "conc-end": 64},  # should remain
+                                {"tp": 8, "conc-start": 4, "conc-end": 64},  # should be skipped
+                            ],
+                        }
+                    ]
+                },
             }
         }
 
@@ -761,29 +771,32 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {
-                                "conc-list": [100],
-                                "prefill": {
-                                    "num-worker": 1,
-                                    "tp": 4,
-                                    "ep": 4,
-                                    "dp-attn": False,
-                                },
-                                "decode": {
-                                    "num-worker": 1,
-                                    "tp": 8,
-                                    "ep": 8,
-                                    "dp-attn": False,
-                                },
-                            }
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {
+                                    "conc-list": [100],
+                                    "prefill": {
+                                        "num-worker": 1,
+                                        "tp": 4,
+                                        "ep": 4,
+                                        "dp-attn": False,
+                                    },
+                                    "decode": {
+                                        "num-worker": 1,
+                                        "tp": 8,
+                                        "ep": 8,
+                                        "dp-attn": False,
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
             }
         }
         full_sweep_args_multi_node.runner_type = ["h200"]
@@ -1025,15 +1038,18 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 4, "ep": 4, "dp-attn": True, "conc-start": 4, "conc-end": 4}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 4, "ep": 4, "dp-attn": True, "conc-start": 4, "conc-end": 4}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         result = generate_full_sweep(
@@ -1056,15 +1072,18 @@ class TestEdgeCases:
                 "framework": "trt",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "spec-decoding": "mtp", "conc-start": 4, "conc-end": 4}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "spec-decoding": "mtp", "conc-start": 4, "conc-end": 4}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         result = generate_full_sweep(
@@ -1086,15 +1105,18 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "mi300x",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "conc-start": 4, "conc-end": 16}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "conc-start": 4, "conc-end": 16}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         result = generate_full_sweep(
@@ -1119,15 +1141,18 @@ class TestEdgeCases:
                 "runner": "mi300x",
                 "multinode": False,
                 # No disagg field
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "conc-start": 4, "conc-end": 4}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "conc-start": 4, "conc-end": 4}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         result = generate_full_sweep(
@@ -1148,30 +1173,33 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {
-                                "conc-start": 1,
-                                "conc-end": 8,
-                                "prefill": {
-                                    "num-worker": 1,
-                                    "tp": 4,
-                                    "ep": 4,
-                                    "dp-attn": False,
-                                },
-                                "decode": {
-                                    "num-worker": 1,
-                                    "tp": 8,
-                                    "ep": 8,
-                                    "dp-attn": False,
-                                },
-                            }
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {
+                                    "conc-start": 1,
+                                    "conc-end": 8,
+                                    "prefill": {
+                                        "num-worker": 1,
+                                        "tp": 4,
+                                        "ep": 4,
+                                        "dp-attn": False,
+                                    },
+                                    "decode": {
+                                        "num-worker": 1,
+                                        "tp": 8,
+                                        "ep": 8,
+                                        "dp-attn": False,
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
             }
         }
         result = generate_full_sweep(
@@ -1194,15 +1222,18 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         full_sweep_args_single_node.max_ep = 2
@@ -1226,15 +1257,18 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
+                            ]
+                        }
+                    ]
+                }
             }
         }
         for invalid_value in [0, -1, -100]:
@@ -1257,29 +1291,32 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {
-                                "conc-list": [100, 200, 400],
-                                "prefill": {
-                                    "num-worker": 1,
-                                    "tp": 4,
-                                    "ep": 4,
-                                    "dp-attn": False,
-                                },
-                                "decode": {
-                                    "num-worker": 1,
-                                    "tp": 8,
-                                    "ep": 8,
-                                    "dp-attn": False,
-                                },
-                            }
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {
+                                    "conc-list": [100, 200, 400],
+                                    "prefill": {
+                                        "num-worker": 1,
+                                        "tp": 4,
+                                        "ep": 4,
+                                        "dp-attn": False,
+                                    },
+                                    "decode": {
+                                        "num-worker": 1,
+                                        "tp": 8,
+                                        "ep": 8,
+                                        "dp-attn": False,
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
             }
         }
         for invalid_value in [0, -1, -100]:
@@ -1302,29 +1339,32 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {
-                                "conc-list": [100, 200, 400],
-                                "prefill": {
-                                    "num-worker": 1,
-                                    "tp": 4,
-                                    "ep": 4,
-                                    "dp-attn": False,
-                                },
-                                "decode": {
-                                    "num-worker": 1,
-                                    "tp": 8,
-                                    "ep": 8,
-                                    "dp-attn": False,
-                                },
-                            }
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {
+                                    "conc-list": [100, 200, 400],
+                                    "prefill": {
+                                        "num-worker": 1,
+                                        "tp": 4,
+                                        "ep": 4,
+                                        "dp-attn": False,
+                                    },
+                                    "decode": {
+                                        "num-worker": 1,
+                                        "tp": 8,
+                                        "ep": 8,
+                                        "dp-attn": False,
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
             }
         }
         full_sweep_args_multi_node.max_conc = 1
@@ -1348,16 +1388,19 @@ class TestEdgeCases:
                 "framework": "sglang",
                 "runner": "b200",
                 "multinode": False,
-                "seq-len-configs": [
-                    {
-                        "isl": 1024,
-                        "osl": 1024,
-                        "search-space": [
-                            {"tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200},  # should be skipped
-                            {"tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},  # should remain
-                        ]
-                    }
-                ]
+                "scenarios": {
+                    "fixed-seq-len": [
+
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200},  # should be skipped
+                                {"tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},  # should remain
+                            ]
+                        }
+                    ]
+                }
             }
         }
         full_sweep_args_single_node.max_tp = 2
@@ -1532,6 +1575,49 @@ def full_sweep_args_both():
     args.single_node = True
     args.multi_node = True
     return args
+
+
+# =============================================================================
+# Test generate_test_config_sweep
+# =============================================================================
+
+class TestGenerateTestConfigSweep:
+    """Tests for exact config-key sweep generation."""
+
+    def test_runner_node_filter_expands_config_runner(self, sample_multinode_config, sample_runner_config):
+        """test-config should allow targeting one concrete runner node."""
+        args = argparse.Namespace(
+            config_keys=["dsr1-fp4-gb200-dynamo-trt"],
+            seq_lens=None,
+            conc=None,
+            runner_node_filter="gb200-nv_0",
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_multinode_config,
+            sample_runner_config,
+        )
+
+        assert len(result) == 1
+        assert result[0]["runner"] == "gb200-nv_0"
+
+    def test_runner_node_filter_no_match_skips_config(self, sample_multinode_config, sample_runner_config):
+        """Unmatched node filters should produce no entries."""
+        args = argparse.Namespace(
+            config_keys=["dsr1-fp4-gb200-dynamo-trt"],
+            seq_lens=None,
+            conc=None,
+            runner_node_filter="gb300-nv_0",
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_multinode_config,
+            sample_runner_config,
+        )
+
+        assert result == []
 
 
 # =============================================================================
@@ -1884,5 +1970,4 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-
 

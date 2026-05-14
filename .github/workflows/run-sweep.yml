@@ -2,7 +2,15 @@ name: "Run Sweep"
 run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
 
 concurrency:
-    group: sweep-${{ github.event.pull_request.number || github.sha }}
+    group: >-
+        sweep-${{ github.event.pull_request.number || github.sha }}-${{
+          github.event_name == 'pull_request' &&
+          (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+          github.event.label.name != 'sweep-enabled' &&
+          github.event.label.name != 'full-sweep-enabled' &&
+          github.run_id ||
+          'active'
+        }}
     cancel-in-progress: true
 
 on:
@@ -18,13 +26,21 @@ on:
             - ready_for_review
             - synchronize
             - labeled
+            - unlabeled
         paths:
             - "perf-changelog.yaml"
 
 jobs:
     check-newline:
         runs-on: ubuntu-latest
-        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        if: >-
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled'
+            )
         steps:
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,17 +56,54 @@ jobs:
     setup:
         runs-on: ubuntu-latest
         if: >-
-            (github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'sweep-enabled')) ||
-            (github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[skip-sweep]'))
+            (
+              github.event_name == 'pull_request' &&
+              !github.event.pull_request.draft &&
+              (
+                contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              ) &&
+              (
+                (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+                github.event.label.name == 'sweep-enabled' ||
+                github.event.label.name == 'full-sweep-enabled'
+              )
+            ) ||
+            (
+              github.event_name != 'pull_request' &&
+              !contains(github.event.head_commit.message, '[skip-sweep]')
+            )
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            reuse-enabled: ${{ steps.setup.outputs.reuse-enabled }}
+            reuse-source-run-id: ${{ steps.setup.outputs.reuse-source-run-id }}
+            reuse-source-run-attempt: ${{ steps.setup.outputs.reuse-source-run-attempt }}
+            reuse-source-run-url: ${{ steps.setup.outputs.reuse-source-run-url }}
+            reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
+            reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
+            - name: Reject conflicting sweep labels
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              run: |
+                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to max(conc) per parallelism config."
+                  exit 1
+
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   fetch-depth: 0
 
             - id: setup
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TRIM_CONC: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
+                      }}
               run: |
                   pip install pydantic
 
@@ -62,16 +115,29 @@ jobs:
                       HEAD_REF="${{ github.event.after }}"
                   fi
 
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/process_changelog.py \
-                      --changelog-file ${GITHUB_WORKSPACE}/perf-changelog.yaml \
-                      --base-ref "$BASE_REF" \
-                      --head-ref "$HEAD_REF")
+                  CMD=(
+                      python3 "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --base-ref "$BASE_REF"
+                      --head-ref "$HEAD_REF"
+                  )
+                  if [ "$TRIM_CONC" = "true" ]; then
+                      CMD+=(--trim-conc)
+                  fi
 
-                  echo "search-space-config=$CONFIG_JSON" >> $GITHUB_OUTPUT
+                  CONFIG_JSON=$("${CMD[@]}")
+
+                  echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
+                    --repo "${{ github.repository }}" \
+                    --commit-sha "${{ github.sha }}" \
+                    --event-name "${{ github.event_name }}" \
+                    --ref "${{ github.ref }}" \
+                    --workflow-id "run-sweep.yml"
 
     sweep-multi-node-1k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
@@ -109,7 +175,7 @@ jobs:
 
     sweep-multi-node-8k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
@@ -121,7 +187,7 @@ jobs:
 
     sweep-single-node-1k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
@@ -150,7 +216,7 @@ jobs:
 
     sweep-single-node-8k1k:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
@@ -160,9 +226,80 @@ jobs:
         secrets: inherit
         with: *single-node-inputs
 
+    sweep-agentic:
+        needs: setup
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: agentic /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            offloading: ${{ matrix.config.offloading }}
+            duration: ${{ matrix.config.duration }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            spec-decoding: 'none'
+            disagg: ${{ 'false' }}
+            run-eval: false
+            scenario-type: agentic-coding
+
+    sweep-multi-node-agentic:
+        needs: setup
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' }}
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node agentic /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            conc-list: '[${{ matrix.config.conc }}]'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
+            prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-ep: ${{ matrix.config.prefill.ep }}
+            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
+            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
+            decode-num-worker: ${{ matrix.config.decode.num-worker }}
+            decode-tp: ${{ matrix.config.decode.tp }}
+            decode-ep: ${{ matrix.config.decode.ep }}
+            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
+            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            conc: ${{ matrix.config.conc }}
+            duration: ${{ matrix.config.duration }}
+            run-eval: false
+            scenario-type: agentic-coding
+
     sweep-evals:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
@@ -192,7 +329,7 @@ jobs:
 
     sweep-multi-node-evals:
         needs: setup
-        if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null' }}
+        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -233,11 +370,23 @@ jobs:
             [
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
+                sweep-agentic,
                 sweep-multi-node-1k1k,
                 sweep-multi-node-8k1k,
+                sweep-multi-node-agentic,
                 setup,
             ]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: >-
+            ${{
+              always() &&
+              needs.setup.result == 'success' &&
+              (
+                needs.sweep-single-node-1k1k.result != 'skipped' ||
+                needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-1k1k.result != 'skipped' ||
+                needs.sweep-multi-node-8k1k.result != 'skipped'
+              )
+            }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:
@@ -249,9 +398,73 @@ jobs:
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
+    reuse-ingest-artifacts:
+        needs: setup
+        if: ${{ needs.setup.outputs.reuse-enabled == 'true' }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Download reusable source artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+                  SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
+              run: |
+                  gh run download "$SOURCE_RUN_ID" \
+                    --repo "${{ github.repository }}" \
+                    -D source-artifacts
+
+                  # Keep only artifacts consumed by the official ingest path.
+                  # The merge run uploads its own changelog metadata; reusable
+                  # benchmark/eval rows are attributed to the source PR sweep.
+                  rm -rf source-artifacts/changelog-metadata
+                  for artifact_dir in source-artifacts/*; do
+                      [ -e "$artifact_dir" ] || continue
+                      name=$(basename "$artifact_dir")
+                      case "$name" in
+                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|server_logs_*|multinode_server_logs_*|agentic_aggregated)
+                              ;;
+                          *)
+                              rm -rf "$artifact_dir"
+                              ;;
+                      esac
+                  done
+
+                  mkdir -p source-artifacts/reused-ingest-metadata
+                  cat > source-artifacts/reused-ingest-metadata/reuse_source_run.json <<'JSON'
+                  {
+                    "source_run_id": "${{ needs.setup.outputs.reuse-source-run-id }}",
+                    "source_run_attempt": "${{ needs.setup.outputs.reuse-source-run-attempt }}",
+                    "source_run_url": "${{ needs.setup.outputs.reuse-source-run-url }}",
+                    "source_pr_number": "${{ needs.setup.outputs.reuse-source-pr-number }}",
+                    "source_head_sha": "${{ needs.setup.outputs.reuse-source-head-sha }}",
+                    "ingest_run_id": "${{ github.run_id }}",
+                    "ingest_run_attempt": "${{ github.run_attempt }}",
+                    "ingest_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                  JSON
+
+                  echo "Reusing artifacts from $SOURCE_RUN_ID:"
+                  find source-artifacts -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort
+
+            - name: Validate reusable artifacts
+              run: |
+                  cat <<'CONFIGEOF' > _full_config.json
+                  ${{ needs.setup.outputs.search-space-config }}
+                  CONFIGEOF
+                  python3 utils/validate_reusable_sweep_artifacts.py \
+                    --config-json _full_config.json \
+                    --artifacts-dir source-artifacts
+
+            - name: Upload reusable ingest artifacts
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: reused-ingest-artifacts
+                  path: source-artifacts/*
+
     upload-changelog-metadata:
         needs: [setup, collect-results]
-        if: ${{ always() && needs.setup.result != 'skipped' }}
+        if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
@@ -294,7 +507,7 @@ jobs:
               run: pip install PyGithub
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -329,7 +542,7 @@ jobs:
               run: pip install psycopg2-binary tabulate
 
             - name: Compare results against main
-              run: python3 utils/compare_results.py results/ >> $GITHUB_STEP_SUMMARY
+              run: python3 utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
 
     trigger-ingest:
         needs:
@@ -338,12 +551,17 @@ jobs:
                 collect-evals,
                 calc-success-rate,
                 upload-changelog-metadata,
+                reuse-ingest-artifacts,
             ]
         if: >-
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
-            (needs.collect-results.result != 'skipped' || needs.collect-evals.result != 'skipped')
+            (
+              needs.collect-results.result != 'skipped' ||
+              needs.collect-evals.result != 'skipped' ||
+              needs.reuse-ingest-artifacts.result == 'success'
+            )
         runs-on: ubuntu-latest
         steps:
             - name: Trigger database ingest
@@ -359,3 +577,46 @@ jobs:
                         "run-attempt": "${{ github.run_attempt }}"
                       }
                     }'
+
+    comment-unofficial-run-visualizer:
+        needs:
+            [
+                collect-results,
+                collect-evals,
+                calc-success-rate,
+                upload-changelog-metadata,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+            ) &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled'
+            )
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Comment unofficial run visualizer link on PR
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                  github-token: ${{ github.token }}
+                  script: |
+                      const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
+                      const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
+                      const body = [
+                          `see unofficial run visualizer at ${inferenceUrl}`,
+                          `see unofficial run visualizer at ${evaluationUrl}`,
+                      ].join('\n');
+                      await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.issue.number,
+                          body,
+                      });

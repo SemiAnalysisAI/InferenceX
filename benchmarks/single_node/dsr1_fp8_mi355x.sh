@@ -15,7 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # Reference
 # https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
@@ -44,7 +44,7 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --chunked-prefill-size 196608 \
     --mem-fraction-static 0.8 --disable-radix-cache \
-    --num-continuous-decode-steps 4 \
+    --num-continuous-decode-steps 8 \
     --max-prefill-tokens 196608 \
     --kv-cache-dtype fp8_e4m3 \
     --cuda-graph-max-bs "$CONC" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
