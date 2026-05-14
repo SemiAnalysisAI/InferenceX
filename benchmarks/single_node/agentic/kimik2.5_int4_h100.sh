@@ -16,12 +16,13 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-# H100 80 GB HBM is too small for Kimi K2.5 INT4's native 1M-token context;
-# vLLM bails at engine init with "No available memory for the cache blocks".
-# Cap at 32K so the engine can reserve KV blocks. Long-context trace turns
-# beyond this cap are truncated by vLLM at request time.
+# H100 80 GB HBM is barely enough for Kimi K2.5 INT4 (~44 GB/GPU weights at
+# TP=8) plus KV reservation plus MoE intermediate buffers. R2 at MAX=32K hit
+# CUDA OOM in fused_marlin_moe even at conc=1. Drop to 16K so KV reservation
+# is half, and pair with --gpu-memory-utilization 0.85 (below) to leave room
+# for the ~900 MiB-per-call MoE workspace.
 if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=32768
+    MAX_MODEL_LEN=16384
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -60,7 +61,7 @@ export VLLM_USE_FLASHINFER_MOE_INT4=1
 vllm serve $MODEL \
 --host 0.0.0.0 \
 --port $PORT \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.85 \
 --tensor-parallel-size $TP \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
