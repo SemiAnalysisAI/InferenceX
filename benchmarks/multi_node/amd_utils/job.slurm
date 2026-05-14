@@ -86,12 +86,14 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # Docker privilege detection
 # =============================================================================
 # Detect on the batch host. Per-node detection happens inside srun below.
+set -x
 if docker ps &>/dev/null; then
     DOCKER_CMD="docker"
 else
     DOCKER_CMD="sudo docker"
 fi
 export DOCKER_CMD
+set +x
 
 # =============================================================================
 # Model Path Resolution
