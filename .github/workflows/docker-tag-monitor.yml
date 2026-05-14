@@ -1,5 +1,7 @@
 name: Docker Tag Monitor
 
+# trigger: re-run after token/allowed_bots fix
+
 on:
   schedule:
     - cron: '0 7 * * 6'
@@ -137,6 +139,38 @@ jobs:
 
           echo "has_updates=true" >> "$GITHUB_OUTPUT"
 
+          # Snapshot self-hosted runner availability from the CI tracker.
+          # Used to constrain which SKUs Claude is allowed to open PRs against.
+          RUNNERS_TABLE=$(mktemp)
+          ALLOWED_SKUS_FILE=$(mktemp)
+          if curl -sf --max-time 10 "https://inferencex-ci-tracker.vercel.app/api/ci" -o /tmp/ci.json; then
+            jq -r '
+              [
+                "| SKU | Total | Busy | Idle | Offline | Pressure | Available |",
+                "|-----|-------|------|------|---------|----------|-----------|"
+              ] + (
+                .skus
+                | sort_by(.label)
+                | map(
+                    .label as $l
+                    | .summary as $s
+                    | (($s.idleRunners > 0) and ($s.offlineRunners < $s.totalRunners)) as $ok
+                    | "| `\($l)` | \($s.totalRunners) | \($s.busyRunners) | \($s.idleRunners) | \($s.offlineRunners) | \($s.pressureLevel) | \(if $ok then "yes" else "no" end) |"
+                  )
+              )
+              | .[]
+            ' /tmp/ci.json > "$RUNNERS_TABLE"
+            jq -r '
+              .skus[]
+              | select((.summary.pressureLevel == "clear") and (.summary.idleRunners > 0) and (.summary.offlineRunners < .summary.totalRunners))
+              | .label
+            ' /tmp/ci.json | paste -sd, - > "$ALLOWED_SKUS_FILE"
+          else
+            echo "_Could not reach https://inferencex-ci-tracker.vercel.app/api/ci — proceed cautiously._" > "$RUNNERS_TABLE"
+            : > "$ALLOWED_SKUS_FILE"
+          fi
+          ALLOWED_SKUS=$(cat "$ALLOWED_SKUS_FILE")
+
           # Build issue body and write to file
           BODY_FILE=$(mktemp)
           {
@@ -153,18 +187,77 @@ jobs:
               echo "| \`$repo\` | \`$tag\` | $tag_ver | $cur_ver | $pub_date |"
             done <<< "$UPDATES"
             echo ""
+            echo "### Self-Hosted Runner Snapshot"
+            echo ""
+            echo "_Source: https://inferencex-ci-tracker.vercel.app/api/ci at $(date -u +%Y-%m-%dT%H:%M:%SZ)_"
+            echo ""
+            cat "$RUNNERS_TABLE"
+            echo ""
+            if [[ -n "$ALLOWED_SKUS" ]]; then
+              echo "**Allowed SKUs for this run:** \`$ALLOWED_SKUS\`"
+            else
+              echo "**Allowed SKUs for this run:** _none — skip PR creation and post a comment explaining the runner shortage._"
+            fi
+            echo ""
             echo "---"
             echo ""
             echo "@claude Please update the configurations:"
             echo ""
             echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
-            echo "3. Create separate PRs grouped by framework and image family, and link each PR."
+            echo "3. For each eligible config-key, push a branch and actually open a PR — do not stop at the \"Create a pull request for ...\" remote hint that \`git push\` prints. Run \`gh pr create\` (or the equivalent MCP tool) and verify the returned PR URL. Link every PR back to this issue in a comment."
             echo ""
-            echo "Group by framework plus CUDA/ROCm image family (for example sglang-cuda, sglang-rocm, vllm-cuda, vllm-rocm, atom, trt), not by individual GPU. Split by GPU only when an update is genuinely hardware-specific."
+            echo "**PR title / commit message formatting:** Multi-line titles and bodies MUST use a heredoc, not \`\\n\` escapes and not \`\$'...'\` ANSI-C quoting. Last run produced commits literally starting with \`\$\` and containing \`\\n\\n\` as text because of mis-quoted ANSI-C strings. Use this pattern instead:"
             echo ""
-            echo "Focus on updating single-node configurations. For each framework/image family, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+            echo "\`\`\`bash"
+            echo "git commit -m \"\$(cat <<'EOF'"
+            echo "Update qwen3.5-bf16-b300-sglang-mtp SGLang image to v0.5.11-cu130"
+            echo ""
+            echo "Ref #${ISSUE_NUMBER}"
+            echo "EOF"
+            echo ")\""
+            echo ""
+            echo "gh pr create --title \"Update qwen3.5-bf16-b300-sglang-mtp SGLang image to v0.5.11-cu130\" \\"
+            echo "  --label full-sweep-enabled \\"
+            echo "  --body \"\$(cat <<'EOF'"
+            echo "Updates the SGLang image tag for \\\`qwen3.5-bf16-b300-sglang-mtp\\\` to v0.5.11-cu130."
+            echo ""
+            echo "Ref #${ISSUE_NUMBER}"
+            echo "EOF"
+            echo ")\""
+            echo "\`\`\`"
+            echo ""
+            echo "PR titles must be a single line (no newlines). Bodies are multi-line and must contain real \\\\n, not the literal characters \`\\\\n\`. Never put \`\$\` in front of a quoted message string."
+            echo ""
+            echo "**Required PR label:** Every PR you open from this issue MUST carry the \`full-sweep-enabled\` label. Apply it at creation time via \`gh pr create --label full-sweep-enabled\` (or add it immediately after with \`gh pr edit <num> --add-label full-sweep-enabled\`). Do not skip this — downstream automation keys off the label."
+            echo ""
+            echo "**Runner gating:** Only open PRs for config-keys whose runner SKU is in the allowed list (\`$ALLOWED_SKUS\`). The runner SKU is the hardware segment in the config-key (e.g. \`dsr1-fp4-b200-sglang\` → \`b200\`). For any config-key whose SKU is not in the allowed list, skip it and list the skipped keys plus the reason (not clear / all-offline / no idle capacity) in a single comment on this issue."
+            echo ""
+            echo "**Single-node only:** Skip any config-key whose master-config entry has \`multinode: true\` or otherwise targets a multinode runner. Only update single-node configurations."
+            echo ""
+            echo "**Per-SKU cap (max 5):** For each allowed SKU, work on at most 5 config-keys. If a SKU has more than 5 eligible config-keys, pick 5 in alphabetical order and list the deferred remainder in your wrap-up comment on this issue so a future run can pick them up."
+            echo ""
+            echo "**Sequential execution per SKU:** Within a single SKU, process config-keys one at a time. For each config-key: open the PR, dispatch its e2e test (\`mcp__github__run_workflow\` against \`e2e-tests.yml\` on the PR branch), poll with exponential backoff until the run reaches a terminal state (success/failure/cancelled), then move on to the next config-key for that SKU. Do not dispatch the next e2e run for the same SKU until the previous one has finished. Different SKUs may be processed in parallel since they target disjoint hardware, but each SKU's queue must stay serial."
+            echo ""
+            echo "One PR per config-key — do not bundle multiple config-keys into one PR even when they share a framework or image family."
+            echo ""
+            echo "**Exception — MTP pairs:** When a config-key and its \`-mtp\` sibling exist for the same model/precision/runner/framework (e.g. \`qwen3.5-fp4-b300-sglang\` and \`qwen3.5-fp4-b300-sglang-mtp\`), bundle both into one PR. Treat the pair as a single unit for the per-SKU cap (counts as 1, not 2) and the sequential e2e queue. If only one side of the pair is present in the updates, open a PR for just that one."
+            echo ""
+            echo "For each eligible config-key, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
+            echo ""
+            echo "**Slack ping when done:** After all PRs have been opened, all e2e runs have reached a terminal state, and the wrap-up comment with any deferred config-keys has been posted, send a single summary message to Slack channel \`C09PULGMVNG\` via the Bash tool. The \`SLACK_BOT_TOKEN\` env var is available. Use:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "curl -sS -X POST https://slack.com/api/chat.postMessage \\"
+            echo "  -H \"Authorization: Bearer \$SLACK_BOT_TOKEN\" \\"
+            echo "  -H \"Content-Type: application/json; charset=utf-8\" \\"
+            echo "  --data \"\$(jq -n --arg ch C09PULGMVNG --arg t \"<text>\" '{channel: \$ch, text: \$t}')\""
+            echo "\`\`\`"
+            echo ""
+            echo "Message text should include: this issue link, count of PRs opened (per SKU), count of e2e runs passed/failed, list of skipped or deferred config-keys, and link to this workflow run. Send exactly one Slack message — do not post per-SKU or per-PR."
           } > "$BODY_FILE"
+
+          rm -f "$RUNNERS_TABLE" "$ALLOWED_SKUS_FILE" /tmp/ci.json
 
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
