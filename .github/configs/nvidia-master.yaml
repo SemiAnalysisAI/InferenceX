@@ -2844,10 +2844,11 @@ dsv4-fp4-b300-vllm:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 70] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 70] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 70] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 70] }
+      # Retry-only subset: re-running the 7 jobs that hit a transient
+      # cudaErrorDevicesUnavailable at vLLM worker startup in run 25831988077.
+      # The other 29 configs verified clean from that run.
+      - { tp: 8, offloading: none, conc-list: [1, 2, 8, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 4, 8] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
