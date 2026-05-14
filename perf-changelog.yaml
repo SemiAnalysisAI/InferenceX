@@ -2465,6 +2465,7 @@
     - glm5-fp8-mi355x-sglang
   description:
     - "Image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260513"
+    - "Add --cuda-graph-max-bs to meet conc"
     - "Turn to tp=4 for best perf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 

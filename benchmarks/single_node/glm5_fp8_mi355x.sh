@@ -46,6 +46,8 @@ python3 -m sglang.launch_server \
     --nsa-prefill-backend tilelang \
     --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
     --kv-cache-dtype fp8_e4m3 \
+    --max-running-requests ${CONC} \
+    --cuda-graph-max-bs ${CONC} \
     --disable-radix-cache> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
