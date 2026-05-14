@@ -427,7 +427,16 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
-exec \$DOCKER_CMD run \
+# Skip exec on vllm-disagg rank 0 so we can stop the router after the main
+# container exits.  Without this, decode nodes block forever waiting for the
+# router port to close (the router is a separate container).
+MAYBE_EXEC=exec
+if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+    MAYBE_EXEC=
+    set +e
+fi
+
+\$MAYBE_EXEC \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -468,11 +477,11 @@ exec \$DOCKER_CMD run \
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
+# Only reached when exec was skipped (vllm-disagg rank 0)
 DOCKER_EXIT_CODE=\$?
-if [[ \$DOCKER_EXIT_CODE -ne 0 ]]; then
-  echo \"ERROR: docker exited rc=\$DOCKER_EXIT_CODE on \$(hostname)\"
-  exit \$DOCKER_EXIT_CODE
-fi
+echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
+\$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+exit \$DOCKER_EXIT_CODE
 "
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
