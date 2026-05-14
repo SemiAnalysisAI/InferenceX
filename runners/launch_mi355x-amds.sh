@@ -52,8 +52,24 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Ensure root-owned files are cleaned up even on early exit to prevent
-    # EACCES errors when the next GH Actions job checks out on this runner
-    trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+    # EACCES errors when the next GH Actions job checks out on this runner.
+    # Always preserve slurm logs as CI artifacts for debugging.
+    cleanup_and_save_logs() {
+        if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
+            local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            mkdir -p "$art_dir"
+            cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+        fi
+        # Print .err inline so failures are visible in CI output
+        local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
+        if [[ -s "$err_file" ]]; then
+            echo "=== Slurm job stderr ==="
+            tail -100 "$err_file"
+            echo "========================"
+        fi
+        sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    }
+    trap cleanup_and_save_logs EXIT
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
@@ -162,16 +178,7 @@ PY
 
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
-    # Upload logs as artifact if running in GitHub Actions
-    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-        ARTIFACT_DIR="$GITHUB_WORKSPACE/benchmark_artifacts"
-        mkdir -p "$ARTIFACT_DIR"
-        cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$ARTIFACT_DIR/" 2>/dev/null || true
-        echo "Logs copied to $ARTIFACT_DIR for artifact upload"
-    fi
-
-    # Clean up root-owned files to prevent EACCES on GH Actions checkout cleanup
-    sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
 
 else
 
