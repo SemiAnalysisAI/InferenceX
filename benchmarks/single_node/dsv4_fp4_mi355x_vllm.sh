@@ -12,6 +12,12 @@ set -eo pipefail
 # official vllm/vllm-openai-rocm:nightly image. DSv4 base ROCm support
 # (vllm-project/vllm#40871) is already in that image, so no source
 # rebuild is needed.
+#
+# Note: the recipe specifies --moe-backend triton_unfused, but that
+# choice was never accepted into vLLM main (likely added on the #40871
+# PR branch and renamed before merge). Leaving --moe-backend unset so
+# vLLM's auto selector picks the right path; with VLLM_ROCM_USE_AITER=1
+# set, that resolves to the AITER MoE backend on ROCm.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -63,7 +69,6 @@ vllm serve $MODEL --port $PORT \
     --trust-remote-code \
     --enforce-eager \
     --async-scheduling \
-    --moe-backend "triton_unfused" \
     --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
