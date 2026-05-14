@@ -195,3 +195,4 @@ benchmark:
   concurrencies: "4096"
   req_rate: "inf"
   use_chat_template: false
+  custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
