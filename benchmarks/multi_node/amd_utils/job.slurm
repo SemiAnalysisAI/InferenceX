@@ -83,19 +83,6 @@ ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
 # =============================================================================
-# Docker privilege detection
-# =============================================================================
-# Detect on the batch host. Per-node detection happens inside srun below.
-set -x
-if docker ps &>/dev/null; then
-    DOCKER_CMD="docker"
-else
-    DOCKER_CMD="sudo docker"
-fi
-export DOCKER_CMD
-set +x
-
-# =============================================================================
 # Model Path Resolution
 # =============================================================================
 
@@ -211,6 +198,16 @@ echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
 SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
+
+# Docker privilege detection — test on a compute node, not the batch host.
+FIRST_NODE=$(echo "$SELECTED_NODES" | head -1)
+if srun --nodelist="$FIRST_NODE" -N1 -n1 --overlap bash -c 'docker ps &>/dev/null'; then
+    DOCKER_CMD="docker"
+else
+    DOCKER_CMD="sudo docker"
+fi
+export DOCKER_CMD
+echo "[docker-detect] DOCKER_CMD=$DOCKER_CMD (tested on $FIRST_NODE)"
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES
