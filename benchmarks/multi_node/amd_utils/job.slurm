@@ -199,15 +199,9 @@ FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
 SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
 
-# Docker privilege detection — test on a compute node, not the batch host.
-FIRST_NODE=$(echo "$SELECTED_NODES" | head -1)
-if srun --nodelist="$FIRST_NODE" -N1 -n1 --overlap bash -c 'docker ps &>/dev/null'; then
-    DOCKER_CMD="docker"
-else
-    DOCKER_CMD="sudo docker"
-fi
-export DOCKER_CMD
-echo "[docker-detect] DOCKER_CMD=$DOCKER_CMD (tested on $FIRST_NODE)"
+# Docker privilege detection — evaluated per-node since group membership varies.
+# Exported as a snippet so every srun participant resolves it locally.
+export DOCKER_CMD_DETECT='if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi'
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES
@@ -402,6 +396,10 @@ set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
+# Per-node docker privilege detection
+eval \"\$DOCKER_CMD_DETECT\"
+echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
+
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
@@ -484,12 +482,12 @@ exit \$DOCKER_EXIT_CODE
 "
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '$DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
         srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
-            '"$DOCKER_CMD"' rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
+            eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
         '
     fi
 fi
