@@ -18,7 +18,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # sglang ships in the image at the SHA encoded in the image tag (built
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
