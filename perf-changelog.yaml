@@ -2975,6 +2975,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Add vLLM disaggregated prefill-decode benchmark for Kimi-K2.5-MXFP4 on MI355X"
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm-disagg
+  description:
+    - "Add vLLM disaggregated prefill-decode benchmark for MiniMax-M2.5 on MI355X"
+
+- config-keys:
     - dsv4-fp4-mi355x-vllm
   description:
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
