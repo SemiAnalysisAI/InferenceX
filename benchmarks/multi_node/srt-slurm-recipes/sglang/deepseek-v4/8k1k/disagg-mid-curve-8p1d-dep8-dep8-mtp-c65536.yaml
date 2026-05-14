@@ -1,4 +1,4 @@
-name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-7p1d-dep8-dep8-mtp-c65536"
+name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-7p2d-dep8-dep8-mtp-c65536"
 
 frontend:
   type: dynamo
@@ -24,8 +24,8 @@ resources:
   prefill_nodes: 14
   prefill_workers: 7
   gpus_per_prefill: 8
-  decode_nodes: 2
-  decode_workers: 1
+  decode_nodes: 4
+  decode_workers: 2
   gpus_per_decode: 8
 
 backend:
