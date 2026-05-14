@@ -2460,3 +2460,13 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM benchmark config; bump image to rocm/atom-dev:nightly_202605101539, expand concurrency range (conc 4–1024), and simplify runtime script"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311  
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+  description:
+    - "Image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260513"
+    - "Add --cuda-graph-max-bs to meet conc"
+    - "Turn to tp=4 for best perf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
+
+
