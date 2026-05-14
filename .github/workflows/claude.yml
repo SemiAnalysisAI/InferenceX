@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
-          token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          token: ${{ secrets.CLAUDE_PAT }}
 
       - name: Setup MCP Server
         run: |
@@ -35,16 +35,17 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.PAT_WITH_WORKFLOW_SCOPE }}
+          github_token: ${{ secrets.CLAUDE_PAT }}
           trigger_phrase: "${{ contains(github.event.comment.body || github.event.issue.body || github.event.issue.title || '', '@Klaud-Cold') && '@Klaud-Cold' || '@claude' }}"
           track_progress: true
-          allowed_bots: 'Klaud-Cold'
+          allowed_bots: '*'
           additional_permissions: |
             actions: read
           settings: |
