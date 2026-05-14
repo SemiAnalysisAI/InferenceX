@@ -1326,9 +1326,9 @@ kimik2.5-fp4-mi355x-vllm-disagg:
     - isl: 1024
       osl: 1024
       search-space:
-      # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total
+      # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total , 16, 32, 64, 128, 256, 512
       - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -1349,7 +1349,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
       osl: 1024
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 8
