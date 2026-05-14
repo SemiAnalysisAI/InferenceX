@@ -8,10 +8,12 @@ set -eo pipefail
 # fp4 variant.
 #
 # Image and serving flags follow the validated MI355X recipe from
-# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8), which uses the
-# official vllm/vllm-openai-rocm:nightly image. DSv4 base ROCm support
-# (vllm-project/vllm#40871) is already in that image, so no source
-# rebuild is needed.
+# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8). DSv4 base ROCm
+# support (vllm-project/vllm#40871) merged into vLLM main on 2026-05-05,
+# so any vllm/vllm-openai-rocm nightly built after that date includes
+# the DeepseekV4ForCausalLM model class. The amd-master.yaml entry pins
+# a digest-suffixed nightly tag (not the floating :nightly) to bypass
+# the runner's squashfs-cache, which otherwise keeps a stale build.
 #
 # Note: the recipe specifies --moe-backend triton_unfused, but that
 # choice was never accepted into vLLM main (likely added on the #40871

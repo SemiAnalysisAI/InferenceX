@@ -1611,8 +1611,16 @@ dsv4-fp4-mi355x-sglang:
       - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 16 }
 
-# DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm:nightly
-# image (DSv4 base ROCm support is in via vllm-project/vllm#40871).
+# DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
+# nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
+# on 2026-05-05, so any nightly built after that includes the
+# DeepseekV4ForCausalLM model class.
+#
+# IMPORTANT: pin to a digest-suffixed nightly tag rather than the
+# floating `:nightly`. launch_mi355x-amds.sh caches enroot squashfs
+# files keyed on the image string and short-circuits re-import if the
+# file already exists, so the floating tag silently keeps a stale build
+# even after Docker Hub updates `:nightly`.
 #
 # DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the
 # rest); InferenceX classifies this as fp4 — same as the sister sglang
@@ -1624,7 +1632,7 @@ dsv4-fp4-mi355x-sglang:
 # matches the sister sglang config (conc 4-64) so vLLM↔SGLang are
 # comparable.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly
+  image: vllm/vllm-openai-rocm:nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
