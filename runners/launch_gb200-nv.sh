@@ -194,6 +194,12 @@ p.write_text(src.replace(old, new, 1))
 print("Patched schema.py: backported NVIDIA/srt-slurm#81 cargo/maturin fix")
 PATCH_DYNAMO_INSTALL
 
+    # Backport sa_bench_tokenizers module from main (NVIDIA/srt-slurm#73).
+    # sa-submission-q2-2026 predates this module; without it the
+    # custom_tokenizer field in our recipes fails with
+    # "ModuleNotFoundError: No module named 'sa_bench_tokenizers'".
+    git checkout origin/main -- src/srtctl/benchmarks/scripts/sa-bench/sa_bench_tokenizers/
+
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
