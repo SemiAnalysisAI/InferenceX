@@ -2460,3 +2460,11 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM benchmark config; bump image to rocm/atom-dev:nightly_202605101539, expand concurrency range (conc 4–1024), and simplify runtime script"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311  
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Reduce mid-curve MTP disagg concurrency to match system capacity"
+    - "1P8D 256->160, 1P16D 256->192, 2P8D 512->384, 4P8D 1024->640"
+    - "Set num_prompts_mult=16 to keep total prompt count unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1316
