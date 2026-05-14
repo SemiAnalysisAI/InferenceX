@@ -185,7 +185,7 @@ old = (
 )
 new = (
     '"apt-get update -qq && apt-get install -y -qq libclang-dev curl protobuf-compiler > /dev/null 2>&1 && "\n'
-    '            "if ! command -v cargo &>/dev/null; then curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable -q && source \\$HOME/.cargo/env; fi && "\n'
+    '            "if ! command -v cargo &>/dev/null; then curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable -q && source $HOME/.cargo/env; fi && "\n'
     '            "pip install --break-system-packages --force-reinstall --quiet maturin && "\n'
     '            "cd /sgl-workspace/ && "'
 )
