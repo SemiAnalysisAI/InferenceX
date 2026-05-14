@@ -21,6 +21,20 @@ set -eo pipefail
 # parameters (w13_weight_scale / w2_weight_scale), so safetensors
 # loading raises KeyError. The choice was added by #40871 alongside the
 # model class; the pinned nightly-dcacdf9a includes it.
+#
+# --quantization deepseek_v4_fp8 is required to make vLLM route the
+# MoE through the FP4-aware quant config (DeepseekV4FP8Config) and
+# honor `expert_dtype: "fp4"` from the checkpoint config. The recipe
+# omits this flag because it relies on auto-detection via
+# `model_type == "deepseek_v4"`. That auto-path is fragile in our
+# container — the SGLang sister script (dsv4_fp8_mi355x.sh) documents
+# that the bundled transformers doesn't recognize the deepseek_v4
+# model_type and the cached config has to be patched. Whenever the
+# auto-detection silently misses, vLLM falls back to plain Fp8Config,
+# which treats MoE as FP8 and rejects triton_unfused. Passing
+# --quantization deepseek_v4_fp8 satisfies the explicit-user branch in
+# DeepseekV4FP8Config.override_quantization_method and bypasses the
+# model_type check entirely.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -72,6 +86,7 @@ vllm serve $MODEL --port $PORT \
     --trust-remote-code \
     --enforce-eager \
     --async-scheduling \
+    --quantization deepseek_v4_fp8 \
     --moe-backend triton_unfused \
     --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
