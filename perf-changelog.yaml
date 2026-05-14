@@ -2456,14 +2456,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1329
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM benchmark config; bump image to rocm/atom-dev:nightly_202605101539, expand concurrency range (conc 4–1024), and simplify runtime script"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311  
+
+- config-keys:
     - dsv4-fp4-mi355x-vllm
   description:
-    - "Reclassify the DeepSeek-V4-Pro mi355x vLLM benchmark from fp8 to fp4 — the deepseek-ai/DeepSeek-V4-Pro checkpoint is FP4+FP8 mixed (FP4 MoE expert weights dominate), matching the sister dsv4-fp4-mi355x-sglang and dsv4-fp4-mi355x-atom entries"
-    - "Replace config key dsv4-fp8-mi355x-vllm with dsv4-fp4-mi355x-vllm; rename benchmarks/single_node/dsv4_fp8_mi355x_vllm.sh -> dsv4_fp4_mi355x_vllm.sh"
     - "Adopt validated MI355X serving recipe from vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8)"
     - "Add env: VLLM_ROCM_USE_AITER_LINEAR=1 (alongside existing VLLM_ROCM_USE_AITER=1)"
     - "Add server flags: --distributed-executor-backend mp, --max-num-batched-tokens 8192, --async-scheduling"
-    - "Tune: --gpu-memory-utilization 0.90 -> 0.6, --max-num-seqs 32 -> 128"
-    - "Drop --tool-call-parser deepseek_v4 / --enable-auto-tool-choice (not in recipe; benchmark doesn't exercise tool calling)"
     - "Expand search space from conc=1 to conc 4-64 to match dsv4-fp4-mi355x-sglang for vLLM<->SGLang comparability now that max-num-seqs=128 supports it"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
