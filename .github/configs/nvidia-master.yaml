@@ -8819,9 +8819,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 16
           ep: 16
           dp-attn: true
-      # Mid curve 5p1d-dep8-dep8. 12 nodes.
+      # Mid curve 5p1d-dep8-dep8. 12 nodes. Conc halved 24576->12288 to drop failed-req rate (was 25.8%).
       - spec-decoding: mtp
-        conc-list: [24576]
+        conc-list: [12288]
         prefill:
           num-worker: 5
           tp: 8
@@ -8834,9 +8834,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 8
           ep: 8
           dp-attn: true
-      # Mid curve 6p1d-dep8-dep8. 14 nodes.
+      # Mid curve 6p1d-dep8-dep8. 14 nodes. Conc halved 32768->16384 to drop failed-req rate (was 42.0%).
       - spec-decoding: mtp
-        conc-list: [32768]
+        conc-list: [16384]
         prefill:
           num-worker: 6
           tp: 8
@@ -8849,8 +8849,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 8
           ep: 8
           dp-attn: true
+      # Mid curve 4p1d-dep4-dep8. Conc halved 16384->8192 to drop failed-req rate (was 39.8%).
       - spec-decoding: mtp
-        conc-list: [16384]
+        conc-list: [8192]
         prefill:
           num-worker: 4
           tp: 4
@@ -8863,9 +8864,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 8
           ep: 8
           dp-attn: true
-      # Re-added 65536 7p1d separately, with lowered num_prompts_mult to fit wall budget.
+      # Mid curve 7p1d-dep8-dep8. 16 nodes. Conc halved 65536->32768 to drop failed-req rate (was 97.7%).
       - spec-decoding: mtp
-        conc-list: [65536]
+        conc-list: [32768]
         prefill:
           num-worker: 7
           tp: 8
