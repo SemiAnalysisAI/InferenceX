@@ -15,11 +15,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# GLM-5 requires transformers with glm_moe_dsa model type support.
-# However, the Image rocm/sgl-dev:v0.5.8.post1-rocm720-mi35x-20260219 doesn't provide this support.
-python3 -m pip install -U --no-cache-dir \
-  "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
-
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # ROCm / SGLang performance tuning for MI355X
