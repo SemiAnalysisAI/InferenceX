@@ -15,11 +15,12 @@ set -eo pipefail
 # a digest-suffixed nightly tag (not the floating :nightly) to bypass
 # the runner's squashfs-cache, which otherwise keeps a stale build.
 #
-# Note: the recipe specifies --moe-backend triton_unfused, but that
-# choice was never accepted into vLLM main (likely added on the #40871
-# PR branch and renamed before merge). Leaving --moe-backend unset so
-# vLLM's auto selector picks the right path; with VLLM_ROCM_USE_AITER=1
-# set, that resolves to the AITER MoE backend on ROCm.
+# --moe-backend triton_unfused is required for the FP4 MoE expert
+# weight format used by deepseek-ai/DeepSeek-V4-Pro. Letting --moe-backend
+# default to auto picks a backend that doesn't register the FP4 scale
+# parameters (w13_weight_scale / w2_weight_scale), so safetensors
+# loading raises KeyError. The choice was added by #40871 alongside the
+# model class; the pinned nightly-dcacdf9a includes it.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -71,6 +72,7 @@ vllm serve $MODEL --port $PORT \
     --trust-remote-code \
     --enforce-eager \
     --async-scheduling \
+    --moe-backend triton_unfused \
     --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &

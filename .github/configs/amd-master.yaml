@@ -1626,11 +1626,10 @@ dsv4-fp4-mi355x-sglang:
 # rest); InferenceX classifies this as fp4 — same as the sister sglang
 # and atom DSv4 mi355x entries below. Image and serving flags follow the
 # validated recipe from vllm-project/recipes#433: AITER+AITER_LINEAR, mp
-# executor, async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
-# gpu-mem-util=0.6. (Recipe's --moe-backend triton_unfused was never
-# accepted into vLLM main, so we let auto pick the AITER MoE path.) Sweep
-# matches the sister sglang config (conc 4-64) so vLLM↔SGLang are
-# comparable.
+# executor, triton_unfused MoE (required for the FP4 expert format),
+# async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
+# gpu-mem-util=0.6. Sweep matches the sister sglang config (conc 4-64)
+# so vLLM↔SGLang are comparable.
 dsv4-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026
   model: deepseek-ai/DeepSeek-V4-Pro
