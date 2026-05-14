@@ -16,6 +16,13 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
+# H200 141 GB HBM is too tight for Kimi K2.5 INT4's native 1M-token context;
+# without a cap, vLLM either fails to allocate KV blocks at engine init or
+# aiperf's Configure-Profiling phase times out waiting for the slow KV
+# initialization. Cap at 131K for plenty of context with KV headroom.
+if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+    MAX_MODEL_LEN=131072
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -55,6 +62,7 @@ vllm serve $MODEL \
 --port $PORT \
 --gpu-memory-utilization 0.95 \
 --tensor-parallel-size $TP \
+--max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \

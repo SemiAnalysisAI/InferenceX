@@ -2612,7 +2612,12 @@ kimik2.5-fp4-b200-vllm:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
+  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
+  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
+  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
+  # INT4 B300 sister already uses successfully.
+  image: vllm/vllm-openai:v0.20.0-cu130
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
