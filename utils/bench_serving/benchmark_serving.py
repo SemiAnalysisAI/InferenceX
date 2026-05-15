@@ -45,10 +45,20 @@ from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,
 from tqdm.asyncio import tqdm
 from transformers import PreTrainedTokenizerBase
 
-try:
-    from vllm.transformers_utils.tokenizer import get_tokenizer
-except ImportError:
-    from backend_request_func import get_tokenizer
+def get_tokenizer(tokenizer_id, tokenizer_mode="auto", trust_remote_code=False, **kwargs):
+    """Load tokenizer directly via transformers, bypassing vllm's get_cached_tokenizer.
+
+    vllm's get_cached_tokenizer() accesses tokenizer.all_special_tokens_extended which
+    does not exist on Rust-backed TokenizersBackend (e.g. GLM-5). Using transformers
+    AutoTokenizer directly avoids that code path entirely.
+    """
+    from transformers import AutoTokenizer
+    use_fast = tokenizer_mode != "slow"
+    return AutoTokenizer.from_pretrained(
+        tokenizer_id,
+        use_fast=use_fast,
+        trust_remote_code=trust_remote_code,
+    )
 
 try:
     from vllm.utils import FlexibleArgumentParser
