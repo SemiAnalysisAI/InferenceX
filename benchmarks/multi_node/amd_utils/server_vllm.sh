@@ -284,7 +284,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
-    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
+    SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
@@ -450,7 +450,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
 
     setup_vllm_env
 
-    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
+    SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
@@ -506,7 +506,7 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
-    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
+    SERVED_MODEL="${MODEL_NAME}"
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
