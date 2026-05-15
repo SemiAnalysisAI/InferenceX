@@ -900,6 +900,16 @@ def main(args: argparse.Namespace):
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
 
+    max_failure_rate = 0.05
+    completed = benchmark_result["completed"]
+    failure_rate = 1 - completed / args.num_prompts
+    if failure_rate > max_failure_rate:
+        raise SystemExit(
+            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
+            f"{max_failure_rate:.0%} threshold "
+            f"({completed}/{args.num_prompts} completed)"
+        )
+
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser(
