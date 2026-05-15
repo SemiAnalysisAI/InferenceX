@@ -204,6 +204,7 @@ run_benchmark_serving() {
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
+    local tokenizer=""
     local use_chat_template=false
     local dsv4=false
     local trust_remote_code=false
@@ -268,6 +269,10 @@ run_benchmark_serving() {
                 dsv4=true
                 use_chat_template=true
                 shift
+                ;;
+            --tokenizer)
+                tokenizer="$2"
+                shift 2
                 ;;
             --trust-remote-code)
                 trust_remote_code=true
