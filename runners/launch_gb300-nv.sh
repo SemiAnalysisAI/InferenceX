@@ -19,7 +19,10 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
+    # DSV4 weights on gb300-nv are staged under the runner user's home, not
+    # /scratch/models like the dsr1 weights. srtctl preflight resolves the
+    # 'deepseek-v4-pro' alias to this path and aborts if the dir is missing.
+    export MODEL_PATH="$HOME/models/DeepSeek-V4-Pro"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4"
