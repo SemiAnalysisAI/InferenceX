@@ -2486,3 +2486,12 @@
   description:
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+  description:
+    - "Bump ATOM image to rocm/atom-dev:nightly_202605111702"
+    - "Update model to amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4 (replaces Preview checkpoint)"
+    - "Consolidate to tp=4 for best perf; improves tput/GPU by +9% to +32%"
+    - "Ref ATOM upstream benchmark run https://github.com/ROCm/ATOM/actions/runs/25686894636"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER

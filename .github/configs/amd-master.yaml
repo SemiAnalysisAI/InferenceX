@@ -23,8 +23,8 @@ dsr1-fp4-mi355x-sglang:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
 dsr1-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
-  model: amd/DeepSeek-R1-0528-MXFP4-Preview
+  image: rocm/atom-dev:nightly_202605111702
+  model: amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4
   model-prefix: dsr1
   runner: mi355x
   precision: fp4
@@ -35,13 +35,11 @@ dsr1-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 
 dsr1-fp4-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
