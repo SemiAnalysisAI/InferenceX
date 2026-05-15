@@ -213,6 +213,11 @@ else
         SLRUM_HOME_MOUNT=" --container-mount-home "
     fi
 
+    # to prevent reading outdated saved model. use a fresh model from hf repo
+    if [[ "$FRAMEWORK" == "atom" ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
