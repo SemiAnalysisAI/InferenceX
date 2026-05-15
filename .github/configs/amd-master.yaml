@@ -1359,12 +1359,12 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "PREFILL_NODES=1"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
+          - "DECODE_NODES=1"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
   image: vllm/vllm-openai-rocm:nightly-100c7b65e7579c8caf4ee0b04a6410b2796b905c
