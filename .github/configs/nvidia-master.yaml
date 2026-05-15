@@ -8537,7 +8537,7 @@ dsv4-fp4-b300-dynamo-vllm-mtp3:
       search-space:
       # B300 MTP3 InfiniteBench 8k/256 datapoints: 1p1d DEP8 mid-curve refined
       # from 25654780570 plus the two DEP8 datapoints from 25640497040.
-      - conc-list: [2048, 4096]
+      - conc-list: [1024, 2048]
         spec-decoding: mtp
         prefill:
           num-worker: 1
