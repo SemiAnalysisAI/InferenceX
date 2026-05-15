@@ -2475,4 +2475,11 @@
     - "Turn to tp=4 for best perf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Enable W4A4 (MXFP4) megamoe by appending SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1 and SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1 wherever SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE is set"
+    - "Update SGLang image from lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev to lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
 

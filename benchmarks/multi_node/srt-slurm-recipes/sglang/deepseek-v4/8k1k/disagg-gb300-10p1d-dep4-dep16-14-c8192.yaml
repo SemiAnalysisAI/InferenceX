@@ -33,7 +33,7 @@ name: "disagg-gb300-10p1d-dep4-dep16-14-c8192"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
   precision: "fp4"
 
 dynamo:
@@ -85,6 +85,8 @@ backend:
     SGLANG_OPT_USE_TOPK_V2: "1"
     SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
     SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
     SGLANG_OPT_USE_FAST_MASK_EP: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
@@ -117,6 +119,8 @@ backend:
     SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
     SGLANG_OPT_USE_TOPK_V2: "1"
     SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
     SGLANG_OPT_USE_FAST_MASK_EP: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
