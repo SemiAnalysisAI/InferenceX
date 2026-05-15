@@ -466,46 +466,64 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
     import json
     from pathlib import Path
 
+    def _resolve(filename):
+        """Return a filesystem path for `filename`, whether `model_path` is a
+        local directory or an HF Hub repo id. Returns None and logs a warning
+        on failure so we don't silently fail to apply the v5 fix."""
+        local = Path(model_path) / filename
+        if local.is_file():
+            return str(local)
+        try:
+            from huggingface_hub import hf_hub_download
+            return hf_hub_download(repo_id=model_path, filename=filename)
+        except Exception as e:
+            print(
+                f"v5 tokenizer fix: cannot resolve {filename} for {model_path!r} "
+                f"({type(e).__name__}: {e}); fix will not apply.",
+                flush=True,
+            )
+            return None
+
     backend = getattr(tokenizer, "_tokenizer", None)
     if backend is not None:
-        try:
+        tok_file = _resolve("tokenizer.json")
+        if tok_file is not None:
             from tokenizers import Tokenizer as RawTokenizer
-            tok_file = Path(model_path) / "tokenizer.json"
-            if tok_file.is_file():
-                raw = RawTokenizer.from_file(str(tok_file))
-                raw_pre = type(raw.pre_tokenizer).__name__ if raw.pre_tokenizer else None
-                loaded_pre = type(backend.pre_tokenizer).__name__ if backend.pre_tokenizer else None
-                if raw_pre and loaded_pre and raw_pre != loaded_pre:
-                    backend.pre_tokenizer = raw.pre_tokenizer
-                    backend.decoder = raw.decoder
-        except Exception:
-            pass
+            raw = RawTokenizer.from_file(tok_file)
+            raw_pre = type(raw.pre_tokenizer).__name__ if raw.pre_tokenizer else None
+            loaded_pre = type(backend.pre_tokenizer).__name__ if backend.pre_tokenizer else None
+            if raw_pre and loaded_pre and raw_pre != loaded_pre:
+                print(
+                    f"v5 tokenizer fix: {model_path} pre_tokenizer {loaded_pre} -> {raw_pre}, "
+                    f"decoder {type(backend.decoder).__name__ if backend.decoder else None} -> "
+                    f"{type(raw.decoder).__name__ if raw.decoder else None}",
+                    flush=True,
+                )
+                backend.pre_tokenizer = raw.pre_tokenizer
+                backend.decoder = raw.decoder
 
-    try:
-        config_file = Path(model_path) / "tokenizer_config.json"
-        if config_file.is_file():
-            with open(config_file) as f:
-                config = json.load(f)
-            tok_class = config.get("tokenizer_class", "")
-            bos_eos_classes = {
-                "LlamaTokenizer", "LlamaTokenizerFast",
-                "CodeLlamaTokenizer", "CodeLlamaTokenizerFast",
-                "GemmaTokenizer", "GemmaTokenizerFast", "CohereTokenizerFast",
-            }
-            if tok_class in bos_eos_classes:
-                defaults = {"add_bos_token": True, "add_eos_token": False}
-                changed = False
-                for attr in ("add_bos_token", "add_eos_token"):
-                    val = config.get(attr)
-                    if val is None:
-                        val = defaults.get(attr, False)
-                    if getattr(tokenizer, attr, None) != val:
-                        setattr(tokenizer, f"_{attr}", val)
-                        changed = True
-                if changed and hasattr(tokenizer, "update_post_processor"):
-                    tokenizer.update_post_processor()
-    except Exception:
-        pass
+    config_file = _resolve("tokenizer_config.json")
+    if config_file is not None:
+        with open(config_file) as f:
+            config = json.load(f)
+        tok_class = config.get("tokenizer_class", "")
+        bos_eos_classes = {
+            "LlamaTokenizer", "LlamaTokenizerFast",
+            "CodeLlamaTokenizer", "CodeLlamaTokenizerFast",
+            "GemmaTokenizer", "GemmaTokenizerFast", "CohereTokenizerFast",
+        }
+        if tok_class in bos_eos_classes:
+            defaults = {"add_bos_token": True, "add_eos_token": False}
+            changed = False
+            for attr in ("add_bos_token", "add_eos_token"):
+                val = config.get(attr)
+                if val is None:
+                    val = defaults.get(attr, False)
+                if getattr(tokenizer, attr, None) != val:
+                    setattr(tokenizer, f"_{attr}", val)
+                    changed = True
+            if changed and hasattr(tokenizer, "update_post_processor"):
+                tokenizer.update_post_processor()
 
     return tokenizer
 
