@@ -20,6 +20,12 @@ decode_gpus=$4
 model_path=$5
 model_name=$6
 MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
+# vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
+    BENCH_MODEL="${MODEL_NAME:-${MODEL_PATH}}"
+else
+    BENCH_MODEL="${MODEL_PATH}"
+fi
 log_path=$7
 
 chosen_isl=${8:-1024}
@@ -80,7 +86,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     run_benchmark_serving \
         --bench-serving-dir "$REPO_ROOT" \
-        --model "$MODEL_PATH" \
+        --model "$BENCH_MODEL" \
         --port "$ROUTER_PORT" \
         --backend openai \
         --input-len "$chosen_isl" \
