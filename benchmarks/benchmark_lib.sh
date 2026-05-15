@@ -974,6 +974,18 @@ build_replay_cmd() {
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"
+    # Abort the run if real-failure rate exceeds 5% after a grace floor of
+    # max(CONC, 10) records. Context-overflow records are dropped from the
+    # failure tally in AGENTIC_REPLAY scenarios (see record_processor_service
+    # in the aiperf submodule), so this threshold measures only real failures
+    # (server 5xx, parse errors, malformed responses).
+    REPLAY_CMD+=" --failed-request-threshold 0.05"
+    # Sample each trajectory's warmup start position uniformly from
+    # [25%, 75%] of the trace's turn count (was hardcoded 0%-70% upstream).
+    # Avoids starting trajectories right at turn 0 where the KV cache is
+    # cold and skews early steady-state samples.
+    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
+    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
