@@ -8148,7 +8148,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
 
       # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
       # 5 nodes total with a dedicated NATS/etcd infra node.
-      - conc-list: [128]
+      - conc-list: [128, 256, 512, 1024]
         spec-decoding: mtp
         prefill:
           num-worker: 1

@@ -2486,10 +2486,17 @@
   description:
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
-  
+
 - config-keys:
     - dsv4-fp4-b300-vllm-mtp
   description:
     - "Update image tag to vllm/vllm-openai:v0.20.2"
     - "Add DEP configs for B300 vLLM MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Upgrade GB200 DSV4 MTP2 1P/1D DEP8 MegaMOE mid-curve recipe to vLLM v0.21.0"
+    - "Extend mid-curve concurrency sweep to also benchmark conc=256, conc=512, and conc=1024"
+  pr-link: TBD
