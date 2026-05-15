@@ -37,10 +37,12 @@ case "$OFFLOADING" in
     none)
         ;;
     cpu)
-        # B200 DGXC nodes have ~1.8 TB DRAM available. Override the workflow
-        # input default (600) so the simple offload connector gets the full
-        # capacity. Same value used by the INT4 launcher.
-        TOTAL_CPU_DRAM_GB=1800
+        # B200 DGXC nodes have ~2.7 TiB host DRAM; reserve 2.5 TB for the
+        # simple offload connector and leave ~200 GB headroom for worker
+        # RSS + page cache. Eager mode (the shortcut form default) is
+        # intentional here per user request — Kimi FP4 on B200 has cleared
+        # the full eager sweep before.
+        TOTAL_CPU_DRAM_GB=2500
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
         ;;
