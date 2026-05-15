@@ -40,8 +40,19 @@ case "$OFFLOADING" in
         # connector. Conservative because Hopper-class clusters typically
         # have smaller host RAM envelopes than the Blackwell side.
         TOTAL_CPU_DRAM_GB=1000
+        # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
+        # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
+        # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap
+        # keeps the aggregate at TOTAL.
+        PER_ENGINE_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+        # JSON form (rather than --kv_offloading_backend native shortcut) so
+        # we can pass lazy_offload=true. Eager mode (the shortcut default)
+        # hits a popleft_n AssertionError in
+        # vllm/v1/core/kv_cache_utils.py at low/mid CONC on DSv4 + SimpleCPUOffloadConnector;
+        # lazy defers the store path and clears low/mid CONC reliably. See
+        # SimpleCPUOffloadConnector PR #37160.
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
+        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
         ;;
     *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
 esac
