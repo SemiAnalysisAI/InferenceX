@@ -368,7 +368,7 @@ qwen3.5-fp8-mi300x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 glm5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260413
+  image: lmsysorg/sglang-rocm:v0.5.11-rocm720-mi35x-20260513
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x
@@ -380,11 +380,11 @@ glm5-fp8-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
@@ -1145,10 +1145,9 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
-
 dsr1-fp4-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
-  model: amd/DeepSeek-R1-0528-MXFP4
+  image: lmsysorg/sglang-rocm:v0.5.10.post1-rocm720-mi35x-20260501
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
   precision: fp4
@@ -1239,7 +1238,7 @@ dsr1-fp4-mi355x-sglang-disagg:
     
       # 1*DEP4+ 1*DEP8
       - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
+        conc-list: [ 1024, 2048, 4096 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -1336,16 +1335,16 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=2"
           - "DECODE_MTP_SIZE=0"
 
-      # 4*DEP4 + 1*DEP8
+      # 2*DEP8 + 1*DEP8
       - spec-decoding: "none"
         conc-list: [ 1024, 2048, 4096 ]
         prefill:
-          num-worker: 4
-          tp: 4
-          ep: 4
+          num-worker: 2
+          tp: 8
+          ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=4"
+          - "PREFILL_NODES=2"
         decode:
           num-worker: 1
           tp: 8
@@ -1355,9 +1354,10 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
 
+
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-3
-  model: amd/DeepSeek-R1-0528-MXFP4
+  image: lmsysorg/sglang-rocm:v0.5.10.post1-rocm720-mi35x-20260501
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
   precision: fp4
@@ -1425,7 +1425,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=2"
 
       # 1P2D TP4
       - spec-decoding: "mtp" 
@@ -1444,11 +1444,11 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=2"
 
       # 1*DEP4+ 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
+        conc-list: [ 1024, 2048, 4096 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -1526,7 +1526,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=2"
 
       # 1P2D TP4
       - spec-decoding: "mtp"
@@ -1545,18 +1545,18 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=2"
 
-      # 4*DEP4 + 1*DEP8
+      # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
         conc-list: [ 1024, 2048, 4096 ]
         prefill:
-          num-worker: 4
-          tp: 4
-          ep: 4
+          num-worker: 2
+          tp: 8
+          ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=4"
+          - "PREFILL_NODES=2"
         decode:
           num-worker: 1
           tp: 8
@@ -1565,6 +1565,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
+      
 
 dsv4-fp8-mi355x-sglang:
   image: rocm/sgl-dev:deepseek-v4-mi35x
@@ -1590,7 +1591,7 @@ dsv4-fp8-mi355x-sglang:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-a8410de-20260502-DSv4
+  image: rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1602,13 +1603,13 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
-      - { tp: 8, dp-attn: true, conc-start: 2 , conc-end: 32 }
+      - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
+      - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 16 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 128 }
-      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 8 }
+      - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 16 }
 
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
 # stacked on #40871). Uses the ATOM MI355X image (ROCm 7.2.2, aiter with
@@ -1643,7 +1644,7 @@ dsv4-fp8-mi355x-vllm:
 # the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
 # the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
 dsv4-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  image: rocm/atom-dev:nightly_202605130853
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1655,8 +1656,8 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }

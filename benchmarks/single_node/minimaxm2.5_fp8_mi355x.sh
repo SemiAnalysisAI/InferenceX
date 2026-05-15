@@ -17,7 +17,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # Set HIP_VISIBLE_DEVICES to match ROCR_VISIBLE_DEVICES for Ray compatibility in vLLM 0.14+
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -26,7 +26,43 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+VLLM_BLOCK_SIZE=32
+ASYNC_SCHEDULING_ARGS=""
+
+if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
+    if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        echo "1k1k TP8/EP8: using block size 32, shuffle disabled, async scheduling disabled."
+    elif (( CONC <= 128 )); then
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        echo "1k1k c${CONC}: using block size 16, shuffle enabled, async scheduling disabled."
+    else
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+        echo "1k1k c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
+    fi
+elif [[ "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+    if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
+        export VLLM_ROCM_USE_AITER_MOE=0
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        echo "8k1k TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling disabled."
+    elif (( CONC < 64 )); then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        echo "8k1k c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
+    elif (( CONC == 64 )); then
+        ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+        echo "8k1k c64: using block size 16, shuffle enabled, async scheduling disabled."
+    else
+        export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+        VLLM_BLOCK_SIZE=16
+        echo "8k1k c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
+    fi
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -52,9 +88,10 @@ $EP \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
---block-size=32 \
+--block-size=$VLLM_BLOCK_SIZE \
 --no-enable-prefix-caching \
 --attention-backend "ROCM_AITER_FA" \
+$ASYNC_SCHEDULING_ARGS \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

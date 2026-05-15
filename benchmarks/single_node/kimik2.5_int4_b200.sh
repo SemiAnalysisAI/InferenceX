@@ -16,7 +16,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 nvidia-smi
 
@@ -43,7 +43,6 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --trust-remote-code \
---disable-log-requests \
 --no-enable-prefix-caching > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
