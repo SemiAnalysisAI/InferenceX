@@ -338,7 +338,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+    elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
@@ -346,7 +348,80 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
     fi
 
-    # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
+    # Run evaluation if requested (before killing router)
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        echo "Running lm-eval evaluation on Node 0..."
+
+        EVAL_HEALTH_OK=false
+        for _attempt in 1 2 3; do
+            if curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/health" >/dev/null 2>&1; then
+                EVAL_HEALTH_OK=true
+                break
+            fi
+            echo "Eval health check attempt $_attempt failed, retrying in 10s..."
+            sleep 10
+        done
+
+        if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
+            echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
+        else
+            pushd /workspace
+
+            source /workspace/benchmarks/benchmark_lib.sh
+
+            if [[ -n "${EVAL_CONC:-}" ]]; then
+                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+            else
+                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            fi
+
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "DRY RUN: run_eval --framework lm-eval --port $ROUTER_PORT (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+            else
+                run_eval --framework lm-eval --port "$ROUTER_PORT"
+                eval_rc=$?
+
+                if [[ $eval_rc -ne 0 ]]; then
+                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    EVAL_FAILED=1
+                else
+                    export TP="${PREFILL_TP_SIZE}"
+                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
+                    export EP_SIZE=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
+                    export PREFILL_TP="${PREFILL_TP_SIZE}"
+                    export PREFILL_EP=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
+                    export PREFILL_NUM_WORKERS="${xP}"
+                    export DECODE_TP="${DECODE_TP_SIZE}"
+                    export DECODE_EP=1
+                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
+                    export DECODE_NUM_WORKERS="${yD}"
+                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
+                    export ISL="${BENCH_INPUT_LEN}"
+                    export OSL="${BENCH_OUTPUT_LEN}"
+
+                    append_lm_eval_summary
+
+                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    mkdir -p "$EVAL_COPY_DIR"
+                    for f in meta_env.json; do
+                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                    done
+                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+
+                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                fi
+            fi
+
+            popd
+        fi
+    fi
+
+    # Copy benchmark/eval results to BENCHMARK_LOGS_DIR (mounted from host)
     LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
     mkdir -p "$LOGS_OUTPUT"
 
@@ -360,6 +435,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
         sleep 2
         pkill -f "vllm serve" 2>/dev/null || true
+    fi
+
+    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
+        echo "ERROR: eval failed; exiting node-0 with rc=1"
+        exit 1
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
