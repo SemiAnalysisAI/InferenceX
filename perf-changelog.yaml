@@ -2482,4 +2482,14 @@
     - "Update SGLang image from lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev to lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1382
 
+- config-keys:
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1323
 
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
