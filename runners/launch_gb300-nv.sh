@@ -107,6 +107,20 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
+
+# Persistent cluster-wide cache for `dynamo: hash:` source builds. The
+# upstream cache root (_DYNAMO_CACHE_ROOT in srtctl/core/schema.py) is
+# `/configs/dynamo-wheels`; without an override every prefill node falls
+# into a cold `apt-get + cargo build` path that can exit 100 when several
+# nodes hammer NVIDIA's apt repo at once (observed in run 25900230952).
+# Stage the cache under $HOME (shared NFS across all gb300-nv_N runners)
+# and bind-mount it over `/configs/dynamo-wheels` via the cluster
+# `default_mounts` setting. flock inside srtctl serializes cold-cache
+# builds across concurrent matrix jobs.
+DYNAMO_WHEELS_CACHE_HOST="${HOME}/dynamo-wheels-cache"
+mkdir -p "$DYNAMO_WHEELS_CACHE_HOST"
+mkdir -p configs/dynamo-wheels
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
@@ -122,6 +136,9 @@ network_interface: ""
 
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+
+default_mounts:
+  ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
 
 # Model path aliases
 model_paths:
