@@ -60,6 +60,10 @@ backend:
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
 
+    # Mooncake P→D pipeline tuning (probe).
+    SGLANG_DISAGGREGATION_QUEUE_SIZE: "8"
+    SGLANG_DISAGGREGATION_THREAD_POOL_SIZE: "32"
+
   decode_environment:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_DISABLE_REUSE: "1"
@@ -88,6 +92,11 @@ backend:
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
     SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"  # CAR_V2 is single-node only.
+
+    # Mooncake P→D pipeline tuning (probe).
+    SGLANG_DISAGGREGATION_QUEUE_SIZE: "8"
+    SGLANG_DISAGGREGATION_THREAD_POOL_SIZE: "32"
+    SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "2048"
 
   sglang_config:
     prefill:
@@ -151,7 +160,7 @@ benchmark:
   isl: 8192
   osl: 256
   random_range_ratio: 1.0
-  concurrencies: "9216"
+  concurrencies: "12288"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"

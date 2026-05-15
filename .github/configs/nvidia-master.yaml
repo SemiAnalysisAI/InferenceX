@@ -8820,9 +8820,10 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 16
           ep: 16
           dp-attn: true
-      # Mid curve 5p1d-dep8-dep8. 12 nodes. Conc 9216 (~12% above the 8k clean point — probe).
+      # Mid curve 5p1d-dep8-dep8. 12 nodes. Conc 12288 with mooncake P→D tuning (queue=8, threads=32, prealloc=2048).
+      # Baseline was 9.10% zero-output at 12288 without tuning.
       - spec-decoding: mtp
-        conc-list: [9216]
+        conc-list: [12288]
         prefill:
           num-worker: 5
           tp: 8
