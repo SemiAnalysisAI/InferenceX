@@ -8895,3 +8895,37 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 8
           ep: 8
           dp-attn: true
+
+# Mirror of dsv4-fp4-gb300-dynamo-sglang-mtp3 targeting the gb300-nv cluster instead
+# of gb300-cw. Single 5p2d-dep8-dep8 probe at conc 12288 (~6k per decode worker — well
+# under the empirical 8k boundary). Used to compare per-cluster behavior at the same
+# server shape.
+dsv4-fp4-gb300-nv-dynamo-sglang-mtp3:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260509-9ee83034
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      # Mid curve 5p2d-dep8-dep8. 14 nodes (10P + 4D). Conc 12288 (~6k per decode).
+      - spec-decoding: mtp
+        conc-list: [12288]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-mid-curve-5p2d-dep8-dep8-mtp-c12288.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
