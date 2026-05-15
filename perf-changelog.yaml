@@ -2475,4 +2475,9 @@
     - "Turn to tp=4 for best perf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 
-
+- config-keys:
+    - kimik2.5-fp4-mi355x-atom
+  description:
+    - "Update Kimi-K2.5 FP4 MI355X ATOM image from rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2 to rocm/atom-dev:latest"
+    - "Expand TP=4 conc-end from 128 to 256 to match upstream ATOM CI sweep"
+    - "ATOM CI (2026-05-11) shows up to +31% tput_per_gpu improvement over InferenceX baseline (2026-04-01) at low concurrency; parity or slight regression at high concurrency"
