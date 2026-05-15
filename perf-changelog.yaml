@@ -2476,6 +2476,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 
 - config-keys:
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1323
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
+  
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Update image tag to vllm/vllm-openai:v0.20.2"
+    - "Add DEP configs for B300 vLLM MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
+  
+- config-keys:
     - glm5-fp8-b200-dynamo-sglang
   description:
     - "Add GLM-5 FP8 B200 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
