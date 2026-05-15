@@ -541,7 +541,10 @@ kimik2.5-fp4-mi355x-vllm:
     - duration: 1800
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
-      - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
+      # CPU offload only above the KV cliff. Lower concurrencies fit
+      # entirely on-GPU, so paying the offload-path overhead there would
+      # just slow them down without measuring anything new.
+      - { tp: 8, offloading: cpu,  conc-list: [32, 40, 48, 56] }
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
