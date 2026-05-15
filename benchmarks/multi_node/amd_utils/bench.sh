@@ -77,8 +77,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     # Engine-specific extra flags
     extra_flags=""
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
-        extra_flags="--trust-remote-code --tokenizer ${MODEL_PATH}"
-
+        extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
     else
         if [ "$IS_MTP" = "true" ]; then
             extra_flags="--use-chat-template"
