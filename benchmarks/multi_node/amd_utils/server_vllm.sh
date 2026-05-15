@@ -284,7 +284,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
+    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
+        --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
@@ -448,7 +450,9 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
 
     setup_vllm_env
 
+    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
+        --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
@@ -502,7 +506,9 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
+    SERVED_MODEL="${MODEL:-${MODEL_NAME}}"
     DECODE_CMD="vllm serve ${MODEL_PATH} \
+        --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
         --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
