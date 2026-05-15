@@ -2486,3 +2486,9 @@
   description:
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.0 to v0.20.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1384
