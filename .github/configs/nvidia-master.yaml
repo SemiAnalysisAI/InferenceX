@@ -8820,9 +8820,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp3:
           tp: 16
           ep: 16
           dp-attn: true
-      # Mid curve 5p1d-dep8-dep8. 12 nodes. Conc dropped 12288->8192 (~8k per decode worker — clean point).
+      # Mid curve 5p1d-dep8-dep8. 12 nodes. Conc 9216 (~12% above the 8k clean point — probe).
       - spec-decoding: mtp
-        conc-list: [8192]
+        conc-list: [9216]
         prefill:
           num-worker: 5
           tp: 8
