@@ -39,9 +39,6 @@ fi
 MOE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
-
-if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=2048
 else
     MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
