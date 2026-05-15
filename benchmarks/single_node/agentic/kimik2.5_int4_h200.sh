@@ -2,10 +2,10 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K2.5 NVFP4 on B200 using vLLM.
+# Agentic trace replay benchmark for Kimi-K2.5 INT4 on H200 using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, RESULT_DIR
+#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -34,48 +34,42 @@ mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
 case "$OFFLOADING" in
-    none)
-        ;;
+    none) ;;
     cpu)
-        # B200 DGXC nodes have ~2.7 TiB host DRAM; reserve 2.5 TB for the
-        # simple offload connector and leave ~200 GB headroom for worker
-        # RSS + page cache. Eager mode (the shortcut form default) is
-        # intentional here per user request — Kimi FP4 on B200 has cleared
-        # the full eager sweep before.
-        TOTAL_CPU_DRAM_GB=2500
+        # H200 nodes — reserve up to 1 TB for the simple CPU offload
+        # connector. Conservative because Hopper-class clusters typically
+        # have smaller host RAM envelopes than the Blackwell side.
+        TOTAL_CPU_DRAM_GB=1000
+        # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
+        # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
+        # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap
+        # keeps the aggregate at TOTAL.
+        PER_ENGINE_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+        # JSON form (rather than --kv_offloading_backend native shortcut) so
+        # we can pass lazy_offload=true. Eager mode (the shortcut default)
+        # hits a popleft_n AssertionError in
+        # vllm/v1/core/kv_cache_utils.py at low/mid CONC on DSv4 + SimpleCPUOffloadConnector;
+        # lazy defers the store path and clears low/mid CONC reliably. See
+        # SimpleCPUOffloadConnector PR #37160.
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
+        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
         ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
-        exit 1
-        ;;
+    *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
 esac
 
 echo "Starting vllm server..."
-export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
-# Disable vLLM v0.21+ CUDA-graph memory estimator. Its pre-reservation
-# eats ~32% of HBM upfront which, combined with FP4 weights at TP=4
-# (~62 GB/GPU), leaves no room for KV blocks -- _check_enough_kv_cache_memory
-# trips before the engine starts. Our --gpu-memory-utilization=0.90 already
-# leaves ~18 GB/GPU slack outside vLLM's budget, which is the same safety
-# net the estimator provides, so disabling it is redundant rather than
-# unsafe.
-export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+export VLLM_USE_FLASHINFER_MOE_INT4=1
 
 vllm serve $MODEL \
 --host 0.0.0.0 \
 --port $PORT \
---tensor-parallel-size=$TP \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.95 \
+--tensor-parallel-size $TP \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
---kv-cache-dtype fp8 \
---max-cudagraph-capture-size 2048 \
---stream-interval 20 \
 --trust-remote-code \
 $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
