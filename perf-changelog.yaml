@@ -2482,4 +2482,14 @@
     - "Turn to tp=4 for best perf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 
+- config-keys:
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1323
 
+- config-keys:
+    - dsr1-fp8-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
