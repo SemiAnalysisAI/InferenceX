@@ -8110,7 +8110,7 @@ dsv4-fp4-gb200-dynamo-vllm:
           dp-attn: false
 
       # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes total.
-      - conc-list: [16384]
+      - conc-list: [128, 1024, 2048, 4096]
         spec-decoding: offline
         prefill:
           num-worker: 1
