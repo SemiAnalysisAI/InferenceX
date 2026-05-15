@@ -7,7 +7,7 @@ and the legacy kv-cache-tester pipeline produce, so utils/summarize.py and
 sibling aggregators keep working without changes.
 
 Inputs:
-- profile_export_aiperf.json  -- per-metric aggregate stats (avg/p50/p90/p99/...)
+- profile_export_aiperf.json  -- per-metric aggregate stats (avg/p75/p90/...)
 - profile_export.jsonl        -- one record per request (metadata + metrics)
 - server_metrics_export.json  -- Prometheus scrape aggregates from the inference
                                  server (vLLM cache hit counters, KV usage, etc.)
@@ -74,10 +74,9 @@ def stats_for(prefix: str, values: list[float]) -> dict:
         return {}
     out = {
         f"mean_{prefix}": statistics.mean(values),
-        f"median_{prefix}": statistics.median(values),
+        f"p75_{prefix}": percentile(values, 75),
         f"p90_{prefix}": percentile(values, 90),
-        f"p99_{prefix}": percentile(values, 99),
-        f"p99.9_{prefix}": percentile(values, 99.9),
+        f"p95_{prefix}": percentile(values, 95),
     }
     out[f"std_{prefix}"] = statistics.pstdev(values) if len(values) > 1 else 0.0
     return out
@@ -303,10 +302,9 @@ def compute_qps_stats(records: list[dict]) -> dict:
 
     return {
         "mean_qps": statistics.mean(qps_values),
-        "median_qps": statistics.median(qps_values),
+        "p75_qps": percentile(qps_values, 75),
         "p90_qps": percentile(qps_values, 90),
-        "p99_qps": percentile(qps_values, 99),
-        "p99.9_qps": percentile(qps_values, 99.9),
+        "p95_qps": percentile(qps_values, 95),
         "std_qps": statistics.pstdev(qps_values) if len(qps_values) > 1 else 0.0,
     }
 
@@ -321,10 +319,9 @@ def compute_workload_stats(records: list[dict]) -> dict:
         if not values:
             continue
         result[f"mean_{name}"] = statistics.mean(values)
-        result[f"median_{name}"] = statistics.median(values)
+        result[f"p75_{name}"] = percentile(values, 75)
         result[f"p90_{name}"] = percentile(values, 90)
-        result[f"p99_{name}"] = percentile(values, 99)
-        result[f"p99.9_{name}"] = percentile(values, 99.9)
+        result[f"p95_{name}"] = percentile(values, 95)
         result[f"std_{name}"] = (
             statistics.pstdev(values) if len(values) > 1 else 0.0
         )
@@ -345,10 +342,9 @@ def compute_workload_stats(records: list[dict]) -> dict:
             expected.append(turns[turn_index]["output_length"])
         if expected:
             result["mean_output_tokens_expected"] = statistics.mean(expected)
-            result["median_output_tokens_expected"] = statistics.median(expected)
+            result["p75_output_tokens_expected"] = percentile(expected, 75)
             result["p90_output_tokens_expected"] = percentile(expected, 90)
-            result["p99_output_tokens_expected"] = percentile(expected, 99)
-            result["p99.9_output_tokens_expected"] = percentile(expected, 99.9)
+            result["p95_output_tokens_expected"] = percentile(expected, 95)
             result["std_output_tokens_expected"] = (
                 statistics.pstdev(expected) if len(expected) > 1 else 0.0
             )
@@ -678,8 +674,8 @@ def main() -> int:
     if "mean_qps" in agg:
         print(
             f"  QPS: mean={agg['mean_qps']:.2f} "
-            f"median={agg.get('median_qps', 0):.2f} "
-            f"p99={agg.get('p99_qps', 0):.2f}"
+            f"p75={agg.get('p75_qps', 0):.2f} "
+            f"p95={agg.get('p95_qps', 0):.2f}"
         )
     if agg.get("server_gpu_cache_hit_rate") is not None:
         print(f"  GPU cache hit rate: {agg['server_gpu_cache_hit_rate']:.1%}")
