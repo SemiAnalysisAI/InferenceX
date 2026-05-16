@@ -2493,4 +2493,10 @@
     - "Bump ATOM image from rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post to rocm/atom-dev:nightly_202605111702"
     - "TP=4 shows +3.2% to +16.3% throughput improvement across 1k1k and 8k1k workloads (concurrency 4-256)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1389
-  
+    
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Update image tag to vllm/vllm-openai:v0.20.2"
+    - "Add DEP configs for B300 vLLM MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
