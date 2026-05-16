@@ -262,6 +262,11 @@ qwen3.5-fp8-mi355x-sglang-mtp:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 32, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 256, spec-decoding: mtp }
 
+# Diverged from qwen3.5-fp8-mi355x-sglang (agentic-coding sibling). Metadata is
+# identical to origin/main's qwen3.5-fp8-mi355x-sglang; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original qwen3.5-fp8-mi355x-sglang entry stays byte-identical to origin/main.
 qwen3.5-fp8-mi355x-sglang-agentic:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -463,6 +468,11 @@ glm5.1-fp4-mi355x-sglang:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
+# Diverged from glm5.1-fp4-mi355x-sglang (agentic-coding sibling). Metadata is
+# identical to origin/main's glm5.1-fp4-mi355x-sglang; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original glm5.1-fp4-mi355x-sglang entry stays byte-identical to origin/main.
 glm5.1-fp4-mi355x-sglang-agentic:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
   model: amd/GLM-5.1-MXFP4
@@ -575,6 +585,10 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
+# Diverged from kimik2.5-fp4-mi355x-vllm (agentic-coding sibling). Reasons below;
+# the original kimik2.5-fp4-mi355x-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:v0.21.0'
 kimik2.5-fp4-mi355x-vllm-agentic:
   # v0.21.0 (released 2026-05-14) supersedes the prior nightly pin
   # (51f22dcf...) which was carrying the SimpleCPUOffloadConnector ROCm
@@ -641,6 +655,10 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 512 }
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
 
+# Diverged from minimaxm2.5-fp8-mi355x-vllm (agentic-coding sibling). Reasons below;
+# the original minimaxm2.5-fp8-mi355x-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai-rocm:v0.19.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
 minimaxm2.5-fp8-mi355x-vllm-agentic:
   # Nightly carrying vllm-project/vllm@20cac26b ("[Bug fix][KV Connector]
   # add cpu_offload_blocks > 0 check before maybe_run_layer_kv_offload"),
@@ -754,6 +772,10 @@ minimaxm2.5-fp8-mi300x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
+# Diverged from minimaxm2.5-fp8-mi300x-vllm (agentic-coding sibling). Reasons below;
+# the original minimaxm2.5-fp8-mi300x-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai-rocm:v0.16.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
 minimaxm2.5-fp8-mi300x-vllm-agentic:
   # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
   image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
@@ -794,6 +816,10 @@ minimaxm2.5-fp8-mi325x-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
+# Diverged from minimaxm2.5-fp8-mi325x-vllm (agentic-coding sibling). Reasons below;
+# the original minimaxm2.5-fp8-mi325x-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
 minimaxm2.5-fp8-mi325x-vllm-agentic:
   # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
   image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
