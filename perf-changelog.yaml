@@ -2961,6 +2961,6 @@
 - config-keys:
     - gptoss-fp4-mi355x-atom
   description:
-    - "Bump ATOM image from rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post to rocm/atom-dev:nightly_202605111702"
+    - "Bump ATOM image from rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post to rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511"
     - "ATOM upstream benchmark shows +8% to +20% throughput improvement vs InferenceX baselines (1 GPU, ISL=1024/8192, OSL=1024)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1412
