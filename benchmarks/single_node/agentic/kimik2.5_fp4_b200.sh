@@ -16,6 +16,11 @@ DURATION=${DURATION:-1800}
 MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
+# Agentic matrix entries don't set max-model-len, so the workflow passes 0.
+# ${:-DEFAULT} only fires on unset/empty, so handle 0 explicitly.
+if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+    MAX_MODEL_LEN=131072
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -37,14 +42,8 @@ case "$OFFLOADING" in
     none)
         ;;
     cpu)
-        # B200 DGXC nodes have ~2.7 TiB host DRAM; reserve 2.5 TB for the
-        # simple offload connector and leave ~200 GB headroom for worker
-        # RSS + page cache. Eager mode (the shortcut form default) is
-        # intentional here per user request — Kimi FP4 on B200 has cleared
-        # the full eager sweep before.
-        TOTAL_CPU_DRAM_GB=2500
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
+        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --no-disable-hybrid-kv-cache-manager"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
@@ -55,20 +54,13 @@ esac
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
-# Disable vLLM v0.21+ CUDA-graph memory estimator. Its pre-reservation
-# eats ~32% of HBM upfront which, combined with FP4 weights at TP=4
-# (~62 GB/GPU), leaves no room for KV blocks -- _check_enough_kv_cache_memory
-# trips before the engine starts. Our --gpu-memory-utilization=0.90 already
-# leaves ~18 GB/GPU slack outside vLLM's budget, which is the same safety
-# net the estimator provides, so disabling it is redundant rather than
-# unsafe.
-export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 vllm serve $MODEL \
 --host 0.0.0.0 \
 --port $PORT \
 --tensor-parallel-size=$TP \
 --gpu-memory-utilization 0.90 \
+--max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \

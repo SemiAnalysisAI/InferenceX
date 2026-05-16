@@ -875,14 +875,11 @@ run_eval() {
 
 
 # --------------------------------
-# Agentic trace replay helpers (aiperf driver)
+# Agentic trace replay helpers
 # --------------------------------
 
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
-AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
-# TRACE_REPLAY_DIR retained for any out-of-tree consumer that still
-# imports the kv-cache-tester scripts. Not used by the helpers below.
 TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
 agentic_pip_install() {
@@ -905,15 +902,12 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-no-subagents-051226"
-    # aiperf reads the corpus via its public-dataset registry; the loader
-    # under the hood pulls from semianalysisai/cc-traces-weka-no-subagents-051226
-    # (949 traces, no-subagents variant — see plugins.yaml).
-    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka"
-    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka ($dataset)"
+    local dataset="semianalysisai/cc-traces-weka-042026"
+    TRACE_SOURCE_FLAG="--hf-dataset $dataset"
+    echo "Loading traces from Hugging Face dataset: $dataset"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
-    # for model weights) so subsequent runs read from cache instead of
-    # re-downloading every job.
+    # for model weights) so datasets.load_dataset() reads from cache on
+    # subsequent runs instead of re-downloading every job.
     ensure_hf_cli
     hf download --repo-type dataset "$dataset"
 }
@@ -921,16 +915,7 @@ resolve_trace_source() {
 install_agentic_deps() {
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
-    # Editable install of aiperf from the submodule — gives us the
-    # `aiperf` CLI plus the inferencex-agentx-mvp scenario plugin.
-    #
-    # `--ignore-installed` sidesteps the distutils-uninstall error that
-    # vLLM containers hit on apt-managed system packages (blinker, etc.)
-    # when pip's resolver tries to upgrade one of aiperf's transitive
-    # deps. Installing fresh into the user/site location is safe — the
-    # system package stays in place and pip's import order picks up our
-    # newer copy first.
-    agentic_pip_install -q --ignore-installed -e "$AIPERF_DIR"
+    agentic_pip_install -q -r "$TRACE_REPLAY_DIR/requirements.txt"
     # Force-upgrade datasets: containers often ship an older version without
     # the `Json` feature type used by the HF traces dataset. `Json` was added
     # in datasets 4.7.0 (March 2025). Unpinned installs won't upgrade an
@@ -939,100 +924,40 @@ install_agentic_deps() {
 }
 
 build_replay_cmd() {
-    # aiperf invocation for the inferencex-agentx-mvp scenario.
-    #
-    # Live-assistant mode is on by default
-    # (AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1): the loader emits
-    # user-only deltas and the worker threads the server's live assistant
-    # response back into the session. This preserves cache-hit reuse on
-    # the just-generated KV blocks at the cost of hash-id fidelity past
-    # turn 0 — which is exactly what we want for benchmark numbers.
-    #
-    # The scenario plugin locks: --cache-bust first_turn_prefix,
-    # --inter-turn-delay-cap-seconds 60, etc., and auto-injects them — so
-    # we do not pass them. See utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="${DURATION:-1800}"
+    local max_delay="${MAX_DELAY:-60}"
+    local advance_min="${ADVANCE_MIN:-0.0}"
+    local advance_max="${ADVANCE_MAX:-0.7}"
 
-    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
-    # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the 949-trace weka corpus on fast /tmp
-    # (B300) but can stretch to 14 min on slower /tmp + parallel contention
-    # (observed on H200 where all 14 R3 jobs hit aiperf's 900s Configure
-    # Profiling timeout simultaneously). Bump to 1800s to absorb 3x
-    # worst-case slowdown — the post-setup measurement window is unaffected.
-    export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
-    # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
-    # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
-    export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
-    REPLAY_CMD="aiperf profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
-    REPLAY_CMD+=" --endpoint /v1/chat/completions"
-    REPLAY_CMD+=" --endpoint-type chat"
-    REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
-    REPLAY_CMD+=" --concurrency $CONC"
-    REPLAY_CMD+=" --benchmark-duration $duration"
-    REPLAY_CMD+=" --random-seed 42"
-    # Abort the run if real-failure rate exceeds 5% after a grace floor of
-    # max(CONC, 10) records. Context-overflow records are dropped from the
-    # failure tally in AGENTIC_REPLAY scenarios (see record_processor_service
-    # in the aiperf submodule), so this threshold measures only real failures
-    # (server 5xx, parse errors, malformed responses).
-    REPLAY_CMD+=" --failed-request-threshold 0.05"
-    # Sample each trajectory's warmup start position uniformly from
-    # [25%, 75%] of the trace's turn count (was hardcoded 0%-70% upstream).
-    # Avoids starting trajectories right at turn 0 where the KV cache is
-    # cold and skews early steady-state samples.
-    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
-    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Use server-reported usage fields (prompt_tokens / completion_tokens) for
-    # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
-    # stream_options.include_usage on the OpenAI chat endpoint. Skips the
-    # heavy per-record tokenization in the records pipeline that was pinning
-    # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
-    # usage is authoritative).
-    REPLAY_CMD+=" --use-server-token-count"
-    # aiperf's dataset manager (separate from the inference parser) loads
-    # the model's tokenizer for trace-prompt tokenization regardless of
-    # --use-server-token-count. Models like kimi (amd/Kimi-K2.5-MXFP4,
-    # moonshotai/Kimi-K2.5) ship a custom tokenizer in their HF repo and
-    # need trust_remote_code=True to load. Benign for models without
-    # custom tokenizer code, so we set it unconditionally.
-    REPLAY_CMD+=" --tokenizer-trust-remote-code"
-    # Default --num-dataset-entries is 100; the weka corpus has 949. Cap
-    # at 949 so all unique traces are loaded (the loader treats this as a
-    # ``min(cap, available)`` ceiling, not a target — see
-    # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 949"
-    # 1-second timeslices on the server-metrics scrape so the post-run
-    # plotter has per-window time series (KV usage, cache hit rate,
-    # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
-    # snapshot cadence so metrics_plots.png is visually comparable.
-    # Without this, aiperf only emits aggregate stats and the 6x2 panels
-    # collapse to flat lines.
-    REPLAY_CMD+=" --slice-duration 1.0"
-    REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
-    # The inferencex-agentx-mvp scenario enforces a 900s minimum
-    # benchmark duration. For smoke tests with shorter durations, opt
-    # into --unsafe-override (the run's submission_valid will be flagged
-    # false; that's expected for non-canonical runs).
-    if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE:-false}" = "true" ]; then
-        REPLAY_CMD+=" --unsafe-override"
-    fi
+    REPLAY_CMD="python3 $TRACE_REPLAY_DIR/trace_replay_tester.py"
+    REPLAY_CMD+=" --api-endpoint http://localhost:$PORT"
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
+    REPLAY_CMD+=" --output-dir $result_dir/trace_replay"
+    REPLAY_CMD+=" --start-users $CONC"
+    REPLAY_CMD+=" --max-users $CONC"
+    REPLAY_CMD+=" --test-duration $duration"
+    REPLAY_CMD+=" --recycle"
+    REPLAY_CMD+=" --max-delay $max_delay"
+    REPLAY_CMD+=" --max-concurrent-requests 0"
+    REPLAY_CMD+=" --advance-min $advance_min"
+    REPLAY_CMD+=" --advance-max $advance_max"
+    REPLAY_CMD+=" --warmup-enabled"
+    REPLAY_CMD+=" --seed 42"
+    if [ "${HASH_BLOCK_MODE:-false}" = "true" ]; then
+        REPLAY_CMD+=" --hash-block-mode"
+    fi
+    if [ "${DEBUG_TRACE:-false}" = "true" ]; then
+        REPLAY_CMD+=" --debug-trace"
+    fi
+    REPLAY_CMD+=" --metrics-output-prefix $result_dir/metrics"
 }
 
 write_agentic_result_json() {
-    # Aggregate aiperf's profile_export.{json,jsonl} + server_metrics_export.json
-    # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow's existing
-    # retry-based existence check is the single success gate.
+    # Aggregate detailed_results.csv + metrics_server_metrics.csv into
+    # $INFMAX_CONTAINER_WORKSPACE/$RESULT_FILENAME.json. The workflow's
+    # existing retry-based existence check is the single success gate.
     local result_dir="$1"
     RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
         python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
-
-    # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
-    # don't fail the launcher if plot generation has trouble (e.g. matplotlib
-    # missing in a stripped-down image). The agg JSON is the success gate.
-    python3 "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }

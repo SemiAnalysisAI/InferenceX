@@ -179,8 +179,9 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
 else
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    git clone https://github.com/ishandhanani/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q1-2026
 fi
 
 echo "Installing srtctl..."
@@ -238,7 +239,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 echo "Submitting job with srtctl..."
 
 # Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)

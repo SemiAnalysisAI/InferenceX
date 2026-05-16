@@ -2,7 +2,3 @@
 	path = utils/trace-replay
 	url = https://github.com/callanjfox/kv-cache-tester.git
 	branch = agentx-minimized
-[submodule "utils/aiperf"]
-	path = utils/aiperf
-	url = https://github.com/cquil11/aiperf.git
-	branch = cjq/weka-live-assistant-responses

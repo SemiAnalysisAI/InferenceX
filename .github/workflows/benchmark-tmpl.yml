@@ -239,34 +239,18 @@ jobs:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             results/server.log
+            results/metrics_server_metrics.csv
+            results/metrics_plots.png
+            results/metrics_workload.png
+            results/metrics_client_metrics.csv
             results/benchmark.log
             results/config.yaml
             results/vllm_command.txt
             results/benchmark_command.txt
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
-            results/metrics_plots.png
-            results/trace_replay/profile_export.jsonl
-            results/trace_replay/profile_export_aiperf.json
-            results/trace_replay/profile_export_aiperf.csv
-            results/trace_replay/profile_export_aiperf_timeslices.json
-            results/trace_replay/profile_export_aiperf_timeslices.csv
-            results/trace_replay/profile_export_aiperf_aggregate.json
-            results/trace_replay/profile_export_aiperf_aggregate.csv
-            results/trace_replay/profile_export_aiperf_collated.json
-            results/trace_replay/server_metrics_export.json
-            results/trace_replay/server_metrics_export.jsonl
-            results/trace_replay/server_metrics_export.csv
-            results/trace_replay/server_metrics_export.parquet
-            results/trace_replay/gpu_telemetry_export.jsonl
-            results/trace_replay/logs/aiperf.log
-            results/trace_replay/logs/*.log
-          # Excluded by design (multi-GB debug artifacts, not consumed by
-          # post-processing): results/trace_replay/inputs.json (pre-formatted
-          # request bodies — the mmap'd binary equivalent is rebuilt from
-          # --public-dataset + --random-seed) and
-          # results/trace_replay/profile_export_raw.jsonl (full HTTP bodies
-          # per request — recoverable by re-running the same trace).
+            results/trace_replay/detailed_results.csv
+            results/trace_replay/debug_trace.jsonl
           if-no-files-found: ignore
 
       - name: Upload server logs

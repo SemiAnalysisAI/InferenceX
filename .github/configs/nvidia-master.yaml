@@ -1737,7 +1737,7 @@ dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200-dgxc
+  runner: b200-dsv4
   precision: fp4
   framework: vllm
   multinode: false
@@ -1754,25 +1754,6 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options for
-    # DSv4-Pro on this SKU — pure TP for low-conc / high-interactivity, DEP
-    # (DP-attn + EP-MoE) for high-conc / high-throughput per the vLLM blog
-    # recipe (https://vllm.ai/blog/deepseek-v4). HMA stays enabled alongside
-    # cpu offload via VLLM_USE_SIMPLE_KV_OFFLOAD=1 (the simple connector
-    # inherits SupportsHMA in v0.20.0, PR #37160). The launcher passes the
-    # full TOTAL_CPU_DRAM_GB to --kv_offloading_size in pure-TP mode (the
-    # connector's internal divide by world_size=TP gives per-rank values
-    # that share TP-mmap to ≈ TOTAL aggregate), and pre-divides by $TP in
-    # DP-attn mode (each DP engine has world_size=1, no internal divide,
-    # so we shrink the per-engine input to keep aggregate ≈ TOTAL).
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # cpu offload only this iteration — none entries already validated in
-      # earlier runs (B200 25332045030: TP=8 1..32 + DEP=8 16..128 all 100%).
-      # Re-add when investigating regressions in offload=none.
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
@@ -2003,6 +1984,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2062,10 +2044,6 @@ qwen3.5-bf16-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-bf16-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
@@ -2099,17 +2077,13 @@ qwen3.5-fp8-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260422-de962f32
@@ -2171,11 +2145,6 @@ glm5-fp8-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # sglang manages its own KV eviction via radix cache, so just sweep concurrency on offloading=none
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
@@ -2469,15 +2438,10 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  # Bumped from v0.19.1 — that release tripped a bug in
-  # `flashinfer_trtllm_mxint4_moe` ('list' object has no attribute 'to')
-  # during warmup `profile_run` on the agentic-coding path
-  # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
-  # flashinfer fix.
   image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
-  runner: b200-dgxc
+  runner: b200
   precision: int4
   framework: vllm
   multinode: false
@@ -2491,11 +2455,6 @@ kimik2.5-int4-b200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, offloading: cpu,  conc-list: [32, 64, 96, 128] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -2525,11 +2484,7 @@ kimik2.5-int4-h200-vllm:
   image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
-  # Pinned to h200-dgxc (NVIDIA DGX Cloud Slurm pool) so we hit a host with
-  # the /home/sa-shared/gharunners/ai-perf-cache mount where aiperf's
-  # content-addressed dataset mmap cache lives. Other h200 pools (cw, nb)
-  # don't have that mount and would re-materialize 65 GB to /tmp every job.
-  runner: h200-dgxc
+  runner: h200
   precision: int4
   framework: vllm
   multinode: false
@@ -2543,49 +2498,12 @@ kimik2.5-int4-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-    # H200 has 141 GB HBM per GPU (smaller than B200's 192 GB); KV cliff
-    # arrives at lower conc, so the sweep tops out earlier than the Blackwell
-    # sibling.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
-      - { tp: 8, offloading: cpu,  conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
-
-kimik2.5-int4-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
-  model: moonshotai/Kimi-K2.5
-  model-prefix: kimik2.5
-  runner: h100
-  precision: int4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 32 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 32 }
-    # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
-    # early. Sweep saturates conc=20 to keep total HBM headroom.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
-      - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 12, 16, 20] }
 
 kimik2.5-fp4-b200-vllm:
-  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
-  # cleared the agentic-coding warmup crash on max_model_len=131072 +
-  # prefix caching.
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.17.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
-  runner: b200-dgxc
+  runner: b200
   precision: fp4
   framework: vllm
   multinode: false
@@ -2601,29 +2519,12 @@ kimik2.5-fp4-b200-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    # agentic-coding: dual-TP sweep. TP=8 covers the full KV-cliff transition
-    # from clean (offload off) to overflow (offload on); TP=4 explores the
-    # half-TP regime where each GPU holds 2x the model shard but 4 vs 8
-    # ranks per replica changes the on-GPU KV vs activation budget trade.
-    # User-specified conc lists below.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [16, 24, 32, 36] }
-      - { tp: 4, ep: 1, offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, offloading: cpu,  conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 kimik2.5-fp4-b300-vllm:
-  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
-  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
-  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
-  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
-  # INT4 B300 sister already uses successfully.
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.19.0-cu130
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -2642,13 +2543,6 @@ kimik2.5-fp4-b300-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    # B300 has 288 GB HBM per GPU (vs B200's 192 GB) so the KV-cache cliff
-    # sits higher than B200's. Extend the conc sweep to probe up to 64.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -2781,10 +2675,6 @@ dsv4-fp8-h200-vllm:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
 # MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
@@ -2876,7 +2766,7 @@ dsv4-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, conc-start: 1, conc-end: 128 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 8192 }
@@ -2884,24 +2774,9 @@ dsv4-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options —
-    # B300 has more flexibility than B200 since both half-node (TP=4 / DEP=4)
-    # and full-node (TP=8 / DEP=8) layouts are routinely used for DSv4-Pro on
-    # this SKU. Pure TP for low-conc / interactivity, DEP for high-conc /
-    # throughput. See B200 agentic-coding NOTE above for HMA + cpu-offload
-    # configuration details.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # cpu offload only this iteration — none entries already validated in
-      # earlier runs. Re-add when investigating regressions in offload=none.
-      - { tp: 4, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [128, 256, 512] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
@@ -4096,7 +3971,7 @@ gptoss-fp4-b200-trt:
       - { tp: 8, conc-start:   4, conc-end:   4}
 
 gptoss-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.15.1
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -4119,19 +3994,12 @@ gptoss-fp4-b200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
-      - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.19.0-cu130
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: b200-dgxc
+  runner: b200
   precision: fp8
   framework: vllm
   multinode: false
@@ -4148,20 +4016,12 @@ minimaxm2.5-fp8-b200-vllm:
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 512 }
-    agentic-coding:
-    # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
-    # Push none past the KV cliff (96, 128) to make the no-offload throughput
-    # collapse visible; cpu range overlaps fully for same-conc comparison.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 96, 128] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 96, 128] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.19.0-cu130
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -4183,17 +4043,6 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 1, conc-start: 4, conc-end: 16 }
       - { tp: 2, conc-start: 64, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
-    agentic-coding:
-    # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
-    # Push none past the KV cliff (96, 128, 192) so the no-offload throughput
-    # collapse is visible; cpu range overlaps fully so each high-conc point
-    # has a same-conc no-offload counterpart for direct comparison.
-    # Dense sampling between 96 and 128 (step=4) to resolve the sharp dropoff
-    # observed in v6 cpu data right past conc=96.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.19.0-cu130
@@ -4223,10 +4072,6 @@ minimaxm2.5-fp4-b200-vllm:
       - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
@@ -4301,14 +4146,6 @@ minimaxm2.5-fp8-h100-vllm:
       search-space:
       # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    # H100 tp=4 ep=4: compute ceiling ~10 (empirical), KV cliff ~6 (analytical).
-    # Best cpu-offload demo SKU — 4-conc-point window between cliffs.
-    # Dense sampling 4-12 covers both cliffs; conc 16 confirms compute plateau.
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
 
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
@@ -4513,13 +4350,6 @@ minimaxm2.5-fp8-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
-    agentic-coding:
-    # H200 tp=4: compute ceiling ~35 (empirical), KV cliff ~29 (analytical).
-    # cpu offload window conc 29-35 — dense sampling 24-40 captures both cliffs.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 28, 32, 36, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [24, 28, 32, 36, 40, 48] }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
@@ -8181,58 +8011,91 @@ dsv4-fp4-gb200-dynamo-vllm:
   disagg: true
   scenarios:
     fixed-seq-len:
-    # 1k/1k — extrapolated from kimi-k2.5 1k/1k topologies, scaled to DSV4-Pro's
-    # DP>=8 constraint. No upstream NVIDIA reference for DSV4-Pro vLLM disagg
-    # at this seq-len yet (PR #67 only publishes 8k/1k).
-    - isl: 1024
+    - isl: 8192
       osl: 1024
       search-space:
-      # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-      # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch
-      # 1p1d-dep8-tep8.yaml (offload + numa-bind stripped — see recipe header).
-      - conc-list: [1, 4, 8, 16, 32, 64]
+      # Validated 8k/1k points mirrored from NVIDIA/srt-slurm
+      # aflowers/vllm-gb200-v0.20.0 history. conc-list values match each
+      # recipe's benchmark.concurrencies.
+
+      # Low latency: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with
+      # a dedicated NATS/etcd infra node.
+      - conc-list: [1]
         prefill:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
-      # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
-      # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
-      - conc-list: [128, 256, 1024, 2048, 4096]
+
+      # Low-middle curve: 1 prefill (DEP=8) + 4 decode (TP=8). 11 nodes total
+      # with a dedicated NATS/etcd infra node.
+      - conc-list: [256, 512]
         prefill:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-middle-curve.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes
+      # total with a dedicated NATS/etcd infra node.
+      - conc-list: [256, 512, 1024]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
           dp-attn: true
-      # High throughput: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes.
-      # The 4096 overlap with the 1p1d block gives a crossover point. 8192
-      # would saturate 1p1d's prefill, so this topology takes over there.
-      - conc-list: [4096, 8192]
+
+      # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 7 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [4096]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # MegaMOE max throughput: 3 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 9 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [4096]
         prefill:
           num-worker: 3
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-max-tpt-megamoe.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
           dp-attn: true
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
@@ -8251,49 +8114,70 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
     - isl: 8192
       osl: 1024
       search-space:
-      # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-      # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch.
-      - conc-list: [1, 4, 8, 16, 32, 64]
+      # Aggregate low latency: TP=8, max-num-seqs=4.
+      - conc-list: [1]
+        spec-decoding: mtp
         prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
-        decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
-      # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
-      - conc-list: [512, 1024]
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-gb200-low-latency-mtp2.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # Low-latency bridge: 1 prefill (DEP=8) + 4 decode (TP=8), no offload.
+      - conc-list: [16, 32, 64]
+        spec-decoding: mtp
         prefill:
-          num-worker: 3
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency-mtp2.yaml"
         decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
-      # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
-      - conc-list: [4096, 8192]
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
+      # 5 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [128]
+        spec-decoding: mtp
         prefill:
-          num-worker: 7
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-7p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe-mtp2.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 7 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
           dp-attn: true
 
 dsv4-fp4-b300-dynamo-vllm:
@@ -8434,8 +8318,8 @@ dsv4-fp4-gb300-dynamo-vllm:
       - conc-list: [3072]
         prefill:
           num-worker: 7
-          tp: 8
-          ep: 8
+          tp: 4
+          ep: 4
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-7p2d-dep4-dep16.yaml"

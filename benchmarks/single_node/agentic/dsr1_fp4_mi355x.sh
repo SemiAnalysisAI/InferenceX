@@ -23,7 +23,6 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 rocm-smi
-amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source

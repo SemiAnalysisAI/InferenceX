@@ -70,8 +70,6 @@ else
     exit 1
 fi
 
-export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
-
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Validate framework
@@ -184,7 +182,7 @@ EOF
     fi
 
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
@@ -336,7 +334,7 @@ else
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else).
-    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b200"
+    BENCH_BASE="benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b200"
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
@@ -354,10 +352,6 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    # b200-dgxc cluster was re-partitioned to gpu-1 / gpu-2; the prior gpu-10
-    # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
-    # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
-    # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
@@ -378,9 +372,9 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
-        --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"
 fi

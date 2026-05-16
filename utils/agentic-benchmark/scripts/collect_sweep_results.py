@@ -87,14 +87,17 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
         "input_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)") - scalar_val("Output Token Throughput (tokens/sec)"),
         "mean_ttft_ms": metric_stat("Time to First Token (ms)", "avg"),
         "p50_ttft_ms": metric_stat("Time to First Token (ms)", "p50"),
+        "p75_ttft_ms": metric_stat("Time to First Token (ms)", "p75"),
         "p90_ttft_ms": metric_stat("Time to First Token (ms)", "p90"),
         "p99_ttft_ms": metric_stat("Time to First Token (ms)", "p99"),
         "mean_tpot_ms": metric_stat("Inter Token Latency (ms)", "avg"),
         "p50_tpot_ms": metric_stat("Inter Token Latency (ms)", "p50"),
+        "p75_tpot_ms": metric_stat("Inter Token Latency (ms)", "p75"),
         "p90_tpot_ms": metric_stat("Inter Token Latency (ms)", "p90"),
         "p99_tpot_ms": metric_stat("Inter Token Latency (ms)", "p99"),
         "mean_latency_ms": metric_stat("Request Latency (ms)", "avg"),
         "p50_latency_ms": metric_stat("Request Latency (ms)", "p50"),
+        "p75_latency_ms": metric_stat("Request Latency (ms)", "p75"),
         "p90_latency_ms": metric_stat("Request Latency (ms)", "p90"),
         "p99_latency_ms": metric_stat("Request Latency (ms)", "p99"),
     }
@@ -224,14 +227,17 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
                 "mean_ttft_ms": df["ttft_ms"].mean(),
                 "p50_ttft_ms": df["ttft_ms"].median(),
+                "p75_ttft_ms": df["ttft_ms"].quantile(0.75),
                 "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
                 "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
                 "mean_tpot_ms": df["tpot_ms"].mean(),
                 "p50_tpot_ms": df["tpot_ms"].median(),
+                "p75_tpot_ms": df["tpot_ms"].quantile(0.75),
                 "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
                 "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
                 "mean_latency_ms": df["latency_ms"].mean(),
                 "p50_latency_ms": df["latency_ms"].median(),
+                "p75_latency_ms": df["latency_ms"].quantile(0.75),
                 "p90_latency_ms": df["latency_ms"].quantile(0.9),
                 "p99_latency_ms": df["latency_ms"].quantile(0.99),
             })
@@ -266,14 +272,17 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
                 "mean_ttft_ms": df["ttft_ms"].mean(),
                 "p50_ttft_ms": df["ttft_ms"].median(),
+                "p75_ttft_ms": df["ttft_ms"].quantile(0.75),
                 "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
                 "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
                 "mean_tpot_ms": df["tpot_ms"].mean(),
                 "p50_tpot_ms": df["tpot_ms"].median(),
+                "p75_tpot_ms": df["tpot_ms"].quantile(0.75),
                 "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
                 "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
                 "mean_latency_ms": df["latency_ms"].mean(),
                 "p50_latency_ms": df["latency_ms"].median(),
+                "p75_latency_ms": df["latency_ms"].quantile(0.75),
                 "p90_latency_ms": df["latency_ms"].quantile(0.9),
                 "p99_latency_ms": df["latency_ms"].quantile(0.99),
             })
@@ -336,20 +345,6 @@ def main() -> None:
     failed = sum(1 for e in experiments if e.get("status") == "FAILED")
     other = len(experiments) - success - failed
     print(f"  SUCCESS: {success}, FAILED: {failed}, OTHER: {other}")
-
-    # Run overview plots (throughput vs concurrency, workload consistency)
-    try:
-        from plot_sweep_overview import plot_throughput_vs_concurrency, plot_workload_consistency
-        pareto_input = output_dir / "pareto_input"
-        summary_csv = pareto_input / "experiment_summary.csv"
-        if summary_csv.exists():
-            overview_df = pd.read_csv(summary_csv)
-            plot_throughput_vs_concurrency(overview_df, output_dir)
-            plot_workload_consistency(pareto_input, output_dir)
-        else:
-            print("Warning: No experiment_summary.csv found, skipping overview plots")
-    except Exception as e:
-        print(f"Warning: Overview plots failed: {e}")
 
     print(f"Aggregated results saved to {output_dir}")
 

@@ -16,20 +16,19 @@ TP = "TP"
 EP = "EP"
 DP_ATTENTION = "DP Attention"
 CONC = "Conc"
-TTFT_MEAN = "TTFT Mean (ms)"
-TTFT_P75 = "TTFT P75 (ms)"
+TTFT_MEDIAN = "TTFT Median (ms)"
 TTFT_P90 = "TTFT P90 (ms)"
-TTFT_P95 = "TTFT P95 (ms)"
-TPOT_MEAN = "TPOT Mean (ms)"
-TPOT_P75 = "TPOT P75 (ms)"
-INTVTY_MEAN = "Intvty Mean (tok/s/user)"
-INTVTY_AT_P75_TPOT = "Intvty at P75 TPOT (tok/s/user)"
+TTFT_P99 = "TTFT P99 (ms)"
+TTFT_P999 = "TTFT P99.9 (ms)"
+TPOT_MEDIAN = "TPOT Median (ms)"
+INTVTY_MEDIAN = "Intvty Median (tok/s/user)"
 INTVTY_AT_P90_TPOT = "Intvty at P90 TPOT (tok/s/user)"
-INTVTY_AT_P95_TPOT = "Intvty at P95 TPOT (tok/s/user)"
-E2EL_MEAN = "E2EL Mean (s)"
-E2EL_P75 = "E2EL P75 (s)"
+INTVTY_AT_P99_TPOT = "Intvty at P99 TPOT (tok/s/user)"
+INTVTY_AT_P999_TPOT = "Intvty at P99.9 TPOT (tok/s/user)"
+E2EL_MEDIAN = "E2EL Median (s)"
 E2EL_P90 = "E2EL P90 (s)"
-E2EL_P95 = "E2EL P95 (s)"
+E2EL_P99 = "E2EL P99 (s)"
+E2EL_P999 = "E2EL P99.9 (s)"
 TPUT_PER_GPU = "TPUT per GPU"
 OUTPUT_TPUT_PER_GPU = "Output TPUT per GPU"
 INPUT_TPUT_PER_GPU = "Input TPUT per GPU"
@@ -86,10 +85,10 @@ def main():
         single_node_headers = [
             MODEL, SERVED_MODEL, HARDWARE, FRAMEWORK, PRECISION, ISL, OSL, TP, EP, DP_ATTENTION,
             CONC,
-            TTFT_MEAN, TTFT_P75, TTFT_P90, TTFT_P95,
-            TPOT_MEAN, TPOT_P75,
-            INTVTY_MEAN, INTVTY_AT_P75_TPOT, INTVTY_AT_P90_TPOT, INTVTY_AT_P95_TPOT,
-            E2EL_MEAN, E2EL_P75, E2EL_P90, E2EL_P95,
+            TTFT_MEDIAN, TTFT_P90, TTFT_P99, TTFT_P999,
+            TPOT_MEDIAN,
+            INTVTY_MEDIAN, INTVTY_AT_P90_TPOT, INTVTY_AT_P99_TPOT, INTVTY_AT_P999_TPOT,
+            E2EL_MEDIAN, E2EL_P90, E2EL_P99, E2EL_P999,
             TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
         ]
 
@@ -106,20 +105,19 @@ def main():
                 r['ep'],
                 r['dp_attention'],
                 r['conc'],
-                f"{r['mean_ttft'] * 1000:.4f}",
-                f"{r.get('p75_ttft', 0) * 1000:.4f}",
+                f"{r['median_ttft'] * 1000:.4f}",
                 f"{r.get('p90_ttft', 0) * 1000:.4f}",
-                f"{r.get('p95_ttft', 0) * 1000:.4f}",
-                f"{r['mean_tpot'] * 1000:.4f}",
-                f"{r.get('p75_tpot', 0) * 1000:.4f}",
-                f"{r.get('mean_intvty', 0):.4f}",
-                f"{r.get('p75_intvty', 0):.4f}",
+                f"{r.get('p99_ttft', 0) * 1000:.4f}",
+                f"{r.get('p99.9_ttft', 0) * 1000:.4f}",
+                f"{r['median_tpot'] * 1000:.4f}",
+                f"{r.get('median_intvty', 0):.4f}",
                 f"{r.get('p90_intvty', 0):.4f}",
-                f"{r.get('p95_intvty', 0):.4f}",
-                f"{r.get('mean_e2el', 0):.4f}",
-                f"{r.get('p75_e2el', 0):.4f}",
+                f"{r.get('p99_intvty', 0):.4f}",
+                f"{r.get('p99.9_intvty', 0):.4f}",
+                f"{r.get('median_e2el', 0):.4f}",
                 f"{r.get('p90_e2el', 0):.4f}",
-                f"{r.get('p95_e2el', 0):.4f}",
+                f"{r.get('p99_e2el', 0):.4f}",
+                f"{r.get('p99.9_e2el', 0):.4f}",
                 f"{r['tput_per_gpu']:.4f}",
                 f"{r['output_tput_per_gpu']:.4f}",
                 f"{r['input_tput_per_gpu']:.4f}",
@@ -141,10 +139,10 @@ def main():
             PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS, PREFILL_GPUS,
             DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS, DECODE_GPUS,
             CONC,
-            TTFT_MEAN, TTFT_P75, TTFT_P90, TTFT_P95,
-            TPOT_MEAN, TPOT_P75,
-            INTVTY_MEAN, INTVTY_AT_P75_TPOT, INTVTY_AT_P90_TPOT, INTVTY_AT_P95_TPOT,
-            E2EL_MEAN, E2EL_P75, E2EL_P90, E2EL_P95,
+            TTFT_MEDIAN, TTFT_P90, TTFT_P99, TTFT_P999,
+            TPOT_MEDIAN,
+            INTVTY_MEDIAN, INTVTY_AT_P90_TPOT, INTVTY_AT_P99_TPOT, INTVTY_AT_P999_TPOT,
+            E2EL_MEDIAN, E2EL_P90, E2EL_P99, E2EL_P999,
             TPUT_PER_GPU, OUTPUT_TPUT_PER_GPU, INPUT_TPUT_PER_GPU
         ]
 
@@ -168,20 +166,19 @@ def main():
                 r['decode_num_workers'],
                 r['num_decode_gpu'],
                 r['conc'],
-                f"{r['mean_ttft'] * 1000:.4f}",
-                f"{r.get('p75_ttft', 0) * 1000:.4f}",
+                f"{r['median_ttft'] * 1000:.4f}",
                 f"{r.get('p90_ttft', 0) * 1000:.4f}",
-                f"{r.get('p95_ttft', 0) * 1000:.4f}",
-                f"{r['mean_tpot'] * 1000:.4f}",
-                f"{r.get('p75_tpot', 0) * 1000:.4f}",
-                f"{r.get('mean_intvty', 0):.4f}",
-                f"{r.get('p75_intvty', 0):.4f}",
+                f"{r.get('p99_ttft', 0) * 1000:.4f}",
+                f"{r.get('p99.9_ttft', 0) * 1000:.4f}",
+                f"{r['median_tpot'] * 1000:.4f}",
+                f"{r.get('median_intvty', 0):.4f}",
                 f"{r.get('p90_intvty', 0):.4f}",
-                f"{r.get('p95_intvty', 0):.4f}",
-                f"{r.get('mean_e2el', 0):.4f}",
-                f"{r.get('p75_e2el', 0):.4f}",
+                f"{r.get('p99_intvty', 0):.4f}",
+                f"{r.get('p99.9_intvty', 0):.4f}",
+                f"{r.get('median_e2el', 0):.4f}",
                 f"{r.get('p90_e2el', 0):.4f}",
-                f"{r.get('p95_e2el', 0):.4f}",
+                f"{r.get('p99_e2el', 0):.4f}",
+                f"{r.get('p99.9_e2el', 0):.4f}",
                 f"{r['tput_per_gpu']:.4f}",
                 f"{r['output_tput_per_gpu']:.4f}",
                 f"{r['input_tput_per_gpu']:.4f}",
