@@ -2957,3 +2957,10 @@
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
     - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - gptoss-fp4-mi355x-atom
+  description:
+    - "Bump ATOM image from rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post to rocm/atom-dev:nightly_202605111702"
+    - "ATOM upstream benchmark shows +8% to +20% throughput improvement vs InferenceX baselines (1 GPU, ISL=1024/8192, OSL=1024)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
