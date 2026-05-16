@@ -2490,7 +2490,7 @@
 - config-keys:
     - kimik2.5-fp4-mi355x-atom
   description:
-    - "Bump ATOM image to rocm/atom-dev:nightly_202605111702"
+    - "Bump ATOM image to rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511"
     - "Improves tput/GPU by up to +31% at low concurrency (tp=4, isl=1024, c=4-16)"
     - "Ref ATOM upstream benchmark run https://github.com/ROCm/ATOM/actions/runs/25686894636"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1387

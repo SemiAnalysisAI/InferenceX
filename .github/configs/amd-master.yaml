@@ -547,7 +547,7 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202605111702
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
