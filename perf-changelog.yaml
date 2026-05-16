@@ -2494,3 +2494,10 @@
     - "Improves tput/GPU by up to +31% at low concurrency (tp=4, isl=1024, c=4-16)"
     - "Ref ATOM upstream benchmark run https://github.com/ROCm/ATOM/actions/runs/25686894636"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1387
+  
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Update image tag to vllm/vllm-openai:v0.20.2"
+    - "Add DEP configs for B300 vLLM MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
