@@ -156,7 +156,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: int
-    offloading: Literal["none", "cpu", "ssd"] = Field(alias=Fields.OFFLOADING.value)
+    offloading: Literal["none", "cpu", "lmcache_cpu", "ssd"] = Field(alias=Fields.OFFLOADING.value)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -338,7 +338,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
-    offloading: Literal["none", "cpu", "ssd"] = Field(default="none", alias=Fields.OFFLOADING.value)
+    offloading: Literal["none", "cpu", "lmcache_cpu", "ssd"] = Field(default="none", alias=Fields.OFFLOADING.value)
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -349,15 +349,13 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     @model_validator(mode='after')
     def validate_topology_fields(self):
-        has_single_node = self.tp is not None
-        has_any_multinode_field = self.prefill is not None or self.decode is not None
-        has_complete_multinode = self.prefill is not None and self.decode is not None
-        if has_single_node:
-            valid = not has_any_multinode_field
-        else:
-            valid = has_complete_multinode
-        if not valid:
-            raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        has_tp = self.tp is not None
+        has_prefill = self.prefill is not None
+        has_decode = self.decode is not None
+        if has_prefill != has_decode:
+            raise ValueError("Agentic search-space entries must specify both prefill and decode, not just one")
+        if not has_tp and not has_prefill:
+            raise ValueError("Agentic search-space entries must specify at least tp or both prefill and decode")
         return self
 
 

@@ -11,7 +11,12 @@ from validation import (
     MultiNodeSeqLenConfig,
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
+    SingleNodeAgenticMatrixEntry,
+    AgenticCodingSearchSpaceEntry,
+    AgenticCodingConfig,
+    SingleNodeScenarios,
     validate_matrix_entry,
+    validate_agentic_matrix_entry,
     validate_master_config,
     validate_runner_config,
     load_config_files,
@@ -875,3 +880,304 @@ h100: not-a-list
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+# =============================================================================
+# Test AgenticCodingSearchSpaceEntry
+# =============================================================================
+
+class TestAgenticCodingSearchSpaceEntry:
+    """Tests for AgenticCodingSearchSpaceEntry model."""
+
+    def test_valid_with_offloading_none(self):
+        """Valid entry with offloading=none should pass."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "none",
+            "conc-list": [2, 4, 8, 16],
+        })
+        assert entry.tp == 8
+        assert entry.offloading == "none"
+        assert entry.conc_list == [2, 4, 8, 16]
+
+    def test_valid_with_offloading_cpu(self):
+        """Valid entry with offloading=cpu should pass."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 4,
+            "offloading": "cpu",
+            "conc-list": [4, 8],
+        })
+        assert entry.offloading == "cpu"
+
+    def test_valid_with_offloading_lmcache(self):
+        """Valid entry with offloading=lmcache_cpu should pass."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 2,
+            "offloading": "lmcache_cpu",
+            "conc-list": [2, 4, 8, 16],
+        })
+        assert entry.offloading == "lmcache_cpu"
+        assert entry.tp == 2
+
+    def test_valid_with_offloading_ssd(self):
+        """Valid entry with offloading=ssd should pass."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "ssd",
+            "conc-start": 4,
+            "conc-end": 32,
+        })
+        assert entry.offloading == "ssd"
+
+    def test_invalid_offloading_value(self):
+        """Invalid offloading value should fail."""
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "offloading": "invalid",
+                "conc-list": [4],
+            })
+
+    def test_offloading_defaults_to_none(self):
+        """Offloading should default to none."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "conc-list": [4, 8],
+        })
+        assert entry.offloading == "none"
+
+    def test_must_specify_tp_or_prefill_decode(self):
+        """Must specify either tp or both prefill and decode."""
+        with pytest.raises(Exception) as exc_info:
+            AgenticCodingSearchSpaceEntry(**{
+                "offloading": "lmcache_cpu",
+                "conc-list": [4],
+            })
+        assert "must specify at least tp" in str(exc_info.value).lower()
+
+    def test_tp_with_prefill_decode_allowed(self):
+        """tp can coexist with prefill/decode for disaggregated serving."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "prefill": {
+                "num-worker": 1, "tp": 4, "ep": 4, "dp-attn": False,
+            },
+            "decode": {
+                "num-worker": 1, "tp": 8, "ep": 8, "dp-attn": False,
+            },
+            "conc-list": [4],
+        })
+        assert entry.tp == 8
+        assert entry.prefill.tp == 4
+        assert entry.decode.tp == 8
+
+    def test_prefill_without_decode_rejected(self):
+        """Specifying only prefill without decode should fail."""
+        with pytest.raises(Exception) as exc_info:
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "prefill": {
+                    "num-worker": 1, "tp": 4, "ep": 4, "dp-attn": False,
+                },
+                "conc-list": [4],
+            })
+        assert "both prefill and decode" in str(exc_info.value).lower()
+
+    def test_decode_without_prefill_rejected(self):
+        """Specifying only decode without prefill should fail."""
+        with pytest.raises(Exception) as exc_info:
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "decode": {
+                    "num-worker": 1, "tp": 8, "ep": 8, "dp-attn": False,
+                },
+                "conc-list": [4],
+            })
+        assert "both prefill and decode" in str(exc_info.value).lower()
+
+
+# =============================================================================
+# Test SingleNodeAgenticMatrixEntry
+# =============================================================================
+
+class TestSingleNodeAgenticMatrixEntry:
+    """Tests for SingleNodeAgenticMatrixEntry model."""
+
+    @pytest.fixture
+    def valid_agentic_entry(self):
+        return {
+            "image": "vllm/vllm-openai-rocm:v0.19.1",
+            "model": "MiniMaxAI/MiniMax-M2.5",
+            "model-prefix": "minimaxm2.5",
+            "precision": "fp8",
+            "framework": "vllm",
+            "runner": "mi300x",
+            "tp": 2,
+            "ep": 1,
+            "dp-attn": False,
+            "conc": 8,
+            "offloading": "lmcache_cpu",
+            "duration": 1800,
+            "exp-name": "minimaxm2.5_tp2_conc8_offloadlmcache_cpu",
+            "scenario-type": "agentic-coding",
+        }
+
+    def test_valid_lmcache_entry(self, valid_agentic_entry):
+        """Valid agentic entry with lmcache offloading should pass."""
+        entry = SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+        assert entry.offloading == "lmcache_cpu"
+        assert entry.tp == 2
+        assert entry.conc == 8
+        assert entry.scenario_type == "agentic-coding"
+
+    def test_valid_none_offloading(self, valid_agentic_entry):
+        """Valid agentic entry with no offloading should pass."""
+        valid_agentic_entry["offloading"] = "none"
+        entry = SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+        assert entry.offloading == "none"
+
+    def test_valid_cpu_offloading(self, valid_agentic_entry):
+        """Valid agentic entry with cpu offloading should pass."""
+        valid_agentic_entry["offloading"] = "cpu"
+        entry = SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+        assert entry.offloading == "cpu"
+
+    def test_invalid_offloading_rejected(self, valid_agentic_entry):
+        """Invalid offloading value should fail."""
+        valid_agentic_entry["offloading"] = "gpu"
+        with pytest.raises(Exception):
+            SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+
+    def test_missing_offloading_fails(self, valid_agentic_entry):
+        """Missing offloading field should fail (no default on matrix entry)."""
+        del valid_agentic_entry["offloading"]
+        with pytest.raises(Exception):
+            SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+
+    def test_extra_field_forbidden(self, valid_agentic_entry):
+        """Extra fields should be rejected."""
+        valid_agentic_entry["extra-field"] = "value"
+        with pytest.raises(Exception):
+            SingleNodeAgenticMatrixEntry(**valid_agentic_entry)
+
+    def test_validate_agentic_matrix_entry_function(self, valid_agentic_entry):
+        """validate_agentic_matrix_entry should accept valid entry."""
+        result = validate_agentic_matrix_entry(valid_agentic_entry)
+        assert result == valid_agentic_entry
+
+    def test_validate_agentic_matrix_entry_invalid(self, valid_agentic_entry):
+        """validate_agentic_matrix_entry should reject invalid entry."""
+        del valid_agentic_entry["tp"]
+        with pytest.raises(ValueError) as exc_info:
+            validate_agentic_matrix_entry(valid_agentic_entry)
+        assert "failed validation" in str(exc_info.value)
+
+
+# =============================================================================
+# Test AgenticCodingConfig
+# =============================================================================
+
+class TestAgenticCodingConfig:
+    """Tests for AgenticCodingConfig model."""
+
+    def test_valid_with_lmcache_and_none(self):
+        """Config with both lmcache and none offloading entries should pass."""
+        config = AgenticCodingConfig(**{
+            "duration": 1800,
+            "search-space": [
+                {"tp": 2, "offloading": "none", "conc-list": [2, 4, 8]},
+                {"tp": 2, "offloading": "lmcache_cpu", "conc-list": [2, 4, 8]},
+            ],
+        })
+        assert config.duration == 1800
+        assert len(config.search_space) == 2
+        assert config.search_space[0].offloading == "none"
+        assert config.search_space[1].offloading == "lmcache_cpu"
+
+    def test_duration_defaults_to_1800(self):
+        """Duration should default to 1800."""
+        config = AgenticCodingConfig(**{
+            "search-space": [
+                {"tp": 8, "offloading": "none", "conc-list": [4]},
+            ],
+        })
+        assert config.duration == 1800
+
+
+# =============================================================================
+# Test Master Config with Agentic Scenarios
+# =============================================================================
+
+class TestMasterConfigWithAgentic:
+    """Tests for master config entries containing agentic-coding scenarios."""
+
+    def test_single_node_with_agentic_only(self):
+        """Single node config with only agentic-coding scenario should pass."""
+        config = SingleNodeMasterConfigEntry(**{
+            "image": "vllm/vllm-openai-rocm:v0.19.1",
+            "model": "MiniMaxAI/MiniMax-M2.5",
+            "model-prefix": "minimaxm2.5",
+            "precision": "fp8",
+            "framework": "vllm",
+            "runner": "mi300x",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "duration": 1800,
+                        "search-space": [
+                            {"tp": 2, "offloading": "lmcache_cpu", "conc-list": [2, 4, 8]},
+                        ],
+                    }
+                ],
+            },
+        })
+        assert config.scenarios.agentic_coding is not None
+        assert len(config.scenarios.agentic_coding) == 1
+        assert config.scenarios.agentic_coding[0].search_space[0].offloading == "lmcache_cpu"
+
+    def test_single_node_with_both_scenarios(self):
+        """Single node config with both fixed-seq-len and agentic-coding should pass."""
+        config = SingleNodeMasterConfigEntry(**{
+            "image": "vllm/vllm-openai-rocm:v0.19.1",
+            "model": "MiniMaxAI/MiniMax-M2.5",
+            "model-prefix": "minimaxm2.5",
+            "precision": "fp8",
+            "framework": "vllm",
+            "runner": "mi300x",
+            "multinode": False,
+            "scenarios": {
+                "fixed-seq-len": [
+                    {
+                        "isl": 1024, "osl": 1024,
+                        "search-space": [{"tp": 2, "conc-start": 4, "conc-end": 64}],
+                    }
+                ],
+                "agentic-coding": [
+                    {
+                        "duration": 1800,
+                        "search-space": [
+                            {"tp": 2, "offloading": "none", "conc-list": [2, 4, 8]},
+                            {"tp": 2, "offloading": "lmcache_cpu", "conc-list": [2, 4, 8]},
+                        ],
+                    }
+                ],
+            },
+        })
+        assert config.scenarios.fixed_seq_len is not None
+        assert config.scenarios.agentic_coding is not None
+
+    def test_scenarios_must_have_at_least_one(self):
+        """Scenarios must have at least one scenario type."""
+        with pytest.raises(Exception) as exc_info:
+            SingleNodeMasterConfigEntry(**{
+                "image": "test",
+                "model": "test",
+                "model-prefix": "test",
+                "precision": "fp8",
+                "framework": "vllm",
+                "runner": "mi300x",
+                "multinode": False,
+                "scenarios": {},
+            })
+        assert "At least one scenario" in str(exc_info.value)

@@ -912,6 +912,19 @@ resolve_trace_source() {
     hf download --repo-type dataset "$dataset"
 }
 
+install_lmcache_hip() {
+    # LMCache PyPI wheel ships CUDA-only c_ops.so; must build from source for ROCm.
+    # `pip install lmcache` ignores BUILD_WITH_HIP and installs the pre-built CUDA wheel.
+    # We must clone and build with --no-build-isolation to get the HIP c_ops.so.
+    local lmcache_dir
+    lmcache_dir="$(mktemp -d)/LMCache"
+    echo "Building LMCache from source with HIP support..."
+    git clone --depth 1 https://github.com/LMCache/LMCache.git "$lmcache_dir"
+    SETUPTOOLS_SCM_PRETEND_VERSION=0.4.4 BUILD_WITH_HIP=1 \
+        agentic_pip_install -e "$lmcache_dir" --no-build-isolation
+    echo "LMCache HIP build complete."
+}
+
 install_agentic_deps() {
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
