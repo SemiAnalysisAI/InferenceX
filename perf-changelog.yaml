@@ -2493,3 +2493,9 @@
     - "Update image tag to vllm/vllm-openai:v0.20.2"
     - "Add DEP configs for B300 vLLM MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: XXX
