@@ -2548,3 +2548,9 @@
   description:
     - "Update vLLM image from v0.20.2 to v0.21.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1402
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11 to v0.5.12"
+  pr-link: XXX
