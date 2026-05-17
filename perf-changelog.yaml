@@ -2634,4 +2634,4 @@
     - glm5-fp8-h200-sglang
   description:
     - "Update SGLang image from custom glm5-hopper tag (59d old) to v0.5.12-cu130"
-  pr-link: PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1459
