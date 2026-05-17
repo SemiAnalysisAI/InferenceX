@@ -2633,7 +2633,6 @@
 - config-keys:
     - qwen3.5-bf16-b200-sglang
     - qwen3.5-bf16-b200-sglang-mtp
-    - qwen3.5-bf16-b200-sglang-agentic
   description:
     - "Update SGLang image from nightly-dev-20260216-d3bae71e (86d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1446
