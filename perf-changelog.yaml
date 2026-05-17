@@ -2634,4 +2634,4 @@
     - minimaxm2.5-fp4-b300-vllm
   description:
     - "Update vLLM image from v0.19.0-cu130 (26d old) to v0.21.0"
-  pr-link: PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1453
