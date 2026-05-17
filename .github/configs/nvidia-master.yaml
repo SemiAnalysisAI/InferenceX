@@ -2568,7 +2568,7 @@ kimik2.5-int4-b200-vllm-agentic:
 # Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
