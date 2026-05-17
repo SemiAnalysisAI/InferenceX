@@ -2914,7 +2914,7 @@ dsv4-fp8-h200-vllm-agentic:
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 
 dsv4-fp8-h200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200-dgxc
@@ -2938,7 +2938,7 @@ dsv4-fp8-h200-sglang:
 # runner pool, search space) and adds EAGLE speculative decoding via
 # --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
 dsv4-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200-dgxc
