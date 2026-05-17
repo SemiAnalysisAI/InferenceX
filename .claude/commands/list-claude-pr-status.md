@@ -2,7 +2,7 @@
 description: List Claude-authored PRs that haven't failed (ready or still running) with their actual check state
 ---
 
-List open PRs authored by Claude (branches starting with `claude/`) that have **not** had any check fail. Show each PR's actual state (READY when all checks finished green, RUNNING when sweeps are still queued/in-progress) along with a per-status check breakdown.
+List open PRs authored by Claude (branches starting with `claude/`) that have **not** had any check fail. Show each PR's actual state (READY when all checks finished green, RUNNING when sweeps are still queued/in-progress) along with a per-status check breakdown, rendered as a markdown table.
 
 ## Step 1 — list candidate `claude/*` PRs
 
@@ -49,13 +49,21 @@ while IFS=$'\t' read -r pr title; do
 done < /tmp/claude_pr_candidates.tsv
 ```
 
-## Step 3 — present the result
+## Step 3 — render markdown table
 
-Sort READY first, then RUNNING. Render a markdown table with columns:
+Print the result directly as a markdown table. READY rows first, then RUNNING. Each PR is a clickable link.
 
-| PR | State | Check breakdown | Title |
-|---|---|---|---|
+```bash
+{
+  printf '| PR | State | Check breakdown | Title |\n'
+  printf '|---|---|---|---|\n'
+  # READY first, then RUNNING; within each group keep input order (descending PR number from gh)
+  awk -F'\t' '$2 == "READY"'   /tmp/claude_pr_status.tsv
+  awk -F'\t' '$2 == "RUNNING"' /tmp/claude_pr_status.tsv
+} | awk -F'\t' 'NR<=2 {print; next}
+                {printf "| [#%s](https://github.com/SemiAnalysisAI/InferenceX/pull/%s) | %s | `%s` | %s |\n", $1, $1, $2, $3, $4}'
+```
 
-Each PR cell should be a markdown link to `https://github.com/SemiAnalysisAI/InferenceX/pull/<number>`. The check breakdown column should show the per-state counts (e.g. `SUCCESS=44 SKIPPED=7 NEUTRAL=1` or `SUCCESS=9 QUEUED=34 IN_PROGRESS=14 SKIPPED=6 NEUTRAL=1`).
+If `/tmp/claude_pr_status.tsv` is empty, print: `_No claude/* PRs are currently READY or RUNNING — all open Claude PRs have failures or no sweep results._`
 
-Do **not** auto-merge. This command is informational only.
+Output the resulting markdown table to the user verbatim. This command is informational only — do **not** auto-merge.
