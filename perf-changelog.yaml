@@ -2634,5 +2634,5 @@
     - glm5-fp8-mi355x-sglang
     - glm5-fp8-mi355x-sglang-mtp
   description:
-    - "Update SGLang ROCm image from v0.5.11/v0.5.10rc0 to v0.5.12-rocm720-mi35x-20260517"
+    - "Update SGLang ROCm image from v0.5.11/v0.5.10rc0 to v0.5.12-rocm720-mi35x"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
