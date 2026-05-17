@@ -2580,3 +2580,9 @@
   description:
     - "Update SGLang image from v0.5.11 to v0.5.12"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1424
+
+- config-keys:
+    - kimik2.5-int4-mi300x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1404
