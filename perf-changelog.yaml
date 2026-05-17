@@ -2634,4 +2634,4 @@
     - dsv4-fp4-b200-sglang
   description:
     - "Update SGLang image from custom deepseek-v4-blackwell@sha256:df18bfc4... (21d old) to v0.5.12-cu130"
-  pr-link: PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1450
