@@ -75,14 +75,15 @@ if [ "$merge_status" -ne 0 ]; then
         die "Unexpected conflict(s) in: ${unresolved} — only ${CHANGELOG} is auto-resolved"
     fi
     log "Resolving ${CHANGELOG} conflict"
-    python3 - "$CHANGELOG" "$PR" <<'PY'
+    python3 - "$CHANGELOG" "$PR" "$REPO" <<'PY'
 import re
 import subprocess
 import sys
 
 import yaml
 
-path, pr = sys.argv[1], sys.argv[2]
+path, pr, repo = sys.argv[1], sys.argv[2], sys.argv[3]
+pr_link_full = f"https://github.com/{repo}/pull/{pr}"
 
 
 def read_stage(stage: int) -> str:
@@ -136,7 +137,18 @@ for entry, block in zip(pr_data, pr_blocks):
         continue
     if entry_signature(entry) in main_sigs:
         continue  # Same logical entry already on main (e.g. XXX placeholder vs real pr-link).
-    contribs.append(block.replace("/pull/XXX", f"/pull/{pr}"))
+    # Force the pr-link line to the canonical full URL, regardless of whether
+    # the PR's entry used bare `XXX` or `/pull/XXX`.
+    new_block, n = re.subn(
+        r"^(\s*pr-link:).*$",
+        lambda m: f"{m.group(1)} {pr_link_full}",
+        block,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if n != 1:
+        sys.exit(f"Could not locate pr-link line in entry: {entry}")
+    contribs.append(new_block)
 
 if not contribs:
     sys.exit(
