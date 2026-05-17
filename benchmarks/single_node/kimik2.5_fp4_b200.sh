@@ -36,7 +36,7 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.98 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
