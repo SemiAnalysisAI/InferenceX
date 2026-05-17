@@ -546,6 +546,27 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
+kimik2.5-fp4-mi355x-vllm-eagle3-fp8:
+  image: vllm/vllm-openai-rocm:nightly-fb1ac806c55a6dc96fe92261b80c8550e9c39d2f
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, spec-decoding: eagle3_fp8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, spec-decoding: eagle3_fp8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, spec-decoding: eagle3_fp8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, spec-decoding: eagle3_fp8, conc-start: 4, conc-end: 64 }
+
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
   model: amd/Kimi-K2.5-MXFP4

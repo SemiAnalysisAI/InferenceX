@@ -2574,3 +2574,12 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1417
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-eagle3-fp8
+  description:
+    - "Add Kimi-K2.5 MXFP4 vLLM Eagle3 speculative decoding config with AMD Quark FP8 draft model on MI355X"
+    - "Image: vllm/vllm-openai-rocm:nightly-fb1ac806c55a6dc96fe92261b80c8550e9c39d2f"
+    - "Model: amd/Kimi-K2.5-MXFP4"
+    - "Draft model: amd/kimi-k2.5-eagle3-fp8 (num_speculative_tokens=6, draft_tp=1)"
+  pr-link: XXX
