@@ -4251,7 +4251,7 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b200
