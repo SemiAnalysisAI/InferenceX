@@ -1750,6 +1750,29 @@ dsv4-fp4-mi355x-sglang:
       - { tp: 8, dp-attn: true, conc-start: 16, conc-end: 256 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 16 }
 
+# Diverged from dsv4-fp4-mi355x-sglang (agentic-coding sibling). Reasons below;
+# the original dsv4-fp4-mi355x-sglang entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - scenarios: replaced fixed-seq-len with agentic-coding.
+# Image is identical to the base entry (rocm/sgl-dev DSv4 build).
+# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
+# comparability. Offload sweep is none-only (SGLang has no equivalent of
+# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
+dsv4-fp4-mi355x-sglang-agentic:
+  image: rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [16, 32, 64] }
+      - { tp: 8, dp-attn: true, offloading: none, conc-list: [64, 128, 256] }
+
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
 # stacked on #40871). Uses the ATOM MI355X image (ROCm 7.2.2, aiter with
 # MLA decode, MI355X GPU detection); vLLM is rebuilt from the PR branch
