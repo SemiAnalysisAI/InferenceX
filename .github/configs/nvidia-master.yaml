@@ -2634,7 +2634,7 @@ dsr1-fp8-b200-trt-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -4104,7 +4104,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -4127,7 +4127,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
