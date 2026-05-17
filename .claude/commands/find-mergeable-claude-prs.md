@@ -4,30 +4,40 @@ description: Find Claude-authored PRs with all-green full-sweep validation and c
 
 Find open PRs authored by Claude (branches starting with `claude/`) whose full-sweep validation has completed all-green, then prompt the user before merging.
 
-## Step 1 — fetch open PR status
+## Step 1 — list candidate `claude/*` PRs
+
+`gh pr list --json statusCheckRollup` truncates each PR's rollup, so it can't be trusted for the per-check filter. Use it only to get the candidate numbers, then re-query each PR individually.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
-  --json number,title,headRefName,statusCheckRollup > /tmp/claude_prs.json
+  --json number,title,headRefName \
+  --jq '.[] | select(.headRefName | startswith("claude/")) | .number' \
+  > /tmp/claude_pr_candidates.txt
 ```
 
-## Step 2 — filter for fully-validated `claude/*` PRs
+## Step 2 — per-PR all-green check
 
-A PR qualifies only if **all** of the following hold:
+For each candidate, fetch the full rollup with `gh pr view`. A PR qualifies only if **all** of the following hold:
 
-- `headRefName` starts with `claude/`
 - No check has conclusion `FAILURE`, `CANCELLED`, or `TIMED_OUT`
-- No check has status `QUEUED`, `IN_PROGRESS`, or `PENDING` (i.e. sweep is finished, not still running)
-- At least one `Run Sweep` check has conclusion `SUCCESS` (i.e. the sweep actually ran — not all skipped)
+- No check has status `QUEUED`, `IN_PROGRESS`, or `PENDING` (sweep finished, not still running)
+- At least one `Run Sweep` check has conclusion `SUCCESS` (sweep actually ran — not all skipped)
 
 ```bash
-jq -r '.[]
-  | select(.headRefName | startswith("claude/"))
-  | . as $p
-  | ([$p.statusCheckRollup[] | (.conclusion // .status)]) as $s
-  | select(($s | any(. == "FAILURE" or . == "CANCELLED" or . == "TIMED_OUT" or . == "QUEUED" or . == "IN_PROGRESS" or . == "PENDING")) | not)
-  | select([$p.statusCheckRollup[] | select(.workflowName == "Run Sweep" and (.conclusion // .status) == "SUCCESS")] | length > 0)
-  | "\(.number)\thttps://github.com/SemiAnalysisAI/InferenceX/pull/\(.number)\t\(.title)"' /tmp/claude_prs.json
+: > /tmp/claude_prs_green.txt
+while read -r pr; do
+  is_green=$(gh pr view "$pr" --repo SemiAnalysisAI/InferenceX --json statusCheckRollup --jq '
+    . as $p
+    | ([$p.statusCheckRollup[] | (.conclusion // .status)]) as $s
+    | ($s | any(. == "FAILURE" or . == "CANCELLED" or . == "TIMED_OUT" or . == "QUEUED" or . == "IN_PROGRESS" or . == "PENDING")) as $bad
+    | ([$p.statusCheckRollup[] | select(.workflowName == "Run Sweep" and (.conclusion // .status) == "SUCCESS")] | length > 0) as $swept
+    | (($bad | not) and $swept)')
+  if [ "$is_green" = "true" ]; then
+    title=$(gh pr view "$pr" --repo SemiAnalysisAI/InferenceX --json title --jq '.title')
+    printf '%s\thttps://github.com/SemiAnalysisAI/InferenceX/pull/%s\t%s\n' "$pr" "$pr" "$title" >> /tmp/claude_prs_green.txt
+  fi
+done < /tmp/claude_pr_candidates.txt
+cat /tmp/claude_prs_green.txt
 ```
 
 ## Step 3 — present the list and ask for confirmation
