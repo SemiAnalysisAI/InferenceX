@@ -4352,7 +4352,7 @@ minimaxm2.5-fp8-b300-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
