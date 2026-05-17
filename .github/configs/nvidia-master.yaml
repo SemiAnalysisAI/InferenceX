@@ -2844,7 +2844,7 @@ dsr1-fp8-h200-sglang:
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu129
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2868,7 +2868,7 @@ dsv4-fp8-h200-vllm:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
