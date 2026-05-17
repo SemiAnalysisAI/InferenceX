@@ -3022,3 +3022,10 @@
   description:
     - "Update SGLang image from nightly-dev-cu13-20260518-c67b2870 to nightly-dev-cu13-20260519-dbac4647"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1492
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.10.post1-cu130 / v0.5.11-cu130 (30d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1451
