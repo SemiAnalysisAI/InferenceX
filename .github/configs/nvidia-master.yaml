@@ -4303,7 +4303,7 @@ minimaxm2.5-fp8-b200-vllm-agentic:
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
