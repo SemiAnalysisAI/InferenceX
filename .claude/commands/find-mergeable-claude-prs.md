@@ -23,14 +23,17 @@ For each candidate, fetch the full rollup with `gh pr view`. A PR qualifies only
 - No check has status `QUEUED`, `IN_PROGRESS`, or `PENDING` (sweep finished, not still running)
 - At least one `Run Sweep` check has conclusion `SUCCESS` (sweep actually ran — not all skipped)
 
+Note: `gh` returns `conclusion: ""` (empty string, not `null`) for in-flight checks, so jq's `//` operator does **not** fall through to `.status`. Each check's effective state must be computed as `if conclusion is non-empty then conclusion else status`.
+
 ```bash
 : > /tmp/claude_prs_green.txt
 while read -r pr; do
   is_green=$(gh pr view "$pr" --repo SemiAnalysisAI/InferenceX --json statusCheckRollup --jq '
+    def state: if (.conclusion // "") != "" then .conclusion else .status end;
     . as $p
-    | ([$p.statusCheckRollup[] | (.conclusion // .status)]) as $s
+    | ([$p.statusCheckRollup[] | state]) as $s
     | ($s | any(. == "FAILURE" or . == "CANCELLED" or . == "TIMED_OUT" or . == "QUEUED" or . == "IN_PROGRESS" or . == "PENDING")) as $bad
-    | ([$p.statusCheckRollup[] | select(.workflowName == "Run Sweep" and (.conclusion // .status) == "SUCCESS")] | length > 0) as $swept
+    | ([$p.statusCheckRollup[] | select(.workflowName == "Run Sweep" and (state) == "SUCCESS")] | length > 0) as $swept
     | (($bad | not) and $swept)')
   if [ "$is_green" = "true" ]; then
     title=$(gh pr view "$pr" --repo SemiAnalysisAI/InferenceX --json title --jq '.title')
