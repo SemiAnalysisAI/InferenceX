@@ -2635,4 +2635,4 @@
     - glm5-fp8-b200-sglang-mtp
   description:
     - "Update SGLang image from nightly-dev-cu13-20260317-1eea7448 (33d/29d old) to v0.5.12-cu130"
-  pr-link: PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1447
