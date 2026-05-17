@@ -1696,7 +1696,7 @@ dsr1-fp4-b200-sglang:
       - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsv4-fp4-b200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
