@@ -474,7 +474,7 @@ glm5.1-fp4-mi355x-sglang:
 # (either main had none or had a different conc/offload sweep).
 # The original glm5.1-fp4-mi355x-sglang entry stays byte-identical to origin/main.
 glm5.1-fp4-mi355x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
