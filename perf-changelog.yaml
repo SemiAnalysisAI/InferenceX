@@ -2487,9 +2487,126 @@
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1322
   
+
 - config-keys:
     - dsv4-fp4-b300-vllm-mtp
   description:
     - "Update image tag to vllm/vllm-openai:v0.20.2"
     - "Add DEP configs for B300 vLLM MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.19.0 to v0.21.0"
+  pr-link: XXX
+
+- config-keys:
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1400
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1397
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1396
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.17.0 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1406
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1407
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1408
+
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.19.1 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1409
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1402
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+  pr-link: XXX
+
+- config-keys:
+    - kimik2.5-int4-h200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1401
+
+- config-keys:
+    - dsr1-fp8-b300-sglang
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1419
+
+- config-keys:
+    - glm5-fp4-b200-sglang
+    - glm5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1417
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11 to v0.5.12"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1424
+
+- config-keys:
+    - gptoss-fp4-h100-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1398
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1430
+
+- config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1399
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1423
+
+- config-keys:
+    - qwen3.5-bf16-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1429
