@@ -2814,3 +2814,9 @@
   description:
     - "Update vLLM image from v0.19.0-cu130 (26d old) to v0.21.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1453
+
+- config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang ROCm image from v0.5.10rc0-rocm720-mi35x-20260415 to v0.5.12-rocm720-mi35x-20260517"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1441
