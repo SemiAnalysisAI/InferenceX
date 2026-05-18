@@ -919,6 +919,16 @@ resolve_trace_source() {
 }
 
 install_agentic_deps() {
+    # vllm/vllm-openai container ships without git, but pip's editable
+    # install (-e) of the aiperf submodule below invokes `git version`
+    # to record direct_url.json provenance and bails if git is missing:
+    #   ERROR: Cannot find command 'git' - do you have 'git' installed
+    #   and in your PATH?
+    # Install on demand; cheap no-op when git is already present
+    # (e.g. on AMD images that ship it).
+    if ! command -v git >/dev/null 2>&1; then
+        apt-get update -qq && apt-get install -y -qq git
+    fi
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
     # Editable install of aiperf from the submodule — gives us the
