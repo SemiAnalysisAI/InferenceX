@@ -2659,4 +2659,4 @@
     - qwen3.5-fp4-b200-sglang-mtp
   description:
     - "Update SGLang image from nightly-dev-20260422-de962f32 (17d/13d old) to v0.5.12-cu130"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1474
