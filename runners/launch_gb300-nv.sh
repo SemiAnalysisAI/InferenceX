@@ -77,17 +77,18 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses upstream NVIDIA/srt-slurm@main, which has
-    # caught up on every schema feature we need:
-    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
-    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (so our vllm recipes can pin the same
-    #     ai-dynamo wheel as the fixed-seq-len path)
-    #   - default_bash_preamble (no more "Unknown field" warning)
-    # Pin to HEAD as of when this landed; bump as upstream evolves.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/agentic-mem-0,
+    # which is upstream NVIDIA/srt-slurm@main (127597c2926467) plus a
+    # single patch: pass --mem=0 to all container worker sruns so they
+    # get the full node memory budget instead of cpus_per_task ×
+    # DefMemPerCPU (= 4 GB on CW gb300, which OOM-kills any vLLM
+    # worker loading a multi-GB model). R7 of the agentic sweep hit
+    # this with 6/8 workers OOM-killed; sacct showed AllocTRES mem=4G
+    # per worker. Bump as upstream evolves; consider PR'ing the
+    # --mem=0 change upstream.
+    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout 127597c2926467db06e6707e0aa9227261c6c02a
+    git checkout 96c443aedeacdf65205799ba3b475190aa6f09b5
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
