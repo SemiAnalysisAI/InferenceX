@@ -2146,7 +2146,7 @@ qwen3.5-fp8-b200-sglang-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2167,7 +2167,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
