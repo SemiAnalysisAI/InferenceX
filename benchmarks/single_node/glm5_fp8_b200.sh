@@ -45,6 +45,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --tool-call-parser glm47 \
 --reasoning-parser glm45 \
 --kv-cache-dtype fp8_e4m3 --quantization fp8 \
+--fp8-gemm-runner-backend cutlass \
 --attention-backend nsa \
 --nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
 --moe-runner-backend flashinfer_trtllm \
