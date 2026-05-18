@@ -2834,3 +2834,10 @@
     - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
     - "Add --mm-attention-backend triton_attn to bypass flash-attn cute sm_103 assertion (see sgl-project/sglang#25564)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1422
+
+- config-keys:
+    - qwen3.5-bf16-h200-sglang
+    - qwen3.5-bf16-h200-sglang-mtp
+  description:
+    - "Add Qwen-3.5-397B-A17B BF16 sglang recipes (off + MTP/EAGLE) for H200 on lmsysorg/sglang:v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
