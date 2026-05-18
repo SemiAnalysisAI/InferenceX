@@ -2,6 +2,8 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
+
 ## Project Overview
 
 InferenceX is an open-source automated benchmarking system that tracks LLM inference performance across hardware (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results published to https://inferencex.com/.
