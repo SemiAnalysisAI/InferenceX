@@ -2711,3 +2711,9 @@
     - "Update vLLM image from v0.20.2 to v0.21.0"
     - "Add VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 to disable aggressive CUDA-graph memory profiler that OOMs the KV cache"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1395
+
+- config-keys:
+    - qwen3.5-bf16-mi325x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling of qwen3.5-bf16-mi325x-sglang"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
