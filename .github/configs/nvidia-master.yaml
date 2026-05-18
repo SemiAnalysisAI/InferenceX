@@ -8715,12 +8715,11 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  # gb300-nv (not generic gb300) — the generic label is shared by both NV
-  # and CW runner pools, so runs-on: gb300 lets CW runners pick up shards.
-  # The gb300-nv label is on NV runners only (per .github/configs/runners.yaml
-  # + actual runner label listings). Pins agentic to the NVIDIA cluster
-  # for initial validation. Drop -nv suffix to widen later.
-  runner: gb300-nv
+  # TEMP on chore/agentx-v0.3-cw-test: pinned to gb300-cw to debug the
+  # CoreWeave path in parallel with the gb300-nv main branch. Do NOT
+  # cherry-pick this commit back to chore/agentx-v0.3 — that branch
+  # stays on gb300-nv.
+  runner: gb300-cw
   precision: fp4
   framework: dynamo-vllm
   multinode: true
