@@ -78,20 +78,32 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses upstream NVIDIA/srt-slurm@main, which has
-    # caught up on every schema feature we need:
+    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
+    # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
+    # (`srtctl apply --no-preflight`) — needed because:
+    #
+    #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
+    #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
+    #   - /scratch only exists on GB300 compute nodes; it is NOT mounted
+    #     on the GHA runner pod that invokes srtctl.
+    #   - srtctl's pre-submit model check (_preflight_model in
+    #     src/srtctl/core/validation.py) does a Path.is_dir() in-process
+    #     on the invoking node — so it fails before sbatch is ever
+    #     called with "Model alias 'X' resolved to '/scratch/...',
+    #     but that path is unavailable".
+    #   - --no-preflight skips just the optional Python-level FS check.
+    #     vLLM still fails loudly at runtime if the path is genuinely
+    #     missing on the compute node.
+    #
+    # All other upstream schema features we need are inherited from
+    # NVIDIA HEAD:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
-    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (so our vllm recipes can pin the same
-    #     ai-dynamo wheel as the fixed-seq-len path)
-    #   - default_bash_preamble (no more "Unknown field" warning)
-    # Per-worker --mem=0 is set via `srun_options:` in the recipe yaml
-    # (a documented top-level field that srtctl threads through to
-    # start_srun_process → see docs/config-reference.md#srun_options).
-    # Pin to HEAD as of when this landed; bump as upstream evolves.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+    #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
+    #   - sbatch_directives / srun_options (top-level recipe fields)
+    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout 127597c2926467db06e6707e0aa9227261c6c02a
+    git checkout 854b3fdca82f6496190820e3a0eb08668d04bdb7
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
@@ -177,7 +189,18 @@ fi
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+# --no-preflight is only safe on the agentic path, where the recipe
+# resolves model.path to /scratch (compute-node-only NVMe) and the
+# srtctl process running on the GHA runner pod can't see it. Fixed-
+# seq-len recipes still resolve model.path to an NFS-visible location
+# where the precheck is a useful sanity guard, so keep enforcement on
+# for them.
+PREFLIGHT_FLAG=""
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    PREFLIGHT_FLAG="--no-preflight"
+fi
+
+SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
