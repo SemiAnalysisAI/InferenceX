@@ -3055,4 +3055,4 @@
     - qwen3.5-fp8-mi300x-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling of qwen3.5-fp8-mi300x-sglang"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1482
