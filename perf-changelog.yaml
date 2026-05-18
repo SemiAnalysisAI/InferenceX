@@ -2840,4 +2840,4 @@
     - qwen3.5-bf16-h200-sglang-mtp
   description:
     - "Add Qwen-3.5-397B-A17B BF16 sglang recipes (off + MTP/EAGLE) for H200 on lmsysorg/sglang:v0.5.12-cu130"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1508
