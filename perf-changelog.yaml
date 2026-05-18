@@ -2658,4 +2658,4 @@
     - dsv4-fp8-mi355x-vllm
   description:
     - "Update vLLM image from custom rocm/atom (20d old) to vllm/vllm-openai-rocm:v0.21.0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1472
