@@ -885,7 +885,7 @@ except Exception as e:
 # install_mori
 install_recipe_deps
 install_amd_quark
-patch_mori_fp8_compat
+# patch_mori_fp8_compat
 patch_moriio_save_kv_timeout
 patch_moriio_transfer_timeout
 patch_moriio_load_kv_timeout
