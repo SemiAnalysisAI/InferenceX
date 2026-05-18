@@ -1980,26 +1980,22 @@ dsr1-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
 
-# NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# lists B200 (not B300) as the Blackwell target. This config reuses the
-# B200 Pro FP4 Max-Throughput recipe (DP=8 + DeepEP, no MTP) on B300
-# until a B300-specific recipe ships. Prefix caching is disabled.
-# Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
+# DeepSeek-V4-Pro on B300 with sglang (non-MTP).
+# Uses nightly image with megamoe backend for high-concurrency profiles.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
+  image: lmsysorg/sglang:nightly-dev-cu13-20260518-c67b2870
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
   precision: fp4
   framework: sglang
   multinode: false
-  # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh by CONC:
-  #   low-latency    (CONC <= 32):       TP-only
-  #   balanced       (32 < CONC <= 128): + DP-attn
-  #   max-throughput (CONC > 128):       + DP-attn
-  # Split so result filenames (ep=, dpa=) accurately reflect the recipe.
-  # ep is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
+  # Recipes are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh
+  # by CONC:
+  #   CONC 1|32:         TP-only, flashinfer_mxfp4
+  #   CONC 512:          DP-attn, flashinfer_mxfp4
+  #   CONC 2048-8192:    DP-attn, megamoe
+  # ep is implicit in sglang: --moe-a2a-backend megamoe forces ep_size=tp_size,
   # while low-latency leaves ep_size at the default of 1.
   scenarios:
     fixed-seq-len:
@@ -2008,14 +2004,14 @@ dsv4-fp4-b300-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
