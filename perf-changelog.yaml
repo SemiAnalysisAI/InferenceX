@@ -2655,6 +2655,167 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
 
 - config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.9-rocm700-mi30x to v0.5.12-rocm700-mi30x"
+    - "Workaround LlamaTokenizer.all_special_tokens_extended removal in newer transformers: prefer backend_request_func.get_tokenizer over vLLM's"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1428
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+    - "Temporarily disable agentic-coding scenario (blocked by e2e-tests.yml artifact-name mismatch)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1415
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang
+    - qwen3.5-bf16-b200-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-20260216-d3bae71e (86d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1446
+
+- config-keys:
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.17.0 (70d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1467
+
+- config-keys:
+    - kimik2.5-int4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 (52d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1468
+
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 (50d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1469
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Update vLLM image from v0.19.0-cu130 (25d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1449
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.19.0-cu130 (25d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1448
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+    - "Add VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 to disable aggressive CUDA-graph memory profiler that OOMs the KV cache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1395
+
+- config-keys:
+    - qwen3.5-bf16-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1426
+
+- config-keys:
+    - glm5-fp8-h200-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for glm5-fp8-h200-sglang on lmsysorg/sglang:v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1480
+
+- config-keys:
+    - qwen3.5-bf16-mi325x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling of qwen3.5-bf16-mi325x-sglang"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1483
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Update vLLM image from v0.19.0-cu130 (27d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1452
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-vllm
+  description:
+    - "Update vLLM image from v0.19.0-cu130 (26d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1454
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.9-rocm700-mi30x to v0.5.12-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1425
+
+- config-keys:
+    - glm5-fp8-b300-sglang
+    - glm5-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+    - "Disable JIT DeepGemm (SGL_ENABLE_JIT_DEEPGEMM=0) to bypass v0.5.12 DeepGemm TMA-descriptor regression on B300 — see sgl-project/sglang#25551"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1421
+
+- config-keys:
+    - dsr1-fp8-b200-trt
+    - dsr1-fp8-b200-trt-mtp
+  description:
+    - "Update TensorRT-LLM image (off: v1.2.0rc6.post2 109d / mtp: v1.2.0rc6.post3 102d) to v1.3.0rc14 (latest pre-release)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1488
+
+- config-keys:
+    - dsr1-fp8-h200-trt
+    - dsr1-fp8-h200-trt-mtp
+  description:
+    - "Update TensorRT-LLM image from v1.1.0rc2.post2 (154d/124d old) to v1.3.0rc14 (latest pre-release)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1487
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+    - dsv4-fp4-b200-vllm-mtp
+  description:
+    - "Update vLLM image from v0.20.0-cu130 (20d/18d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1476
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-20260422-de962f32 (17d/13d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1474
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-20260422-de962f32 (18d/12d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1473
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 (1d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1466
+
+- config-keys:
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Update vLLM image from v0.20.0-cu130 (14d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1457
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - "Update vLLM image from v0.20.0-cu130 (18d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1456
+
+- config-keys:
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Update vLLM image from v0.19.0-cu130 (26d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1453
+
+- config-keys:
     - glm5-fp8-mi355x-sglang
     - glm5-fp8-mi355x-sglang-mtp
   description:

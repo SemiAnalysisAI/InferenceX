@@ -66,7 +66,7 @@ Seen on: #1460 (dsv4-fp8-h200-sglang+mtp).
 
 ## 4. Upstream sglang v0.5.12 B300 regressions
 
-Two distinct upstream regressions on NVIDIA B300 (Blackwell, `sm_120`) shipped in `lmsysorg/sglang:v0.5.12-cu130`:
+Three distinct upstream regressions on NVIDIA B300 (Blackwell Ultra, `sm_103` — compute capability 10.3) shipped in `lmsysorg/sglang:v0.5.12-cu130`. (sm_120 is for *consumer* Blackwell / RTX 50 series, not B300 — don't propagate that.)
 
 ### 4a. DeepGemm TMA-descriptor crash (GLM-5-FP8)
 **Symptom:** CUDA graph capture aborts with `CUDA_ERROR_ILLEGAL_ADDRESS (700)` at `/deepgemm/csrc/.../runtime_utils.hpp:143` on the **first batch size** for **every TP rank**. Server never serves a prompt.
@@ -86,7 +86,7 @@ Filed upstream: sgl-project/sglang#25551. Seen on #1421.
 2. Comment out the MTP/EAGLE scenarios on B300 in the recipe.
 3. Pin to v0.5.11-cu130.
 
-Seen on #1420.
+Filed upstream: sgl-project/sglang#25563. Seen on #1420.
 
 ### 4c. flash_attn SM-arch assertion (qwen3.5-bf16)
 **Symptom:** All 4 TP workers AssertionError on first forward pass:
@@ -94,9 +94,9 @@ Seen on #1420.
 File "/opt/venv/.../sglang/srt/layers/attention/flashattention_backend.py:..."
   assert sm_100 <= arch <= sm_110f
 ```
-B300 is `sm_120`, outside the asserted range. Server never becomes healthy; warmup times out at 600s.
+B300 is `sm_103` (compute capability 10.3, Blackwell Ultra) — which is *nominally inside* the asserted `sm_100..sm_110f` range, yet the assertion still fires. Best guess is the cute kernel's `Arch.sm_110f` set only matches the architecture-specific feature-flag variants it was compiled for (e.g. `sm_100`, `sm_100f`, `sm_110`, `sm_110f`) and `sm_103` / `sm_103a` isn't in that explicit list. Server never becomes healthy; warmup times out at 600s.
 
-**Fix:** Needs sglang image with flash_attn supporting `sm_120` — no local workaround. Pin to v0.5.11-cu130 in the meantime.
+**Fix:** Needs an sglang image with `flash_attn` that recognises `sm_103` / `sm_103a` — no local workaround. Pin to `v0.5.11-cu130` in the meantime.
 
 Seen on #1422.
 
