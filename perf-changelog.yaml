@@ -2582,7 +2582,62 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1424
 
 - config-keys:
-    - qwen3.5-bf16-mi300x-sglang
+    - gptoss-fp4-h100-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1398
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
   description:
     - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1430
+
+- config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1399
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1423
+
+- config-keys:
+    - qwen3.5-bf16-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1429
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1416
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.15.1 to v0.20.2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1394
+
+- config-keys:
+    - kimik2.5-int4-mi300x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.18.0 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1404
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1427
+
+- config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Update SGLang image from custom glm5-hopper tag (59d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1459
