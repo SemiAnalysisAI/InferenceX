@@ -149,6 +149,14 @@ sbatch_directives:
   cpus-per-task: "72"
 srun_options:
   mem: "0"
+  # gb300-nv: pyxis maps the calling user (sa-shared) into the container as
+  # uid 345200007. dpkg refuses to run without EUID 0 even though
+  # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the agentic_srt
+  # apt-get install git step fails. --container-remap-root asks pyxis to
+  # remap us to uid 0 inside the container, matching the gb300-cw behavior.
+  # No-op on cw (already root). srt-slurm renders empty-string values as
+  # flag-only srun args (see core/slurm.py:250).
+  container-remap-root: ""
 
 benchmark:
   type: custom
