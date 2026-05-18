@@ -63,14 +63,17 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses the cquil11 fork because that's the only
-    # srt-slurm build that knows about benchmark.type=custom (the hook
-    # that hands control off to benchmarks/multi_node/agentic_srt.sh).
-    # Overlay our local agentic recipes so iteration stays in this repo;
-    # the fork's vllm/deepseek-v4/agentic/ directory is shadowed by ours.
-    git clone --branch cam/sa-submission-q2-2026 --single-branch \
-        https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    # Agentic multi-node uses upstream NVIDIA/srt-slurm@main, which has
+    # caught up on every schema feature we need:
+    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+    #   - DynamoConfig.wheel (so our vllm recipes can pin the same
+    #     ai-dynamo wheel as the fixed-seq-len path)
+    #   - default_bash_preamble (no more "Unknown field" warning)
+    # Pin to HEAD as of when this landed; bump as upstream evolves.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
+    git checkout 127597c0e6d3c1b3ffd7ac02dd0fea2d2fd62f74
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
@@ -93,7 +96,11 @@ export PATH="$UV_INSTALL_DIR:$PATH"
 
 VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
 rm -rf "$VENV_DIR"
-uv venv "$VENV_DIR"
+# --seed installs pip+setuptools+wheel into the venv. Without it, the
+# upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
+# recipe has dynamo.wheel set) fails with "No module named pip" because
+# uv venv defaults to no-pip.
+uv venv --seed "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 uv pip install -e .
 

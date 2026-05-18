@@ -12,17 +12,16 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/mnt/vast/models/dsv4"
 
     if [[ "$IS_AGENTIC" == "1" ]]; then
-        # Agentic multi-node uses the cquil11/srt-slurm-nv fork — it's the
-        # only srt-slurm build with benchmark.type=custom (the hook that
-        # hands control off to benchmarks/multi_node/agentic_srt.sh).
-        # cam/sa-submission-q2-2026 also carries the cherry-picked
-        # `dynamo.wheel` support (NVIDIA upstream commit 0060f857) so our
-        # vllm recipes can pin the same ai-dynamo wheel as the fixed-seq-len
-        # path. The fork's ClusterConfig still warns "Unknown field" on
-        # default_bash_preamble; that's a non-fatal warning until we
-        # cherry-pick that schema addition too.
-        SRT_SLURM_RECIPES_REPO="https://github.com/cquil11/srt-slurm-nv.git"
-        SRT_SLURM_RECIPES_REF="cam/sa-submission-q2-2026"
+        # Agentic multi-node uses upstream NVIDIA/srt-slurm@main, which has
+        # caught up on every schema feature we need:
+        #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+        #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+        #   - DynamoConfig.wheel (so our vllm recipes can pin the same
+        #     ai-dynamo wheel as the fixed-seq-len path)
+        #   - default_bash_preamble (no more "Unknown field" warning)
+        # Pin to HEAD as of when this landed; bump as upstream evolves.
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="127597c0e6d3c1b3ffd7ac02dd0fea2d2fd62f74"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic"
         SRT_RECIPE_DST="recipes/vllm/deepseek-v4/agentic"
     elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
@@ -146,7 +145,11 @@ if [ -e "$HOME/.local/bin/uv" ]; then
     exit 1
 fi
 
-uv venv
+# --seed installs pip+setuptools+wheel into the venv. Without it, the
+# upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
+# recipe has dynamo.wheel set) fails with "No module named pip" because
+# uv venv defaults to no-pip.
+uv venv --seed
 source .venv/bin/activate
 uv pip install -e .
 
