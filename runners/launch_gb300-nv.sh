@@ -42,8 +42,14 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# Squash files live on the Vast NFS storage; use the /data/ mount
+# (not /home/sa-shared/) — both are the same backing storage but the
+# /home/sa-shared/ mount has a chronic ELOOP / "Too many levels of
+# symbolic links" bug from workflow worker NFS sessions on lockfiles
+# AND data files. /data/ has a separate NFS client cache that isn't
+# poisoned. See feedback_gb300_nfs_eloop_workaround for diagnosis.
+SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Run the import on a compute node via srun, not on the login node:
 # the login node is x86_64 while the compute nodes are aarch64, so the
