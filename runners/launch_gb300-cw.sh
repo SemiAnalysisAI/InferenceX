@@ -11,7 +11,21 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on shared storage; avoid node-local /scratch symlink drift.
     export MODEL_PATH="/mnt/vast/models/dsv4"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        # Agentic multi-node uses the cquil11/srt-slurm-nv fork — it's the
+        # only srt-slurm build with benchmark.type=custom (the hook that
+        # hands control off to benchmarks/multi_node/agentic_srt.sh).
+        # cam/sa-submission-q2-2026 also carries the cherry-picked
+        # `dynamo.wheel` support (NVIDIA upstream commit 0060f857) so our
+        # vllm recipes can pin the same ai-dynamo wheel as the fixed-seq-len
+        # path. The fork's ClusterConfig still warns "Unknown field" on
+        # default_bash_preamble; that's a non-fatal warning until we
+        # cherry-pick that schema addition too.
+        SRT_SLURM_RECIPES_REPO="https://github.com/cquil11/srt-slurm-nv.git"
+        SRT_SLURM_RECIPES_REF="cam/sa-submission-q2-2026"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic"
+        SRT_RECIPE_DST="recipes/vllm/deepseek-v4/agentic"
+    elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
         SRT_SLURM_RECIPES_REF="main"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
