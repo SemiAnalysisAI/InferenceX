@@ -85,7 +85,7 @@ dsr1-fp8-mi300x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.9-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
@@ -527,7 +527,7 @@ kimik2.5-int4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.18.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x
@@ -872,7 +872,7 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 8, conc-start: 1, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.17.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi325x
