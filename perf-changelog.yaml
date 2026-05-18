@@ -2729,4 +2729,4 @@
     - glm5-fp4-mi355x-sglang-mtp
   description:
     - "Add GLM-5 MXFP4 SGLang ROCm recipes (off + MTP/EAGLE) for MI355X on lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517 (model amd/GLM-5-MXFP4)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1493
