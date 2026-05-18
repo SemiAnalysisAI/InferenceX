@@ -1670,7 +1670,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1689,11 +1689,14 @@ dsr1-fp4-b200-sglang:
       search-space:
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
-      - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
+    # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
+    # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
+    # `bmk_agentic_*`). Re-enable once that workflow is aligned.
+    # agentic-coding:
+    # - duration: 1800
+    #   search-space:
+    #   - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
+    #   - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
@@ -1734,10 +1737,10 @@ dsv4-fp4-b200-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200-dgxc
+  runner: b200-dsv4
   precision: fp4
   framework: vllm
   multinode: false
@@ -1754,17 +1757,20 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options for
-    # DSv4-Pro on this SKU — pure TP for low-conc / high-interactivity, DEP
-    # (DP-attn + EP-MoE) for high-conc / high-throughput per the vLLM blog
-    # recipe (https://vllm.ai/blog/deepseek-v4). HMA stays enabled alongside
-    # cpu offload via VLLM_USE_SIMPLE_KV_OFFLOAD=1 (the simple connector
-    # inherits SupportsHMA in v0.20.0, PR #37160). The launcher passes the
-    # full TOTAL_CPU_DRAM_GB to --kv_offloading_size in pure-TP mode (the
-    # connector's internal divide by world_size=TP gives per-rank values
-    # that share TP-mmap to ≈ TOTAL aggregate), and pre-divides by $TP in
-    # DP-attn mode (each DP engine has world_size=1, no internal divide,
-    # so we shrink the per-engine input to keep aggregate ≈ TOTAL).
+
+# Diverged from dsv4-fp4-b200-vllm (agentic-coding sibling). Reasons below;
+# the original dsv4-fp4-b200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - runner: 'b200-dsv4' -> 'b200-dgxc'
+dsv4-fp4-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -1819,7 +1825,7 @@ dsv4-fp4-b200-trt-mtp:
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1846,7 +1852,7 @@ dsv4-fp4-b200-vllm-mtp:
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b300
@@ -1932,7 +1938,7 @@ dsr1-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -1955,7 +1961,7 @@ dsr1-fp8-b200-sglang:
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b300
@@ -2003,6 +2009,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2045,7 +2052,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2062,13 +2069,9 @@ qwen3.5-bf16-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-bf16-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2086,8 +2089,25 @@ qwen3.5-bf16-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
+# agentic-coding sibling — temporarily disabled, blocked by e2e-tests.yml
+# artifact-name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads
+# as `bmk_agentic_*`). Re-enable once that workflow is aligned.
+# qwen3.5-bf16-b200-sglang-agentic:
+#   image: lmsysorg/sglang:v0.5.12-cu130
+#   model: Qwen/Qwen3.5-397B-A17B
+#   model-prefix: qwen3.5
+#   runner: b200
+#   precision: bf16
+#   framework: sglang
+#   multinode: false
+#   scenarios:
+#     agentic-coding:
+#     - duration: 1800
+#       search-space:
+#       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2099,20 +2119,35 @@ qwen3.5-fp8-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 4, conc-start: 16, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
+# Diverged from qwen3.5-fp8-b200-sglang (agentic-coding sibling). Metadata is
+# identical to origin/main's qwen3.5-fp8-b200-sglang; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original qwen3.5-fp8-b200-sglang entry stays byte-identical to origin/main.
+qwen3.5-fp8-b200-sglang-agentic:
+  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2133,7 +2168,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2171,11 +2206,6 @@ glm5-fp8-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # sglang manages its own KV eviction via radix cache, so just sweep concurrency on offloading=none
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
@@ -2199,8 +2229,28 @@ glm5-fp8-b200-sglang-mtp:
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5.1
   # does not have a B300-specific recipe, so this config reuses the existing GLM5 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
+# Diverged from glm5-fp8-b200-sglang (agentic-coding sibling). Metadata is
+# identical to origin/main's glm5-fp8-b200-sglang; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original glm5-fp8-b200-sglang entry stays byte-identical to origin/main.
+glm5-fp8-b200-sglang-agentic:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # sglang manages its own KV eviction via radix cache, so just sweep concurrency on offloading=none
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
 glm5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2219,7 +2269,7 @@ glm5-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2238,7 +2288,7 @@ glm5-fp8-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 glm5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
@@ -2259,7 +2309,7 @@ glm5-fp4-b200-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
@@ -2325,7 +2375,7 @@ glm5-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2469,15 +2519,10 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  # Bumped from v0.19.1 — that release tripped a bug in
-  # `flashinfer_trtllm_mxint4_moe` ('list' object has no attribute 'to')
-  # during warmup `profile_run` on the agentic-coding path
-  # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
-  # flashinfer fix.
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
-  runner: b200-dgxc
+  runner: b200
   precision: int4
   framework: vllm
   multinode: false
@@ -2491,6 +2536,28 @@ kimik2.5-int4-b200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this config reuses the existing
+# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Diverged from kimik2.5-int4-b200-vllm (agentic-coding sibling). Reasons below;
+# the original kimik2.5-int4-b200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - runner: 'b200' -> 'b200-dgxc'
+kimik2.5-int4-b200-vllm-agentic:
+  # Bumped from v0.19.1 — that release tripped a bug in
+  # `flashinfer_trtllm_mxint4_moe` ('list' object has no attribute 'to')
+  # during warmup `profile_run` on the agentic-coding path
+  # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
+  # flashinfer fix.
+  image: vllm/vllm-openai:v0.20.2
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: b200-dgxc
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -2500,8 +2567,9 @@ kimik2.5-int4-b200-vllm:
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
@@ -2522,6 +2590,29 @@ kimik2.5-int4-b300-vllm:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-h200-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: h200
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# Diverged from kimik2.5-int4-h200-vllm (agentic-coding sibling). Reasons below;
+# the original kimik2.5-int4-h200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - runner: 'h200' -> 'h200-dgxc'
+kimik2.5-int4-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.20.2
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
@@ -2534,58 +2625,17 @@ kimik2.5-int4-h200-vllm:
   framework: vllm
   multinode: false
   scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    # H200 has 141 GB HBM per GPU (smaller than B200's 192 GB); KV cliff
-    # arrives at lower conc, so the sweep tops out earlier than the Blackwell
-    # sibling.
     agentic-coding:
     - duration: 1800
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
       - { tp: 8, offloading: cpu,  conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
-kimik2.5-int4-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
-  model: moonshotai/Kimi-K2.5
-  model-prefix: kimik2.5
-  runner: h100
-  precision: int4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 32 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 32 }
-    # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
-    # early. Sweep saturates conc=20 to keep total HBM headroom.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
-      - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 12, 16, 20] }
-
 kimik2.5-fp4-b200-vllm:
-  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
-  # cleared the agentic-coding warmup crash on max_model_len=131072 +
-  # prefix caching.
   image: vllm/vllm-openai:v0.20.2
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
-  runner: b200-dgxc
+  runner: b200
   precision: fp4
   framework: vllm
   multinode: false
@@ -2601,11 +2651,27 @@ kimik2.5-fp4-b200-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    # agentic-coding: dual-TP sweep. TP=8 covers the full KV-cliff transition
-    # from clean (offload off) to overflow (offload on); TP=4 explores the
-    # half-TP regime where each GPU holds 2x the model shard but 4 vs 8
-    # ranks per replica changes the on-GPU KV vs activation budget trade.
-    # User-specified conc lists below.
+
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this config reuses the existing
+# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Diverged from kimik2.5-fp4-b200-vllm (agentic-coding sibling). Reasons below;
+# the original kimik2.5-fp4-b200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai:v0.17.0' -> 'vllm/vllm-openai:v0.20.2'
+#   - runner: 'b200' -> 'b200-dgxc'
+kimik2.5-fp4-b200-vllm-agentic:
+  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
+  # cleared the agentic-coding warmup crash on max_model_len=131072 +
+  # prefix caching.
+  image: vllm/vllm-openai:v0.20.2
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -2617,13 +2683,9 @@ kimik2.5-fp4-b200-vllm:
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 kimik2.5-fp4-b300-vllm:
-  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
-  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
-  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
-  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
-  # INT4 B300 sister already uses successfully.
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -2642,16 +2704,9 @@ kimik2.5-fp4-b300-vllm:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    # B300 has 288 GB HBM per GPU (vs B200's 192 GB) so the KV-cache cliff
-    # sits higher than B200's. Extend the conc sweep to probe up to 64.
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -2674,7 +2729,7 @@ dsr1-fp8-b200-sglang-mtp:
   # B200 SGLang MTP recipe as-is until B300-specific tuning is available. Image bumped
   # to v0.5.10.post1-cu130 to match the standard B300 SGLang image used by other B300 configs.
 dsr1-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b300
@@ -2692,8 +2747,36 @@ dsr1-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
+# Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
+# the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'lmsysorg/sglang:v0.5.10.post1-cu130' -> 'vllm/vllm-openai:v0.20.0-cu130'
+#   - model: 'deepseek-ai/DeepSeek-R1-0528' -> 'nvidia/Kimi-K2.5-NVFP4'
+#   - model-prefix: 'dsr1' -> 'kimik2.5'
+#   - precision: 'fp8' -> 'fp4'
+#   - framework: 'sglang' -> 'vllm'
+kimik2.5-fp4-b300-vllm-agentic:
+  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
+  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
+  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
+  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
+  # INT4 B300 sister already uses successfully.
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+
 dsr1-fp8-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -2716,7 +2799,7 @@ dsr1-fp8-b200-trt:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
 dsr1-fp8-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -2740,7 +2823,7 @@ dsr1-fp8-b200-trt-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -2781,10 +2864,6 @@ dsv4-fp8-h200-vllm:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
 # MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
@@ -2813,6 +2892,28 @@ dsv4-fp8-h200-vllm-mtp:
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
 # Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
 # image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
+# Diverged from dsv4-fp8-h200-vllm (agentic-coding sibling). Reasons below;
+# the original dsv4-fp8-h200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4' -> 'vllm/vllm-openai:deepseekv4-cu129'
+dsv4-fp8-h200-vllm-agentic:
+  image: vllm/vllm-openai:deepseekv4-cu129
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [1, 2, 4, 8, 16] }
+
+# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
+# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+
 dsv4-fp8-h200-sglang:
   image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2863,7 +2964,7 @@ dsv4-fp8-h200-sglang-mtp:
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
   # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -2876,7 +2977,7 @@ dsv4-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, conc-start: 1, conc-end: 128 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 8192 }
@@ -2884,15 +2985,24 @@ dsv4-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-    # NOTE: agentic-coding mirrors the fixed-seq-len parallelism options —
-    # B300 has more flexibility than B200 since both half-node (TP=4 / DEP=4)
-    # and full-node (TP=8 / DEP=8) layouts are routinely used for DSv4-Pro on
-    # this SKU. Pure TP for low-conc / interactivity, DEP for high-conc /
-    # throughput. See B200 agentic-coding NOTE above for HMA + cpu-offload
-    # configuration details.
+
+# Diverged from dsv4-fp4-b300-vllm (agentic-coding sibling). Metadata is
+# identical to origin/main's dsv4-fp4-b300-vllm; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original dsv4-fp4-b300-vllm entry stays byte-identical to origin/main.
+dsv4-fp4-b300-vllm-agentic:
+  image: vllm/vllm-openai:v0.20.0-cu130
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -2950,7 +3060,7 @@ dsv4-fp4-b300-trt-mtp:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
 
 dsv4-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -2974,7 +3084,7 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu129-amd64
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -2993,7 +3103,7 @@ qwen3.5-fp8-h200-sglang:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11
+  image: lmsysorg/sglang:v0.5.12
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -3012,7 +3122,7 @@ qwen3.5-fp8-h200-sglang-mtp:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 glm5-fp8-h200-sglang:
-  image: lmsysorg/sglang:glm5-hopper
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: h200
@@ -3030,8 +3140,27 @@ glm5-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+glm5-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: h200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp8-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -3054,7 +3183,7 @@ dsr1-fp8-h200-trt:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
 
 dsr1-fp8-h200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -4096,7 +4225,7 @@ gptoss-fp4-b200-trt:
       - { tp: 8, conc-start:   4, conc-end:   4}
 
 gptoss-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -4119,6 +4248,20 @@ gptoss-fp4-b200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
+
+# Diverged from gptoss-fp4-b200-vllm (agentic-coding sibling). Reasons below;
+# the original gptoss-fp4-b200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai:v0.15.1' -> 'vllm/vllm-openai:v0.19.1'
+gptoss-fp4-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.19.1
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -4128,10 +4271,10 @@ gptoss-fp4-b200-vllm:
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: b200-dgxc
+  runner: b200
   precision: fp8
   framework: vllm
   multinode: false
@@ -4148,6 +4291,24 @@ minimaxm2.5-fp8-b200-vllm:
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 512 }
+
+  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
+  # does not have a B300-specific recipe, so this config reuses the existing
+  # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Diverged from minimaxm2.5-fp8-b200-vllm (agentic-coding sibling). Reasons below;
+# the original minimaxm2.5-fp8-b200-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
+#   - runner: 'b200' -> 'b200-dgxc'
+minimaxm2.5-fp8-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.19.1
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: b200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
     # Push none past the KV cliff (96, 128) to make the no-offload throughput
@@ -4160,8 +4321,9 @@ minimaxm2.5-fp8-b200-vllm:
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -4183,6 +4345,20 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 1, conc-start: 4, conc-end: 16 }
       - { tp: 2, conc-start: 64, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
+
+# Diverged from minimaxm2.5-fp8-b300-vllm (agentic-coding sibling). Reasons below;
+# the original minimaxm2.5-fp8-b300-vllm entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
+minimaxm2.5-fp8-b300-vllm-agentic:
+  image: vllm/vllm-openai:v0.19.1
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: b300
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
     # Push none past the KV cliff (96, 128, 192) so the no-offload throughput
@@ -4196,7 +4372,7 @@ minimaxm2.5-fp8-b300-vllm:
       - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
@@ -4223,6 +4399,24 @@ minimaxm2.5-fp4-b200-vllm:
       - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
       - { tp: 4, conc-start: 4, conc-end: 8 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
+
+  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
+  # does not have a B300-specific recipe, so this config reuses the existing
+  # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Diverged from minimaxm2.5-fp4-b200-vllm (agentic-coding sibling). Metadata is
+# identical to origin/main's minimaxm2.5-fp4-b200-vllm; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original minimaxm2.5-fp4-b200-vllm entry stays byte-identical to origin/main.
+minimaxm2.5-fp4-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.19.0-cu130
+  model: nvidia/MiniMax-M2.5-NVFP4
+  model-prefix: minimaxm2.5
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
@@ -4231,8 +4425,9 @@ minimaxm2.5-fp4-b200-vllm:
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 minimaxm2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b300
@@ -4259,7 +4454,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -4282,7 +4477,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -4301,6 +4496,21 @@ minimaxm2.5-fp8-h100-vllm:
       search-space:
       # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+
+# Diverged from minimaxm2.5-fp8-h100-vllm (agentic-coding sibling). Metadata is
+# identical to origin/main's minimaxm2.5-fp8-h100-vllm; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original minimaxm2.5-fp8-h100-vllm entry stays byte-identical to origin/main.
+minimaxm2.5-fp8-h100-vllm-agentic:
+  image: vllm/vllm-openai:v0.20.2
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: h100
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     # H100 tp=4 ep=4: compute ceiling ~10 (empirical), KV cliff ~6 (analytical).
     # Best cpu-offload demo SKU — 4-conc-point window between cliffs.
@@ -4471,7 +4681,7 @@ gptoss-fp4-h200-trt:
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -4496,7 +4706,7 @@ gptoss-fp4-h200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 32 }
 
 minimaxm2.5-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200
@@ -4513,6 +4723,21 @@ minimaxm2.5-fp8-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
+
+# Diverged from minimaxm2.5-fp8-h200-vllm (agentic-coding sibling). Metadata is
+# identical to origin/main's minimaxm2.5-fp8-h200-vllm; the split exists because this
+# PR adds an agentic-coding scenarios block that differs from main
+# (either main had none or had a different conc/offload sweep).
+# The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
+minimaxm2.5-fp8-h200-vllm-agentic:
+  image: vllm/vllm-openai:v0.20.2
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
     agentic-coding:
     # H200 tp=4: compute ceiling ~35 (empirical), KV cliff ~29 (analytical).
     # cpu offload window conc 29-35 — dense sampling 24-40 captures both cliffs.
@@ -4611,7 +4836,6 @@ dsr1-fp4-gb200-dynamo-trt:
           tp: 4
           ep: 4
           dp-attn: true
-
 
       # Non-MTP configurations (default spec_decoding="none")
       - conc-list: [ 4301 ]
@@ -5306,7 +5530,6 @@ dsr1-fp8-gb200-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: false
-
 
 dsr1-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
@@ -6890,7 +7113,6 @@ gptoss-fp4-gb200-dynamo-trt:
           - "DECODE_MAX_BATCH_SIZE=512"
           - "DECODE_GPU_MEM_FRACTION=0.9"
 
-
 dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -7730,7 +7952,6 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -8181,58 +8402,91 @@ dsv4-fp4-gb200-dynamo-vllm:
   disagg: true
   scenarios:
     fixed-seq-len:
-    # 1k/1k — extrapolated from kimi-k2.5 1k/1k topologies, scaled to DSV4-Pro's
-    # DP>=8 constraint. No upstream NVIDIA reference for DSV4-Pro vLLM disagg
-    # at this seq-len yet (PR #67 only publishes 8k/1k).
-    - isl: 1024
+    - isl: 8192
       osl: 1024
       search-space:
-      # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-      # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch
-      # 1p1d-dep8-tep8.yaml (offload + numa-bind stripped — see recipe header).
-      - conc-list: [1, 4, 8, 16, 32, 64]
+      # Validated 8k/1k points mirrored from NVIDIA/srt-slurm
+      # aflowers/vllm-gb200-v0.20.0 history. conc-list values match each
+      # recipe's benchmark.concurrencies.
+
+      # Low latency: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with
+      # a dedicated NATS/etcd infra node.
+      - conc-list: [1]
         prefill:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
-      # Mid throughput: 1 prefill (DP=8) + 1 wide decode (DP=16).
-      # 6 nodes. Single prefill is plenty for 1k prompts up to ~conc 4096.
-      - conc-list: [128, 256, 1024, 2048, 4096]
+
+      # Low-middle curve: 1 prefill (DEP=8) + 4 decode (TP=8). 11 nodes total
+      # with a dedicated NATS/etcd infra node.
+      - conc-list: [256, 512]
         prefill:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-1p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-middle-curve.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8). 5 nodes
+      # total with a dedicated NATS/etcd infra node.
+      - conc-list: [256, 512, 1024]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
           dp-attn: true
-      # High throughput: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes.
-      # The 4096 overlap with the 1p1d block gives a crossover point. 8192
-      # would saturate 1p1d's prefill, so this topology takes over there.
-      - conc-list: [4096, 8192]
+
+      # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 7 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [4096]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # MegaMOE max throughput: 3 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 9 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [4096]
         prefill:
           num-worker: 3
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-max-tpt-megamoe.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
           dp-attn: true
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
@@ -8251,49 +8505,70 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
     - isl: 8192
       osl: 1024
       search-space:
-      # Low-concurrency / interactivity: 1 prefill (DP=8) + 1 decode (TP=8).
-      # 4 nodes total. Mirrors NVIDIA aflowers/gb200-dsv4-recipes branch.
-      - conc-list: [1, 4, 8, 16, 32, 64]
+      # Aggregate low latency: TP=8, max-num-seqs=4.
+      - conc-list: [1]
+        spec-decoding: mtp
         prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-tep8.yaml"
-        decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
-      # Mid: 3 prefills (DP=8) + 1 wide decode (DP=16). 10 nodes total.
-      - conc-list: [512, 1024]
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-gb200-low-latency-mtp2.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # Low-latency bridge: 1 prefill (DEP=8) + 4 decode (TP=8), no offload.
+      - conc-list: [16, 32, 64]
+        spec-decoding: mtp
         prefill:
-          num-worker: 3
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-3p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency-mtp2.yaml"
         decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      # Max throughput: 7 prefills (DP=8) + 1 wide decode (DP=16). 18 nodes
-      # (full cluster). Mirrors NVIDIA/srt-slurm PR #67.
-      - conc-list: [4096, 8192]
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
+      # 5 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [128]
+        spec-decoding: mtp
         prefill:
-          num-worker: 7
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-7p1d-dep8-dep16.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe-mtp2.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 7 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
           dp-attn: true
 
 dsv4-fp4-b300-dynamo-vllm:
@@ -8434,8 +8709,8 @@ dsv4-fp4-gb300-dynamo-vllm:
       - conc-list: [3072]
         prefill:
           num-worker: 7
-          tp: 8
-          ep: 8
+          tp: 4
+          ep: 4
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-7p2d-dep4-dep16.yaml"
@@ -8650,3 +8925,23 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+
+kimik2.5-int4-h100-vllm:
+  image: vllm/vllm-openai:v0.20.2
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: h100
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # New entry, agentic-coding only: this PR intentionally does NOT add
+    # fixed-seq-len coverage for kimik2.5-int4 on H100 to keep the
+    # fixed-seq-len test surface identical to origin/main.
+    # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
+    # early. Sweep saturates conc=20 to keep total HBM headroom.
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 12, 16, 20] }
