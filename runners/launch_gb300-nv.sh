@@ -8,6 +8,15 @@ export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
+# Host-side directory holding aiperf's content-addressed dataset mmap cache.
+# Bind-mounted into worker containers at /aiperf_mmap_cache via the
+# default_mounts: block in srtslurm.yaml below; aiperf reads it via
+# AIPERF_DATASET_MMAP_CACHE_DIR (set in each agentic recipe's benchmark.env).
+# Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
+# per dataset on first use. 777 mode so all gharunner_X SLURM users can
+# write to it.
+export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
+
 export MODEL_PATH=$MODEL
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -158,6 +167,13 @@ network_interface: ""
 
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+
+# Cluster-level bind mounts applied to every worker container
+# (see srtctl/core/runtime.py — get_srtslurm_setting("default_mounts")).
+# Used here for aiperf's persistent mmap cache so the dataset isn't
+# re-tokenized + re-written every job.
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
 
 # Model path aliases
 model_paths:

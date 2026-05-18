@@ -67,6 +67,15 @@ export SLURM_ACCOUNT="cw-sup"
 export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
+# Host-side directory holding aiperf's content-addressed dataset mmap cache.
+# Bind-mounted into worker containers at /aiperf_mmap_cache via the
+# default_mounts: block in srtslurm.yaml below; aiperf reads it via
+# AIPERF_DATASET_MMAP_CACHE_DIR (set in each agentic recipe's benchmark.env).
+# Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
+# per dataset on first use. 777 mode so all gharunner_X SLURM users can
+# write to it.
+export AIPERF_MMAP_CACHE_HOST_PATH="/mnt/vast/ai-perf-cache"
+
 NGINX_IMAGE="nginx:1.27.4"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
@@ -199,6 +208,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 
 default_mounts:
   ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
 
 model_paths:
   dspro: "${MODEL_PATH}"
