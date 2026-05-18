@@ -1802,7 +1802,7 @@ dsv4-fp4-mi355x-atom:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
 
 glm5.1-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi35x
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
