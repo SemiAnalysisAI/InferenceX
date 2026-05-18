@@ -2843,6 +2843,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1509
 
 - config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling of dsr1-fp8-mi325x-sglang on lmsysorg/sglang:v0.5.12-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1500
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+    - glm5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260317-1eea7448 (33d/29d old) to v0.5.12-cu130"
+    - "Add --fp8-gemm-runner-backend cutlass to bypass DeepGemm illegal-memory-access on CUDA-graph capture (KLAUD_DEBUG §4a, B200 sm_100 variant)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1447
+
+- config-keys:
     - qwen3.5-fp8-mi325x-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling of qwen3.5-fp8-mi325x-sglang"
