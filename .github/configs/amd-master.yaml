@@ -1706,25 +1706,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
       
 
-dsv4-fp8-mi355x-sglang:
-  image: rocm/sgl-dev:deepseek-v4-mi35x
-  model: sgl-project/DeepSeek-V4-Pro-FP8
-  model-prefix: dsv4
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps

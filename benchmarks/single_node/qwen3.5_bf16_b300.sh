@@ -58,7 +58,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
---attention-backend trtllm_mha --moe-runner-backend flashinfer_trtllm \
+--attention-backend trtllm_mha --mm-attention-backend triton_attn --moe-runner-backend flashinfer_trtllm \
 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
 --tokenizer-worker-num 6 --stream-interval 30 > $SERVER_LOG 2>&1 &
 
