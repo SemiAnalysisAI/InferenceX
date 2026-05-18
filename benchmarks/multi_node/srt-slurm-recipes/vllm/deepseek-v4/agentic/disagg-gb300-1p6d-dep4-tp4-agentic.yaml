@@ -11,8 +11,10 @@ name: "svf-vllm-disagg-gb300-1p6d-dep4-tp4-agentic"
 #                              trajectories blow past any small explicit cap)
 #   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
 #                              trajectory reuse — entire point of agentic)
-#   - tokenizer-mode/parser/reasoning-parser flags added (DSv4 tool-call +
-#                              thinking support; required for chat endpoint)
+# Note: --enable-auto-tool-choice / --tool-call-parser / --reasoning-parser
+# are NOT set on the worker. The dynamo-vllm worker entrypoint doesn't
+# accept them (different arg parser than `vllm serve`). In disagg, chat
+# parsing happens at the dynamo frontend, not at the worker.
 
 model:
   path: "deepseek-v4-pro"
@@ -91,9 +93,6 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-      tool-call-parser: deepseek_v4
-      enable-auto-tool-choice: true
-      reasoning-parser: deepseek_v4
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -114,9 +113,6 @@ backend:
       no-enable-flashinfer-autotune: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-      tool-call-parser: deepseek_v4
-      enable-auto-tool-choice: true
-      reasoning-parser: deepseek_v4
 
 benchmark:
   type: custom

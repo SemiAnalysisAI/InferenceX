@@ -5,7 +5,13 @@
 # the dsv4-fp4-gb300-dynamo-vllm-disagg branch (PR #1150). The SGLang
 # recipes are copied exactly from the pinned srt-slurm commit below.
 
-set -x
+# -e: abort on any unhandled error. -o pipefail: pipeline fails if any
+# stage fails. Without these, errors like a bad `git checkout SHA` get
+# silently swallowed and the script continues with broken state. R5 of
+# dsv4-fp4-gb300-dynamo-vllm-agentic caught this — a bad checkout left
+# the cw shards on origin/HEAD (which happened to be the right commit),
+# masking the bug entirely until upstream main moves and breaks us.
+set -exo pipefail
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on shared storage; avoid node-local /scratch symlink drift.
