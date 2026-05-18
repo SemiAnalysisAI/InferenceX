@@ -36,7 +36,6 @@ set -x
 SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
---enable-symm-mem \
 --disable-radix-cache \
 --quantization fp8 \
 --kv-cache-dtype fp8_e4m3 \

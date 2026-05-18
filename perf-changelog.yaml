@@ -2841,3 +2841,9 @@
   description:
     - "Add Qwen-3.5-397B-A17B FP8 sglang recipes (off + MTP/EAGLE) for H100 on lmsysorg/sglang:v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1509
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Drop --enable-symm-mem from qwen3.5 FP8 B200 sglang MTP server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
