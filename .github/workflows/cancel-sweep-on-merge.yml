@@ -1,0 +1,36 @@
+name: "Cancel Sweep on PR Merge"
+
+on:
+    pull_request:
+        types: [closed]
+        paths:
+            - "perf-changelog.yaml"
+
+jobs:
+    cancel-sweep:
+        if: github.event.pull_request.merged == true
+        runs-on: ubuntu-latest
+        permissions:
+            actions: write
+        steps:
+            - name: Cancel in-flight Run Sweep runs for this PR's branch
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  REPO: ${{ github.repository }}
+                  BRANCH: ${{ github.event.pull_request.head.ref }}
+              run: |
+                  set -euo pipefail
+                  cancelled=0
+                  for status in in_progress queued waiting; do
+                      ids=$(gh api "repos/${REPO}/actions/workflows/run-sweep.yml/runs" \
+                          -f "event=pull_request" \
+                          -f "branch=${BRANCH}" \
+                          -f "status=${status}" \
+                          --jq '.workflow_runs[].id')
+                      for run_id in $ids; do
+                          echo "Cancelling ${status} run ${run_id}"
+                          gh run cancel "${run_id}" --repo "${REPO}" || true
+                          cancelled=$((cancelled + 1))
+                      done
+                  done
+                  echo "Cancelled ${cancelled} sweep run(s) for branch ${BRANCH}."
