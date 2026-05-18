@@ -2846,4 +2846,4 @@
     - qwen3.5-fp8-b200-sglang-mtp
   description:
     - "Drop --enable-symm-mem from qwen3.5 FP8 B200 sglang MTP server launch"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1513
