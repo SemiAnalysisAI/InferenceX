@@ -2659,4 +2659,4 @@
     - dsv4-fp4-b200-vllm-mtp
   description:
     - "Update vLLM image from v0.20.0-cu130 (20d/18d old) to v0.21.0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1476
