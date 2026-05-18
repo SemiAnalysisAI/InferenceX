@@ -272,6 +272,7 @@ EOF
 else
 
     HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
+    AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
     SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
@@ -312,10 +313,10 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR/ \
-        --no-container-entrypoint --export=ALL,PORT=8888 \
+        --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash $BENCH_SCRIPT
 
     scancel $JOB_ID
