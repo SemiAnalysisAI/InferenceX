@@ -471,9 +471,9 @@ glm5.1-fp4-mi355x-sglang:
 # Diverged from glm5.1-fp4-mi355x-sglang (agentic-coding sibling). Reasons below;
 # the original glm5.1-fp4-mi355x-sglang entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
-#   - image: 'lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415' -> 'lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x'
+#   - image: 'lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415' -> 'lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517'
 glm5.1-fp4-mi355x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
