@@ -35,28 +35,7 @@ Do **not** try a 3-way merge of `perf-changelog.yaml` — whitespace edits will 
 
 ---
 
-## 2. Bench-client tokenizer crash (sglang v0.5.12 images)
-
-**Symptom:** the sglang server loads the model fine; the bench client crashes before sending any request with
-```
-AttributeError: LlamaTokenizer has no attribute all_special_tokens_extended
-File "/opt/venv/.../vllm/transformers_utils/tokenizer.py:101" in get_cached_tokenizer
-```
-
-**Root cause:** `utils/bench_serving/benchmark_serving.py:48-51` prefers vLLM's `get_tokenizer` (which calls `get_cached_tokenizer` → probes `.all_special_tokens_extended`). The newer `transformers` library bundled inside sglang v0.5.12 images no longer exposes that attribute on `LlamaTokenizer`.
-
-**Fix (in-PR workaround):** swap import preference so the local `backend_request_func.get_tokenizer` (HF AutoTokenizer-based, no `get_cached_tokenizer` probe) wins:
-```python
-try:
-    from backend_request_func import get_tokenizer
-except ImportError:
-    from vllm.transformers_utils.tokenizer import get_tokenizer
-```
-Affects PRs touching sglang v0.5.12 images on any AMD platform. Apply per-PR (each PR's branch needs its own swap commit) until a global fix lands.
-
----
-
-## 3. vLLM v0.21.x / v0.20.x: GPU OOM at model-load
+## 2. vLLM v0.21.x / v0.20.x: GPU OOM at model-load
 
 **Symptom:** vLLM workers OOM during weight loading or right after warmup:
 - `HSA_STATUS_ERROR_OUT_OF_RESOURCES: Available Free mem : 0 MB` (AMD)
@@ -73,7 +52,7 @@ Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi
 
 ---
 
-## 4. Custom DSV4 image → generic v0.5.12 OOMs
+## 3. Custom DSV4 image → generic v0.5.12 OOMs
 
 **Symptom:** DSV4 recipes work on their SHA-pinned `lmsysorg/sglang:deepseek-v4-hopper@sha256:...` (or `deepseek-v4-b300`, `deepseek-v4-blackwell`) custom builds, but OOM on weights load when bumped to the generic `v0.5.12-cu130` release tag. Example: DSV4-Pro FP8+MTP weights consume ~125.43 GB / 141 GB per H200, leaving `-4.05 GB` for KV cache.
 
@@ -85,11 +64,11 @@ Seen on: #1460 (dsv4-fp8-h200-sglang+mtp).
 
 ---
 
-## 5. Upstream sglang v0.5.12 B300 regressions
+## 4. Upstream sglang v0.5.12 B300 regressions
 
 Two distinct upstream regressions on NVIDIA B300 (Blackwell, `sm_120`) shipped in `lmsysorg/sglang:v0.5.12-cu130`:
 
-### 5a. DeepGemm TMA-descriptor crash (GLM-5-FP8)
+### 4a. DeepGemm TMA-descriptor crash (GLM-5-FP8)
 **Symptom:** CUDA graph capture aborts with `CUDA_ERROR_ILLEGAL_ADDRESS (700)` at `/deepgemm/csrc/.../runtime_utils.hpp:143` on the **first batch size** for **every TP rank**. Server never serves a prompt.
 
 **Workarounds (any one):**
@@ -99,7 +78,7 @@ Two distinct upstream regressions on NVIDIA B300 (Blackwell, `sm_120`) shipped i
 
 Filed upstream: sgl-project/sglang#25551. Seen on #1421.
 
-### 5b. trtllm GEMM bug at bs=128 + MTP / EAGLE (GLM-5-NVFP4)
+### 4b. trtllm GEMM bug at bs=128 + MTP / EAGLE (GLM-5-NVFP4)
 **Symptom:** EAGLE draft CUDA graph capture crashes immediately at the largest batch size with `RuntimeError ... trtllm_batched_gemm_runner.cu:276 ... numBatches=256, GemmMNK 128x1024x6144`. The target model captures fine; only the draft model crashes.
 
 **Workarounds:**
@@ -109,7 +88,7 @@ Filed upstream: sgl-project/sglang#25551. Seen on #1421.
 
 Seen on #1420.
 
-### 5c. flash_attn SM-arch assertion (qwen3.5-bf16)
+### 4c. flash_attn SM-arch assertion (qwen3.5-bf16)
 **Symptom:** All 4 TP workers AssertionError on first forward pass:
 ```
 File "/opt/venv/.../sglang/srt/layers/attention/flashattention_backend.py:..."
@@ -123,37 +102,37 @@ Seen on #1422.
 
 ---
 
-## 6. Cluster infrastructure (AMD MI355X / MI300X / MI325X)
+## 5. Cluster infrastructure (AMD MI355X / MI300X / MI325X)
 
-### 6.1 `mia1-p01-g09 / g19 / g37` (amd-tw-mi355) — persistently drained
+### 5.1 `mia1-p01-g09 / g19 / g37` (amd-tw-mi355) — persistently drained
 - **g09**: `pyxis is broken`
 - **g19**: `Kill task failed (JobId=N StepId=N)`
 - **g37**: `permission issues with GHA runner workflows : Not responding` (down since Mar 2026)
 
 If a sweep job lands on any of these, it'll never start. Nothing to do at the recipe level — these stay drained until ops fixes them.
 
-### 6.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
+### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
 **Symptom:** mi355x jobs fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` during the `docker stop $(docker ps -a -q)` cleanup step, cascading into SLURM job expiration.
 **Fix:** ops needs to fix docker group / socket perms on these nodes. Recipe-level workaround: none.
 
-### 6.3 `chi-mi300x-049` — `/nvme_home` disk-full
+### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
 **Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`) — see PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
 
-### 6.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
+### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.
 **Fix:** SSH to controller, find the holder via `ss -tlnp | grep :8888`, `kill` the PID. If recurring, file with the team running MLPerf experiments.
 
-### 6.5 Cluster controller layout
-- **amd-vultr-mi300**: SLURM controller for 7 mi300x nodes (3 down, see 6.3).
+### 5.5 Cluster controller layout
+- **amd-vultr-mi300**: SLURM controller for 7 mi300x nodes (3 down, see 5.3).
 - **amd-vultr-mi325**: SLURM controller for 6 mi325x nodes.
-- **amd-tw-mi355**: jumpbox → ssh further to compute nodes (`mia1-p01-gNN`). 12 nodes (3 drained, see 6.1).
+- **amd-tw-mi355**: jumpbox → ssh further to compute nodes (`mia1-p01-gNN`). 12 nodes (3 drained, see 5.1).
 - `/home` is NFS-mounted across clusters from `chi-mi325x-pod1-001:/nfs/homes`, **root-writable**.
 - `/tmp` and `/nvme_home` are per-node local; HF cache lives at node-local `/raid/hf-hub-cache/` (2.7T per mi300x node).
 - Use `srun -w <FQDN>` (with the **full FQDN**, not the short hostname) from the controller to run admin commands on a compute node.
 
-### 6.6 Drain watchdog pattern
+### 5.6 Drain watchdog pattern
 SLURM auto-clears `State=DRAIN` on `DYNAMIC_NORM` nodes when they re-register. To keep a node out of the pool sticky-style, use `State=DOWN` AND start a watchdog:
 ```bash
 # on the controller, as root
@@ -171,7 +150,7 @@ Doesn't survive controller reboots — for permanent removal a SLURM admin shoul
 
 ---
 
-## 7. Docker image tag gotchas
+## 6. Docker image tag gotchas
 
 **Don't invent a "release" tag pattern from a date-suffixed nightly.** `lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x` does **not** exist — only the dated `v0.5.12-rocm720-mi35x-20260517` does. All MI355X `sglang-rocm:rocm720` tags follow the dated-nightly pattern.
 
@@ -185,7 +164,7 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 
 ---
 
-## 8. CI: rerun mechanics
+## 7. CI: rerun mechanics
 
 - `gh run rerun <id> --failed` only works when the workflow run is **completed** with `conclusion=failure`. If the run is still `queued`/`in_progress`, the call returns "cannot be rerun".
 - To abandon an in-flight run and start fresh, push an **empty commit** to the PR branch:
@@ -198,7 +177,7 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 
 ---
 
-## 9. gh CLI gotchas
+## 8. gh CLI gotchas
 
 - **`gh pr edit` silently aborts** on a Projects-classic deprecation GraphQL error. Title/body updates won't apply. Use `gh api -X PATCH "repos/<org>/<repo>/pulls/<N>" -f title="..." -F body=@file.md` instead.
 - Same issue for adding labels — use `gh api -X POST "repos/<org>/<repo>/issues/<N>/labels" -f "labels[]=<name>"`.
@@ -211,16 +190,16 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 
 ---
 
-## 10. PR conventions for this repo
+## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
 - Add the `full-sweep-enabled` label so a full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Without it, the sweep is mostly SKIPPED.
-- After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §9).
+- After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint; it handles the `perf-changelog.yaml` auto-append.
 
 ---
 
-## 11. Useful slash commands (defined in `.claude/commands/`)
+## 10. Useful slash commands (defined in `.claude/commands/`)
 
 - `/find-mergeable-claude-prs` — lists `claude/*` PRs whose full sweep finished all-green.
 - `/list-claude-pr-status` — lists READY/RUNNING (and optionally FAILED) state per `claude/*` PR.

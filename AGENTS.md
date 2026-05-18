@@ -2,7 +2,7 @@
 
 Guidance for AI agents working with InferenceX.
 
-> **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (tokenizer crash, vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
+> **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
 
 ## Project Overview
 
