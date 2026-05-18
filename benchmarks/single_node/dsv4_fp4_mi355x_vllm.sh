@@ -7,34 +7,21 @@ set -eo pipefail
 # router, FP8 KV cache at runtime). InferenceX classifies this as the
 # fp4 variant.
 #
-# Image and serving flags follow the validated MI355X recipe from
-# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8). DSv4 base ROCm
-# support (vllm-project/vllm#40871) merged into vLLM main on 2026-05-05,
-# so any vllm/vllm-openai-rocm nightly built after that date includes
-# the DeepseekV4ForCausalLM model class. The amd-master.yaml entry pins
-# a digest-suffixed nightly tag (not the floating :nightly) to bypass
-# the runner's squashfs-cache, which otherwise keeps a stale build.
+# Serving flags follow the validated MI355X recipe from
+# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8). Image-pin details
+# live in amd-master.yaml.
 #
 # --moe-backend triton_unfused is required for the FP4 MoE expert
 # weight format used by deepseek-ai/DeepSeek-V4-Pro. Letting --moe-backend
 # default to auto picks a backend that doesn't register the FP4 scale
 # parameters (w13_weight_scale / w2_weight_scale), so safetensors
-# loading raises KeyError. The choice was added by #40871 alongside the
-# model class; the pinned nightly-dcacdf9a includes it.
+# loading raises KeyError.
 #
-# --quantization deepseek_v4_fp8 is required to make vLLM route the
-# MoE through the FP4-aware quant config (DeepseekV4FP8Config) and
-# honor `expert_dtype: "fp4"` from the checkpoint config. The recipe
-# omits this flag because it relies on auto-detection via
-# `model_type == "deepseek_v4"`. That auto-path is fragile in our
-# container — the SGLang sister script (dsv4_fp8_mi355x.sh) documents
-# that the bundled transformers doesn't recognize the deepseek_v4
-# model_type and the cached config has to be patched. Whenever the
-# auto-detection silently misses, vLLM falls back to plain Fp8Config,
-# which treats MoE as FP8 and rejects triton_unfused. Passing
-# --quantization deepseek_v4_fp8 satisfies the explicit-user branch in
-# DeepseekV4FP8Config.override_quantization_method and bypasses the
-# model_type check entirely.
+# --quantization deepseek_v4_fp8 forces the FP4-aware
+# DeepseekV4FP8Config instead of relying on model_type auto-detection.
+# That keeps the mixed-precision checkpoint on the intended MoE path
+# and avoids falling back to plain Fp8Config, which rejects
+# triton_unfused.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 

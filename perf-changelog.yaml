@@ -2676,3 +2676,9 @@
     - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
     - "Temporarily disable agentic-coding scenario (blocked by e2e-tests.yml artifact-name mismatch)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1415
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026 to nightly-ff712f6447093d07747c88680b9d006b119f5890"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374

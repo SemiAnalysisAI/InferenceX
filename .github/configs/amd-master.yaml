@@ -1770,7 +1770,7 @@ dsv4-fp4-mi355x-sglang:
 # gpu-mem-util=0.6. Sweep matches the sister sglang config (conc 4-64)
 # so vLLM↔SGLang are comparable.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026
+  image: vllm/vllm-openai-rocm:nightly-ff712f6447093d07747c88680b9d006b119f5890
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
