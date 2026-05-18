@@ -906,11 +906,15 @@ ensure_hf_cli() {
 
 resolve_trace_source() {
     local dataset="semianalysisai/cc-traces-weka-no-subagents-051226"
-    # aiperf reads the corpus via its public-dataset registry; the loader
-    # under the hood pulls from semianalysisai/cc-traces-weka-no-subagents-051226
-    # (949 traces, no-subagents variant — see plugins.yaml).
-    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka"
-    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka ($dataset)"
+    # aiperf reads the corpus via its public-dataset registry. The
+    # inferencex-agentx-mvp scenario hard-requires loader=one of
+    # ['semianalysis_cc_traces_weka_no_subagents', 'weka_trace'] (see
+    # aiperf src/aiperf/common/scenario/inferencex_agentx_mvp.py's
+    # `require_loader`). The bare `semianalysis_cc_traces_weka` loader
+    # points at the older 042026 corpus with subagent fan-out and is no
+    # longer accepted as of upstream PR #875.
+    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka_no_subagents"
+    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_no_subagents ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
     # for model weights) so subsequent runs read from cache instead of
     # re-downloading every job.
@@ -926,8 +930,17 @@ install_agentic_deps() {
     #   and in your PATH?
     # Install on demand; cheap no-op when git is already present
     # (e.g. on AMD images that ship it).
+    #
+    # Some pyxis/enroot setups map the calling user into the container
+    # as non-root (gb300-nv does this; gb300-cw runs as root). Use sudo
+    # when not root — the vllm-base layer installs `sudo` and the typical
+    # enroot config grants the calling user passwordless sudo.
     if ! command -v git >/dev/null 2>&1; then
-        apt-get update -qq && apt-get install -y -qq git
+        if [ "$(id -u)" -eq 0 ]; then
+            apt-get update -qq && apt-get install -y -qq git
+        else
+            sudo apt-get update -qq && sudo apt-get install -y -qq git
+        fi
     fi
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
