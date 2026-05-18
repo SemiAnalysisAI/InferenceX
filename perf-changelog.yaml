@@ -2831,4 +2831,4 @@
     - kimik2.5-fp4-b200-vllm
   description:
     - "Update vLLM image from v0.20.2 to v0.21.0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1504
