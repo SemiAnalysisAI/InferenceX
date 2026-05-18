@@ -1,0 +1,29 @@
+# Model-specific ATOM server configurations for disaggregated inference.
+#
+# Each top-level key is a MODEL_NAME value (must match the directory name
+# under MODEL_DIR). job.slurm validates MODEL_NAME against the top-level keys
+# of this file before submitting; server.sh reads per-model knobs to build
+# the prefill/decode command lines.
+#
+# Schema (simpler than amd_utils/models.yaml — ATOM exposes fewer server
+# knobs at the enabling stage):
+#   <model-name>:
+#     base_flags: str           # Common flags for both prefill and decode
+#     prefill_flags: str        # Appended to prefill role only
+#     decode_flags: str         # Appended to decode role only
+
+DeepSeek-V4-Pro:
+  # base_flags mirror what benchmarks/single_node/dsv4_fp4_mi355x_atom.sh
+  # passes to atom.entrypoints.openai_server:
+  #   --kv_cache_dtype fp8 --trust-remote-code
+  # plus the disagg transfer backend selector (mori) consistent with the
+  # SGLang side (amd_utils/models.yaml DeepSeek-* entries use
+  # --disaggregation-transfer-backend mori).
+  base_flags: "--kv_cache_dtype fp8 --trust-remote-code"
+  # ATOM disagg flag surface is still being upstreamed (ROCm/ATOM disagg
+  # PR series). The two strings below are placeholders that server.sh
+  # composes with --disaggregation-mode prefill/decode and the role-
+  # specific --disaggregation-ib-device argument. Adjust as the ATOM
+  # upstream disagg CLI stabilizes.
+  prefill_flags: ""
+  decode_flags: ""
