@@ -15,7 +15,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this

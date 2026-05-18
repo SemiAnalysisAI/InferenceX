@@ -176,6 +176,7 @@ PY
 else
 
     export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
+    export AIPERF_MMAP_CACHE_HOST_PATH="/it-share/aiperf-cache/"
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
@@ -212,6 +213,11 @@ else
         SLRUM_HOME_MOUNT=" --container-mount-home "
     fi
 
+    # to prevent reading outdated saved model. use a fresh model from hf repo
+    if [[ "$FRAMEWORK" == "atom" ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
@@ -223,11 +229,11 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
-        --no-container-entrypoint --export=ALL \
+        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
 
     scancel $JOB_ID
