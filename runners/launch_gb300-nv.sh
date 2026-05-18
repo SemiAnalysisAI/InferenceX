@@ -19,7 +19,15 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
+    # DSv4-Pro weights live on the shared sa-shared NFS mount; the
+    # /scratch/models/ node-local SSDs that hold DSR1 were never staged
+    # with DSv4. R6 of the agentic sweep caught this via srtctl preflight:
+    #   "Model alias 'deepseek-v4-pro' resolved to /scratch/models/...,
+    #    but that path is unavailable."
+    # (NFS is slower than /scratch but it's where the 806 GB checkpoint
+    # actually lives. Stage to /scratch and switch back if I/O becomes
+    # the bottleneck during model load.)
+    export MODEL_PATH=/home/sa-shared/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4"
