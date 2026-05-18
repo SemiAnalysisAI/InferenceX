@@ -8945,3 +8945,41 @@ kimik2.5-int4-h100-vllm:
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
       - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 12, 16, 20] }
+
+qwen3.5-fp8-h100-sglang:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: h100
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+
+qwen3.5-fp8-h100-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: h100
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
