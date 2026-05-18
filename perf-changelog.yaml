@@ -2824,4 +2824,4 @@
     - dsr1-fp8-b300-sglang-mtp
   description:
     - "Re-run DSR1 SGLang agg configs (B200/B300, FP8/FP4, no-MTP/MTP) — picks up tokenizer fix from #1381"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1502
