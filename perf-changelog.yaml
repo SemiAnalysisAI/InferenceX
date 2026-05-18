@@ -2957,3 +2957,10 @@
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
     - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - glm5-fp8-mi325x-sglang
+    - glm5-fp8-mi325x-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 SGLang ROCm recipes (off + MTP/EAGLE) for MI325X on lmsysorg/sglang:v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
