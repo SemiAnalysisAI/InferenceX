@@ -2641,3 +2641,9 @@
   description:
     - "Update SGLang image from custom glm5-hopper tag (59d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1459
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.9-rocm700-mi30x to v0.5.12-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1425
