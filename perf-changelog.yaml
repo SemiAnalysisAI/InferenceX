@@ -2723,4 +2723,4 @@
     - dsr1-fp4-b200-trt-mtp
   description:
     - "Update TensorRT-LLM image (off: v1.2.0rc6.post2 104d / mtp: v1.2.0rc6.post3 101d) to v1.3.0rc14 (latest pre-release)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1489
