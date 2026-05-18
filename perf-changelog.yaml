@@ -2680,5 +2680,5 @@
 - config-keys:
     - dsv4-fp4-mi355x-vllm
   description:
-    - "Update vLLM ROCm image from nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026 to nightly-ff712f6447093d07747c88680b9d006b119f5890"
+    - "Update vLLM ROCm image from nightly-dcacdf9a8860a86401127d1c8f93ebf3cfbfd026 to nightly-b50646e5effd7cb5884cd96fdff4c53c18521198"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
