@@ -2717,3 +2717,9 @@
   description:
     - "Update SGLang image from v0.5.10-rocm720-mi30x to v0.5.12-rocm720-mi30x"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1426
+
+- config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Update TensorRT-LLM image from v1.2.0rc2.post2 (102d old) to v1.3.0rc14 (latest pre-release)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
