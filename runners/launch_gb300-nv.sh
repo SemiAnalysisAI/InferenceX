@@ -19,15 +19,21 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # DSv4-Pro weights live on the shared sa-shared NFS mount; the
-    # /scratch/models/ node-local SSDs that hold DSR1 were never staged
-    # with DSv4. R6 of the agentic sweep caught this via srtctl preflight:
-    #   "Model alias 'deepseek-v4-pro' resolved to /scratch/models/...,
-    #    but that path is unavailable."
-    # (NFS is slower than /scratch but it's where the 806 GB checkpoint
-    # actually lives. Stage to /scratch and switch back if I/O becomes
-    # the bottleneck during model load.)
-    export MODEL_PATH=/home/sa-shared/models/DeepSeek-V4-Pro
+    # DSv4-Pro weights live on the shared sa-shared Vast NFS storage;
+    # the /scratch/models/ node-local SSDs that hold DSR1 were never
+    # staged with DSv4.
+    #
+    # We use /data/home/sa-shared/... (not /home/sa-shared/...) because
+    # the two are different mount points for the SAME backing storage
+    # (storage-vip.vast.p03.globalai.run:/scratch/home/sa-shared mounted
+    # on /home/sa-shared, and :/scratch mounted on /data). The
+    # /home/sa-shared/ mount has shown a chronic ELOOP / "Too many
+    # levels of symbolic links" bug for workflow worker NFS sessions
+    # (R5 hit it on squash lockfiles; R7 hit it on the model path
+    # itself: Python's Path.resolve() returns ELOOP even though the
+    # path is a regular dir from interactive sessions). The /data/
+    # mount has a separate NFS client cache and so far isn't poisoned.
+    export MODEL_PATH=/data/home/sa-shared/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4"
