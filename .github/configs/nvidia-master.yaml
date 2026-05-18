@@ -2250,7 +2250,7 @@ glm5-fp8-b200-sglang-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2269,7 +2269,7 @@ glm5-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2685,7 +2685,7 @@ kimik2.5-fp4-b200-vllm-agentic:
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -3139,6 +3139,25 @@ glm5-fp8-h200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
+glm5-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: h200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
@@ -4304,7 +4323,7 @@ minimaxm2.5-fp8-b200-vllm-agentic:
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
