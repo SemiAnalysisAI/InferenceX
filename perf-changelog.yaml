@@ -2716,4 +2716,4 @@
     - glm5-fp8-h200-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling for glm5-fp8-h200-sglang on lmsysorg/sglang:v0.5.12-cu130"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1480
