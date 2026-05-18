@@ -33,10 +33,17 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+# vLLM v0.20.2+'s CUDA-graph memory profiler pre-reserves ~57 GB/GPU upfront
+# (~32% of total), which collides with --gpu-memory-utilization=0.90 and
+# leaves negative space for the KV cache. Disable the profiler — our 0.90
+# already leaves ~18 GB/GPU as safety net (same pattern as
+# benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh).
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size=$TP \
---gpu-memory-utilization 0.98 \
+--gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
