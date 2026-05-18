@@ -2653,3 +2653,9 @@
   description:
     - "Update SGLang image from v0.5.9-cu129-amd64 (74d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 (1d old) to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
