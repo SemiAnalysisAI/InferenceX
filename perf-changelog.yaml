@@ -2826,3 +2826,9 @@
   description:
     - "Update TensorRT-LLM image from v1.2.0rc2.post2 (102d old) to v1.3.0rc14 (latest pre-release)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1490
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
