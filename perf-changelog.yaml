@@ -2658,4 +2658,4 @@
     - minimaxm2.5-fp8-mi325x-vllm
   description:
     - "Update vLLM ROCm image from v0.18.0 (50d old) to v0.21.0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1469
