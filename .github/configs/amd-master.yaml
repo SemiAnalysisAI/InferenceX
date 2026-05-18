@@ -1461,7 +1461,7 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi300x-vllm-disagg:
-  image: ghcr.io/simondanielsson/vllm/vllm-openai-rocm:fix-moriio-hangs-high-concurrency-bnxt
+  image: ghcr.io/simondanielsson/vllm/vllm-openai-rocm:fix-moriio-hangs-high-concurrency
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x-disagg
@@ -1514,7 +1514,7 @@ minimaxm2.5-fp8-mi300x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi325x-vllm-disagg:
-  image: ghcr.io/simondanielsson/vllm/vllm-openai-rocm:fix-moriio-hangs-high-concurrency-bnxt
+  image: ghcr.io/simondanielsson/vllm/vllm-openai-rocm:fix-moriio-hangs-high-concurrency
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x-disagg
