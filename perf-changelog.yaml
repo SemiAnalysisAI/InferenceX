@@ -2653,3 +2653,10 @@
   description:
     - "Update SGLang image from v0.5.9-cu129-amd64 (74d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-20260422-de962f32 (18d/12d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
