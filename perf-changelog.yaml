@@ -2722,4 +2722,4 @@
     - gptoss-fp4-h200-trt
   description:
     - "Update TensorRT-LLM image from v1.3.0rc11 (34d old) to v1.3.0rc14 (latest pre-release)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1491
