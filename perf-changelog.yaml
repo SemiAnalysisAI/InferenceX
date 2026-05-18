@@ -2822,6 +2822,33 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1491
 
 - config-keys:
+    - gptoss-fp4-b200-trt
+  description:
+    - "Update TensorRT-LLM image from v1.2.0rc2.post2 (102d old) to v1.3.0rc14 (latest pre-release)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1490
+
+- config-keys:
+    - qwen3.5-bf16-b300-sglang
+    - qwen3.5-bf16-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
+    - "Add --mm-attention-backend triton_attn to bypass flash-attn cute sm_103 assertion (see sgl-project/sglang#25564)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1422
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Add Qwen-3.5-397B-A17B FP8 sglang recipes (off + MTP/EAGLE) for H100 on lmsysorg/sglang:v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1509
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling of dsr1-fp8-mi325x-sglang on lmsysorg/sglang:v0.5.12-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1500
+
+- config-keys:
     - glm5-fp8-b200-sglang
     - glm5-fp8-b200-sglang-mtp
   description:
