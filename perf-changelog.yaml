@@ -2825,4 +2825,4 @@
     - dsr1-fp8-mi325x-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling of dsr1-fp8-mi325x-sglang on lmsysorg/sglang:v0.5.12-rocm700-mi30x"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1500
