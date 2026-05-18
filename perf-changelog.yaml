@@ -2963,4 +2963,4 @@
     - glm5-fp8-mi325x-sglang-mtp
   description:
     - "Add GLM-5 FP8 SGLang ROCm recipes (off + MTP/EAGLE) for MI325X on lmsysorg/sglang:v0.5.12-rocm720-mi30x"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1485
