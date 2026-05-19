@@ -2909,4 +2909,4 @@
     - "Image: vllm/vllm-openai-rocm:nightly-fb1ac806c55a6dc96fe92261b80c8550e9c39d2f"
     - "Model: amd/Kimi-K2.5-MXFP4"
     - "Draft model: amd/kimi-k2.5-eagle3-fp8 (num_speculative_tokens=6, draft_tp=1)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1439
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1515
