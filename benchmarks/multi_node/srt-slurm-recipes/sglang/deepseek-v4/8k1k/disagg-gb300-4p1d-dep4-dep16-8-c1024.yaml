@@ -94,6 +94,7 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: "1"
     SGLANG_LOG_MS: "1"
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+    SGLANG_OPT_FP8_WO_A_GEMM: "0"
 
   decode_environment:
     PYTHONUNBUFFERED: "1"
@@ -118,6 +119,7 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: "1"
     SGLANG_LOG_MS: "1"
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+    SGLANG_OPT_FP8_WO_A_GEMM: "0"
     # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
