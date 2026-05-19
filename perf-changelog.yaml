@@ -2957,3 +2957,10 @@
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
     - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.1-...-atom0.1.2) to rocm7.2.3_..._atom20260511"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
