@@ -2949,3 +2949,13 @@
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
     - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - minimaxm2.5-fp4-h100-vllm
+  description:
+    - "Add MiniMax-M2.5-NVFP4 H100 vLLM benchmark"
+    - "Image: vllm/vllm-openai:v0.19.1-cu130"
+    - "Model: nvidia/MiniMax-M2.5-NVFP4"
+    - "TP=8, EP=1, --tool-call-parser minimax_m2, --reasoning-parser minimax_m2_append_think"
+    - "Configs: 1k1k conc 4-512, 8k1k conc 4-512"
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/1517
