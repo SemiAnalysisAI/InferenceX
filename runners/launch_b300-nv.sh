@@ -347,6 +347,7 @@ else
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
+        --container-remap-root \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"
 
