@@ -1,4 +1,4 @@
 [submodule "utils/aiperf"]
 	path = utils/aiperf
 	url = https://github.com/cquil11/aiperf.git
-	branch = cjq/weka-live-assistant-responses
+	branch = cjq/agentx-v0.3
