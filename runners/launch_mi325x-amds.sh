@@ -9,7 +9,11 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 set -x
 
-JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+# Exclude known-broken mi325x nodes:
+#   chi-mi325x-pod1-121: enroot-aufs2ovlfs setcap fails on this node's NFS-backed
+#                        squash dir; container image import never completes
+#                        (root-caused via #1467/#1468/#1469 sweep failures).
+JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"

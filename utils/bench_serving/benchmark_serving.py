@@ -46,9 +46,9 @@ from tqdm.asyncio import tqdm
 from transformers import PreTrainedTokenizerBase
 
 try:
-    from vllm.transformers_utils.tokenizer import get_tokenizer
-except ImportError:
     from backend_request_func import get_tokenizer
+except ImportError:
+    from vllm.transformers_utils.tokenizer import get_tokenizer
 
 try:
     from vllm.utils import FlexibleArgumentParser
@@ -899,6 +899,16 @@ def main(args: argparse.Namespace):
         with open(file_name, "w", encoding='utf-8') as outfile:
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
+
+    max_failure_rate = 0.05
+    completed = benchmark_result["completed"]
+    failure_rate = 1 - completed / args.num_prompts
+    if failure_rate > max_failure_rate:
+        raise SystemExit(
+            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
+            f"{max_failure_rate:.0%} threshold "
+            f"({completed}/{args.num_prompts} completed)"
+        )
 
 
 if __name__ == "__main__":
