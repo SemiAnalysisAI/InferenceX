@@ -151,7 +151,7 @@ jobs:
           fi
 
           # Cleanup results/ from a prior job on this runner. Agentic jobs
-          # write to fixed subpaths (trace_replay/, metrics_*, etc.), so stale
+          # write to fixed subpaths (aiperf_artifacts/, metrics_*, etc.), so stale
           # data from a previous job would otherwise be picked up as this
           # job's output when replay fails early.
           rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
@@ -246,26 +246,26 @@ jobs:
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
             results/metrics_plots.png
-            results/trace_replay/profile_export.jsonl
-            results/trace_replay/profile_export_aiperf.json
-            results/trace_replay/profile_export_aiperf.csv
-            results/trace_replay/profile_export_aiperf_timeslices.json
-            results/trace_replay/profile_export_aiperf_timeslices.csv
-            results/trace_replay/profile_export_aiperf_aggregate.json
-            results/trace_replay/profile_export_aiperf_aggregate.csv
-            results/trace_replay/profile_export_aiperf_collated.json
-            results/trace_replay/server_metrics_export.json
-            results/trace_replay/server_metrics_export.jsonl
-            results/trace_replay/server_metrics_export.csv
-            results/trace_replay/server_metrics_export.parquet
-            results/trace_replay/gpu_telemetry_export.jsonl
-            results/trace_replay/logs/aiperf.log
-            results/trace_replay/logs/*.log
+            results/aiperf_artifacts/profile_export.jsonl
+            results/aiperf_artifacts/profile_export_aiperf.json
+            results/aiperf_artifacts/profile_export_aiperf.csv
+            results/aiperf_artifacts/profile_export_aiperf_timeslices.json
+            results/aiperf_artifacts/profile_export_aiperf_timeslices.csv
+            results/aiperf_artifacts/profile_export_aiperf_aggregate.json
+            results/aiperf_artifacts/profile_export_aiperf_aggregate.csv
+            results/aiperf_artifacts/profile_export_aiperf_collated.json
+            results/aiperf_artifacts/server_metrics_export.json
+            results/aiperf_artifacts/server_metrics_export.jsonl
+            results/aiperf_artifacts/server_metrics_export.csv
+            results/aiperf_artifacts/server_metrics_export.parquet
+            results/aiperf_artifacts/gpu_telemetry_export.jsonl
+            results/aiperf_artifacts/logs/aiperf.log
+            results/aiperf_artifacts/logs/*.log
           # Excluded by design (multi-GB debug artifacts, not consumed by
-          # post-processing): results/trace_replay/inputs.json (pre-formatted
+          # post-processing): results/aiperf_artifacts/inputs.json (pre-formatted
           # request bodies — the mmap'd binary equivalent is rebuilt from
           # --public-dataset + --random-seed) and
-          # results/trace_replay/profile_export_raw.jsonl (full HTTP bodies
+          # results/aiperf_artifacts/profile_export_raw.jsonl (full HTTP bodies
           # per request — recoverable by re-running the same trace).
           if-no-files-found: ignore
 

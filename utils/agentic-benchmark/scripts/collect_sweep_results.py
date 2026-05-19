@@ -100,51 +100,12 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     }
 
 
-def _load_trace_replay_csv(csv_path: Path) -> pd.DataFrame | None:
-    """Load per-request metrics from trace_replay detailed_results.csv."""
-    df = pd.read_csv(csv_path)
-    if len(df) == 0:
-        return None
-
-    # Filter to successful requests only
-    df = df[df["success"] == True].copy()
-    if len(df) == 0:
-        return None
-
-    # Convert to the same schema as _load_aiperf_jsonl
-    latency_s = df["request_complete_time"] - df["request_start_time"]
-    return pd.DataFrame({
-        "start_time_ms": df["request_start_time"] * 1000,
-        "ttft_ms": df["ttft"] * 1000,
-        "tpot_ms": df["itl"] * 1000,
-        "latency_ms": latency_s * 1000,
-        "input_num_tokens": df["input_tokens"],
-        "output_num_tokens": df["output_tokens_actual"],
-    })
-
-
 def load_experiment(exp_dir: Path) -> dict | None:
     """Load metrics from a single experiment artifact directory."""
     client_csv = exp_dir / "metrics_client_metrics.csv"
     server_csv = exp_dir / "metrics_server_metrics.csv"
 
-    # No more status.txt: an experiment is considered SUCCESS iff its
-    # trace_replay/detailed_results.csv has at least one successful row.
-    # Failed / missing jobs show up as FAILED in the summary.
-    trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
-    status = "FAILED"
-    if trace_replay_csv.exists():
-        try:
-            import csv as _csv
-            import sys as _sys
-            _csv.field_size_limit(_sys.maxsize)
-            with open(trace_replay_csv) as _f:
-                if any(r.get('success') == 'True' for r in _csv.DictReader(_f)):
-                    status = "SUCCESS"
-        except Exception:
-            pass
-
-    # Check for aiperf summary CSV (preferred) or per-record JSONL (fallback)
+    # An experiment is considered SUCCESS iff aiperf produced a summary CSV.
     aiperf_summary_csv = None
     aiperf_artifacts = exp_dir / "aiperf_artifacts"
     if aiperf_artifacts.exists():
@@ -152,10 +113,9 @@ def load_experiment(exp_dir: Path) -> dict | None:
         if candidate.exists():
             aiperf_summary_csv = candidate
 
-    # Check for trace replay output
-    trace_replay_csv = exp_dir / "trace_replay" / "detailed_results.csv"
+    status = "SUCCESS" if aiperf_summary_csv is not None else "FAILED"
 
-    if not client_csv.exists() and aiperf_summary_csv is None and not trace_replay_csv.exists():
+    if not client_csv.exists() and aiperf_summary_csv is None:
         return None
 
     # Parse experiment name from directory.
@@ -186,7 +146,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: aiperf summary CSV (preferred), custom client CSV, or trace replay CSV
+        # Determine data source: aiperf summary CSV (preferred) or custom client CSV
         if aiperf_summary_csv is not None:
             aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
             if aiperf_metrics is None:
@@ -198,48 +158,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 return result
 
             # Prefer benchmark_metadata.json for precise wall-clock duration
-            metadata_file = exp_dir / "benchmark_metadata.json"
-            total_time_sec = None
-            if metadata_file.exists():
-                try:
-                    with open(metadata_file) as f:
-                        metadata = json.load(f)
-                    total_time_sec = metadata.get("benchmark_runtime_sec")
-                except Exception:
-                    pass
-
-            if not total_time_sec or total_time_sec <= 0:
-                first_start_ms = df["start_time_ms"].min()
-                last_finish_ms = (df["start_time_ms"] + df["latency_ms"]).max()
-                total_time_sec = (last_finish_ms - first_start_ms) / 1000.0
-            if total_time_sec <= 0:
-                total_time_sec = df["latency_ms"].sum() / 1000
-
-            num_requests = len(df)
-            result.update({
-                "num_requests": num_requests,
-                "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
-                "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-                "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-                "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
-                "mean_ttft_ms": df["ttft_ms"].mean(),
-                "p50_ttft_ms": df["ttft_ms"].median(),
-                "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
-                "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
-                "mean_tpot_ms": df["tpot_ms"].mean(),
-                "p50_tpot_ms": df["tpot_ms"].median(),
-                "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
-                "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
-                "mean_latency_ms": df["latency_ms"].mean(),
-                "p50_latency_ms": df["latency_ms"].median(),
-                "p90_latency_ms": df["latency_ms"].quantile(0.9),
-                "p99_latency_ms": df["latency_ms"].quantile(0.99),
-            })
-        elif trace_replay_csv.exists():
-            df = _load_trace_replay_csv(trace_replay_csv)
-            if df is None or len(df) == 0:
-                return result
-
             metadata_file = exp_dir / "benchmark_metadata.json"
             total_time_sec = None
             if metadata_file.exists():

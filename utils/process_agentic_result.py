@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Process aiperf agentic-replay output into the InferenceX agg_*.json shape.
 
-Reads aiperf's three artifact files from $RESULT_DIR/trace_replay/ and emits
+Reads aiperf's three artifact files from $RESULT_DIR/aiperf_artifacts/ and emits
 $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json with the same key schema fixed-seq-len
 and the legacy kv-cache-tester pipeline produce, so utils/summarize.py and
 sibling aggregators keep working without changes.
@@ -626,11 +626,11 @@ def _resolve_artifact_dir(result_dir: Path) -> Path:
 
     aiperf accepts ``--output-artifact-dir`` and writes directly into it when
     ``--num-profile-runs == 1`` (our default), but creates a per-run subdir
-    when that flag is > 1. Handle both: prefer ``result_dir/trace_replay``
+    when that flag is > 1. Handle both: prefer ``result_dir/aiperf_artifacts``
     when it has the export files, else descend into the first child dir
     that does.
     """
-    base = result_dir / "trace_replay"
+    base = result_dir / "aiperf_artifacts"
     if (base / "profile_export.jsonl").is_file():
         return base
     if base.is_dir():

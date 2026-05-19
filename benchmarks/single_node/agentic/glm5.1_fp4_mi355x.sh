@@ -83,4 +83,4 @@ write_agentic_result_json "$RESULT_DIR"
 
 # ---- Post-processing --------------------------------------------------------
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
-    "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
+    "$RESULT_DIR/aiperf_artifacts" -o "$RESULT_DIR" 2>&1 || true

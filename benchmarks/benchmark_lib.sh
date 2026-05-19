@@ -881,9 +881,6 @@ run_eval() {
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
 AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
-# TRACE_REPLAY_DIR retained for any out-of-tree consumer that still
-# imports the kv-cache-tester scripts. Not used by the helpers below.
-TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -1026,7 +1023,7 @@ build_replay_cmd() {
     # Without this, aiperf only emits aggregate stats and the 6x2 panels
     # collapse to flat lines.
     REPLAY_CMD+=" --slice-duration 1.0"
-    REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
+    REPLAY_CMD+=" --output-artifact-dir $result_dir/aiperf_artifacts"
     # The inferencex-agentx-mvp scenario enforces a 900s minimum
     # benchmark duration. For smoke tests with shorter durations, opt
     # into --unsafe-override (the run's submission_valid will be flagged

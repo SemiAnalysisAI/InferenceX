@@ -34,7 +34,7 @@ set -e
 write_agentic_result_json "$RESULT_DIR"
 
 python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
-    "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
+    "$RESULT_DIR/aiperf_artifacts" -o "$RESULT_DIR" 2>&1 || true
 
 if [ "$REPLAY_RC" -ne 0 ]; then
     echo "WARNING: agentic trace replay exited with code $REPLAY_RC after writing available results" >&2
