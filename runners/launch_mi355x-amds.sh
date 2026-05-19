@@ -181,6 +181,11 @@ else
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    case "$SPEC_DECODING" in
+        mtp)        SPEC_SUFFIX='_mtp' ;;
+        eagle3_fp8) SPEC_SUFFIX='_eagle3_fp8' ;;
+        *)          SPEC_SUFFIX='' ;;
+    esac
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
