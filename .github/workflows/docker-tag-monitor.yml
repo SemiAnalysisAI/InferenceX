@@ -1,6 +1,14 @@
 name: Docker Tag Monitor
 
-# trigger: re-run after token/allowed_bots fix
+# Downstream merge note (human-only — intentionally NOT in the @claude prompt):
+#   Once the per-config-key PRs this workflow asks Claude to open have a
+#   green run-sweep.yml run and the `full-sweep-enabled` label, merge them
+#   with `utils/merge_with_reuse.sh <pr-number>` instead of the GitHub UI.
+#   That script posts /reuse-sweep-run, auto-resolves perf-changelog.yaml
+#   conflicts, cancels the merge-triggered sweep, and squash-merges with
+#   --admin so the post-merge run-sweep run reuses the PR's prior sweep.
+#   Claude doesn't have admin merge rights and shouldn't be told about this
+#   path — it's a maintainer-only finalization step.
 
 on:
   schedule:
@@ -207,29 +215,29 @@ jobs:
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
             echo "3. For each eligible config-key, push a branch and actually open a PR — do not stop at the \"Create a pull request for ...\" remote hint that \`git push\` prints. Run \`gh pr create\` (or the equivalent MCP tool) and verify the returned PR URL. Link every PR back to this issue in a comment."
             echo ""
-            echo "**PR title / commit message formatting:** Multi-line titles and bodies MUST use a heredoc, not \`\\n\` escapes and not \`\$'...'\` ANSI-C quoting. Last run produced commits literally starting with \`\$\` and containing \`\\n\\n\` as text because of mis-quoted ANSI-C strings. Use this pattern instead:"
+            echo "**Required PR label:** Every PR you open from this issue MUST carry the \`full-sweep-enabled\` label. Apply it at creation time via \`gh pr create --label full-sweep-enabled\` (or add it immediately after with \`gh pr edit <num> --add-label full-sweep-enabled\`). Do not skip this — downstream automation keys off the label."
+            echo ""
+            echo "**PR title / commit message formatting:** Multi-line titles and bodies MUST use a heredoc, not \`\\n\` escapes and not \`\$'...'\` ANSI-C quoting. A prior run produced commits literally starting with \`\$\` and containing \`\\n\\n\` as text because of mis-quoted ANSI-C strings. Use this pattern instead:"
             echo ""
             echo "\`\`\`bash"
             echo "git commit -m \"\$(cat <<'EOF'"
             echo "Update qwen3.5-bf16-b300-sglang-mtp SGLang image to v0.5.11-cu130"
             echo ""
-            echo "Ref #${ISSUE_NUMBER}"
+            echo "Ref #<this issue's number>"
             echo "EOF"
             echo ")\""
             echo ""
             echo "gh pr create --title \"Update qwen3.5-bf16-b300-sglang-mtp SGLang image to v0.5.11-cu130\" \\"
             echo "  --label full-sweep-enabled \\"
             echo "  --body \"\$(cat <<'EOF'"
-            echo "Updates the SGLang image tag for \\\`qwen3.5-bf16-b300-sglang-mtp\\\` to v0.5.11-cu130."
+            echo "Updates the SGLang image tag for \`qwen3.5-bf16-b300-sglang-mtp\` to v0.5.11-cu130."
             echo ""
-            echo "Ref #${ISSUE_NUMBER}"
+            echo "Ref #<this issue's number>"
             echo "EOF"
             echo ")\""
             echo "\`\`\`"
             echo ""
-            echo "PR titles must be a single line (no newlines). Bodies are multi-line and must contain real \\\\n, not the literal characters \`\\\\n\`. Never put \`\$\` in front of a quoted message string."
-            echo ""
-            echo "**Required PR label:** Every PR you open from this issue MUST carry the \`full-sweep-enabled\` label. Apply it at creation time via \`gh pr create --label full-sweep-enabled\` (or add it immediately after with \`gh pr edit <num> --add-label full-sweep-enabled\`). Do not skip this — downstream automation keys off the label."
+            echo "PR titles must be a single line (no newlines). Bodies should contain real newlines (use a heredoc), not the literal characters \`\\n\`. Never put \`\$\` in front of a quoted message string."
             echo ""
             echo "**Runner gating:** Only open PRs for config-keys whose runner SKU is in the allowed list (\`$ALLOWED_SKUS\`). The runner SKU is the hardware segment in the config-key (e.g. \`dsr1-fp4-b200-sglang\` → \`b200\`). For any config-key whose SKU is not in the allowed list, skip it and list the skipped keys plus the reason (not clear / all-offline / no idle capacity) in a single comment on this issue."
             echo ""
@@ -243,18 +251,7 @@ jobs:
             echo ""
             echo "**Exception — MTP pairs:** When a config-key and its \`-mtp\` sibling exist for the same model/precision/runner/framework (e.g. \`qwen3.5-fp4-b300-sglang\` and \`qwen3.5-fp4-b300-sglang-mtp\`), bundle both into one PR. Treat the pair as a single unit for the per-SKU cap (counts as 1, not 2) and the sequential e2e queue. If only one side of the pair is present in the updates, open a PR for just that one."
             echo ""
-            echo "For each eligible config-key, check if there are multiple CUDA/ROCm versions available and choose appropriately based on current usage patterns in the configs."
-            echo ""
-            echo "**Slack ping when done:** After all PRs have been opened, all e2e runs have reached a terminal state, and the wrap-up comment with any deferred config-keys has been posted, send a single summary message to Slack channel \`C09PULGMVNG\` via the Bash tool. The \`SLACK_BOT_TOKEN\` env var is available. Use:"
-            echo ""
-            echo "\`\`\`bash"
-            echo "curl -sS -X POST https://slack.com/api/chat.postMessage \\"
-            echo "  -H \"Authorization: Bearer \$SLACK_BOT_TOKEN\" \\"
-            echo "  -H \"Content-Type: application/json; charset=utf-8\" \\"
-            echo "  --data \"\$(jq -n --arg ch C09PULGMVNG --arg t \"<text>\" '{channel: \$ch, text: \$t}')\""
-            echo "\`\`\`"
-            echo ""
-            echo "Message text should include: this issue link, count of PRs opened (per SKU), count of e2e runs passed/failed, list of skipped or deferred config-keys, and link to this workflow run. Send exactly one Slack message — do not post per-SKU or per-PR."
+            echo "If Docker Hub lists multiple variants for the same base version (e.g. \`cu128\` vs \`cu130\`, \`rocm70\` vs \`rocm72\`), pick the variant whose suffix matches what the config-key's current image entry already uses — don't switch CUDA/ROCm minor versions in this update."
           } > "$BODY_FILE"
 
           rm -f "$RUNNERS_TABLE" "$ALLOWED_SKUS_FILE" /tmp/ci.json
