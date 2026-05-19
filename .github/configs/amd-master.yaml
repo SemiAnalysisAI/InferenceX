@@ -643,7 +643,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
 
 kimik2.5-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
