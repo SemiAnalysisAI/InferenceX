@@ -9034,7 +9034,7 @@ glm5-fp8-b200-dynamo-sglang:
 
 # MTP variant of dsv4-fp4-gb300-dynamo-sglang.
 dsv4-fp4-gb300-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260509-9ee83034
+  image: lmsysorg/sglang:nightly-dev-cu13-20260519-dbac4647
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
