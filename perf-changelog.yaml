@@ -2958,4 +2958,4 @@
     - "Model: nvidia/MiniMax-M2.5-NVFP4"
     - "TP=8, EP=1, --tool-call-parser minimax_m2, --reasoning-parser minimax_m2_append_think"
     - "Configs: 1k1k conc 4-512, 8k1k conc 4-512"
-  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/47
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/1517
