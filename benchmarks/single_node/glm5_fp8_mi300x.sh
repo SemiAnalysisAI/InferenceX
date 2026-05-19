@@ -31,10 +31,9 @@ fi
 
 start_gpu_monitor
 
-# Follows the qwen3.5-fp8-mi300x recipe (AMD Andy's LinkedIn-recommended
-# args for sglang ROCm on mi300x) with GLM-5-specific parsers.
+# Launch args follow sglang issue #25672 comment 4485916205:
+# tilelang NSA backends + fp8_e4m3 KV cache + multithread model load.
 python3 -m sglang.launch_server \
-    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
@@ -44,12 +43,16 @@ python3 -m sglang.launch_server \
     --tool-call-parser glm47 \
     --reasoning-parser glm45 \
     --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --mem-fraction-static 0.80 \
+    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
+    --nsa-prefill-backend tilelang \
+    --nsa-decode-backend tilelang \
+    --kv-cache-dtype fp8_e4m3 \
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

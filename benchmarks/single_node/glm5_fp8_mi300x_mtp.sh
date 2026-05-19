@@ -35,8 +35,10 @@ fi
 
 start_gpu_monitor
 
+# Launch args follow sglang issue #25672 comment 4485916205:
+# tilelang NSA backends + fp8_e4m3 KV cache + multithread model load,
+# plus EAGLE/MTP speculative decoding.
 python3 -m sglang.launch_server \
-    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
@@ -46,12 +48,15 @@ python3 -m sglang.launch_server \
     --tool-call-parser glm47 \
     --reasoning-parser glm45 \
     --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.75 \
+    --mem-fraction-static 0.80 \
+    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
+    --nsa-prefill-backend tilelang \
+    --nsa-decode-backend tilelang \
+    --kv-cache-dtype fp8_e4m3 \
     --speculative-algorithm EAGLE \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
