@@ -163,6 +163,7 @@ SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
+pip install -q --upgrade transformers
 
 run_benchmark_serving \
     --model "$MODEL" \

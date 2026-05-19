@@ -2938,7 +2938,7 @@
 - config-keys:
     - dsv4-fp4-b300-sglang
   description:
-    - "Update sglang image from deepseek-v4-b300 to nightly-dev-cu13-20260518-c67b2870"
+    - "Update sglang image from deepseek-v4-b300 to nightly-dev-cu13-20260519-dbac4647"
     - "Refactor benchmark script to dispatch by CONC instead of nested DP_ATTENTION/CONC/EP_SIZE"
     - "Switch CONC 2048/4096/8192 from --moe-a2a-backend deepep to megamoe"
     - "Remove env vars deleted from sglang main (SGLANG_OPT_USE_JIT_NORM, SGLANG_OPT_USE_FAST_MASK_EP, SGLANG_OPT_FIX_NEXTN_MEGA_MOE, SGLANG_OPT_FIX_HASH_MEGA_MOE)"
