@@ -116,7 +116,6 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --attention-backend compressed \
     --max-running-requests ${CONC} \
-    --cuda-graph-max-bs ${CONC} \
     --page-size 256 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \

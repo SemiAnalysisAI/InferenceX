@@ -1723,12 +1723,12 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
+      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
       - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
+      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 64 }
 
 # vLLM with AITER MLA decode for DSv4 on MI355X (vllm-project/vllm#40889,
