@@ -333,7 +333,12 @@ else
 
     # Pin to one of the known-good B300 nodes; others have hardware/network
     # issues that cause benchmarks to hang or fail to start.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # NOTE: b300-020 no longer exists in the cluster (current max node is
+    # b300-019; sinfo confirms). Slurm rejects the whole nodelist if any
+    # name is invalid, so dropping 020 unblocks dispatch. The historical
+    # exclusion pattern (skip 007, 013-016 — known special-purpose nodes)
+    # is preserved.
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-019] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
