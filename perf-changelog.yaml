@@ -2871,6 +2871,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1372
 
 - config-keys:
+<<<<<<< dsv4-mi355-sgl-0513
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-b19052c-20260518-DSv4."
@@ -2878,3 +2879,68 @@
     - "Concurrency sweep up to 1024."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1355
 
+=======
+    - dsr1-fp4-b200-trt
+    - dsr1-fp4-b200-trt-mtp
+  description:
+    - "Update TensorRT-LLM image (off: v1.2.0rc6.post2 104d / mtp: v1.2.0rc6.post3 101d) to v1.3.0rc14 (latest pre-release)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1489
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Update SGLang image to v0.5.12-rocm700-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1432
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.20.2 to v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1504
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  description:
+    - "Upgrade GB200 DSV4 MTP2 1P/1D DEP8 MegaMOE mid-curve recipe to vLLM v0.21.0"
+    - "Extend mid-curve concurrency sweep to also benchmark conc=256, conc=512, and conc=1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1390
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add MI355X config: qwen3.5-fp4-sglang-mtp using lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1445
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Update SGLang image to v0.5.12-rocm700-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1431
+
+- config-keys:
+    - qwen3.5-bf16-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.10rc0-rocm720-mi35x-20260415 to v0.5.12-rocm720-mi35x-20260517"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1443
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.10rc0-rocm720-mi35x-20260414 to v0.5.12-rocm720-mi35x-20260517"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1444
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+  description:
+    - "Update SGLang ROCm image from rocm/sgl-dev:v0.5.10rc0-rocm720-mi35x-20260413 (32d old, deprecated rocm/sgl-dev repo) to lmsysorg/sglang:v0.5.12-rocm720-mi35x (clean stable tag on the active lmsysorg/sglang repo)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1497
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang
+    - glm5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.11/v0.5.10rc0 to v0.5.12-rocm720-mi35x-20260517"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
+>>>>>>> main
