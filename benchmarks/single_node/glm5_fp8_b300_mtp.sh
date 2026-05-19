@@ -25,7 +25,11 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
 
-export SGL_ENABLE_JIT_DEEPGEMM=1
+# Workaround for sgl-project/sglang#25551: v0.5.12 DeepGemm TMA-descriptor
+# regression on B300 (sm_120) crashes CUDA graph capture with
+# CUDA_ERROR_ILLEGAL_ADDRESS. Disabling JIT DeepGemm bypasses the affected
+# kernel path. Restore to =1 once the upstream regression is fixed.
+export SGL_ENABLE_JIT_DEEPGEMM=0
 export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log
