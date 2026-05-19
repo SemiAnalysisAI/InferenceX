@@ -46,6 +46,9 @@ resources:
 
 infra:
   etcd_nats_dedicated_node: true
+  # See sibling 1p6d recipe for rationale — NATS 1 MiB default rejects
+  # agentic prompts; 32 MiB gives ~10x headroom over observed payloads.
+  nats_max_payload_mb: 32
 
 frontend:
   type: dynamo

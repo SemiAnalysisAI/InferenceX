@@ -46,6 +46,16 @@ resources:
 
 infra:
   etcd_nats_dedicated_node: true
+  # Raise NATS server max_payload from the 1 MiB default to 32 MiB.
+  # Agentic prompts at 50k-200k DSv4 tokens serialize to JSON at ~10-15
+  # bytes/token, easily clearing 1-3 MB per request. Without this, every
+  # long-prompt prefill RPC gets rejected by the NATS server with
+  # "maximum payload exceeded" (visible in infra.out), and the dynamo
+  # frontend surfaces a misleading "NATS request ... deadline has elapsed"
+  # (it never gets a reply because the publish was rejected). 32 MiB gives
+  # ~10x headroom over the largest observed payload (3.2 MB) without
+  # crossing NATS's 64 MiB hard cap or Dynamo's 16 MiB advisory limit.
+  nats_max_payload_mb: 32
 
 frontend:
   type: dynamo
