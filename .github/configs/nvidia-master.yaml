@@ -1773,11 +1773,12 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # cpu offload only this iteration — none entries already validated in
-      # earlier runs (B200 25332045030: TP=8 1..32 + DEP=8 16..128 all 100%).
-      # Re-add when investigating regressions in offload=none.
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
+      # no-offload curve against the new cc-traces-weka-no-subagents-051826
+      # dataset (98 traces, v5-only + CC ≥ 2.1.139). cpu-offload entries
+      # removed for this iteration; restore from prior commits if revisiting
+      # offload regressions.
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [12, 16, 24, 32, 48, 64, 96, 128] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
@@ -3007,12 +3008,13 @@ dsv4-fp4-b300-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # cpu offload only this iteration — none entries already validated in
-      # earlier runs. Re-add when investigating regressions in offload=none.
-      - { tp: 4, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [128, 256, 512] }
+      # no-offload curve against the new cc-traces-weka-no-subagents-051826
+      # dataset (98 traces, v5-only + CC ≥ 2.1.139). cpu-offload entries
+      # removed for this iteration; restore from prior commits if revisiting
+      # offload regressions.
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 24, 32, 40, 48] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
