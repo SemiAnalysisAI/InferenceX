@@ -180,7 +180,6 @@ else
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     case "$SPEC_DECODING" in
         mtp)        SPEC_SUFFIX='_mtp' ;;
         eagle3_fp8) SPEC_SUFFIX='_eagle3_fp8' ;;
