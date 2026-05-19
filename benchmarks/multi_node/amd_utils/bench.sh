@@ -31,7 +31,7 @@ log_path=$7
 chosen_isl=${8:-1024}
 chosen_osl=${9:-1024}
 concurrency_list=${10:-"512x1"}
-if [[ "$ENGINE" == "vllm" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     chosen_req_rate=${11:-inf}
 else
     chosen_req_rate=${11:-1}
