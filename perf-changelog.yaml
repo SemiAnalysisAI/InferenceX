@@ -2871,7 +2871,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1372
 
 - config-keys:
-<<<<<<< dsv4-mi355-sgl-0513
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-b19052c-20260518-DSv4."
@@ -2879,7 +2878,7 @@
     - "Concurrency sweep up to 1024."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1355
 
-=======
+- config-keys:
     - dsr1-fp4-b200-trt
     - dsr1-fp4-b200-trt-mtp
   description:
@@ -2943,4 +2942,3 @@
   description:
     - "Update SGLang ROCm image from v0.5.11/v0.5.10rc0 to v0.5.12-rocm720-mi35x-20260517"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
->>>>>>> main
