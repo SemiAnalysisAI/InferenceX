@@ -2957,3 +2957,11 @@
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
     - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - glm5-fp4-gb300-dynamo-sglang
+  description:
+    - "Add GLM-5 FP4 GB300 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
+    - "1k1k and 8k1k STP low-latency and max-throughput srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4/ (ported from upstream srt-slurm PR #152)"
+    - "Wire glm5/fp4 model + dynamo-sglang framework branches into runners/launch_gb300-nv.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1514
