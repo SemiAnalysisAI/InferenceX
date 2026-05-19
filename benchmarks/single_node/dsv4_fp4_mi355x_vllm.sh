@@ -8,8 +8,9 @@ set -eo pipefail
 # fp4 variant.
 #
 # Serving flags follow the validated MI355X recipe from
-# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8). Image-pin details
-# live in amd-master.yaml.
+# vllm-project/recipes#433 (DeepSeek-V4-Pro, TP=8). DEP probes reuse the
+# same ROCm recipe while switching parallelism to vLLM's DP+EP form.
+# Image-pin details live in amd-master.yaml.
 #
 # --moe-backend triton_unfused is required for the FP4 MoE expert
 # weight format used by deepseek-ai/DeepSeek-V4-Pro. Letting --moe-backend
@@ -28,6 +29,7 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -61,9 +63,20 @@ fi
 
 start_gpu_monitor
 
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+fi
+
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
 set -x
 vllm serve $MODEL --port $PORT \
-    --tensor-parallel-size $TP \
+    "${PARALLEL_ARGS[@]}" \
+    "${EP_ARGS[@]}" \
     --distributed-executor-backend mp \
     --gpu-memory-utilization 0.6 \
     --max-model-len $MAX_MODEL_LEN \
