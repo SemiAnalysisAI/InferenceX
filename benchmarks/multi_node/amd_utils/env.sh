@@ -202,9 +202,11 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         NODENAME=$(hostname -s)
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         elif [[ $NODENAME == mia1* ]]; then
             export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
         else
             echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
