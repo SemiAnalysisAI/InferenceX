@@ -54,6 +54,14 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     set -x
 
+    export VLLM_MORIIO_QP_PER_TRANSFER=4
+    export VLLM_MORIIO_NUM_WORKERS=4
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+    export MORI_IO_QP_MAX_SEND_WR=16384
+    export MORI_IO_QP_MAX_CQE=32768
+    export MORI_IO_QP_MAX_SGE=4
+    export MORI_IO_TC_DISABLE=0
+
     # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
     if [[ -z "$UCX_NET_DEVICES" ]]; then
         UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/tw-eth/{print $2}' | head -1)
