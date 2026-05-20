@@ -185,13 +185,14 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 # Container Synchronization
 # =============================================================================
 
-echo "Waiting at the container creation barrier on $host_name"
+BARRIER_PORT="${BARRIER_PORT:-36380}"
+echo "Waiting at the container creation barrier on $host_name (port $BARRIER_PORT)"
 python3 $WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
-    --local-port 5000 \
+    --local-port ${BARRIER_PORT} \
     --enable-port \
     --node-ips ${IPADDRS} \
-    --node-ports 5000 \
+    --node-ports ${BARRIER_PORT} \
     --wait-for-all-ports \
     --timeout 600
 
