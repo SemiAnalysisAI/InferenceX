@@ -50,7 +50,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
-    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
+    rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     cleanup_and_save_logs() {
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
@@ -64,7 +64,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             tail -100 "$err_file"
             echo "========================"
         fi
-        sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+        rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
     }
     trap cleanup_and_save_logs EXIT
 
@@ -153,7 +153,7 @@ PY
     set -x
     echo "Canceled the slurm job $JOB_ID"
 
-    sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
+    rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
 else
 
