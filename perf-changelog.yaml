@@ -2508,13 +2508,6 @@
     - "Update image tag to vllm/vllm-openai:v0.20.2"
     - "Add DEP configs for B300 vLLM MTP"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1271
-
-- config-keys:
-    - qwen3.5-fp8-mi355x-atom
-  description:
-    - "Bump ATOM image to rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511"
-    - "TP=4 shows +3.2% to +16.3% throughput improvement across 1k1k and 8k1k workloads (concurrency 4-256)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1411
   
 - config-keys:  
     - minimaxm2.5-fp8-mi355x-vllm
@@ -2978,3 +2971,11 @@
   description:
     - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.0-...-atom0.1.1 83d) to rocm7.2.3_..._atom20260511"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+  description:
+    - "Bump ATOM image to rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511"
+    - "TP=4 shows +3.2% to +16.3% throughput improvement across 1k1k and 8k1k workloads (concurrency 4-256)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1411
+  
