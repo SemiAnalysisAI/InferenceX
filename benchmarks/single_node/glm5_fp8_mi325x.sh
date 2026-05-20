@@ -15,39 +15,47 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-nvidia-smi
-
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+CONTEXT_LENGTH=$((ISL + OSL + 20))
+MAX_PREFILL_TOKENS=32768
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+else EVAL_CONTEXT_ARGS="--context-length $CONTEXT_LENGTH"
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-set -x
+# Launch args follow sglang issue #25672 comment 4485916205:
+# tilelang NSA backends + fp8_e4m3 KV cache + multithread model load.
 python3 -m sglang.launch_server \
-  --model-path "$MODEL" \
-  --host 0.0.0.0 \
-  --port "$PORT" \
-  --tp-size "$TP" \
-  --tool-call-parser glm47 \
-  --reasoning-parser glm45 \
-  --mem-fraction-static 0.85 \
-  --served-model-name glm-5-fp8 \
-  --trust-remote-code \
-  --enable-flashinfer-allreduce-fusion \
-  $EVAL_CONTEXT_ARGS > "$SERVER_LOG" 2>&1 &
+    --model-path $MODEL \
+    --host=0.0.0.0 \
+    --port $PORT \
+    --tensor-parallel-size $TP \
+    --data-parallel-size 1 \
+    --trust-remote-code \
+    --tool-call-parser glm47 \
+    --reasoning-parser glm45 \
+    --tokenizer-worker-num 6 \
+    --cuda-graph-max-bs $CONC \
+    --disable-radix-cache \
+    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --scheduler-recv-interval 30 \
+    --mem-fraction-static 0.80 \
+    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
+    --nsa-prefill-backend tilelang \
+    --nsa-decode-backend tilelang \
+    --kv-cache-dtype fp8_e4m3 \
+    $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -57,20 +65,15 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( CONC * 10 )) \
+    --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --trust-remote-code
+    --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
-# Server accepts glm-5-fp8 (--served-model-name); lm-eval must use that model name
 if [ "${RUN_EVAL}" = "true" ]; then
-    export MODEL_NAME=glm-5-fp8
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x
