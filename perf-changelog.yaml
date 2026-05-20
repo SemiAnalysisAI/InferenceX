@@ -2971,3 +2971,10 @@
   description:
     - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.0-...-atom0.1.1 83d) to rocm7.2.3_..._atom20260511"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update MiniMax-M2.5 FP8 H200 vLLM to vllm/vllm-openai:v0.20.1-ubuntu2404"
+    - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
