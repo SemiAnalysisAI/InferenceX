@@ -2879,6 +2879,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1372
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-b19052c-20260518-DSv4."
+    - "Enabled Triton attention backend, FlyDSL MoE, and fused hash topk."
+    - "Concurrency sweep up to 1024."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1355
+
+- config-keys:
     - dsr1-fp4-b200-trt
     - dsr1-fp4-b200-trt-mtp
   description:
@@ -2942,6 +2950,64 @@
   description:
     - "Update SGLang ROCm image from v0.5.11/v0.5.10rc0 to v0.5.12-rocm720-mi35x-20260517"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
+    - "Add DEP8 dp-attn=true validation probes at conc=64 for 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
+
+- config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Update SGLang image from glm5-hopper to v0.5.10.post1-cu130"
+    - "Add --enable-flashinfer-allreduce-fusion to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1033
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.0-...-atom0.1.1 83d) to rocm7.2.3_..._atom20260511"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
+
+- config-keys:
+    - glm5-fp8-mi325x-sglang
+    - glm5-fp8-mi325x-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 SGLang ROCm recipes (off + MTP/EAGLE) for MI325X on lmsysorg/sglang:v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1485
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.1-...-atom0.1.2) to rocm7.2.3_..._atom20260511"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1519
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp4-mi355x-sglang (model: amd/DeepSeek-R1-0528-MXFP4) on lmsysorg/sglang:v0.5.12-rocm700-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1520
+
+- config-keys:
+    - dsr1-fp8-h200-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp8-h200-sglang (model: deepseek-ai/DeepSeek-R1-0528) on lmsysorg/sglang:v0.5.12-cu130 — TP=8, EP=1, search-space conc 4..64 on 1k1k + 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1523
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b300-sglang
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b300-sglang
+    - dsr1-fp8-b200-sglang-mtp
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Re-run DSR1 SGLang agg configs (B200/B300, FP8/FP4, no-MTP/MTP) — picks up tokenizer fix from #1381"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1502
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang
