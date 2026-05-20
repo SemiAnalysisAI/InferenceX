@@ -8758,6 +8758,65 @@ dsv4-fp4-gb300-dynamo-vllm:
           ep: 16
           dp-attn: true
 
+dsv4-fp4-gb300-dynamo-vllm-mtp2:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - conc-list: [1, 4, 8]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-tp4-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+      - conc-list: [64, 128, 1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep8-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      - conc-list: [512, 1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-2p1d-dep4-dep8-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260519-dbac4647
   model: deepseek-ai/DeepSeek-V4-Pro
