@@ -3050,3 +3050,10 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Pin image back to vllm/vllm-openai-rocm:v0.19.0 while we work through a v0.21 perf regression on MI355x AITER paths (image was bumped to v0.21.0 in #1406)"
+    - "Switch to AITER-env-based recipe: enable AITER MOE/RMSNORM/UnifiedAttn/A16W4 + HSA_NO_SCRATCH_RECLAIM, drop legacy TRITON_ROPE/BUFFER_OPS/--attention-backend/fuse_rope_kvcache, add --max-num-seqs 256 + --async-scheduling"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1531
