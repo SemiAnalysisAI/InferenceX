@@ -3098,4 +3098,4 @@
     - "Replace the partial Qwen-FP8/dsv4 special-case MODEL rewrite with a universal rewrite from HF id (org/name) to absolute local path under HF_HUB_CACHE_MOUNT; remove hf download from bench scripts so contract is staged-or-fail"
     - "Pin in-scope configs to runner: b300-nv so jobs are picked up by the NVIDIA runner only"
     - "Reduce search-space to single (isl=1024, osl=1024, conc=4) point per config to verify model-path wiring end-to-end"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1539
