@@ -1,0 +1,210 @@
+# 1k1k 1P1D / DEP8 / total 3 nodes
+# conc sweep: 2048, 4096, 8192 (c/4, c/2, c where c = X * 8192)
+# stack: baizhou-revert + sglang-cw-dev (dirty) + dynamo dd37acac04 (locked to PR #130 / job 1350)
+
+name: "disagg-1p1d-dep8-conc8192"
+
+slurm:
+  time_limit: "03:00:00"
+
+sbatch_directives:
+  cpus-per-task: '144'
+  mem: '0'
+
+dynamo:
+  hash: "dd37acac04fa8b00a95de4f089d717080c98e2f4"
+  install: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
+  env:
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1"
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
+
+model:
+  path: dsv4-pro
+  container: "dsv4-grace-blackwell-baizhou-revert"
+  precision: fp4
+
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_nodes: 2
+  decode_workers: 1
+  gpus_per_decode: 8
+
+extra_mount:
+- /mnt/home/yangminl/sglang-cw-dev:/sgl-workspace/sglang
+- /mnt/home/yangminl/sglang-cw-dev:/workspace/sglang
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    PYTHONUNBUFFERED: '1'
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '0'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_REASONING_EFFORT: max
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: '1'
+    SGLANG_OPT_USE_JIT_NORM: '1'
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+    SGLANG_OPT_USE_TOPK_V2: '1'
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: '1'
+    SGLANG_OPT_USE_FAST_MASK_EP: '1'
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: '1'
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    DYN_LOG: 'info,dynamo_runtime::pipeline::network::ingress::push_handler=warn'
+
+  decode_environment:
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    PYTHONUNBUFFERED: '1'
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '0'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_REASONING_EFFORT: max
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: '1'
+    SGLANG_OPT_USE_JIT_NORM: '1'
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+    SGLANG_OPT_USE_TOPK_V2: '1'
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: '1'
+    SGLANG_OPT_USE_FAST_MASK_EP: '1'
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1152'
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: '1'
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: "8"
+    MC_FORCE_MNNVL: '1'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    DYN_LOG: 'info,dynamo_runtime::pipeline::network::ingress::push_handler=warn'
+
+  sglang_config:
+    prefill:
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      moe-dense-tp-size: 1
+      enable-dp-lm-head: true
+      moe-a2a-backend: deepep
+      deepep-config: '{"normal_dispatch":{"num_sms":88,"num_max_nvl_chunked_send_tokens":28,"num_max_nvl_chunked_recv_tokens":512},"normal_combine": {"num_sms":88,"num_max_nvl_chunked_send_tokens":16,"num_max_nvl_chunked_recv_tokens":512}}'
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: mooncake
+      mem-fraction-static: 0.9
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 32768
+
+    decode:
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: deepep
+      deepep-config: '{"normal_dispatch":{"num_sms":88,"num_max_nvl_chunked_send_tokens":28,"num_max_nvl_chunked_recv_tokens":512},"normal_combine": {"num_sms":88,"num_max_nvl_chunked_send_tokens":16,"num_max_nvl_chunked_recv_tokens":512}}'
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: mooncake
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.12
+      context-length: 16384
+      max-running-requests: 9216
+      cuda-graph-max-bs: 1152
+
+benchmark:
+  type: custom
+  command: |
+      set -e
+      ulimit -n 1048576
+      REPO=/configs/upstream-sa-bench/InferenceX
+      [ -d "$REPO" ] || git clone https://github.com/fzyzcjy/InferenceX.git "$REPO"
+      cd "$REPO/utils/bench_serving"
+
+      echo "=== block conc=2048 prompts=6144 warmups=2048 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 6144 --max-concurrency 2048 --request-rate inf \
+        --num-warmups 2048 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir /logs --result-filename results_conc2048.json
+
+      echo "=== block conc=4096 prompts=12288 warmups=4096 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 12288 --max-concurrency 4096 --request-rate inf \
+        --num-warmups 4096 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir /logs --result-filename results_conc4096.json
+
+      echo "=== block conc=8192 prompts=24576 warmups=8192 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 24576 --max-concurrency 8192 --request-rate inf \
+        --num-warmups 8192 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir /logs --result-filename results_conc8192.json
+
