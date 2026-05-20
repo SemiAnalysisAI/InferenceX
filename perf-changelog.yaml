@@ -3060,5 +3060,5 @@
     - dsr1-fp8-b300-sglang-mtp
   description:
     - "Extend low-conc sweep: lower conc-start from 4 to 1 in all search-spaces, adding conc=1 and conc=2 data points (conc-end unchanged, step factor 2)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1534
 
