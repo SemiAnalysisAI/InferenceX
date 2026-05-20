@@ -3050,3 +3050,15 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b300-sglang
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b300-sglang
+    - dsr1-fp8-b200-sglang-mtp
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Extend low-conc sweep: lower conc-start from 4 to 1 in all search-spaces, adding conc=1 and conc=2 data points (conc-end unchanged, step factor 2)"
+  pr-link: TBD
+
