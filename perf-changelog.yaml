@@ -2973,6 +2973,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
 
 - config-keys:
+    - glm5-fp8-mi325x-sglang
+    - glm5-fp8-mi325x-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 SGLang ROCm recipes (off + MTP/EAGLE) for MI325X on lmsysorg/sglang:v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1485
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.1-...-atom0.1.2) to rocm7.2.3_..._atom20260511"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1519
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp4-mi355x-sglang (model: amd/DeepSeek-R1-0528-MXFP4) on lmsysorg/sglang:v0.5.12-rocm700-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1520
+
+- config-keys:
     - dsr1-fp8-h200-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp8-h200-sglang (model: deepseek-ai/DeepSeek-R1-0528) on lmsysorg/sglang:v0.5.12-cu130 — TP=8, EP=1, search-space conc 4..64 on 1k1k + 8k1k"
