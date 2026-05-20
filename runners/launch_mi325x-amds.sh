@@ -28,7 +28,8 @@ scancel_sync() {
 #   chi-mi325x-pod1-121: enroot-aufs2ovlfs setcap fails on this node's NFS-backed
 #                        squash dir; container image import never completes
 #                        (root-caused via #1467/#1468/#1469 sweep failures).
-export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-}"
+export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-chi-mi325x-pod1-021.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-027.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-028.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-030.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com}"
+
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
     set -x
