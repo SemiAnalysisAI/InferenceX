@@ -53,7 +53,7 @@ set -x
 vllm serve $MODEL --port $PORT \
   $ATTN_BACKEND $FUSE_ROPE_KVCACHE \
   --tensor-parallel-size=$TP \
-  --gpu-memory-utilization 0.95 \
+  --gpu-memory-utilization 0.90 \
   --max-model-len $MAX_MODEL_LEN \
   --block-size=64 \
   --no-enable-prefix-caching > $SERVER_LOG 2>&1 &
