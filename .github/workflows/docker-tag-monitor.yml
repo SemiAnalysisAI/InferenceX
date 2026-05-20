@@ -179,6 +179,42 @@ jobs:
           fi
           ALLOWED_SKUS=$(cat "$ALLOWED_SKUS_FILE")
 
+          # Snapshot per-config submission staleness from the production frontend.
+          # Helps Claude prioritize bumps for configs that haven't been refreshed in a long time.
+          STALENESS_TABLE=$(mktemp)
+          if curl -sf --max-time 15 --compressed "https://inferencex.semianalysis.com/api/v1/submissions" -o /tmp/sub.json; then
+            jq -r --arg today "$(date -u +%Y-%m-%d)" '
+              def days_between($a; $b):
+                (($a | strptime("%Y-%m-%d") | mktime) as $ta
+                 | ($b | strptime("%Y-%m-%d") | mktime) as $tb
+                 | (($ta - $tb) / 86400) | floor);
+              [
+                "| Config | Days since |",
+                "|--------|------------|"
+              ]
+              + (
+                (.summary // [])
+                | map(select(.is_multinode == false and (.model | startswith("llama") | not)))
+                | group_by([.model, .hardware, .framework, .precision, .spec_method, .disagg])
+                | map({
+                    key: (
+                      .[0].model + "-" + .[0].precision + "-" + .[0].hardware + "-" + .[0].framework
+                      + (if .[0].spec_method != "none" then "-mtp" else "" end)
+                      + (if .[0].disagg then "-disagg" else "" end)
+                    ),
+                    last_date: ([.[].date] | max)
+                  })
+                | map(. + {days_since: days_between($today; .last_date)})
+                | sort_by(-.days_since)
+                | .[0:20]
+                | map("| `\(.key)` | \(.days_since) |")
+              )
+              | .[]
+            ' /tmp/sub.json > "$STALENESS_TABLE"
+          else
+            echo "_Could not reach https://inferencex.semianalysis.com/api/v1/submissions — submission staleness data not available._" > "$STALENESS_TABLE"
+          fi
+
           # Build issue body and write to file
           BODY_FILE=$(mktemp)
           {
@@ -207,6 +243,17 @@ jobs:
               echo "**Allowed SKUs for this run:** _none — skip PR creation and post a comment explaining the runner shortage._"
             fi
             echo ""
+            echo "### Submission Staleness (single-node configs)"
+            echo ""
+            echo "_Source: https://inferencex.semianalysis.com/api/v1/submissions at $(date -u +%Y-%m-%dT%H:%M:%SZ). Sorted oldest-first — older = higher priority for refresh._"
+            echo ""
+            echo "<details>"
+            echo "<summary>Show staleness table</summary>"
+            echo ""
+            cat "$STALENESS_TABLE"
+            echo ""
+            echo "</details>"
+            echo ""
             echo "---"
             echo ""
             echo "@claude Please update the configurations:"
@@ -214,6 +261,14 @@ jobs:
             echo "1. Update image tags in \`.github/configs/nvidia-master.yaml\` and/or \`.github/configs/amd-master.yaml\`"
             echo "2. Add entries to \`perf-changelog.yaml\` documenting the version changes"
             echo "3. For each eligible config-key, push a branch and actually open a PR — do not stop at the \"Create a pull request for ...\" remote hint that \`git push\` prints. Run \`gh pr create\` (or the equivalent MCP tool) and verify the returned PR URL. Link every PR back to this issue in a comment."
+            echo ""
+            echo "**Pre-flight research (required before opening any PR):** For each image being bumped, read the upstream release notes for every version between the current tag and the new one — vLLM at \`https://github.com/vllm-project/vllm/releases\` (or \`gh api repos/vllm-project/vllm/releases\`), SGLang at \`https://github.com/sgl-project/sglang/releases\`. You are looking for two specific failure modes that have bitten prior runs:"
+            echo ""
+            echo "1. **Suffix convention changes.** The default CUDA/ROCm build can shift between versions, which changes which Docker tag to pick. Concrete example: vLLM v0.21.0 promoted CUDA 13 to the default build, so the bare \`v0.21.0\` tag *is* the cu13 image and no \`v0.21.0-cu13\` tag exists — mechanically reusing the old suffix would point at a 404. Before settling on a tag, confirm it actually exists on Docker Hub (\`curl -sf https://hub.docker.com/v2/repositories/<repo>/tags/<tag>/\`) and that its build matches the runner's accelerator. If the convention shifted, use the new correct tag and call it out explicitly in the PR body."
+            echo ""
+            echo "2. **CLI flag deprecations or removals.** Server flags get removed between minors and the container exits with an error on startup, so this only surfaces during the e2e run. Concrete example: vLLM removed \`--disable-log-requests\` (silent-by-default; passing it now errors). Before opening the PR, \`grep -rn\` the repo for the launch flags actually passed to this image (check launch scripts, sbatch recipes, and any per-config templates — not just the master config). For every flag in use, check the release notes between current and new version for deprecations/removals/renames. If a flag was removed or renamed, fix it in the same PR and add a perf-changelog entry noting the flag change. If a flag has no replacement and is load-bearing, skip the config-key and explain in your wrap-up comment."
+            echo ""
+            echo "List the release-notes URLs you consulted in the PR body so reviewers can audit the research. PRs that bump a tag without evidence of this check will be rejected."
             echo ""
             echo "**Required PR label:** Every PR you open from this issue MUST carry the \`full-sweep-enabled\` label. Apply it at creation time via \`gh pr create --label full-sweep-enabled\` (or add it immediately after with \`gh pr edit <num> --add-label full-sweep-enabled\`). Do not skip this — downstream automation keys off the label."
             echo ""
@@ -254,7 +309,7 @@ jobs:
             echo "If Docker Hub lists multiple variants for the same base version (e.g. \`cu128\` vs \`cu130\`, \`rocm70\` vs \`rocm72\`), pick the variant whose suffix matches what the config-key's current image entry already uses — don't switch CUDA/ROCm minor versions in this update."
           } > "$BODY_FILE"
 
-          rm -f "$RUNNERS_TABLE" "$ALLOWED_SKUS_FILE" /tmp/ci.json
+          rm -f "$RUNNERS_TABLE" "$ALLOWED_SKUS_FILE" "$STALENESS_TABLE" /tmp/ci.json /tmp/sub.json
 
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
