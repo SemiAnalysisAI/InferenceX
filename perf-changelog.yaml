@@ -3050,3 +3050,9 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling of dsr1-fp8-mi300x-sglang on lmsysorg/sglang:v0.5.12-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1499
