@@ -3022,3 +3022,10 @@
   description:
     - "Update SGLang image from nightly-dev-cu13-20260518-c67b2870 to nightly-dev-cu13-20260519-dbac4647"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1492
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image from SHA-pinned deepseek-v4-b300 custom build (20/18d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1455
