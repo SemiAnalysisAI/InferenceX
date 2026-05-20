@@ -24,8 +24,10 @@ scancel_sync() {
     return 0
 }
 
-# Default exclude list for known-down mi300x nodes; override via SLURM_EXCLUDE_NODES env.
-export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-chi-mi300x-033.ord.vultr.cpe.ice.amd.com,chi-mi300x-035.ord.vultr.cpe.ice.amd.com,chi-mi300x-037.ord.vultr.cpe.ice.amd.com,chi-mi300x-049.ord.vultr.cpe.ice.amd.com}"
+# Pin to the known-good mi300x nodes; others are unavailable:
+#   chi-mi300x-033-037: down*
+#   chi-mi300x-049:     down
+export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-chi-mi300x-033.ord.vultr.cpe.ice.amd.com,chi-mi300x-034.ord.vultr.cpe.ice.amd.com,chi-mi300x-035.ord.vultr.cpe.ice.amd.com,chi-mi300x-036.ord.vultr.cpe.ice.amd.com,chi-mi300x-037.ord.vultr.cpe.ice.amd.com,chi-mi300x-049.ord.vultr.cpe.ice.amd.com}"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
     set -x
