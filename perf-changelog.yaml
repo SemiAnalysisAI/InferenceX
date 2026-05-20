@@ -2663,6 +2663,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
 
 - config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Update vLLM image to v0.21.0 (from custom deepseekv4-cu129 / v0.20.1@sha256-pinned)"
+    - "Lower --gpu-memory-utilization from 0.95 to 0.90 in dsv4_fp8_h200.sh and dsv4_fp8_h200_mtp.sh — v0.21.0 uses more memory at load time, OOM'd on GPU 2 at 0.95"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1461
+
+- config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
     - "Update SGLang image from v0.5.9-rocm700-mi30x to v0.5.12-rocm700-mi30x"
