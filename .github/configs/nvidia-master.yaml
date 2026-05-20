@@ -2860,6 +2860,25 @@ dsr1-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+dsr1-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # DeepSeek-V4-Pro H200 recipe from https://vllm.ai/blog/deepseek-v4
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
@@ -8740,7 +8759,7 @@ dsv4-fp4-gb300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev
+  image: lmsysorg/sglang:nightly-dev-cu13-20260519-dbac4647
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
