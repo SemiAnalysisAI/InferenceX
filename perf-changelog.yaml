@@ -3050,10 +3050,3 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
-
-- config-keys:
-    - glm5-fp8-b300-sglang
-    - glm5-fp8-b300-sglang-mtp
-  description:
-    - "Test @trevor-m's suggestion in sgl-project/sglang#25551: pin sgl-deep-gemm==0.0.1 inside v0.5.12 container to isolate whether the deep-gemm 0.0.1→0.1.0 upgrade is the source of the B300 CUDA_ERROR_ILLEGAL_ADDRESS regression."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1512
