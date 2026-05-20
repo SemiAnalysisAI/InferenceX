@@ -3036,4 +3036,4 @@
     - glm5-fp4-b300-sglang
   description:
     - "Enable SGLang prefill-delayer on GLM-5 B200/B300 FP8/FP4 agg server launch: `--enable-prefill-delayer --prefill-delayer-queue-min-ratio 0.1 --prefill-delayer-max-delay-ms 5000`"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1525
