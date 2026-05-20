@@ -663,7 +663,13 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
 
-    artifact = args.result_dir / "trace_replay"
+    # benchmark_lib.sh writes aiperf output to <result_dir>/aiperf_artifacts/
+    # (--output-artifact-dir). Older runs used trace_replay/, kept as fallback.
+    artifact = args.result_dir / "aiperf_artifacts"
+    if not (artifact / "profile_export.jsonl").exists():
+        legacy = args.result_dir / "trace_replay"
+        if (legacy / "profile_export.jsonl").exists():
+            artifact = legacy
     jsonl_path = artifact / "profile_export.jsonl"
     server_metrics_path = artifact / "server_metrics_export.json"
 
