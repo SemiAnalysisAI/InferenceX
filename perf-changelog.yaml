@@ -3043,11 +3043,3 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
-
-- config-keys:
-    - dsv4-fp4-gb300-sglang-stp
-  description:
-    - "Add 9 DSV4 GB300 1k1k STP disagg configs from NVIDIA/srt-slurm#161"
-    - "Configs: 1p1d dep8/dep16, 1p4d, 1p6d, 2p1d dep12/dep16/dep48, low-latency dep4/tp4"
-    - "Container: dsv4-grace-blackwell / dsv4-grace-blackwell-baizhou-revert (NVIDIA internal images)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1530
