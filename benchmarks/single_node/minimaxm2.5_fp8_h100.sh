@@ -17,7 +17,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 nvidia-smi
 

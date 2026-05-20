@@ -279,7 +279,19 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
+    HF_HUB_CACHE_MOUNT="/mnt/numa1/shared/models/"
+    
+    # HF_HUB_CACHE is set to help with dataset download inside the container
+    # for eval jobs. Can be updated to some other path on the cluster and
+    # mounted just like HF_HUB_CACHE_MOUNT.
+    export HF_HUB_CACHE="$HOME/.cache/huggingface"
+
+    # Rewrite MODEL from HF id (org/name) to the pre-staged local path under
+    # HF_HUB_CACHE_MOUNT. Skip if MODEL is already an absolute path.
+    if [[ -n "$MODEL" && "$MODEL" != /* ]]; then
+        export MODEL="${HF_HUB_CACHE_MOUNT}${MODEL##*/}"
+    fi
+
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
@@ -306,7 +318,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888 \

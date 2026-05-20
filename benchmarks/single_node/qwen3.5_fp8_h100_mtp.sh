@@ -22,7 +22,6 @@ fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export SGLANG_ENABLE_SPEC_V2=1
 
