@@ -3050,3 +3050,9 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - gptoss-fp4-mi300x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.17.0 to v0.21.0; lower --gpu-memory-utilization 0.95 -> 0.90 to avoid v0.21 CUDA-graph profiler OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1403

@@ -891,7 +891,7 @@ minimaxm2.5-fp8-mi325x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.17.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
