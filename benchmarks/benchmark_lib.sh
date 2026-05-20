@@ -902,16 +902,17 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-no-subagents-051226"
+    local dataset="semianalysisai/cc-traces-weka-with-subagents-051926"
     # aiperf reads the corpus via its public-dataset registry. The
     # inferencex-agentx-mvp scenario hard-requires loader=one of
-    # ['semianalysis_cc_traces_weka_no_subagents', 'weka_trace'] (see
+    # ['semianalysis_cc_traces_weka_with_subagents', 'weka_trace'] (see
     # aiperf src/aiperf/common/scenario/inferencex_agentx_mvp.py's
-    # `require_loader`). The bare `semianalysis_cc_traces_weka` loader
-    # points at the older 042026 corpus with subagent fan-out and is no
-    # longer accepted as of upstream PR #875.
-    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka_no_subagents"
-    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_no_subagents ($dataset)"
+    # `require_loader`). The with-subagents corpus captures the parent +
+    # Task-tool sub-agent fan-out structure of real Claude Code sessions
+    # (219 traces, v5-only, CC >= 2.1.139, classifier-call OSL spike
+    # filtered).
+    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka_with_subagents"
+    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_with_subagents ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
     # for model weights) so subsequent runs read from cache instead of
     # re-downloading every job.
@@ -955,9 +956,12 @@ build_replay_cmd() {
     # the just-generated KV blocks at the cost of hash-id fidelity past
     # turn 0 — which is exactly what we want for benchmark numbers.
     #
-    # The scenario plugin locks: --cache-bust first_turn_prefix,
-    # --inter-turn-delay-cap-seconds 60, etc., and auto-injects them — so
-    # we do not pass them. See utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # The scenario plugin locks: --cache-bust first_turn_prefix and
+    # --trace-idle-gap-cap-seconds 60 (per-trace idle-gap compression
+    # against parent + subagent request-start timestamps; supersedes the
+    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
+    # and auto-injects them — so we do not pass them. See
+    # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="${DURATION:-1800}"
 
