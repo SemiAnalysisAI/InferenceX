@@ -3043,3 +3043,11 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-1k1k-stp
+  description:
+    - "Add 7 DSV4 GB300 1k1k STP disagg configs from NVIDIA/srt-slurm#161"
+    - "Configs: 1p1d dep8/dep16, 1p4d, 1p6d, 2p1d dep12/dep16/dep48"
+    - "Register in nvidia-master.yaml for CI sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1530
