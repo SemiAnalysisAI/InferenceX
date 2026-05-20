@@ -3043,3 +3043,8 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Restore `sglang-staging:deepseek-v4-grace-blackwell-dev` image, `deepep` moe-a2a-backend, and previous env vars for all non-MTP disagg configs"
