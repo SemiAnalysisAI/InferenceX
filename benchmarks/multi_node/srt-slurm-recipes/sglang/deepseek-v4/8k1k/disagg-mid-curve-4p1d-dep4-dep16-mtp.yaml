@@ -1,4 +1,4 @@
-name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-4p1d-dep4-dep8-mtp"
+name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-4p1d-dep4-dep16-mtp"
 
 frontend:
   type: dynamo
@@ -24,9 +24,9 @@ resources:
   prefill_nodes: 4
   prefill_workers: 4
   gpus_per_prefill: 4
-  decode_nodes: 2
+  decode_nodes: 4
   decode_workers: 1
-  gpus_per_decode: 8
+  gpus_per_decode: 16
 
 backend:
   type: sglang
@@ -124,9 +124,9 @@ backend:
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
 
-      tensor-parallel-size: 8
-      data-parallel-size: 8
-      expert-parallel-size: 8
+      tensor-parallel-size: 16
+      data-parallel-size: 16
+      expert-parallel-size: 16
 
       enable-dp-attention: true
       enable-dp-lm-head: true

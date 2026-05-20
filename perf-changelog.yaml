@@ -3043,3 +3043,11 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 (5d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Add dep16 mid-curve configs (2p1d, 4p1d, 8p1d) and 12p1d-dep4-dep12"
+    - "Update 1p6d low-latency dynamo hash"
+    - "Remove dep8 mid-curve configs (replaced by dep16)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1529
