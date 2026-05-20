@@ -23,14 +23,16 @@ nvidia-smi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
+pip install --break-system-packages --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
 
 # Testing @trevor-m's suggestion in sgl-project/sglang#25551 (comment 4481466979):
 # downgrade sgl-deep-gemm 0.1.0 → 0.0.1 inside the v0.5.12 container to check
 # whether the deepgemm version jump is what causes the B300 TMA-descriptor
 # CUDA_ERROR_ILLEGAL_ADDRESS regression. Re-enabling JIT DeepGemm so the
 # downgraded version actually runs.
-pip install --no-deps "sgl-deep-gemm==0.0.1"
+# --break-system-packages required: the container's Python is PEP-668 externally-managed,
+# so the previous attempt silently failed and left the bundled 0.1.0 in place.
+pip install --break-system-packages --no-deps "sgl-deep-gemm==0.0.1"
 export SGL_ENABLE_JIT_DEEPGEMM=1
 export SGLANG_ENABLE_SPEC_V2=1
 
