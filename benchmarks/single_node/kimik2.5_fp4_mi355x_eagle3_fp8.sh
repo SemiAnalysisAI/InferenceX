@@ -46,7 +46,10 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_FP4_ASM_GEMM=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-export VLLM_ROCM_USE_AITER_RMSNORM=0
+# Disable AITER RMSNorm for TP < 8 due to accuracy issues
+if [ "${TP}" -lt 8 ]; then
+  export VLLM_ROCM_USE_AITER_RMSNORM=0
+fi
 
 if [ "${EP_SIZE:-0}" -gt 1 ]; then
   EP=" --enable-expert-parallel"
