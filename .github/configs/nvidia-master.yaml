@@ -1682,13 +1682,13 @@ dsr1-fp4-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 2 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 2 }
     # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
     # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
     # `bmk_agentic_*`). Re-enable once that workflow is aligned.
@@ -1883,13 +1883,13 @@ dsr1-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 2 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 2 }
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1969,12 +1969,12 @@ dsr1-fp8-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 2 }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -1992,12 +1992,12 @@ dsr1-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 2 }
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
 # lists B200 (not B300) as the Blackwell target. This config reuses the
@@ -2737,11 +2737,11 @@ dsr1-fp8-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2, spec-decoding: mtp }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -2760,11 +2760,11 @@ dsr1-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 2, spec-decoding: mtp }
 
 # Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
 # the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
