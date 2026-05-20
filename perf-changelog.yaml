@@ -2971,3 +2971,9 @@
   description:
     - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.0-...-atom0.1.1 83d) to rocm7.2.3_..._atom20260511"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
+
+- config-keys:
+    - dsr1-fp8-h200-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp8-h200-sglang (model: deepseek-ai/DeepSeek-R1-0528) on lmsysorg/sglang:v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
