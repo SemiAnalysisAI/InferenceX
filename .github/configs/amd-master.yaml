@@ -27,7 +27,7 @@ dsr1-fp4-mi355x-sglang:
     #   - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
 dsr1-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
@@ -48,7 +48,7 @@ dsr1-fp4-mi355x-atom:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 
 dsr1-fp4-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.0-ubuntu24.04-pytorch2.9-atom0.1.1
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x
@@ -1862,6 +1862,44 @@ qwen3.5-fp8-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
+glm5-fp8-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
+glm5-fp8-mi325x-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
   runner: mi325x
   precision: fp8
   framework: sglang

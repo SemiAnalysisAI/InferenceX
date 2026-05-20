@@ -2959,6 +2959,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1374
 
 - config-keys:
+    - glm5-fp8-h200-sglang
+  description:
+    - "Update SGLang image from glm5-hopper to v0.5.10.post1-cu130"
+    - "Add --enable-flashinfer-allreduce-fusion to server launch"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1033
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Update Atom ROCm image (off: rocm7.1.1-...-atom0.1.1-MI350x 125d / mtp: rocm7.2.0-...-atom0.1.1 83d) to rocm7.2.3_..._atom20260511"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1518
+
+- config-keys:
+    - glm5-fp8-mi325x-sglang
+    - glm5-fp8-mi325x-sglang-mtp
+  description:
+    - "Add GLM-5 FP8 SGLang ROCm recipes (off + MTP/EAGLE) for MI325X on lmsysorg/sglang:v0.5.12-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1485
+
+- config-keys:
     - dsr1-fp8-mi355x-atom
     - dsr1-fp8-mi355x-atom-mtp
   description:
