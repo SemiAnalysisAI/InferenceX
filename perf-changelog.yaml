@@ -2969,4 +2969,4 @@
     - dsr1-fp8-mi355x-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp8-mi355x-sglang (model: deepseek-ai/DeepSeek-R1-0528) on lmsysorg/sglang:v0.5.12-rocm700-mi35x"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1521
