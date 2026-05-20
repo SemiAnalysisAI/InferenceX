@@ -3068,3 +3068,34 @@
   description:
     - "Bump image to rocm/sgl-dev:rocm720-mi35x-8c3b5aa-20260521-DSv4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1548
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+    - dsr1-fp8-b300-sglang
+    - dsr1-fp8-b300-sglang-mtp
+    - dsv4-fp4-b300-sglang
+    - dsv4-fp4-b300-sglang-mtp
+    - dsv4-fp4-b300-vllm
+    - dsv4-fp4-b300-vllm-mtp
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+    - glm5-fp8-b300-sglang
+    - glm5-fp8-b300-sglang-mtp
+    - glm5-fp4-b300-sglang
+    - glm5-fp4-b300-sglang-mtp
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+    - qwen3.5-bf16-b300-sglang
+    - qwen3.5-bf16-b300-sglang-mtp
+    - kimik2.5-int4-b300-vllm
+    - kimik2.5-fp4-b300-vllm
+    - minimaxm2.5-fp8-b300-vllm
+    - minimaxm2.5-fp4-b300-vllm
+  description:
+    - "Migrate B300 agg model path to /scratch/models/ (audit-recommended root); set HF_HUB_CACHE to container's ~/.cache/huggingface for eval dataset downloads"
+    - "Replace the partial Qwen-FP8/dsv4 special-case MODEL rewrite with a universal rewrite from HF id (org/name) to absolute local path under HF_HUB_CACHE_MOUNT; remove hf download from bench scripts so contract is staged-or-fail"
+    - "Pin in-scope configs to runner: b300-nv so jobs are picked up by the NVIDIA runner only"
+    - "Reduce search-space to single (isl=1024, osl=1024, conc=4) point per config to verify model-path wiring end-to-end"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

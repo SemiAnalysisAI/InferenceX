@@ -18,7 +18,6 @@ fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export NCCL_NVLS_ENABLE=1
 export SGL_ENABLE_JIT_DEEPGEMM=false
