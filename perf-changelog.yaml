@@ -2663,6 +2663,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 disaggregated SGLang coverage using lmsysorg/sglang:nightly-dev-cu13-20260513-4fb40bff"
+    - "Rename and consolidate the per-concurrency recipe files to `disagg-gb200-{N}p1d-{topo}-{nodes}-c{conc}.yaml`"
+    - "Recipes adapted from https://github.com/shyeh25/srt-slurm/commit/b54ef27bbe6c278895f739519014f8d7d136ccc5#diff-bd1c9e424528b0d04035fbc630454d1e6746665d1c91dbefa7e03296c0fcc27f"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1370
+
+- config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
     - "Update SGLang image from v0.5.9-rocm700-mi30x to v0.5.12-rocm700-mi30x"

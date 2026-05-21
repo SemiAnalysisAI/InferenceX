@@ -161,13 +161,45 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
-    # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
-    # and overlay our hand-rolled DSV4 sglang recipes. NVIDIA/srt-slurm
-    # has no upstream sglang DSV4 disagg recipes yet, hence the overlay.
+    # Pin to the same sa-submission-q2-2026 branch used by the dsv4
+    # dynamo-vllm GB200 runs (run 24921817337 attempt 3). Overlay our
+    # hand-rolled DSV4 sglang recipes on top.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+
+    # Backport NVIDIA/srt-slurm#81 fix: the SGLang container path in
+    # get_install_commands() assumes cargo/maturin are pre-installed,
+    # but nightly-dev SGLang images lack them (exit code 127). The
+    # vllm container (vllm-openai:deepseekv4-cu130) ships both tools
+    # so dynamo-vllm runs are unaffected; SGLang nightly images don't.
+    # Cherry-pick the fix from main: install cargo via rustup and
+    # force-reinstall maturin before calling `maturin build`.
+    python3 << 'PATCH_DYNAMO_INSTALL'
+import pathlib
+p = pathlib.Path("src/srtctl/core/schema.py")
+src = p.read_text()
+old = (
+    '"apt-get update -qq && apt-get install -y -qq libclang-dev > /dev/null 2>&1 && "\n'
+    '            "cd /sgl-workspace/ && "'
+)
+new = (
+    '"apt-get update -qq && apt-get install -y -qq libclang-dev curl protobuf-compiler > /dev/null 2>&1 && "\n'
+    '            "if ! command -v cargo &>/dev/null; then curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable -q && source $HOME/.cargo/env; fi && "\n'
+    '            "pip install --break-system-packages --force-reinstall --quiet maturin && "\n'
+    '            "cd /sgl-workspace/ && "'
+)
+assert old in src, "srt-slurm schema.py layout changed — patch anchor not found"
+p.write_text(src.replace(old, new, 1))
+print("Patched schema.py: backported NVIDIA/srt-slurm#81 cargo/maturin fix")
+PATCH_DYNAMO_INSTALL
+
+    # Backport sa_bench_tokenizers module from main (NVIDIA/srt-slurm#73).
+    # sa-submission-q2-2026 predates this module; without it the
+    # custom_tokenizer field in our recipes fails with
+    # "ModuleNotFoundError: No module named 'sa_bench_tokenizers'".
+    git checkout origin/main -- src/srtctl/benchmarks/scripts/sa-bench/sa_bench_tokenizers/
+
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
