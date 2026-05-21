@@ -1874,7 +1874,7 @@ dsr1-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -1976,7 +1976,7 @@ dsr1-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -1990,7 +1990,7 @@ dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2012,7 +2012,7 @@ dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2228,7 +2228,7 @@ glm5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -2242,7 +2242,7 @@ glm5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -2301,7 +2301,7 @@ glm5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2315,7 +2315,7 @@ glm5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2351,7 +2351,7 @@ qwen3.5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -2365,7 +2365,7 @@ qwen3.5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.10.post1-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -2379,7 +2379,7 @@ qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2393,7 +2393,7 @@ qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: sglang
   multinode: false
@@ -2407,7 +2407,7 @@ qwen3.5-bf16-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: bf16
   framework: sglang
   multinode: false
@@ -2421,7 +2421,7 @@ qwen3.5-bf16-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
-  runner: b300-nv
+  runner: b300
   precision: bf16
   framework: sglang
   multinode: false
@@ -2485,7 +2485,7 @@ kimik2.5-int4-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
-  runner: b300-nv
+  runner: b300
   precision: int4
   framework: vllm
   multinode: false
@@ -2594,7 +2594,7 @@ kimik2.5-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: vllm
   multinode: false
@@ -2631,7 +2631,7 @@ dsr1-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: sglang
   multinode: false
@@ -2872,7 +2872,7 @@ dsv4-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: vllm
   multinode: false
@@ -2905,7 +2905,7 @@ dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: trt
   multinode: false
@@ -2919,7 +2919,7 @@ dsv4-fp4-b300-trt-mtp:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: trt
   multinode: false
@@ -2933,7 +2933,7 @@ dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: vllm
   multinode: false
@@ -4186,7 +4186,7 @@ minimaxm2.5-fp8-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: b300-nv
+  runner: b300
   precision: fp8
   framework: vllm
   multinode: false
@@ -4276,7 +4276,7 @@ minimaxm2.5-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
-  runner: b300-nv
+  runner: b300
   precision: fp4
   framework: vllm
   multinode: false
