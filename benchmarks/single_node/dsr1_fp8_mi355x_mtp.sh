@@ -33,6 +33,10 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
+# Size speculative decoding capacity to the configured sweep ceiling.
+MAX_RUNNING_REQUESTS=64
+CUDA_GRAPH_MAX_BATCH_SIZE=64
+
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -53,7 +57,8 @@ python3 -m sglang.launch_server \
     --num-continuous-decode-steps 8 \
     --max-prefill-tokens 196608 \
     --kv-cache-dtype fp8_e4m3 \
-    --cuda-graph-max-bs "$CONC" \
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BATCH_SIZE" \
+    --max-running-requests "$MAX_RUNNING_REQUESTS" \
     --speculative-algorithm EAGLE \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
