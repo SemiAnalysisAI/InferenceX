@@ -33,7 +33,7 @@ name: "disagg-gb200-1p4d-dep8-tp8-10-c64"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev"
+  container: "lmsysorg/sglang:nightly-dev-20260520-425dffbd"
   precision: "fp4"
 
 dynamo:

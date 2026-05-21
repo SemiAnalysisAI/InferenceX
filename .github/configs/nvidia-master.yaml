@@ -8610,7 +8610,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           dp-attn: true
 
 dsv4-fp4-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260513-4fb40bff
+  image: lmsysorg/sglang:nightly-dev-20260520-425dffbd
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
