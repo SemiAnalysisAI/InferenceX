@@ -33,7 +33,7 @@ name: "disagg-gb300-8p1d-dep4-dep16-12-c4096"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
   precision: "fp4"
 
 dynamo:
@@ -74,27 +74,14 @@ backend:
 
   prefill_environment:
     PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_DISABLE_REUSE: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_USE_JIT_NORM: "1"
-    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-    SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
     SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
-    SGLANG_OPT_FP8_WO_A_GEMM: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -109,25 +96,14 @@ backend:
 
   decode_environment:
     PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_DISABLE_REUSE: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_USE_JIT_NORM: "1"
-    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-    SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1280"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
     SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -140,7 +116,6 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: "1"
     SGLANG_LOG_MS: "1"
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
-    # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
     # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
@@ -156,7 +131,7 @@ backend:
       expert-parallel-size: 4
 
       enable-dp-attention: true
-      moe-a2a-backend: "deepep"
+      moe-a2a-backend: "megamoe"
       deepep-config: '{"normal_dispatch":{"num_sms":88,"num_max_nvl_chunked_send_tokens":28,"num_max_nvl_chunked_recv_tokens":512},"normal_combine": {"num_sms":88,"num_max_nvl_chunked_send_tokens":16,"num_max_nvl_chunked_recv_tokens":512}}'
       moe-dense-tp-size: 1
 
@@ -175,7 +150,7 @@ backend:
       stream-interval: 60
 
       load-balance-method: "total_requests"
-      moe-a2a-backend: "deepep"
+      moe-a2a-backend: "megamoe"
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake

@@ -2,7 +2,7 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe-mtp2"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.1-ubuntu2404"
+  container: "vllm/vllm-openai:v0.21.0-ubuntu2404"
   precision: "fp4"
 
 dynamo:
@@ -130,7 +130,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "128"
+  concurrencies: "128x256x512x1024"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
@@ -140,6 +140,6 @@ identity:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
     revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
   container:
-    image: "vllm/vllm-openai:v0.20.1-ubuntu2404"
+    image: "vllm/vllm-openai:v0.21.0-ubuntu2404"
   frameworks:
     dynamo: "1.2.0.dev20260426"
