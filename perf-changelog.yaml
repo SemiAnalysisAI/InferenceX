@@ -2485,7 +2485,6 @@
     - dsv4-fp4-gb300-dynamo-sglang
   description:
     - "Enable W4A4 (MXFP4) megamoe by appending w4a4 related environ flags when megamoe is enabled"
-    - "Update SGLang image from lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev to lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1382
 
 - config-keys:
