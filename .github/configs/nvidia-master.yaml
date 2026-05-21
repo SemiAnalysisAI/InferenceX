@@ -2056,6 +2056,24 @@ dsv4-flash-fp4-b300-sglang:
       search-space:
       - { tp: 4, ep: 1, conc-start: 64, conc-end: 64 }
 
+# Targeted Flash MTP profile: DEP4 at the same 1k1k conc=64 point as the
+# non-MTP Flash profile above. The shared SGLang MTP launcher selects the
+# Flash-only (steps=2, draft-tokens=3) speculative settings for this model.
+dsv4-flash-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
+
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
