@@ -352,6 +352,15 @@ class TestAgenticMatrixEntries:
         })
         assert entry.offloading == "lmcache"
 
+    def test_hicache_offloading_is_valid_for_agentic_search_space(self):
+        """Agentic search-space entries can request SGLang HiCache."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "hicache",
+            "conc-list": [1, 2],
+        })
+        assert entry.offloading == "hicache"
+
 
 # =============================================================================
 # Test MultiNodeMatrixEntry

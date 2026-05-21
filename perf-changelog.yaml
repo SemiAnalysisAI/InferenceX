@@ -2636,3 +2636,10 @@
   description:
     - "Add Kimi K2.5 FP4 B200 agentic LMCache offload coverage on vLLM v0.21.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-hicache
+    - qwen3.5-fp8-mi355x-sglang-agentic-hicache
+  description:
+    - "Add Qwen3.5 FP8 agentic SGLang HiCache starting points on latest nightly images"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

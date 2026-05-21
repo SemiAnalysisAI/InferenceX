@@ -73,7 +73,7 @@ on:
         type: string
         default: 'fixed-seq-len'
       offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache-mp)"
+        description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache/lmcache-mp/hicache)"
         required: false
         type: string
         default: 'none'
@@ -243,6 +243,7 @@ jobs:
             results/benchmark.log
             results/config.yaml
             results/lmcache_command.txt
+            results/sglang_command.txt
             results/vllm_command.txt
             results/benchmark_command.txt
             results/workload_distribution_summary.txt
