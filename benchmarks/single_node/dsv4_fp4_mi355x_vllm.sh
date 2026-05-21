@@ -67,7 +67,7 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
 fi
 
 set -x
-vllm serve $MODEL --host localhost --port $PORT \
+vllm serve $MODEL --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     --distributed-executor-backend mp \
