@@ -45,6 +45,8 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+# Workaround
+export VLLM_CACHE_ROOT=/it-share/gharunners/.cache/vllm_dsv4_vllm
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
