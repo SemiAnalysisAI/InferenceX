@@ -35,7 +35,7 @@ MiniMax-M2.5:
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.
   prefill_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
   decode_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1"
   hf_dir: "models--MiniMaxAI--MiniMax-M2.5"
 
 gpt-oss-120b:
