@@ -1762,7 +1762,7 @@ dsv4-fp4-b200-vllm:
 #   - image:  bumped to a custom v0.21.0 build (cquil/vllm-openai:v0.21.0-8813c92)
 #     to test SimpleCPUOffloadConnector lazy_offload behavior on a newer vLLM.
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.21.0
+  image: cquil/vllm-openai:v0.21.0-dsv4-offloading
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
