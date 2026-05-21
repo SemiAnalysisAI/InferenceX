@@ -74,60 +74,10 @@ install_amd_quark() {
     _SETUP_INSTALLED+=("amd-quark")
 }
 
-# ---------------------------------------------------------------------------
-# 8. Broadcom bnxt RDMA userspace libraries (libbnxt_re verbs provider)
-#     Required on nodes with Broadcom Thor2 NICs (bcm5760x) when the base
-#     image does not ship the bnxt_re verbs provider.
-# ---------------------------------------------------------------------------
-install_bnxt_rdma() {
-    local existing
-    existing=$(find /usr/local/lib /usr/lib64 /usr/lib -name "libbnxt_re-rdmav*.so" 2>/dev/null)
-    if [[ -n "$existing" ]]; then
-        echo "[SETUP] Existing bnxt RDMA libraries found (will override):"
-        for lib in $existing; do
-            echo "  $lib ($(ls -l "$lib" 2>/dev/null | awk '{print $5, $6, $7, $8}'))"
-        done
-    fi
-
-    echo "[SETUP] Installing bnxt RDMA build dependencies..."
-    apt-get update -q -y && apt-get install -q -y \
-        wget unzip autoconf automake libtool pkg-config \
-        libibverbs-dev librdmacm-dev ibverbs-utils \
-        && rm -rf /var/lib/apt/lists/*
-
-    echo "[SETUP] Downloading and building Broadcom bnxt RDMA userspace libraries..."
-    (
-        set -e
-        cd /tmp
-        wget -q https://docs.broadcom.com/docs-and-downloads/ethernet-network-adapters/NXE/Thor2/GCA1/bcm5760x_230.2.52.0a.zip
-        unzip -q bcm5760x_230.2.52.0a.zip
-        cd bcm5760x_230.2.52.0a/drivers_linux/bnxt_rocelib/
-        results=$(find . -name "libbnxt*.tar.gz")
-        tar -xf $results
-        untar_dir=$(find . -maxdepth 1 -type d -name "libbnxt*" ! -name "*.tar.gz" | head -n 1)
-        cd "$untar_dir"
-        sh autogen.sh
-        ./configure
-        make -j"$(nproc)"
-        find /usr/lib64/ /usr/lib -name "libbnxt_re-rdmav*.so" -exec mv {} {}.inbox \; 2>/dev/null || true
-        make install all
-        echo /usr/local/lib >> /etc/ld.so.conf
-        ldconfig
-        cp -f bnxt_re.driver /etc/libibverbs.d/
-    )
-    rm -rf /tmp/bcm5760x_230.2.52.0a /tmp/bcm5760x_230.2.52.0a.zip
-
-    if ! ibv_devices 2>/dev/null; then
-        echo "[SETUP] WARN: ibv_devices failed after bnxt install (may be OK if no Broadcom NIC on this node)"
-    fi
-    _SETUP_INSTALLED+=("bnxt-rdma")
-}
-
 # =============================================================================
 # Run installers
 # =============================================================================
 
-install_bnxt_rdma
 install_recipe_deps
 install_amd_quark
 
