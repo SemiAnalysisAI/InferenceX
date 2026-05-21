@@ -279,18 +279,46 @@ done
 find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-
-    HF_HUB_CACHE_MOUNT="/scratch/models/"
-
     # HF_HUB_CACHE is set to help with dataset download inside the container
     # for eval jobs. Can be updated to some other path on the cluster and
     # mounted just like HF_HUB_CACHE_MOUNT.
     export HF_HUB_CACHE="$HOME/.cache/huggingface"
 
-    # Rewrite MODEL from HF id (org/name) to the pre-staged local path under
-    # HF_HUB_CACHE_MOUNT. Skip if MODEL is already an absolute path.
-    if [[ -n "$MODEL" && "$MODEL" != /* ]]; then
-        export MODEL="${HF_HUB_CACHE_MOUNT}${MODEL##*/}"
+    # HF_HUB_CACHE_MOUNT is read-only and holds the pre-staged weights below.
+    # WRITABLE_MODELS_DIR is writable; the benchmark script downloads anything not
+    # in the staged list there.
+    HF_HUB_CACHE_MOUNT="/scratch/models/"
+    WRITABLE_MODELS_DIR="/data/models/"
+
+    # Pre-staged model 
+    STAGED_MODELS=(
+        DeepSeek-R1-0528
+        DeepSeek-R1-0528-NVFP4-v2
+        DeepSeek-V4-Flash
+        DeepSeek-V4-Pro
+        GLM-5-FP8
+        GLM-5-NVFP4
+        GLM-5.1
+        Kimi-K2.5
+        Kimi-K2.5-NVFP4
+        Kimi-K2.6
+        MiniMax-M2.5
+        MiniMax-M2.5-NVFP4
+        MiniMax-M2.7
+        MiniMax-M2.7-NVFP4
+        Qwen3.5-397B-A17B
+        Qwen3.5-397B-A17B-FP8
+        Qwen3.5-397B-A17B-NVFP4
+        gpt-oss-120b
+    )
+
+    # MODEL stays as the HF id for the client (--served-model-name, tokenizer);
+    # MODEL_PATH is what the server reads weights from.
+    MODEL_BASENAME="${MODEL##*/}"
+    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+        export MODEL_PATH="${HF_HUB_CACHE_MOUNT%/}/${MODEL_BASENAME}"
+    else
+        export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"
     fi
 
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -340,7 +368,7 @@ else
     srun --jobid=$JOB_ID \
         --mpi=none \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \

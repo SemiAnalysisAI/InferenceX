@@ -3094,7 +3094,6 @@
     - minimaxm2.5-fp8-b300-vllm
     - minimaxm2.5-fp4-b300-vllm
   description:
-    - "Migrate B300 agg model path to /scratch/models/ (audit-recommended root); set HF_HUB_CACHE to container's ~/.cache/huggingface for eval dataset downloads"
-    - "Replace the partial Qwen-FP8/dsv4 special-case MODEL rewrite with a universal rewrite from HF id (org/name) to absolute local path under HF_HUB_CACHE_MOUNT; remove hf download from bench scripts so contract is staged-or-fail"
-    - "Reduce search-space to single (isl=1024, osl=1024, conc=4) point per config to verify model-path wiring end-to-end"
+    - "Migrate B300 agg model path to /scratch/models/; set HF_HUB_CACHE separately for eval dataset"
+    - "Introduce MODEL_PATH (filesystem path) separately from MODEL (HF id)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1539
