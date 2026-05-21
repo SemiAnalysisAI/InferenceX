@@ -20,7 +20,9 @@ check_env_vars \
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
-    hf download "$MODEL" --local-dir "$MODEL_PATH"
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
 else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
@@ -47,8 +49,8 @@ fi
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL_PATH --host 0.0.0.0 --port $PORT \
---tensor-parallel-size=$TP \
+vllm serve $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
+--tensor-parallel-size $TP \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \

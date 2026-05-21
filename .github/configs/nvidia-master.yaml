@@ -1985,7 +1985,7 @@ dsr1-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
   model: deepseek-ai/DeepSeek-V4-Pro
