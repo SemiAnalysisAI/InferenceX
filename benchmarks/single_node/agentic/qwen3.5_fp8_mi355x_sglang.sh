@@ -49,8 +49,14 @@ case "$OFFLOADING" in
         ;;
     hicache)
         # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
-        # TOTAL_CPU_DRAM_GB comes from the workflow input and defaults to 600.
-        HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        # SGLang --hicache-size is per rank, while the workflow input is a
+        # node-total DRAM budget. Divide by TP unless HICACHE_SIZE_GB is set
+        # directly for one-off tuning.
+        HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / TP))}"
+        if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
+            echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB and TP=$TP" >&2
+            exit 1
+        fi
         CACHE_ARGS=(
             --page-size 64
             --enable-hierarchical-cache
