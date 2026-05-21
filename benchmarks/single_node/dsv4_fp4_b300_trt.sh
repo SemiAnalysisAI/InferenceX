@@ -47,10 +47,6 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
-if [[ "$MODEL" != /* ]]; then
-    hf download "$MODEL"
-fi
-
 nvidia-smi
 
 SERVER_LOG="$PWD/server.log"

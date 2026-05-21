@@ -280,16 +280,19 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
 
-    # Pre-staged models on the B300 cluster live under /data/models. Point MODEL
-    # at the local copy so the benchmark skips `hf download` and reads from the
-    # mounted dir. Other models fall through and use `hf download` from their
-    # benchmark script.
-    HF_HUB_CACHE_MOUNT="/data/models"
-    if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
-        export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-        export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
+    HF_HUB_CACHE_MOUNT="/scratch/models/"
+
+    # HF_HUB_CACHE is set to help with dataset download inside the container
+    # for eval jobs. Can be updated to some other path on the cluster and
+    # mounted just like HF_HUB_CACHE_MOUNT.
+    export HF_HUB_CACHE="$HOME/.cache/huggingface"
+
+    # Rewrite MODEL from HF id (org/name) to the pre-staged local path under
+    # HF_HUB_CACHE_MOUNT. Skip if MODEL is already an absolute path.
+    if [[ -n "$MODEL" && "$MODEL" != /* ]]; then
+        export MODEL="${HF_HUB_CACHE_MOUNT}${MODEL##*/}"
     fi
+
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models

@@ -1883,14 +1883,7 @@ dsr1-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
-
+      - { tp: 4, ep: 4, conc-start: 4, conc-end: 4 }
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -1992,18 +1985,7 @@ dsr1-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
-
-# NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# lists B200 (not B300) as the Blackwell target. This config reuses the
-# B200 Pro FP4 Max-Throughput recipe (DP=8 + DeepEP, no MTP) on B300
-# until a B300-specific recipe ships. Prefix caching is disabled.
-# Parallelisms and concurrency ranges mirror dsv4-fp4-b200-vllm.
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2025,26 +2007,7 @@ dsv4-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
-
-  # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
-  # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
-  # DP_ATTENTION:
-  #   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
-  #                     + EAGLE (3,1,4) + mem-fraction 0.90
-  #   dp-attn: true  -> DP-attn  + flashinfer_mxfp4 + chunked-prefill 32768
-  #                     + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2062,14 +2025,7 @@ dsv4-fp4-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2281,12 +2237,7 @@ glm5-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
-
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
 glm5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -2300,12 +2251,7 @@ glm5-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/GLM-5-NVFP4
@@ -2364,14 +2310,7 @@ glm5-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 glm5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
@@ -2385,14 +2324,7 @@ glm5-fp4-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2428,12 +2360,7 @@ qwen3.5-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 qwen3.5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.10.post1-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2447,12 +2374,7 @@ qwen3.5-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -2466,14 +2388,7 @@ qwen3.5-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
-
+      - { tp: 2, ep: 2, conc-start: 4, conc-end: 4 }
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -2487,14 +2402,7 @@ qwen3.5-fp4-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-
+      - { tp: 2, ep: 2, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 qwen3.5-bf16-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2508,14 +2416,7 @@ qwen3.5-bf16-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 qwen3.5-bf16-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2529,14 +2430,7 @@ qwen3.5-bf16-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
@@ -2600,14 +2494,7 @@ kimik2.5-int4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 kimik2.5-int4-h200-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
@@ -2716,14 +2603,7 @@ kimik2.5-fp4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
-
+      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2760,20 +2640,7 @@ dsr1-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
-
-# Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'lmsysorg/sglang:v0.5.10.post1-cu130' -> 'vllm/vllm-openai:v0.20.0-cu130'
-#   - model: 'deepseek-ai/DeepSeek-R1-0528' -> 'nvidia/Kimi-K2.5-NVFP4'
-#   - model-prefix: 'dsr1' -> 'kimik2.5'
-#   - precision: 'fp8' -> 'fp4'
-#   - framework: 'sglang' -> 'vllm'
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 kimik2.5-fp4-b300-vllm-agentic:
   # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
   # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
@@ -3014,24 +2881,7 @@ dsv4-fp4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 8192 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 8, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-
-# Diverged from dsv4-fp4-b300-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's dsv4-fp4-b300-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original dsv4-fp4-b300-vllm entry stays byte-identical to origin/main.
+      - { tp: 4, conc-start: 4, conc-end: 4 }
 dsv4-fp4-b300-vllm-agentic:
   image: vllm/vllm-openai:v0.20.0-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3064,16 +2914,7 @@ dsv4-fp4-b300-trt:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
-
+      - { tp: 4, conc-start: 4, conc-end: 4 }
 dsv4-fp4-b300-trt-mtp:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3087,16 +2928,7 @@ dsv4-fp4-b300-trt-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
-
+      - { tp: 4, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3110,17 +2942,7 @@ dsv4-fp4-b300-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
-
+      - { tp: 4, conc-start: 4, conc-end: 4, spec-decoding: mtp }
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -4373,21 +4195,7 @@ minimaxm2.5-fp8-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 2, conc-start: 64, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-
-# Diverged from minimaxm2.5-fp8-b300-vllm (agentic-coding sibling). Reasons below;
-# the original minimaxm2.5-fp8-b300-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
+      - { tp: 1, conc-start: 4, conc-end: 4 }
 minimaxm2.5-fp8-b300-vllm-agentic:
   image: vllm/vllm-openai:v0.19.1
   model: MiniMaxAI/MiniMax-M2.5
@@ -4477,20 +4285,7 @@ minimaxm2.5-fp4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 8 }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 128 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 2048 }
-      - { tp: 4, conc-start: 8, conc-end: 8 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-
+      - { tp: 1, conc-start: 4, conc-end: 4 }
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
