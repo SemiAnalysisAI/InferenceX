@@ -18,11 +18,8 @@ set -eo pipefail
 # parameters (w13_weight_scale / w2_weight_scale), so safetensors
 # loading raises KeyError.
 #
-# --quantization deepseek_v4_fp8 forces the FP4-aware
-# DeepseekV4FP8Config instead of relying on model_type auto-detection.
-# That keeps the mixed-precision checkpoint on the intended MoE path
-# and avoids falling back to plain Fp8Config, which rejects
-# triton_unfused.
+# --compilation-config mode=3 with FULL_AND_PIECEWISE cudagraph mode
+# enables full CUDA graph capture for improved throughput on MI355X.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
@@ -74,23 +71,17 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
 fi
 
 set -x
-vllm serve $MODEL --port $PORT \
+vllm serve $MODEL --host localhost --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     --distributed-executor-backend mp \
-    --gpu-memory-utilization 0.6 \
-    --max-model-len $MAX_MODEL_LEN \
-    --max-num-seqs 128 \
-    --max-num-batched-tokens 8192 \
+    --gpu-memory-utilization 0.8 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --enforce-eager \
-    --async-scheduling \
-    --quantization deepseek_v4_fp8 \
     --moe-backend triton_unfused \
-    --no-enable-prefix-caching \
     --tokenizer-mode deepseek_v4 \
-    --reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
+    --reasoning-parser deepseek_v4 \
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
