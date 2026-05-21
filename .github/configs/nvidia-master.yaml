@@ -2686,6 +2686,23 @@ kimik2.5-fp4-b200-vllm-agentic:
       - { tp: 4, ep: 1, offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
       - { tp: 4, ep: 1, offloading: cpu,  conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
+kimik2.5-fp4-b200-vllm-agentic-lmcache:
+  image: vllm/vllm-openai:v0.21.0
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
+      - { tp: 8, ep: 1, offloading: lmcache,  conc-list: [16, 24, 32, 36] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
+      - { tp: 4, ep: 1, offloading: lmcache,  conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
@@ -2762,12 +2779,7 @@ dsr1-fp8-b300-sglang-mtp:
 #   - precision: 'fp8' -> 'fp4'
 #   - framework: 'sglang' -> 'vllm'
 kimik2.5-fp4-b300-vllm-agentic:
-  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
-  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
-  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
-  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
-  # INT4 B300 sister already uses successfully.
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -2780,6 +2792,7 @@ kimik2.5-fp4-b300-vllm-agentic:
       search-space:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2

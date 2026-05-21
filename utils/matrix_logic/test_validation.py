@@ -343,6 +343,15 @@ class TestAgenticMatrixEntries:
         })
         assert entry.offloading == "lmcache-mp"
 
+    def test_lmcache_offloading_is_valid_for_agentic_search_space(self):
+        """Agentic search-space entries can request in-process LMCache."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "lmcache",
+            "conc-list": [1, 2],
+        })
+        assert entry.offloading == "lmcache"
+
 
 # =============================================================================
 # Test MultiNodeMatrixEntry

@@ -2623,3 +2623,16 @@
   description:
     - "Update vLLM image from v0.15.1 to v0.20.2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1394
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic
+  description:
+    - "Update Kimi K2.5 FP4 B300 agentic vLLM image from v0.20.0-cu130 to v0.21.0"
+    - "Add LMCache offload coverage for Kimi K2.5 FP4 B300 agentic runs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm-agentic-lmcache
+  description:
+    - "Add Kimi K2.5 FP4 B200 agentic LMCache offload coverage on vLLM v0.21.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -156,7 +156,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: int
-    offloading: Literal["none", "cpu", "ssd", "lmcache-mp"] = Field(
+    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp"] = Field(
         alias=Fields.OFFLOADING.value
     )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
@@ -340,7 +340,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
-    offloading: Literal["none", "cpu", "ssd", "lmcache-mp"] = Field(
+    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp"] = Field(
         default="none", alias=Fields.OFFLOADING.value
     )
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
