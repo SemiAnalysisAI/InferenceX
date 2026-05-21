@@ -64,22 +64,33 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir lmcache
         python3 -c "import lmcache.integration.vllm.vllm_v1_adapter" >/dev/null
 
-        # B200 DGXC nodes have ~2.7 TiB host DRAM. Keep LMCache's local CPU
-        # pool at the same 2.5 TB envelope as native offload while leaving room
-        # for vLLM worker RSS and page cache. vLLM splits this total across TP
-        # ranks for --kv-offloading-backend=lmcache.
+        # B200 DGXC nodes have ~2.7 TiB host DRAM. Keep the TP=8 LMCache
+        # path at the same 2.5 TB envelope as native offload while leaving room
+        # for vLLM worker RSS and page cache.
+        #
+        # vLLM splits --kv-offloading-size across TP ranks for LMCache. In the
+        # current vLLM 0.21.0 + LMCache 0.4.5 integrated connector path, Kimi's
+        # MLA/HND layout cannot use LazyMixedMemoryAllocator and falls back to a
+        # full pinned MixedMemoryAllocator allocation. That means TP=4 with a
+        # 2.5 TB total tries to cudaHostAlloc ~625 GB per rank and fails during
+        # engine startup, while TP=8 at ~312.5 GB per rank starts successfully.
+        # Cap lower-TP LMCache runs to the same proven per-rank envelope.
         TOTAL_CPU_DRAM_GB=2500
+        LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK="${LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK:-313}"
+        LMCACHE_TOTAL_CPU_DRAM_GB="$TOTAL_CPU_DRAM_GB"
+        if (( LMCACHE_TOTAL_CPU_DRAM_GB > TP * LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK )); then
+            LMCACHE_TOTAL_CPU_DRAM_GB=$((TP * LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK))
+        fi
+        echo "LMCache CPU offload pool: ${LMCACHE_TOTAL_CPU_DRAM_GB} GB total across TP=${TP}"
         export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        # Avoid pinning the full CPU pool during engine startup; the integrated
-        # LMCache allocator grows as agentic prefixes accumulate.
-        export LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR="${LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR:-true}"
-        export LMCACHE_LAZY_MEMORY_INITIAL_RATIO="${LMCACHE_LAZY_MEMORY_INITIAL_RATIO:-0.01}"
-        export LMCACHE_LAZY_MEMORY_STEP_RATIO="${LMCACHE_LAZY_MEMORY_STEP_RATIO:-0.02}"
+        # Avoid a noisy failed lazy-allocator fallback; the per-rank cap above is
+        # the actual startup guard for this Kimi/vLLM/LMCache combination.
+        export LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR="${LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR:-false}"
 
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         OFFLOAD_ARGS=(
             --kv-offloading-backend lmcache
-            --kv-offloading-size "$TOTAL_CPU_DRAM_GB"
+            --kv-offloading-size "$LMCACHE_TOTAL_CPU_DRAM_GB"
             --disable-hybrid-kv-cache-manager
         )
         ;;
