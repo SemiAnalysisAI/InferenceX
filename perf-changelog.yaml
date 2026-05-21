@@ -3073,4 +3073,4 @@
     - minimaxm2.5-fp8-mi325x-vllm
   description:
     - "Add VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 + --attention-backend ROCM_AITER_FA (match AMD-recommended AITER recipe pattern used on mi355x)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1549
