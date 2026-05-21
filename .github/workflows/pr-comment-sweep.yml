@@ -42,7 +42,11 @@ jobs:
           else
             cmd_args=${cmd_line#/sweep}
           fi
-          cmd_args=$(echo "$cmd_args" | xargs || true)
+          # Strip CR before xargs so comments pasted from CRLF sources
+          # (Windows clipboards, some browsers/editors) don't leak a trailing
+          # '\r' into the args. Otherwise downstream argparse keys like
+          # "gptoss-fp4-mi355x-vllm\r" silently fail to match real keys.
+          cmd_args=$(echo "$cmd_args" | tr -d '\r' | xargs || true)
 
           echo "generator-args=$cmd_args" >> "$GITHUB_OUTPUT"
           echo "pr-number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
