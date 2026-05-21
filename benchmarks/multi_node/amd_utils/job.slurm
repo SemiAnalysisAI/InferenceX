@@ -201,7 +201,34 @@ SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
 
 # Docker privilege detection — evaluated per-node since group membership varies.
 # Exported as a snippet so every srun participant resolves it locally.
-export DOCKER_CMD_DETECT='if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi'
+#
+# Middle branch (sg-docker shim) is a workaround for stale supplementary groups
+# on long-running GHA runners: the kernel-level group list is frozen at runner
+# start time and predates the gharunner→docker group add, even though NSS now
+# lists gharunner in docker. sg(1) is setuid root, so it can set the docker GID
+# per invocation; we wrap docker in a PATH shim so xargs/etc. also work.
+# Remove this branch once the runners are restarted.
+export DOCKER_CMD_DETECT='
+if docker ps &>/dev/null 2>&1; then
+    DOCKER_CMD=docker
+elif command -v sg >/dev/null 2>&1 && sg docker -c "docker ps" &>/dev/null 2>&1; then
+    SHIM_DIR="/tmp/docker-sg-shim-$$"
+    mkdir -p "$SHIM_DIR"
+    cat >"$SHIM_DIR/docker" <<"SHIM_EOF"
+#!/bin/bash
+args=""
+for a in "$@"; do args+=$(printf "%q " "$a"); done
+exec sg docker -c "/usr/bin/docker $args"
+SHIM_EOF
+    chmod +x "$SHIM_DIR/docker"
+    export PATH="$SHIM_DIR:$PATH"
+    DOCKER_CMD=docker
+    echo "[docker-detect] using sg-docker shim on $(hostname)" >&2
+else
+    out=$(docker ps 2>&1)
+    echo "[docker-detect] docker ps failed on $(hostname) as $(id -un): $out" >&2
+    DOCKER_CMD="sudo docker"
+fi'
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES
