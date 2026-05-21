@@ -44,6 +44,14 @@ else
     MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
 fi
 
+PROFILE_ARGS=()
+if [[ "${PROFILE:-}" == "1" ]]; then
+    PROFILE_ARGS=(
+        --profiler-config
+        "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
+    )
+fi
+
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -69,6 +77,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
+    "${PROFILE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
