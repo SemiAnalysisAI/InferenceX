@@ -1405,7 +1405,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  image: vllm/vllm-openai-rocm:nightly-a6682d1d259cca69a9ae737ea5608fbbe7520031
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg
