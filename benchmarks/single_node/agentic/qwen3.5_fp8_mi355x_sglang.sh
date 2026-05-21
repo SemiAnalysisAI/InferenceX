@@ -49,19 +49,27 @@ case "$OFFLOADING" in
         ;;
     hicache)
         # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
-        # MI355X nodes have about 2 TB of usable CPU DRAM for this run. Keep
-        # this local to the script because the workflow currently passes a
-        # generic default for TOTAL_CPU_DRAM_GB, not a platform-specific value.
+        # MI355X nodes have about 3 TB of host DRAM, but HiCache allocates a
+        # large host pool in every TP rank after the model/runtime have already
+        # consumed memory. A 2 TB node-total target becomes 250 GB/rank at TP=8
+        # and has failed with only ~120-190 GB free by the time later ranks
+        # attach the host pool. Keep the node-total knob for one-off tuning, but
+        # cap the default per-rank pool below the failed 250 GB/rank request.
         TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-2000}"
+        HICACHE_MAX_SIZE_GB_PER_RANK="${HICACHE_MAX_SIZE_GB_PER_RANK:-180}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
         # SGLang --hicache-size is per rank, while the workflow input is a
         # node-total DRAM budget. Divide by TP unless HICACHE_SIZE_GB is set
         # directly for one-off tuning.
         HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / TP))}"
+        if [ "$HICACHE_SIZE_GB" -gt "$HICACHE_MAX_SIZE_GB_PER_RANK" ]; then
+            HICACHE_SIZE_GB="$HICACHE_MAX_SIZE_GB_PER_RANK"
+        fi
         if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
             echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB and TP=$TP" >&2
             exit 1
         fi
+        echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank across TP=${TP}"
         CACHE_ARGS=(
             --page-size 64
             --enable-hierarchical-cache
