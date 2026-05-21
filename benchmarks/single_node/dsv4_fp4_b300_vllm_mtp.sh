@@ -52,6 +52,14 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     )
 fi
 
+COMPILATION_ARGS=(
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --max-cudagraph-capture-size 2048
+)
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+    COMPILATION_ARGS=(--compilation-config '{"cudagraph_mode":"NONE","custom_ops":["all"]}')
+fi
+
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -82,13 +90,12 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${EP_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+    "${COMPILATION_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-cudagraph-capture-size 2048 \
     --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
