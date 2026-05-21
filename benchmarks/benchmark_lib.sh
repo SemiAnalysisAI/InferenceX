@@ -508,7 +508,7 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    local dest_trace="$PWD/profile_${RESULT_FILENAME}.trace.json.gz"
     if [[ "$trace_file" == *.gz ]]; then
         cp -f "$trace_file" "$dest_trace"
     else

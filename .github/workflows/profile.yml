@@ -206,7 +206,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}
-          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
+          path: ${{ steps.run.outputs.trace }}
           if-no-files-found: ignore
 
       - name: Upload TP-0-DECODE trace as artifact
@@ -240,7 +240,7 @@ jobs:
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
           ref: master
-          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
+          token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
 
       - name: Push profile to storage repo

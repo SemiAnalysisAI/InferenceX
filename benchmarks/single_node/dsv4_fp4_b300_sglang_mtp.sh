@@ -77,11 +77,17 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    SPECULATIVE_NUM_STEPS=1
+    SPECULATIVE_NUM_DRAFT_TOKENS=2
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+        SPECULATIVE_NUM_STEPS=3
+        SPECULATIVE_NUM_DRAFT_TOKENS=3
+    fi
     SPEC_FLAGS=(
         --speculative-algorithm EAGLE
-        --speculative-num-steps 1
+        --speculative-num-steps "$SPECULATIVE_NUM_STEPS"
         --speculative-eagle-topk 1
-        --speculative-num-draft-tokens 2
+        --speculative-num-draft-tokens "$SPECULATIVE_NUM_DRAFT_TOKENS"
     )
     PARALLEL_ARGS=(
         --dp-size "$TP"
