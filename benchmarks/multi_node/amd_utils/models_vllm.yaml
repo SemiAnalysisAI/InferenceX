@@ -31,9 +31,11 @@ Kimi-K2.5-MXFP4:
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
 MiniMax-M2.5:
-  prefill_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32 --disable-custom-all-reduce"
-  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32 --disable-custom-all-reduce"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600 HIP_LAUNCH_BLOCKING=1 AMD_SERIALIZE_KERNEL=3 AMD_SERIALIZE_COPY=3 AMD_LOG_LEVEL=3"
+  # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
+  # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.
+  prefill_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  decode_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--MiniMaxAI--MiniMax-M2.5"
 
 gpt-oss-120b:
