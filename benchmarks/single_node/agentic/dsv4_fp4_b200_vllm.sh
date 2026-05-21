@@ -22,7 +22,7 @@ set -x
 #
 # OFFLOADING values:
 #   none        - vLLM GPU KV only, with DSv4 hybrid KV manager enabled.
-#   cpu         - vLLM SimpleCPUOffloadConnector, with hybrid KV manager enabled.
+#   cpu         - vLLM native OffloadingConnector, with hybrid KV manager enabled.
 #   lmcache-mp  - Temporarily disabled for DSv4. LMCache PR #3261 must merge
 #                 first so LMCacheMPConnector can support HMA block-id tuples.
 
@@ -116,37 +116,23 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~1.5 TB total host
-        # CPU pool across the engine(s).
+        # individual jobs to a fraction of that. Aim for ~2.8 TB total native
+        # CPU offload pool across the engine(s), matching the LMCache target.
         #
-        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
-        # parallel_config.world_size (= TP*PP, NOT including DP — see
-        # vllm/config/parallel.py and parallel.py docstrings). So:
-        #   - DP-attn=true  → each of $TP DP engines has world_size=1 in
-        #     its parallel_config; the connector does no internal divide,
-        #     and each engine torch.zeros + pin_tensor allocates the full
-        #     --kv_offloading_size value. Pre-divide by $TP here so the
-        #     aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
-        #   - DP-attn=false → single engine with world_size=TP. Pass the
-        #     full TOTAL_CPU_DRAM_GB; the connector's internal divide
-        #     yields TOTAL/TP per rank, and TP-shared mmap (PR #37206)
-        #     keeps the aggregate at TOTAL.
-        TOTAL_CPU_DRAM_GB=1500
+        # Native --kv-offloading-size becomes OffloadingConnector's
+        # cpu_bytes_to_use. For DP-attn there are $TP independent DP engines,
+        # so pre-divide to keep aggregate host commit near TOTAL_CPU_DRAM_GB.
+        # For pure TP, vLLM treats the size as the total across TP ranks.
+        TOTAL_CPU_DRAM_GB=2800
         if [ "$DP_ATTENTION" = "true" ]; then
             PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         else
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
-        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        # Use --kv-transfer-config JSON to also pass lazy_offload=true. Eager
-        # mode (default) hits an AssertionError in
-        # vllm/v1/core/kv_cache_utils.py:269 popleft_n at low/mid CONC; lazy
-        # mode defers the store path and clears low/mid CONC at 80-100%.
-        # See SimpleCPUOffloadConnector PR #37160 for the lazy_offload knob.
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
+            --kv-offloading-backend native
+            --kv-offloading-size "$PER_ENGINE_GB"
         )
         ;;
     lmcache-mp)

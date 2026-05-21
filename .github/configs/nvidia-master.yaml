@@ -1778,9 +1778,9 @@ dsv4-fp4-b200-vllm-agentic:
       # removed for this iteration; restore from prior commits if revisiting
       # offload regressions.
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16] }
-      # Experimental LMCache MP offload. LMCacheMPConnector currently requires
-      # vLLM's hybrid KV manager to be disabled, so this is not an HMA/CSA/HCA
-      # parity run against the no-offload path.
+      # Native vLLM CPU offload with HMA enabled. The benchmark script sizes
+      # the aggregate native offload pool to the same 2.8 TB target used for
+      # the blocked LMCache experiment.
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [12, 16, 24, 32, 48, 64] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [12, 16, 24, 32, 48, 64] }
 
