@@ -49,6 +49,11 @@ case "$OFFLOADING" in
         ;;
     hicache)
         # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
+        # MI355X nodes have about 2 TB of usable CPU DRAM for this run. Keep
+        # this local to the script because the workflow currently passes a
+        # generic default for TOTAL_CPU_DRAM_GB, not a platform-specific value.
+        TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-2000}"
+        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
         # SGLang --hicache-size is per rank, while the workflow input is a
         # node-total DRAM budget. Divide by TP unless HICACHE_SIZE_GB is set
         # directly for one-off tuning.
@@ -63,7 +68,7 @@ case "$OFFLOADING" in
             --hicache-size "$HICACHE_SIZE_GB"
             --hicache-io-backend kernel
             --hicache-mem-layout page_first
-            --hicache-write-policy write_through
+            --hicache-write-policy "$HICACHE_WRITE_POLICY"
         )
         ;;
     *)
