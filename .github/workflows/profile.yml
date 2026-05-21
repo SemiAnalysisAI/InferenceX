@@ -171,7 +171,7 @@ jobs:
             exit 1
           fi
 
-          trace_path="profile_${res_name}.trace.json.gz"
+          trace_path="/workspace/profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
             if [ "${FRAMEWORK}" = "sglang" ]; then
@@ -206,7 +206,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}
-          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
+          path: ${{ steps.run.outputs.trace }}
           if-no-files-found: ignore
 
       - name: Upload TP-0-DECODE trace as artifact
