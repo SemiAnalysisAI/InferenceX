@@ -407,6 +407,7 @@ echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 # Ensure host coredump dir exists and is world-writable so the GPU runtime
 # can drop coredumps from inside the container (mounted at /coredumps below).
 mkdir -p /tmp/coredumps && chmod 1777 /tmp/coredumps || true
+echo \"[coredump-prep] rank \$SLURM_PROCID on \$(hostname): /tmp/coredumps -> \$(ls -ld /tmp/coredumps 2>&1)\"
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
