@@ -70,6 +70,8 @@ set -x
 vllm serve $MODEL --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
+    --async-scheduling \
+    --no-enable-prefix-caching \
     --distributed-executor-backend mp \
     --gpu-memory-utilization 0.8 \
     --kv-cache-dtype fp8 \
