@@ -116,14 +116,17 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~2.8 TB total native
-        # CPU offload pool across the engine(s), matching the LMCache target.
+        # individual jobs to a fraction of that. Aim for ~1.2 TB total native
+        # CPU offload pool across the engine(s); previously 2.8 TB but every
+        # DP-attn worker stalled for 4+ min during pinned-CPU-tensor allocation
+        # and the shm_broadcast watchdog killed them (run 26246044726). 150 GB
+        # per worker (1.2 TB / 8) completes the alloc within the 60 s window.
         #
         # Native --kv-offloading-size becomes OffloadingConnector's
         # cpu_bytes_to_use. For DP-attn there are $TP independent DP engines,
         # so pre-divide to keep aggregate host commit near TOTAL_CPU_DRAM_GB.
         # For pure TP, vLLM treats the size as the total across TP ranks.
-        TOTAL_CPU_DRAM_GB=2800
+        TOTAL_CPU_DRAM_GB=1200
         if [ "$DP_ATTENTION" = "true" ]; then
             PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         else
