@@ -216,9 +216,12 @@ elif command -v sg >/dev/null 2>&1 && sg docker -c "docker ps" &>/dev/null 2>&1;
     mkdir -p "$SHIM_DIR"
     cat >"$SHIM_DIR/docker" <<"SHIM_EOF"
 #!/bin/bash
-args=""
-for a in "$@"; do args+=$(printf "%q " "$a"); done
-exec sg docker -c "/usr/bin/docker $args"
+F=$(mktemp)
+printf "%s\0" "$@" > "$F"
+sg docker -c "xargs -0 -a $F /usr/bin/docker"
+rc=$?
+rm -f "$F"
+exit $rc
 SHIM_EOF
     chmod +x "$SHIM_DIR/docker"
     export PATH="$SHIM_DIR:$PATH"
