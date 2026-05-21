@@ -43,6 +43,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
+WARMUP_ARGS=()
 case "$OFFLOADING" in
     none)
         CACHE_ARGS=(--disable-radix-cache)
@@ -78,6 +79,10 @@ case "$OFFLOADING" in
             --hicache-mem-layout page_first
             --hicache-write-policy "$HICACHE_WRITE_POLICY"
         )
+        # HiCache startup reaches API readiness, but SGLang's internal warmup
+        # request has timed out after 600s on this Qwen MI355X path. Let aiperf
+        # own benchmark traffic instead of blocking server readiness on it.
+        WARMUP_ARGS=(--skip-server-warmup)
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2
@@ -108,6 +113,7 @@ SGLANG_CMD=(
     --context-length "$MAX_MODEL_LEN"
     --enable-metrics
     "${CACHE_ARGS[@]}"
+    "${WARMUP_ARGS[@]}"
 )
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
