@@ -1015,6 +1015,13 @@ build_replay_cmd() {
     # need trust_remote_code=True to load. Benign for models without
     # custom tokenizer code, so we set it unconditionally.
     REPLAY_CMD+=" --tokenizer-trust-remote-code"
+    # Keep replay inputs inside the same context window used to launch the
+    # server. The WEKA corpus contains a few very long parent/subagent traces;
+    # if we mmap and replay them against a smaller-context server they become
+    # deterministic 4xxs and can still pressure the engine while queued.
+    if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
+        REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
+    fi
     # Default --num-dataset-entries is 100; the weka corpus has 949. Cap
     # at 949 so all unique traces are loaded (the loader treats this as a
     # ``min(cap, available)`` ceiling, not a target — see
