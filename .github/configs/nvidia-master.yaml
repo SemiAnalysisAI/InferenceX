@@ -2089,7 +2089,7 @@ dsv4-flash-fp4-b300-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 8, spec-decoding: mtp }
 
 # Targeted Flash MTP profile: DEP4 at the same 1k1k conc=64 point as the
 # non-MTP Flash profile above. The shared SGLang MTP launcher selects the
