@@ -45,10 +45,6 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_LINEAR=1
-# Loading the ~960 GB checkpoint into KV/weights can exceed the default
-# engine-ready timeout on first run from cold HF cache.
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
