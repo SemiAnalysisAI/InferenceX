@@ -404,6 +404,10 @@ echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
 
+# Ensure host coredump dir exists and is world-writable so the GPU runtime
+# can drop coredumps from inside the container (mounted at /coredumps below).
+mkdir -p /tmp/coredumps && chmod 1777 /tmp/coredumps || true
+
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
@@ -462,6 +466,7 @@ fi
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
     -v /tmp:/run_logs \
+    -v /tmp/coredumps:/coredumps \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     ${DOCKER_ENV_COMMON[*]} \
