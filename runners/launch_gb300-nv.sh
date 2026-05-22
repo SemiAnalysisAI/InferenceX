@@ -24,8 +24,11 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, minimaxm2.5-fp4"
     exit 1
 fi
 
@@ -40,13 +43,30 @@ NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
+    # Fast-path: if a squash file is already at the expected path (e.g.,
+    # a symlink to a prestaged file), skip srun entirely. Use [ -f ]
+    # rather than unsquashfs because the login node may not have the
+    # squashfs-tools binary installed.
+    if [ -f "$squash" ]; then
+        echo "Squash file already exists, skipping import: $squash"
+        return 0
+    fi
     srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
+        # A previously failed enroot import on VAST can leave the lock
+        # or squash as a self-referencing symlink, making subsequent
+        # opens fail with ELOOP. Only unlink when the lock is currently
+        # a symlink — otherwise parallel runs would race to delete each
+        # other's freshly-created regular lock files.
+        if [ -L \"$lock\" ]; then
+            unlink \"$lock\" 2>/dev/null || true
+        fi
         exec 9>\"$lock\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
         if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
             echo 'Squash file already exists and is valid, skipping import: $squash'
         else
-            rm -f \"$squash\"
+            unlink \"$squash\" 2>/dev/null || true
+            rm -f \"$squash\" 2>/dev/null || true
             enroot import -o \"$squash\" docker://$image
         fi
     "
@@ -82,6 +102,14 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    # Custom srt-slurm fork that recognizes resources.spread_workers and
+    # dynamo.wheel schema fields used by the minimax pareto recipes.
+    git clone https://github.com/jasonlizhengjian/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout lijas/spread-workers
+    mkdir -p recipes/vllm/minimax-m2.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5" recipes/vllm/minimax-m2.5
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"

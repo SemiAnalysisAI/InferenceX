@@ -39,8 +39,17 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     fi
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
+    # The GHA runner user for the minimax sweep can't use the default
+    # `benchmark` account (sbatch rejects with "Invalid account or
+    # account/partition combination"). Historical b300 single-node
+    # minimax (commit 5f314bf1) used `restricted` for the same reason.
+    # Keep batch_1 partition; only override the account.
+    SLURM_ACCOUNT="restricted"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm"
     exit 1
 fi
 
@@ -61,6 +70,15 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    # Custom srt-slurm fork that recognizes resources.spread_workers,
+    # dynamo.wheel, and backend.allow_prefill_decode_colocation schema
+    # fields used by the minimax pareto recipes. Same branch as gb300-nv.
+    git clone https://github.com/jasonlizhengjian/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout lijas/spread-workers
+    mkdir -p recipes/vllm/minimax-m2.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300" recipes/vllm/minimax-m2.5
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
