@@ -605,10 +605,6 @@ kimik2.5-fp4-mi355x-vllm:
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:v0.21.0'
 kimik2.5-fp4-mi355x-vllm-agentic:
-  # v0.21.0 (released 2026-05-14) supersedes the prior nightly pin
-  # (51f22dcf...) which was carrying the SimpleCPUOffloadConnector ROCm
-  # cpu_offload_blocks > 0 fix. v0.21.0 is much newer than that fix and
-  # includes all subsequent ROCm offload work.
   image: vllm/vllm-openai-rocm:v0.21.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
@@ -621,17 +617,8 @@ kimik2.5-fp4-mi355x-vllm-agentic:
     - duration: 1800
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
-      # CPU offload only above the KV cliff. Lower concurrencies fit
-      # entirely on-GPU, so paying the offload-path overhead there would
-      # just slow them down without measuring anything new.
-      - { tp: 8, offloading: cpu,  conc-list: [32, 40, 48, 56] }
       - { tp: 8, offloading: lmcache,  conc-list: [32, 40, 48, 56] }
-      # TP=4 probe: half-node layout doubles per-GPU weight footprint
-      # (~62 GB on MI355X's 288 GB HBM, plenty of headroom). Restrict to
-      # cliff-region concurrencies on both offload modes so we can directly
-      # compare TP=4 vs TP=8 at the same conc points.
       - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
-      - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
       - { tp: 4, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
 
 kimik2.5-fp4-mi355x-atom:
