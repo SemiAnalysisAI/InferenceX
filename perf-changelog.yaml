@@ -3134,4 +3134,4 @@
     - dsv4-fp4-gb300-dynamo-sglang-mtp
   description:
     - "Update SGLang image from nightly-dev-cu13-20260510-2473659e to nightly-dev-20260522-c9153da5"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1559
