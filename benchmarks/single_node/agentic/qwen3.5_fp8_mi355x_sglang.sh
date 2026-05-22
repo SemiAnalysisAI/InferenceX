@@ -50,7 +50,6 @@ case "$OFFLOADING" in
         CACHE_ARGS=(--disable-radix-cache)
         ;;
     hicache)
-        # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
         # MI355X nodes have about 3 TB of host DRAM, but Qwen3.5's hybrid
         # GDN/Mamba path allocates two HiCache host pools per TP rank: one for
         # hierarchical KV cache and one for hierarchical Mamba cache. A 2 TB
