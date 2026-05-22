@@ -1053,3 +1053,27 @@ write_agentic_result_json() {
     # missing in a stripped-down image). The agg JSON is the success gate.
     python3 "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
+
+run_agentic_replay_and_write_outputs() {
+    local result_dir="$1"
+    local replay_rc
+
+    echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
+
+    set +e
+    set -x
+    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    replay_rc=${PIPESTATUS[0]}
+    set +x
+    set -e
+
+    write_agentic_result_json "$result_dir"
+
+    python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
+        "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
+
+    if [ "$replay_rc" -ne 0 ]; then
+        echo "ERROR: agentic trace replay exited with code $replay_rc after writing available results" >&2
+        return "$replay_rc"
+    fi
+}
