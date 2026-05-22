@@ -58,11 +58,17 @@ import os
 import threading
 
 if os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR") == "1":
-    from lmcache.v1 import lazy_memory_allocator as _lazy_memory_allocator
+    import builtins
+    import sys
 
-    _LazyMemoryAllocator = _lazy_memory_allocator.LazyMemoryAllocator
+    _orig_import = builtins.__import__
 
-    if not getattr(_LazyMemoryAllocator, "_agentic_rocm_demand_patch", False):
+    def _patch_lazy_memory_allocator(_lazy_memory_allocator) -> None:
+        _LazyMemoryAllocator = _lazy_memory_allocator.LazyMemoryAllocator
+
+        if getattr(_LazyMemoryAllocator, "_agentic_rocm_demand_patch", False):
+            return
+
         _orig_init = _LazyMemoryAllocator.__init__
         _orig_allocate = _LazyMemoryAllocator.allocate
         _orig_batched_allocate = _LazyMemoryAllocator.batched_allocate
@@ -149,6 +155,22 @@ if os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR") == "1":
         _LazyMemoryAllocator.allocate = _patched_allocate
         _LazyMemoryAllocator.batched_allocate = _patched_batched_allocate
         _LazyMemoryAllocator._agentic_rocm_demand_patch = True
+
+    def _maybe_patch_lazy_memory_allocator() -> None:
+        module = sys.modules.get("lmcache.v1.lazy_memory_allocator")
+        if module is not None:
+            _patch_lazy_memory_allocator(module)
+
+    def _agentic_rocm_import(name, globals=None, locals=None, fromlist=(), level=0):
+        module = _orig_import(name, globals, locals, fromlist, level)
+        if name == "lmcache.v1.lazy_memory_allocator" or (
+            name.startswith("lmcache") and "lmcache.v1.lazy_memory_allocator" in sys.modules
+        ):
+            _maybe_patch_lazy_memory_allocator()
+        return module
+
+    builtins.__import__ = _agentic_rocm_import
+    _maybe_patch_lazy_memory_allocator()
 
 if os.environ.get("LMCACHE_ROCM_MP_BLOCK_FALLBACK") == "1":
     import torch
