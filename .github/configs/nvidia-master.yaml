@@ -2416,7 +2416,7 @@ qwen3.5-fp8-b200-sglang-mtp:
     
 
 qwen3.5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b300
@@ -2435,7 +2435,7 @@ qwen3.5-fp8-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b300
@@ -2883,7 +2883,7 @@ dsr1-fp8-h200-sglang-mtp:
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu129
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2907,7 +2907,7 @@ dsv4-fp8-h200-vllm:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
