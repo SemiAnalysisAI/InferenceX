@@ -3089,3 +3089,10 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 / v0.5.11-cu130 (30d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1451
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-mtp2
+  description:
+    - "Add initial DeepSeek-V4-Pro FP4 8k/1k GB300 Dynamo vLLM MTP recipes"
+    - "1P/1D DEP4/TP4, 1P/1D DEP4/DEP8, 2P/1D DEP4/DEP8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1535
