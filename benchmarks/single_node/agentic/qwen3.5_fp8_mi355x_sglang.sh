@@ -60,6 +60,14 @@ case "$OFFLOADING" in
         HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
         HICACHE_MAX_SIZE_GB_PER_RANK_POOL="${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-${HICACHE_MAX_SIZE_GB_PER_RANK:-180}}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+        # Qwen3.5's hybrid Mamba path runs SGLang's no_buffer scheduler on
+        # MI355X, which requires page_size=1. The kernel/page_first HiCache
+        # transfer path faults on first prefill in this mode on ROCm, so keep
+        # the default on the safer direct/layer_first copy path. These remain
+        # env-overridable for future SGLang/ROCm fixes.
+        HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
+        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
         # SGLang --hicache-size is per rank per host pool, while the workflow
         # input is a node-total DRAM budget. Divide by TP and the number of
         # host pools unless HICACHE_SIZE_GB is set directly for one-off tuning.
@@ -73,11 +81,11 @@ case "$OFFLOADING" in
         fi
         echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank per host pool across TP=${TP}, host_pool_count=${HICACHE_HOST_POOL_COUNT}"
         CACHE_ARGS=(
-            --page-size 64
+            --page-size "$HICACHE_PAGE_SIZE"
             --enable-hierarchical-cache
             --hicache-size "$HICACHE_SIZE_GB"
-            --hicache-io-backend kernel
-            --hicache-mem-layout page_first
+            --hicache-io-backend "$HICACHE_IO_BACKEND"
+            --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
             --hicache-write-policy "$HICACHE_WRITE_POLICY"
         )
         # HiCache startup reaches API readiness, but SGLang's internal warmup
