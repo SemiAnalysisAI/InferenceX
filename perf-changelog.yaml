@@ -3083,3 +3083,9 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 / v0.5.11-cu130 (30d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1451
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Smoke run validating measured-power aggregation pipeline. No config change; entry exists to trigger a sweep that produces the first agg_<run>.json with avg_power_w + joules_per_output_token populated by aggregate_power.py."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1551
