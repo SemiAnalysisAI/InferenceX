@@ -2482,6 +2482,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1375
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Enable W4A4 (MXFP4) megamoe by appending w4a4 related environ flags when megamoe is enabled"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1382
+
+- config-keys:
     - dsr1-fp8-b200-sglang-mtp
   description:
     - "Update SGLang image from v0.5.9-cu130 to v0.5.11-cu130"
@@ -2661,6 +2667,14 @@
   description:
     - "Update SGLang image from v0.5.9-cu129-amd64 (74d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1458
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Update vLLM image to v0.21.0 (from custom deepseekv4-cu129 / v0.20.1@sha256-pinned)"
+    - "Lower --gpu-memory-utilization from 0.95 to 0.90 in dsv4_fp8_h200.sh and dsv4_fp8_h200_mtp.sh — v0.21.0 uses more memory at load time, OOM'd on GPU 2 at 0.95"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1461
 
 - config-keys:
     - dsr1-fp8-mi325x-sglang
@@ -2966,6 +2980,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1033
 
 - config-keys:
+    - dsr1-fp8-mi355x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp8-mi355x-sglang (model: deepseek-ai/DeepSeek-R1-0528) on lmsysorg/sglang:v0.5.12-rocm700-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1521
+
+- config-keys:
     - dsr1-fp4-mi355x-atom
     - dsr1-fp4-mi355x-atom-mtp
   description:
@@ -3052,6 +3072,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1475
 
 - config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Bump vLLM ROCm image from nightly-b50646e5effd7cb5884cd96fdff4c53c18521198 to nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1546
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-8c3b5aa-20260521-DSv4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1548
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.10.post1-cu130 / v0.5.11-cu130 (30d old) to v0.5.12-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1451
+
+- config-keys:
     - dsr1-fp8-b200-sglang
     - dsr1-fp8-b300-sglang
     - dsr1-fp4-b200-sglang
@@ -3061,4 +3100,3 @@
   description:
     - "Truncate sweep to conc=1 and conc=2 only: set conc-start=1, conc-end=2 in every search-space across all six DSR1 SGLang agg configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1534
-
