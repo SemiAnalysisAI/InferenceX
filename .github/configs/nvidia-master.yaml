@@ -4537,6 +4537,29 @@ gptoss-fp4-h100-1x-vllm:
       search-space:
       - { tp: 1, offloading: none, conc-list: [1, 2, 4, 8] }
 
+gptoss-fp4-h100-2x-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: openai/gpt-oss-20b
+  model-prefix: gptoss
+  runner: h100-2x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 2, conc-start: 4, conc-end: 16 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 2, conc-start: 4, conc-end: 16 }
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 2, offloading: none, conc-list: [1, 2, 4, 8] }
+
 dsr1qwen3-bf16-rtx5090-1x-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B

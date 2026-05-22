@@ -23,6 +23,8 @@ h100:
 - 'h100-dgxc-slurm_19'
 h100-1x:
 - 'h100-greennode_00'
+h100-2x:
+- 'h100-greennode_01'
 rtx5090-1x:
 - 'rtx5090-greennode_00'
 h100-multinode:
