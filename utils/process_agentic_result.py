@@ -37,7 +37,7 @@ from pathlib import Path
 # Trace metadata lookup: conversation_id (= trace id) -> per-turn dict with
 # ``hash_ids`` and ``output_length``. Built lazily from the HF dataset cache.
 _TRACE_METADATA_CACHE: dict[str, list[dict]] | None = None
-_HF_DATASET = "semianalysisai/cc-traces-weka-042026"
+_HF_DATASET = "semianalysisai/cc-traces-weka-with-subagents-051926"
 
 
 # ---- helpers ---------------------------------------------------------------

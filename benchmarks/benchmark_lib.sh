@@ -1017,11 +1017,11 @@ build_replay_cmd() {
     if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
         REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
     fi
-    # Default --num-dataset-entries is 100; the weka corpus has 949. Cap
-    # at 949 so all unique traces are loaded (the loader treats this as a
-    # ``min(cap, available)`` ceiling, not a target — see
+    # Default --num-dataset-entries is 100; the with-subagents weka corpus
+    # has 219. Cap at 219 so all unique traces are loaded (the loader treats
+    # this as a ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 949"
+    REPLAY_CMD+=" --num-dataset-entries 219"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
