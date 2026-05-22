@@ -3063,7 +3063,6 @@
     - "Remove SGLANG_OPT_FP8_WO_A_GEMM=0 workaround (topk_v2 crash fixed upstream in sgl-project/sglang#25805)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1528
 
-
 - config-keys:
     - qwen3.5-fp4-b300-sglang
     - qwen3.5-fp4-b300-sglang-mtp
@@ -3089,6 +3088,41 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 / v0.5.11-cu130 (30d old) to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1451
+
+- config-keys:
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b300-sglang
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b300-sglang
+    - dsr1-fp8-b200-sglang-mtp
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Truncate sweep to conc=1 and conc=2 only: set conc-start=1, conc-end=2 in every search-space across all six DSR1 SGLang agg configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1534
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add --use-chat-template to run_benchmark_serving so prompts are formatted with the Qwen chat template (matching the other Qwen MTP recipes)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1554
+
+- config-keys:
+    - glm5-fp4-gb300-dynamo-sglang
+  description:
+    - "Add GLM-5 FP4 GB300 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
+    - "1k1k and 8k1k STP low-latency and max-throughput srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4/ (ported from upstream srt-slurm PR #152)"
+    - "Wire glm5/fp4 model + dynamo-sglang framework branches into runners/launch_gb300-nv.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1514
+
+- config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+  description:
+    - "Update minimaxm2.5-fp8-h100-vllm recipe (v0.19.1)"
+    - "Image: vllm/vllm-openai:v0.21.0 -> v0.19.1-cu130"
+    - "Replace recipe flags: drop PIECEWISE/0.90 mem util/256 max-num-seqs/no-prefix-caching/explicit max-model-len; add --enable-auto-tool-choice, --tool-call-parser minimax_m2, --reasoning-parser minimax_m2_append_think, --compilation-config mode:3+fuse_minimax_qk_norm"
+    - "Search-space: tp:8 ep:8 (TEP=8), conc-end 128 chosen at saturation per local sweep"
+    - "Local bench: TEP=8 peaks at C=128 with 26923 tot tps (+178% vs TEP=4 peak at C=32 in May 6 j11600242 sweep)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1516
 
 - config-keys:
     - qwen3.5-fp8-mi355x-atom-mtp
