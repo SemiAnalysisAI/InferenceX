@@ -43,7 +43,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --chunked-prefill-size 4096 \
     --disable-flashinfer-autotune \
     --disable-radix-cache \
-    --mem-fraction-static 0.88 \
+    --mem-fraction-static 0.92 \
     --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     --speculative-algorithm EAGLE \
     --speculative-num-steps 3 \
