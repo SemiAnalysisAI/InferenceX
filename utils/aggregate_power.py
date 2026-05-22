@@ -134,7 +134,17 @@ def aggregate_power(
 
             # Group power readings by sample timestamp so per-sample total power
             # (sum across GPUs) is computed correctly even if rows are interleaved.
+            #
+            # per_sample_row_count is the structural divisor: it's incremented for
+            # every contributing row regardless of whether a GPU-index column was
+            # detected. per_sample_gpus / gpu_keys are only populated when gpu_col
+            # is present and provide the canonical num_gpus via distinct-id count.
+            # When gpu_col is absent (vendor schema variant whose header doesn't
+            # match _GPU_INDEX_COL_RE), we fall back to inferring num_gpus from
+            # the modal row count per timestamp — assuming one row per GPU per
+            # sample, which is what every SMI tool we've seen actually emits.
             per_sample_total: dict[float, float] = {}
+            per_sample_row_count: dict[float, int] = {}
             per_sample_gpus: dict[float, set[str]] = {}
             gpu_keys: set[str] = set()
 
@@ -150,21 +160,33 @@ def aggregate_power(
                 # Bucket by sample timestamp (rounded to ms to absorb sub-ms drift).
                 bucket = round(ts, 3)
                 per_sample_total[bucket] = per_sample_total.get(bucket, 0.0) + pw
-                gpu_id = (row.get(gpu_col) or "0").strip() if gpu_col else "0"
-                per_sample_gpus.setdefault(bucket, set()).add(gpu_id)
-                gpu_keys.add(gpu_id)
+                per_sample_row_count[bucket] = per_sample_row_count.get(bucket, 0) + 1
+                if gpu_col:
+                    gpu_id = (row.get(gpu_col) or "").strip()
+                    if gpu_id:
+                        per_sample_gpus.setdefault(bucket, set()).add(gpu_id)
+                        gpu_keys.add(gpu_id)
     except (OSError, csv.Error):
         return None
 
     if not per_sample_total:
         return None
 
-    # Number of distinct GPUs seen across the window.
-    num_gpus = max(len(gpu_keys), 1)
-    # Per-sample mean power per GPU = sum across GPUs at that timestamp / GPUs seen at that timestamp.
-    per_sample_mean_per_gpu = [
-        total / max(len(per_sample_gpus[ts]), 1) for ts, total in per_sample_total.items()
-    ]
+    # Per-sample divisor and overall num_gpus.
+    # - If a GPU column was detected, trust distinct GPU IDs (correct for any
+    #   sampling pattern, including hot-swap or partial visibility).
+    # - Otherwise, infer from row count (one row per GPU per sample).
+    if gpu_col and gpu_keys:
+        num_gpus = len(gpu_keys)
+        per_sample_mean_per_gpu = [
+            total / max(len(per_sample_gpus.get(ts, ())), 1)
+            for ts, total in per_sample_total.items()
+        ]
+    else:
+        num_gpus = max(per_sample_row_count.values())
+        per_sample_mean_per_gpu = [
+            total / per_sample_row_count[ts] for ts, total in per_sample_total.items()
+        ]
     return mean(per_sample_mean_per_gpu), num_gpus
 
 

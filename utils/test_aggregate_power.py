@@ -203,6 +203,38 @@ def test_aggregate_power_amd_csv(tmp_path: Path):
     assert num_gpus == 2
 
 
+def test_aggregate_power_no_gpu_column_infers_from_row_count(tmp_path: Path):
+    """Schema-variant safety: a vendor CSV whose GPU column header doesn't
+    match _GPU_INDEX_COL_RE (e.g. 'device_id', 'GPU ID', 'slot') must still
+    yield per-GPU mean — not system-total — for avg_power_w. Pre-fix,
+    aggregate_power collapsed all rows to gpu_id='0' and returned the SUM."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    # Schema with a GPU column the regex doesn't recognize ('device_id').
+    lines = ["timestamp,device_id,power.draw [W]"]
+    from datetime import datetime
+
+    def ts(t: float) -> str:
+        return datetime.fromtimestamp(t).strftime("%Y/%m/%d %H:%M:%S.%f")
+
+    # 4 GPUs at 500W, 3 samples.
+    for s in range(3):
+        for gpu in range(4):
+            lines.append(f"{ts(base + s)},{gpu},500.00 W")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = aggregate_power(csv, base, base + 10)
+    assert result is not None
+    avg_power, num_gpus = result
+    # Without the fix: avg_power = 2000 (sum across 4 GPUs), num_gpus = 1.
+    # With the fix: avg_power = 500 (per-GPU mean), num_gpus = 4.
+    assert avg_power == pytest.approx(500.0), (
+        f"avg_power_w should be per-GPU mean (500.0), got {avg_power} — "
+        "the no-gpu-column path is summing instead of averaging"
+    )
+    assert num_gpus == 4, f"num_gpus should be inferred from row count (4), got {num_gpus}"
+
+
 def test_aggregate_power_missing_csv_returns_none(tmp_path: Path):
     csv = tmp_path / "absent.csv"
     assert aggregate_power(csv, 0.0, 100.0) is None
