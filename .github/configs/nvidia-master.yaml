@@ -4529,6 +4529,21 @@ gptoss-fp4-h100-1x-vllm:
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 16 }
 
+dsr1qwen3-bf16-rtx5090-1x-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+  model-prefix: dsr1qwen3
+  runner: rtx5090-1x
+  precision: bf16
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 16 }
+
 minimaxm2.5-fp8-h100-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
