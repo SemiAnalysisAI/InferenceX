@@ -31,6 +31,11 @@ else
     CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
 fi
 
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
+fi
+
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
@@ -71,6 +76,7 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
+    --use-chat-template \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
