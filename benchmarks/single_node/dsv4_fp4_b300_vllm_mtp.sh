@@ -62,7 +62,7 @@ COMPILATION_ARGS=(
 )
 if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
     COMPILATION_ARGS=(
-        --compilation-config '{"mode":0,"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+        --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
         --max-cudagraph-capture-size 2048
     )
 fi
