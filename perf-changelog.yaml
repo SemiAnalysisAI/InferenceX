@@ -3134,4 +3134,5 @@
     - dsv4-fp4-gb300-dynamo-sglang-mtp
   description:
     - "Update SGLang image from nightly-dev-cu13-20260510-2473659e to nightly-dev-20260522-c9153da5"
+    - "Clean up obsolete environs in the 8k1k disagg recipes: drop SGLANG_OPT_USE_JIT_NORM / SGLANG_OPT_USE_JIT_INDEXER_METADATA / SGLANG_OPT_USE_TOPK_V2 (now default-on); drop the auto-set MegaMoE companions (SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE, SGLANG_OPT_FIX_HASH_MEGA_MOE, SGLANG_OPT_FIX_MEGA_MOE_MEMORY, SGLANG_OPT_FIX_NEXTN_MEGA_MOE, SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK); drop SGLANG_RADIX_DISABLE_REUSE / SGLANG_OPT_USE_FAST_MASK_EP which no longer exist in sglang environ.py"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1559
