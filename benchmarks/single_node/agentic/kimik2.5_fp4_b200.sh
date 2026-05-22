@@ -10,7 +10,7 @@ set -x
 # OFFLOADING values:
 #   none    - vLLM GPU KV only.
 #   cpu     - vLLM native simple CPU offload.
-#   lmcache - in-process LMCacheConnectorV1 via vLLM's lmcache backend.
+#   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -35,10 +35,60 @@ install_agentic_deps
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
+LMCACHE_PID=""
+
+cleanup_lmcache_server() {
+    if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
+        kill "$LMCACHE_PID" 2>/dev/null || true
+        wait "$LMCACHE_PID" 2>/dev/null || true
+    fi
+}
+
+trap cleanup_lmcache_server EXIT
+
+wait_for_lmcache_ready() {
+    { set +x; } 2>/dev/null
+    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+    local tail_pid=""
+
+    while [ ! -f "$LMCACHE_LOG" ]; do
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before creating log file. Exiting." >&2
+            exit 1
+        fi
+        sleep 1
+    done
+
+    tail -f -n +1 "$LMCACHE_LOG" &
+    tail_pid=$!
+
+    for ((i = 1; i <= attempts; i++)); do
+        if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+            return 0
+        fi
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before becoming healthy. Log follows:" >&2
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+            cat "$LMCACHE_LOG" >&2 || true
+            exit 1
+        fi
+        sleep 1
+    done
+
+    echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+    cat "$LMCACHE_LOG" >&2 || true
+    exit 1
+}
 
 case "$OFFLOADING" in
     none)
@@ -62,35 +112,54 @@ case "$OFFLOADING" in
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
         agentic_pip_install --quiet --no-cache-dir lmcache
-        python3 -c "import lmcache.integration.vllm.vllm_v1_adapter" >/dev/null
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # B200 DGXC nodes have ~2.7 TiB host DRAM. Keep the TP=8 LMCache
-        # path at the same 2.5 TB envelope as native offload while leaving room
-        # for vLLM worker RSS and page cache.
-        #
-        # vLLM splits --kv-offloading-size across TP ranks for LMCache. In the
-        # current vLLM 0.21.0 + LMCache 0.4.5 integrated connector path, Kimi's
-        # MLA/HND layout cannot use LazyMixedMemoryAllocator and falls back to a
-        # full pinned MixedMemoryAllocator allocation. That means TP=4 with a
-        # 2.5 TB total tries to cudaHostAlloc ~625 GB per rank and fails during
-        # engine startup, while TP=8 at ~312.5 GB per rank starts successfully.
-        # Cap lower-TP LMCache runs to the same proven per-rank envelope.
+        # Keep the semantic CPU KV pool at 2.5 TB for every TP shape. MP mode
+        # owns that pool in the external LMCache server instead of passing
+        # --kv-offloading-size through vLLM's integrated LMCache convenience
+        # path, which divides the value by TP and then hits a large single-shot
+        # cudaHostAlloc in LMCache 0.4.5's single-process local CPU backend.
         TOTAL_CPU_DRAM_GB=2500
-        LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK="${LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK:-313}"
-        LMCACHE_TOTAL_CPU_DRAM_GB="$TOTAL_CPU_DRAM_GB"
-        if (( LMCACHE_TOTAL_CPU_DRAM_GB > TP * LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK )); then
-            LMCACHE_TOTAL_CPU_DRAM_GB=$((TP * LMCACHE_MAX_LOCAL_CPU_GB_PER_RANK))
-        fi
-        echo "LMCache CPU offload pool: ${LMCACHE_TOTAL_CPU_DRAM_GB} GB total across TP=${TP}"
-        export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        # Avoid a noisy failed lazy-allocator fallback; the per-rank cap above is
-        # the actual startup guard for this Kimi/vLLM/LMCache combination.
-        export LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR="${LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR:-false}"
+        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
+        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+        # LMCacheMPConnector builds its ZMQ endpoint by concatenating
+        # lmcache.mp.host and lmcache.mp.port, and its default host already
+        # includes the tcp:// scheme. Keep the server bind host raw, but pass
+        # a ZMQ-style host string to the connector.
+        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        # Initial allocation is deliberately small; --l1-size-gb above is the
+        # actual pool capacity and grows lazily as the run fills the cache.
+        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+        export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+
+        echo "Starting LMCache MP server..."
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --max-workers "$LMCACHE_MAX_WORKERS"
+            --eviction-policy LRU
+        )
+        printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
+        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+        LMCACHE_PID=$!
+        echo "LMCache server PID: $LMCACHE_PID"
+        wait_for_lmcache_ready
 
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         OFFLOAD_ARGS=(
-            --kv-offloading-backend lmcache
-            --kv-offloading-size "$LMCACHE_TOTAL_CPU_DRAM_GB"
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
             --disable-hybrid-kv-cache-manager
         )
         ;;
