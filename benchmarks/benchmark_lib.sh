@@ -683,7 +683,7 @@ run_lm_eval() {
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
