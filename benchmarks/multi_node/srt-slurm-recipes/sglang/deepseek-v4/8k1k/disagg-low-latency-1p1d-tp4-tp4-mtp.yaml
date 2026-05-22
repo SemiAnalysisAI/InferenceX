@@ -11,7 +11,7 @@ dynamo:
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260514-f7efff32"
+  container: "lmsysorg/sglang:nightly-dev-20260522-c9153da5"
   precision: "mxfp4"
 
 sbatch_directives:
