@@ -501,6 +501,13 @@ PY
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+        # LMCache read locks are leases on chunks that lookup has promised
+        # vLLM can retrieve. The default 300s TTL is too short for this
+        # long-context agentic queue: TP8/conc32 can spend >300s between
+        # lookup and retrieve while GPU KV is saturated, which leaves the
+        # object present in L1 but no longer readable. Keep the 2.5 TB pool
+        # size unchanged and only extend the lookup-to-retrieve lease.
+        LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-3600}"
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -514,6 +521,7 @@ PY
             --http-port "$LMCACHE_HTTP_PORT"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+            --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS"
             --chunk-size "$LMCACHE_CHUNK_SIZE"
             --max-workers "$LMCACHE_MAX_WORKERS"
             --eviction-policy LRU
