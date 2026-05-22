@@ -48,7 +48,7 @@ PROFILE_ARGS=()
 if [[ "${PROFILE:-}" == "1" ]]; then
     PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
     if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
-        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":1,\"max_iterations\":8,\"active_iterations\":8,\"torch_profiler_with_stack\":false}"
+        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":1,\"max_iterations\":5,\"active_iterations\":5,\"torch_profiler_with_stack\":false}"
     fi
     PROFILE_ARGS=(
         --profiler-config
@@ -65,11 +65,6 @@ if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
         --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
         --max-cudagraph-capture-size 2048
     )
-fi
-
-SCHEDULER_ARGS=()
-if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
-    SCHEDULER_ARGS=(--num-scheduler-steps 5)
 fi
 
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
@@ -103,7 +98,6 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${MOE_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
     "${COMPILATION_ARGS[@]}" \
-    "${SCHEDULER_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
