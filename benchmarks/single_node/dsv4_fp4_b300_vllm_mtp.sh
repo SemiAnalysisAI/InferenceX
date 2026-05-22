@@ -46,9 +46,13 @@ fi
 
 PROFILE_ARGS=()
 if [[ "${PROFILE:-}" == "1" ]]; then
+    PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":1,\"max_iterations\":2,\"active_iterations\":2,\"torch_profiler_with_stack\":false}"
+    fi
     PROFILE_ARGS=(
         --profiler-config
-        "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
+        "$PROFILER_CONFIG"
     )
 fi
 
