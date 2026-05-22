@@ -44,6 +44,7 @@ mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
 WARMUP_ARGS=()
+CUDA_GRAPH_MAX_BS="$CONC"
 case "$OFFLOADING" in
     none)
         CACHE_ARGS=(--disable-radix-cache)
@@ -83,6 +84,16 @@ case "$OFFLOADING" in
         # request has timed out after 600s on this Qwen MI355X path. Let aiperf
         # own benchmark traffic instead of blocking server readiness on it.
         WARMUP_ARGS=(--skip-server-warmup)
+        # Keep request concurrency as the swept variable, but do not force
+        # HiCache runs to capture ROCm graphs at every high concurrency point.
+        # The conc=32 HiCache job crashed after startup readiness, before any
+        # aiperf traffic, while conc=16 is the highest known-good capture size
+        # for this model/server path. Requests above the capture size can still
+        # run; they just do not require a larger captured graph at startup.
+        HICACHE_CUDA_GRAPH_MAX_BS="${HICACHE_CUDA_GRAPH_MAX_BS:-16}"
+        if [ "$HICACHE_CUDA_GRAPH_MAX_BS" -lt "$CUDA_GRAPH_MAX_BS" ]; then
+            CUDA_GRAPH_MAX_BS="$HICACHE_CUDA_GRAPH_MAX_BS"
+        fi
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2
@@ -105,7 +116,7 @@ SGLANG_CMD=(
     --trust-remote-code
     --tokenizer-worker-num 6
     --enable-aiter-allreduce-fusion
-    --cuda-graph-max-bs "$CONC"
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$CONC"
     --max-prefill-tokens 32768
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
