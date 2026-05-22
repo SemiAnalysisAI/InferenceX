@@ -2,16 +2,18 @@
 description: Render an HTML dashboard of Claude/Klaud-Cold PR states (state + check breakdown per PR) and open it in the browser
 ---
 
-Render an HTML dashboard for every open PR in `SemiAnalysisAI/InferenceX` that was opened by Claude (either a `claude/*` branch OR a title prefixed with `[Klaud Cold]`). Each row shows the PR's current state, a check-status breakdown, the title, and empty "Reason"/"Suggested fix" cells you can fill in afterward by reading failed-run logs.
+Render an HTML dashboard for every open PR in `SemiAnalysisAI/InferenceX` that was opened by Claude (either a `claude/*` branch OR a title containing `[Klaud Cold]`). Each row shows the PR's current state, a check-status breakdown, the title, and empty "Reason"/"Suggested fix" cells you can fill in afterward by reading failed-run logs.
 
 The dashboard lives at `/tmp/klaud_pr_status.html` and is opened with `open` (macOS) at the end.
 
-## Step 1 — list candidate PRs (`claude/*` OR `[Klaud Cold]` title)
+## Step 1 — list candidate PRs (`claude/*` OR title containing `[Klaud Cold]`)
+
+The title check uses `contains` (not `startswith`) so it picks up PRs whose titles embed `[Klaud Cold]` after a prefix like `[Handoff to @Oseltamivir Claude /loop]` — handoff-style PRs from a /loop run still belong on the dashboard.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
   --json number,title,headRefName,createdAt \
-  --jq '.[] | select((.headRefName | startswith("claude/")) or (.title | startswith("[Klaud Cold]"))) | "\(.number)\t\(.headRefName)\t\(.createdAt)\t\(.title)"' \
+  --jq '.[] | select((.headRefName | startswith("claude/")) or (.title | contains("[Klaud Cold]"))) | "\(.number)\t\(.headRefName)\t\(.createdAt)\t\(.title)"' \
   > /tmp/klaud_pr_candidates.tsv
 wc -l /tmp/klaud_pr_candidates.tsv
 ```
