@@ -86,7 +86,7 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      moe-a2a-backend: "deepep"
+      moe-a2a-backend: megamoe
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
       mem-fraction-static: 0.9
@@ -111,7 +111,7 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      moe-a2a-backend: "deepep"
+      moe-a2a-backend: megamoe
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
       speculative-algo: "EAGLE"
