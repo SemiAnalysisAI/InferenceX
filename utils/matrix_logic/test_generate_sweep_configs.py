@@ -1619,6 +1619,48 @@ class TestGenerateTestConfigSweep:
 
         assert result == []
 
+    def test_runner_node_filter_expands_agentic_config_runner(self, sample_runner_config):
+        """Agentic test-config entries should support concrete runner targeting."""
+        config = {
+            "qwen-agentic-hicache": {
+                "image": "sglang-rocm",
+                "model": "Qwen/Qwen3.5-397B-A17B-FP8",
+                "model-prefix": "qwen3.5",
+                "precision": "fp8",
+                "framework": "sglang",
+                "runner": "mi300x",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [
+                        {
+                            "duration": 1800,
+                            "search-space": [
+                                {
+                                    "tp": 8,
+                                    "ep": 1,
+                                    "offloading": "hicache",
+                                    "conc-list": [64],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        args = argparse.Namespace(
+            config_keys=["qwen-agentic-hicache"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter="mi300x-amd_1",
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert len(result) == 1
+        assert result[0]["runner"] == "mi300x-amd_1"
+        assert result[0]["scenario-type"] == "agentic-coding"
+
 
 # =============================================================================
 # Test apply_node_type_defaults
@@ -1970,4 +2012,3 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
-

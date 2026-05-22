@@ -832,44 +832,45 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     continue
 
                 for conc in conc_values:
-                    if is_multinode:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.PREFILL.value: prefill,
-                            Fields.DECODE.value: decode,
-                            Fields.CONC.value: conc,
-                            Fields.DURATION.value: duration,
-                            Fields.EXP_NAME.value: (
-                                f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
-                            ),
-                            Fields.DISAGG.value: disagg,
-                            Fields.SCENARIO_TYPE.value: "agentic-coding",
-                        }
-                    else:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner,
-                            Fields.TP.value: tp,
-                            Fields.EP.value: ep if ep is not None else 1,
-                            Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
-                            Fields.CONC.value: conc,
-                            Fields.OFFLOADING.value: offloading,
-                            Fields.DURATION.value: duration,
-                            Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
-                            Fields.SCENARIO_TYPE.value: "agentic-coding",
-                        }
-                    matrix_values.append(validate_agentic_matrix_entry(entry))
+                    for runner_value in runners_for_entry:
+                        if is_multinode:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.PREFILL.value: prefill,
+                                Fields.DECODE.value: decode,
+                                Fields.CONC.value: conc,
+                                Fields.DURATION.value: duration,
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
+                                ),
+                                Fields.DISAGG.value: disagg,
+                                Fields.SCENARIO_TYPE.value: "agentic-coding",
+                            }
+                        else:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.TP.value: tp,
+                                Fields.EP.value: ep if ep is not None else 1,
+                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.CONC.value: conc,
+                                Fields.OFFLOADING.value: offloading,
+                                Fields.DURATION.value: duration,
+                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.SCENARIO_TYPE.value: "agentic-coding",
+                            }
+                        matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values
 
