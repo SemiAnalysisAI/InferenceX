@@ -67,6 +67,11 @@ if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
     )
 fi
 
+SCHEDULER_ARGS=()
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+    SCHEDULER_ARGS=(--num-scheduler-steps 5)
+fi
+
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -98,6 +103,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${MOE_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
     "${COMPILATION_ARGS[@]}" \
+    "${SCHEDULER_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
