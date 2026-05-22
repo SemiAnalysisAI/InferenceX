@@ -63,7 +63,6 @@ fi
 
 # Pick the launch recipe based on the two-line submission frontier:
 # TP8/no-DP-attn for low latency and DEP8/DP-attn for throughput.
-DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
 if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
@@ -72,11 +71,8 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     export NVSHMEM_DISABLE_IB=1
     export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
     export SGLANG_OPT_USE_ONLINE_COMPRESS=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=2048
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
@@ -93,8 +89,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(
         --dp-size "$TP"
         --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
+        --moe-a2a-backend megamoe
         --cuda-graph-max-bs 544
         --enable-mixed-chunk
         --chunked-prefill-size 16384
