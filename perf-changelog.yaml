@@ -3137,3 +3137,8 @@
     - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
 
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Smoke run validating measured-power aggregation pipeline. No config change; entry exists to trigger a sweep that produces the first agg_<run>.json with avg_power_w + joules_per_output_token populated by aggregate_power.py."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
