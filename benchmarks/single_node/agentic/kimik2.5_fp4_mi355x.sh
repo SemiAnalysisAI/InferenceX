@@ -55,6 +55,100 @@ write_lmcache_rocm_mp_patch() {
 """Runtime compatibility for LMCache MP on ROCm Kimi MLA KV caches."""
 
 import os
+import threading
+
+if os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR") == "1":
+    from lmcache.v1 import lazy_memory_allocator as _lazy_memory_allocator
+
+    _LazyMemoryAllocator = _lazy_memory_allocator.LazyMemoryAllocator
+
+    if not getattr(_LazyMemoryAllocator, "_agentic_rocm_demand_patch", False):
+        _orig_init = _LazyMemoryAllocator.__init__
+        _orig_allocate = _LazyMemoryAllocator.allocate
+        _orig_batched_allocate = _LazyMemoryAllocator.batched_allocate
+
+        def _expand_to(self, target_size: int) -> None:
+            target_size = min(
+                self._final_size,
+                _lazy_memory_allocator.align_to(target_size, self.PIN_CHUNK_SIZE),
+            )
+            lock = self._agentic_rocm_demand_expand_lock
+            with lock:
+                if target_size <= self._curr_size:
+                    return
+
+                start_size = self._curr_size
+                while self._curr_size < target_size:
+                    commit_start = self._curr_size
+                    commit_target = min(target_size, self._curr_size + self.COMMIT_SIZE)
+                    while self._curr_size < commit_target:
+                        self._pin_memory_chunk(self._curr_size, self.PIN_CHUNK_SIZE)
+                        self._curr_size += self.PIN_CHUNK_SIZE
+                    self._commit_expansion(self._curr_size - commit_start)
+
+                self._log_expansion_progress(self._curr_size - start_size)
+
+        def _retry_with_demand_expansion(self, allocate_once):
+            obj = allocate_once()
+            step_gb = float(os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_STEP_GB", "64"))
+            step_bytes = max(self.COMMIT_SIZE, int(step_gb * (1024**3)))
+
+            while obj is None and self._curr_size < self._final_size:
+                _expand_to(self, self._curr_size + step_bytes)
+                obj = allocate_once()
+
+            return obj
+
+        def _patched_init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            self._agentic_rocm_demand_expand_lock = threading.Lock()
+
+            # LMCache MP's upstream LazyMemoryAllocator currently expands to
+            # the final pinned size in a background thread. On ROCm Kimi TP4,
+            # vLLM reaches KV-cache registration only after that 2.5 TB pool
+            # is fully pinned, and the server-side IPC open path can stall
+            # before acknowledging register_kv_caches. Keep the same final
+            # capacity, but pin/commit extra host memory only when L1
+            # allocations actually need it.
+            self._stop_expand.set()
+            self._expand_thread.join()
+            _lazy_memory_allocator.logger.info(
+                "Agentic ROCm patch: using demand-driven LMCache pinned "
+                "memory expansion; final capacity remains %s MB",
+                self._final_size >> 20,
+            )
+
+        def _patched_allocate(
+            self,
+            shapes,
+            dtypes,
+            fmt=_lazy_memory_allocator.MemoryFormat.UNDEFINED,
+            allocator_type=None,
+        ):
+            return _retry_with_demand_expansion(
+                self,
+                lambda: _orig_allocate(self, shapes, dtypes, fmt, allocator_type),
+            )
+
+        def _patched_batched_allocate(
+            self,
+            shapes,
+            dtypes,
+            batch_size,
+            fmt=_lazy_memory_allocator.MemoryFormat.UNDEFINED,
+            allocator_type=None,
+        ):
+            return _retry_with_demand_expansion(
+                self,
+                lambda: _orig_batched_allocate(
+                    self, shapes, dtypes, batch_size, fmt, allocator_type
+                ),
+            )
+
+        _LazyMemoryAllocator.__init__ = _patched_init
+        _LazyMemoryAllocator.allocate = _patched_allocate
+        _LazyMemoryAllocator.batched_allocate = _patched_batched_allocate
+        _LazyMemoryAllocator._agentic_rocm_demand_patch = True
 
 if os.environ.get("LMCACHE_ROCM_MP_BLOCK_FALLBACK") == "1":
     import torch
@@ -326,6 +420,7 @@ PY
         write_lmcache_rocm_mp_patch "$LMCACHE_ROCM_PATCH_DIR"
         export LMCACHE_ROCM_MP_BLOCK_FALLBACK=1
         export LMCACHE_ROCM_MP_BLOCK_FALLBACK_DTYPE=bfloat16
+        export LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR=1
         export PYTHONPATH="$LMCACHE_ROCM_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
