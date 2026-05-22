@@ -141,17 +141,17 @@ case "$OFFLOADING" in
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
         agentic_pip_install --quiet --no-cache-dir lmcache
-        # LMCache's current dependency chain can install NVIDIA/CUDA packages
-        # on ROCm. vLLM 0.21.0 treats ROCm as "cuda-like", and during Kimi
-        # fused-MoE model inspection it imports nixl_ep whenever that module is
-        # importable, even when this run is not using EP/NIXL kernels. The CUDA
-        # wheel then fails immediately on AMD nodes with "ImportError:
-        # libcuda.so.1". LMCache MP only needs the ZMQ server and connector
-        # here, so keep LMCache installed but remove the CUDA-only NIXL/CuPy
-        # deps before vLLM starts.
+        # LMCache's current dependency chain can install NVIDIA/CUDA NIXL
+        # packages on ROCm. vLLM 0.21.0 treats ROCm as "cuda-like", and during
+        # Kimi fused-MoE model inspection it imports nixl_ep whenever that
+        # module is importable, even when this run is not using EP/NIXL kernels.
+        # The CUDA extension then fails immediately on AMD nodes with
+        # "ImportError: libcuda.so.1". Remove the CUDA NIXL packages before
+        # vLLM starts, but keep LMCache's remaining dependencies intact: the MP
+        # server imports cupy during startup even when it falls back to the
+        # non-CUDA backend on ROCm.
         python3 -m pip uninstall -y \
             nixl nixl-cu12 nixl-cu13 nixl_ep \
-            cupy-cuda12x cufile-python cuda-pathfinder \
             >/dev/null 2>&1 || true
         python3 - <<'PY'
 import importlib.util
