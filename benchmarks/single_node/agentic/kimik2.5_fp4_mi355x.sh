@@ -158,7 +158,7 @@ if os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR") == "1":
 
     def _maybe_patch_lazy_memory_allocator() -> None:
         module = sys.modules.get("lmcache.v1.lazy_memory_allocator")
-        if module is not None:
+        if module is not None and hasattr(module, "LazyMemoryAllocator"):
             _patch_lazy_memory_allocator(module)
 
     def _agentic_rocm_import(name, globals=None, locals=None, fromlist=(), level=0):
