@@ -48,6 +48,140 @@ if [ "${TP}" -lt 8 ]; then
   export VLLM_ROCM_USE_AITER_RMSNORM=0
 fi
 
+write_lmcache_rocm_mp_patch() {
+    local patch_dir="$1"
+    mkdir -p "$patch_dir"
+    cat > "$patch_dir/sitecustomize.py" <<'PY'
+"""Runtime compatibility for LMCache MP on ROCm Kimi MLA KV caches."""
+
+import os
+
+if os.environ.get("LMCACHE_ROCM_MP_BLOCK_FALLBACK") == "1":
+    import torch
+    import lmcache.non_cuda_equivalents as lmc
+
+    if not hasattr(lmc, "multi_layer_block_kv_transfer"):
+        _DTYPE_BY_NAME = {
+            "bfloat16": torch.bfloat16,
+            "float16": torch.float16,
+            "float32": torch.float32,
+        }
+
+        def _dtype_from_env() -> torch.dtype:
+            name = os.environ.get("LMCACHE_ROCM_MP_BLOCK_FALLBACK_DTYPE", "bfloat16")
+            try:
+                return _DTYPE_BY_NAME[name]
+            except KeyError as exc:
+                raise ValueError(f"Unsupported LMCache ROCm fallback dtype: {name}") from exc
+
+        def _paged_view(ptr: int, shape_desc, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+            block_stride = shape_desc.block_stride_elems or (
+                shape_desc.bs * shape_desc.nh * shape_desc.hs
+            )
+            base = lmc._tensor_from_ptr(
+                ptr,
+                (shape_desc.nb * block_stride,),
+                dtype,
+                device,
+            )
+            return torch.as_strided(
+                base,
+                (shape_desc.nb, shape_desc.bs, shape_desc.nh * shape_desc.hs),
+                (block_stride, shape_desc.nh * shape_desc.hs, 1),
+            )
+
+        def _tmp_view(ptr: int, shape_desc, num_layers: int, chunk_slots: int, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+            return lmc._tensor_from_ptr(
+                ptr,
+                (shape_desc.kv_size, num_layers, chunk_slots, shape_desc.nh * shape_desc.hs),
+                dtype,
+                device,
+            )
+
+        def multi_layer_block_kv_transfer(
+            group_kv_pointers,
+            tmp_buffer_ptrs,
+            block_ids,
+            paged_memory_device,
+            direction,
+            shape_desc,
+            lmcache_chunk_size,
+            gpu_kv_format,
+            skip_blocks=0,
+        ) -> None:
+            # Kimi K2.5 uses vLLM MLA: one KV tensor per layer with
+            # shape [num_blocks, block_size, hidden_size]. LMCache's Python
+            # fallback has no block-transfer entrypoint yet, so implement the
+            # same gather/scatter contract with torch indexing on ROCm.
+            if shape_desc.kv_size != 1:
+                raise NotImplementedError(
+                    "ROCm LMCache MP block fallback currently supports MLA KV caches only"
+                )
+
+            dtype = _dtype_from_env()
+            device = (
+                paged_memory_device
+                if isinstance(paged_memory_device, torch.device)
+                else torch.device(paged_memory_device)
+            )
+            num_layers = int(group_kv_pointers.numel())
+            blocks_per_chunk = lmcache_chunk_size // shape_desc.bs
+            direction_name = getattr(direction, "name", str(direction))
+
+            for chunk_idx, tmp_ptr in enumerate(tmp_buffer_ptrs):
+                start = chunk_idx * blocks_per_chunk
+                end = start + blocks_per_chunk
+                chunk_blocks = block_ids[start:end].to(device=device, dtype=torch.long)
+
+                dest_slot_offset = 0
+                if skip_blocks and chunk_idx == 0:
+                    chunk_blocks = chunk_blocks[int(skip_blocks):]
+                    dest_slot_offset = int(skip_blocks) * shape_desc.bs
+                if chunk_blocks.numel() == 0:
+                    continue
+
+                num_slots = int(chunk_blocks.numel()) * shape_desc.bs
+                tmp = _tmp_view(
+                    int(tmp_ptr),
+                    shape_desc,
+                    num_layers,
+                    lmcache_chunk_size,
+                    dtype,
+                    device,
+                )
+
+                for layer_idx in range(num_layers):
+                    paged = _paged_view(
+                        int(group_kv_pointers[layer_idx].item()),
+                        shape_desc,
+                        dtype,
+                        device,
+                    )
+                    tmp_slice = tmp[
+                        0,
+                        layer_idx,
+                        dest_slot_offset : dest_slot_offset + num_slots,
+                        :,
+                    ]
+                    if direction_name == "D2H":
+                        gathered = paged.index_select(0, chunk_blocks).reshape(
+                            num_slots, shape_desc.nh * shape_desc.hs
+                        )
+                        tmp_slice.copy_(gathered)
+                    elif direction_name == "H2D":
+                        src = tmp_slice.reshape(
+                            int(chunk_blocks.numel()),
+                            shape_desc.bs,
+                            shape_desc.nh * shape_desc.hs,
+                        )
+                        paged.index_copy_(0, chunk_blocks, src)
+                    else:
+                        raise ValueError(f"Unsupported transfer direction: {direction}")
+
+        lmc.multi_layer_block_kv_transfer = multi_layer_block_kv_transfer
+PY
+}
+
 # Workaround for MEC FW <177 RCCL memory reclaim issue
 version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
 if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
@@ -188,6 +322,11 @@ if not getattr(cupy_runtime, "is_hip", False):
     )
     sys.exit(1)
 PY
+        LMCACHE_ROCM_PATCH_DIR="$RESULT_DIR/lmcache_rocm_patch"
+        write_lmcache_rocm_mp_patch "$LMCACHE_ROCM_PATCH_DIR"
+        export LMCACHE_ROCM_MP_BLOCK_FALLBACK=1
+        export LMCACHE_ROCM_MP_BLOCK_FALLBACK_DTYPE=bfloat16
+        export PYTHONPATH="$LMCACHE_ROCM_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
         # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
