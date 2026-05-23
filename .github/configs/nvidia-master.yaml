@@ -1682,13 +1682,13 @@ dsr1-fp4-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
     # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
     # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
     # `bmk_agentic_*`). Re-enable once that workflow is aligned.
@@ -1883,13 +1883,13 @@ dsr1-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1969,12 +1969,12 @@ dsr1-fp8-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -1992,12 +1992,12 @@ dsr1-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
 # lists B200 (not B300) as the Blackwell target. This config reuses the
@@ -2737,11 +2737,11 @@ dsr1-fp8-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -2760,11 +2760,11 @@ dsr1-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
 # Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
 # the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
@@ -4515,7 +4515,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.19.1-cu130
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -4527,13 +4527,11 @@ minimaxm2.5-fp8-h100-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
 
 # Diverged from minimaxm2.5-fp8-h100-vllm (agentic-coding sibling). Metadata is
 # identical to origin/main's minimaxm2.5-fp8-h100-vllm; the split exists because this
@@ -9234,3 +9232,199 @@ qwen3.5-fp8-h100-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
+glm5-fp4-gb300-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.11-cu130
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 5p1d wide-EP. 13 nodes (5P @ TP=4 + 1D @ TP=32 on 8 nodes).
+      - conc-list: [2048]
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 7p1d wide-EP. 15 nodes.
+      - conc-list: [3072]
+        prefill:
+          num-worker: 7
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 10p1d wide-EP. 18 nodes.
+      - conc-list: [4096]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p3d. 4 nodes (1P + 3 D workers @ 1 node each).
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 3
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p5d. 6 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p9d. 10 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 9
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p15d. 16 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 15
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 3p1d wide-EP. 11 nodes. conc 16500.
+      - conc-list: [16500]
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 2p1d wide-EP. 10 nodes. conc 8300.
+      - conc-list: [8300]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p1d wide-EP. 9 nodes. conc sweep 2500x1024x512x256.
+      - conc-list: [2500, 1024, 512, 256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p17d low-latency, bs=32 sweep. 18 nodes.
+      - conc-list: [512, 256, 128, 64]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p17d low-latency, bs=1 (single-stream). 18 nodes.
+      - conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
