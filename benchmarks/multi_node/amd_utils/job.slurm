@@ -52,6 +52,32 @@ fi
 # $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
 export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
+# ── In-tree sglang patches: auto-apply for known-affected images ──────
+# Some sglang releases ship known bugs in the MoRI PD-disaggregation
+# backend that crash hybrid-attention models (Qwen3.5-MoE, GLM-5,
+# anything using state_types: List[StateType]) at startup. We carry an
+# in-tree overlay of `mori/conn.py` that fixes the wire format + the
+# legacy state_type fallback (see benchmarks/multi_node/amd_utils/patches/README.md).
+#
+# Activate the overlay automatically when the image tag contains a
+# known-affected version string, unless the caller explicitly opts out
+# by setting MORI_CONN_PATCH=skip in the environment. The overlay is
+# appended to ${EXTRA_DOCKER_MOUNTS:-} so callers (CI workflow steps,
+# local drivers, etc.) can still inject additional mounts.
+#
+# Dedups: if EXTRA_DOCKER_MOUNTS already contains the target path,
+# don't double-mount (Docker rejects duplicate destinations).
+_MORI_PATCH_FILE="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/mori_conn.py"
+_MORI_PATCH_TARGET="/sgl-workspace/sglang/python/sglang/srt/disaggregation/mori/conn.py"
+if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
+   && [[ -f "$_MORI_PATCH_FILE" ]] \
+   && [[ "${DOCKER_IMAGE_NAME:-}" == *"v0.5.12.post1"* ]] \
+   && [[ "${EXTRA_DOCKER_MOUNTS:-}" != *"$_MORI_PATCH_TARGET"* ]]; then
+    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v ${_MORI_PATCH_FILE}:${_MORI_PATCH_TARGET}:ro"
+    export EXTRA_DOCKER_MOUNTS
+    echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
+fi
+
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers
 
@@ -387,6 +413,7 @@ exec \$_SUDO docker run --rm \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
+    ${EXTRA_DOCKER_MOUNTS:-} \
     -e SLURM_JOB_ID=\$SLURM_JOB_ID \
     -e SLURM_JOB_NODELIST=\$SLURM_JOB_NODELIST \
     -e NNODES=\$NNODES \
