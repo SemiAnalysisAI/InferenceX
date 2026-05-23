@@ -3133,17 +3133,14 @@
 - config-keys:
     - minimaxm2.5-fp4-b300-dynamo-vllm
   description:
-    - "Add MiniMax-M2.5 NVFP4 B300 disaggregated multinode vLLM benchmarks via Dynamo (mirror of the GB300 pareto sweep, repacked for B300's 8 GPUs/node)"
-    - "Image: vllm/vllm-openai:v0.20.1; model nvidia/MiniMax-M2.5-NVFP4 staged at /data/models/MiniMax-M2.5-NVFP4"
+    - "Add MiniMax-M2.5 NVFP4 B300 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "Image: vllm/vllm-openai:v0.20.1"
     - "Same 1k/1k and 8k/1k search space as gb300, plus a new tp8-1p1d at low concurrencies for both ISLs"
-    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300/ with gpus_per_node=8 and worker repacking for B300 topology"
-    - "Wire minimax b300 launch path through runners/launch_b300-nv.sh and minimax-specific srt-slurm fork branch (lijas/spread-workers)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1560
 
 - config-keys:
     - minimaxm2.5-fp4-gb300-dynamo-vllm
   description:
-    - "Reactivate GB300 minimax disagg vLLM sweep with the pruned pareto-only search space from internal PR57"
-    - "Add minimax model routing and minimax srt-slurm fork path in runners/launch_gb300-nv.sh while keeping SA upstream defaults (SLURM_PARTITION=batch_1, SLURM_ACCOUNT=benchmark, SQUASH_FILE under /home/sa-shared/gharunners/squash/)"
+    - "Add minimax model routing and minimax srt-slurm fork path in runners/launch_gb300-nv.sh"
     - "Add 1k1k/8k1k minimax recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1560
