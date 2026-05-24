@@ -1148,6 +1148,37 @@ class MoriKVManager(CommonKVManager):
             src_state_indices = src_state_indices[:common_len]
             dst_state_indices = dst_state_indices[:common_len]
 
+        # ── BEGIN PATCH #4: rank + length normalization ──────────────────
+        # Bug: for DSA single-component models (e.g. GLM-5), upstream may
+        # hand us `dst_state_indices` as a 2-D array of shape (1, N) or
+        # as a List[int]/List[np.ndarray]. The earlier `[:common_len]`
+        # slice operates only on the outer axis, so a (1, 13) input stays
+        # (1, 13). `group_concurrent_contiguous` then runs `np.diff` on
+        # arrays of mismatched rank ((1, N-1) vs (0,)) and crashes with
+        # "operands could not be broadcast together with shapes (1,12) (0,)".
+        # Flatten both sides to 1-D and re-align lengths so np.diff produces
+        # 1-D arrays of equal length.
+        src_state_indices = np.asarray(src_state_indices).ravel()
+        dst_state_indices = np.asarray(dst_state_indices).ravel()
+        if len(src_state_indices) != len(dst_state_indices):
+            new_common = min(len(src_state_indices), len(dst_state_indices))
+            if not getattr(self.__class__, "_logged_dsa_index_flatten", False):
+                try:
+                    logger.warning(
+                        "[mori-patch] DSA state-indices ravel/realign for %s: "
+                        "src=%d dst=%d -> common=%d (one-shot log)",
+                        state_type,
+                        len(src_state_indices),
+                        len(dst_state_indices),
+                        new_common,
+                    )
+                except Exception:
+                    pass
+                self.__class__._logged_dsa_index_flatten = True
+            src_state_indices = src_state_indices[:new_common]
+            dst_state_indices = dst_state_indices[:new_common]
+        # ── END PATCH #4 ─────────────────────────────────────────────────
+
         # Group contiguous indices and issue per-tensor transfers
         grouped_plan = GroupedIndexPlan.from_groups(
             *group_concurrent_contiguous(src_state_indices, dst_state_indices)

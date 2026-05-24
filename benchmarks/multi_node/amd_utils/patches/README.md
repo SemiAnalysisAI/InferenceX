@@ -20,8 +20,9 @@ Overlays
 Source: forked from the file shipped in
 `lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523`
 (sglang [v0.5.12.post1](https://github.com/sgl-project/sglang/tree/v0.5.12.post1)).
-Three logical edits, all confined to `MoriKVReceiver.send_state` and
-`MoriKVReceiver._register_kv_args`:
+Four logical edits, all confined to `MoriKVReceiver.send_state`,
+`MoriKVReceiver._register_kv_args`, and
+`MoriKVReceiver._send_swa_dsa_state`:
 
 1. **Sender flatten** — handle the framework's nested
    `state_item_lens: List[List[int]]` instead of crashing in the
@@ -37,11 +38,23 @@ Three logical edits, all confined to `MoriKVReceiver.send_state` and
    `send_state`, so the existing per-tensor index arithmetic
    (`state_item_lens[i]`) and length checks
    (`len(state_item_lens) == len(state_mem_descs)`) keep working.
+4. **DSA index rank+length normalization** — inside
+   `_send_swa_dsa_state`, before the `group_concurrent_contiguous`
+   call, ravel both `src_state_indices` and `dst_state_indices` to 1-D
+   and re-truncate to common length. Upstream's existing truncation
+   only slices the outer axis, leaving 2-D `(1, N)` arrays unchanged
+   and triggering an `np.diff` broadcasting error
+   (`shapes (1,12) (0,)`) for GLM-5 (single-DSA-component) prefill
+   traffic. See
+   `scripts/sglang_disagg/docs_glm5/01-bug-analysis.md` for the full
+   write-up.
 
 Verified passing GSM8K = 0.978 ± 0.004 on Qwen3.5-397B-A17B-FP8 1P+1D
 TP=8 dp-attn=false (matches and slightly exceeds upstream
 [PR #22665](https://github.com/sgl-project/sglang/pull/22665)'s
-reported 0.970 GSM8K on the bf16 baseline).
+reported 0.970 GSM8K on the bf16 baseline). GLM-5 (DSA) verification
+in progress under
+`scripts/sglang_disagg/docs_glm5/02-fix-and-verification.md`.
 
 This is a stop-gap. The proper upstream fix is to migrate MoRI to the
 plural `state_types: List[StateType]` API (full design + diff in
