@@ -2208,7 +2208,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 glm5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260523-c112f762
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b200
@@ -2227,7 +2227,7 @@ glm5-fp8-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260523-c112f762
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b200
@@ -2307,7 +2307,7 @@ glm5-fp8-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 glm5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260523-c112f762
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
@@ -2328,7 +2328,7 @@ glm5-fp4-b200-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260523-c112f762
   model: nvidia/GLM-5-NVFP4
   model-prefix: glm5
   runner: b200
