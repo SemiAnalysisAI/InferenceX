@@ -3044,13 +3044,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1492
 
 - config-keys:
-<<<<<<< claude/issue-1154-glm5-fp4-b300-sglang
     - glm5-fp4-b300-sglang
     - glm5-fp4-b300-sglang-mtp
   description:
     - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1420
-=======
+
+- config-keys:
     - dsr1-fp4-b200-sglang-mtp
   description:
     - "Add MTP/EAGLE speculative-decoding sibling for dsr1-fp4-b200-sglang (model: nvidia/DeepSeek-R1-0528-FP4-V2) on lmsysorg/sglang:v0.5.12-cu130"
@@ -3136,4 +3136,3 @@
   description:
     - "Add --use-chat-template to run_benchmark_serving so prompts are formatted with the Qwen chat template (matching the other Qwen MTP recipes)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1555
->>>>>>> main
