@@ -23,7 +23,7 @@ SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
 export OMP_NUM_THREADS=1
-export AITER_QUICK_REDUCE_QUANTIZATION=int4
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 # Calculate max-model-len based on ISL and OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
