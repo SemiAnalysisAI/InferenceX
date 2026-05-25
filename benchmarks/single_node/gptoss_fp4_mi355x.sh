@@ -57,24 +57,6 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# Pre-flight warmup at the benchmark shape (5 rounds of CONC parallel prompts)
-# so the actual measurement below starts at steady-state. Without this, AITER's
-# per-shape Triton JIT autotune and torch.compile cache misses bias the first
-# ~20-40s of the real benchmark window low (CI cold-cache measurements showed
-# a ~10% under-report). vllm bench's built-in --num-warmups defaults to 16
-# serial prompts, which doesn't exercise the full-concurrency kernel variants.
-run_benchmark_serving \
-    --model "$MODEL" \
-    --port "$PORT" \
-    --backend vllm \
-    --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 5))" \
-    --max-concurrency "$CONC" \
-    --result-filename "warmup_$RESULT_FILENAME" \
-    --result-dir /tmp/ > /dev/null 2>&1 || true
-
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
