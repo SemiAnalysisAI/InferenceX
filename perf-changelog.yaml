@@ -3136,3 +3136,9 @@
   description:
     - "Add --use-chat-template to run_benchmark_serving so prompts are formatted with the Qwen chat template (matching the other Qwen MTP recipes)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1555
+
+- config-keys:
+    - dsr1-fp4-b300-vllm
+  description:
+    - "Add DeepSeek-R1 FP4 B300 vLLM benchmark on vllm/vllm-openai:v0.21.0 with TOKENSPEED_MLA prefill/decode and fastokens tokenization"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1562
