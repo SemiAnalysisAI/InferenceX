@@ -14,7 +14,7 @@ from tqdm.asyncio import tqdm
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
-AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=30 * 60)
+AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 
 
 @dataclass
@@ -49,16 +49,12 @@ class RequestFuncOutput:
 async def async_request_tgi(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
-    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")
 
-    _own_session = session is None
-    if _own_session:
-        session = aiohttp.ClientSession(trust_env=True,
-                                        timeout=AIOHTTP_TIMEOUT)
-    try:
+    async with aiohttp.ClientSession(trust_env=True,
+                                     timeout=AIOHTTP_TIMEOUT) as session:
         params = {
             "best_of": request_func_input.best_of,
             "max_new_tokens": request_func_input.output_len,
@@ -66,6 +62,7 @@ async def async_request_tgi(
             "temperature": 0.01,  # TGI does not accept 0.0 temperature.
             "top_p": 0.99,  # TGI does not accept 1.0 top_p.
             "truncate": request_func_input.prompt_len,
+            # TGI does not accept ignore_eos flag.
         }
         payload = {
             "inputs": request_func_input.prompt,
@@ -116,28 +113,21 @@ async def async_request_tgi(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
-    finally:
-        if _own_session:
-            await session.close()
 
-    if pbar:
-        pbar.update(1)
-    return output
+        if pbar:
+            pbar.update(1)
+        return output
 
 
 async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
-    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")
 
-    _own_session = session is None
-    if _own_session:
-        session = aiohttp.ClientSession(trust_env=True,
-                                        timeout=AIOHTTP_TIMEOUT)
-    try:
+    async with aiohttp.ClientSession(trust_env=True,
+                                     timeout=AIOHTTP_TIMEOUT) as session:
         assert request_func_input.best_of == 1
         payload = {
             "accumulate_tokens": True,
@@ -191,25 +181,18 @@ async def async_request_trt_llm(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
-    finally:
-        if _own_session:
-            await session.close()
 
-    if pbar:
-        pbar.update(1)
-    return output
+        if pbar:
+            pbar.update(1)
+        return output
 
 
 async def async_request_deepspeed_mii(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
-    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
-    _own_session = session is None
-    if _own_session:
-        session = aiohttp.ClientSession(trust_env=True,
-                                        timeout=AIOHTTP_TIMEOUT)
-    try:
+    async with aiohttp.ClientSession(trust_env=True,
+                                     timeout=AIOHTTP_TIMEOUT) as session:
         assert request_func_input.best_of == 1
 
         payload = {
@@ -242,30 +225,23 @@ async def async_request_deepspeed_mii(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
-    finally:
-        if _own_session:
-            await session.close()
 
-    if pbar:
-        pbar.update(1)
-    return output
+        if pbar:
+            pbar.update(1)
+        return output
 
 
 async def async_request_openai_completions(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
-    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith(
         ("completions", "profile")
     ), "OpenAI Completions API URL must end with 'completions' or 'profile'."
 
-    _own_session = session is None
-    if _own_session:
-        session = aiohttp.ClientSession(trust_env=True,
-                                        timeout=AIOHTTP_TIMEOUT)
-    try:
+    async with aiohttp.ClientSession(trust_env=True,
+                                     timeout=AIOHTTP_TIMEOUT) as session:
         payload = {
             "model": request_func_input.model_name \
                 if request_func_input.model_name else request_func_input.model,
@@ -305,35 +281,33 @@ async def async_request_openai_completions(
 
                         chunk = chunk_bytes.decode("utf-8").removeprefix(
                             "data: ")
-                        if chunk == "[DONE]":
-                            break
+                        if chunk != "[DONE]":
+                            data = json.loads(chunk)
 
-                        data = json.loads(chunk)
+                            # NOTE: Some completion API might have a last
+                            # usage summary response without a token so we
+                            # want to check a token was generated
+                            if choices := data.get("choices"):
+                                # Note that text could be empty here
+                                # e.g. for special tokens
+                                text = choices[0].get("text")
+                                timestamp = time.perf_counter()
+                                # First token
+                                if not first_chunk_received:
+                                    first_chunk_received = True
+                                    ttft = time.perf_counter() - st
+                                    output.ttft = ttft
 
-                        # NOTE: Some completion API might have a last
-                        # usage summary response without a token so we
-                        # want to check a token was generated
-                        if choices := data.get("choices"):
-                            # Note that text could be empty here
-                            # e.g. for special tokens
-                            text = choices[0].get("text")
-                            timestamp = time.perf_counter()
-                            # First token
-                            if not first_chunk_received:
-                                first_chunk_received = True
-                                ttft = time.perf_counter() - st
-                                output.ttft = ttft
+                                # Decoding phase
+                                else:
+                                    output.itl.append(timestamp -
+                                                      most_recent_timestamp)
 
-                            # Decoding phase
-                            else:
-                                output.itl.append(timestamp -
-                                                  most_recent_timestamp)
-
-                            most_recent_timestamp = timestamp
-                            generated_text += text or ""
-                        elif usage := data.get("usage"):
-                            output.output_tokens = usage.get(
-                                "completion_tokens")
+                                most_recent_timestamp = timestamp
+                                generated_text += text or ""
+                            elif usage := data.get("usage"):
+                                output.output_tokens = usage.get(
+                                    "completion_tokens")
                     if first_chunk_received:
                         output.success = True
                     else:
@@ -350,9 +324,6 @@ async def async_request_openai_completions(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
-    finally:
-        if _own_session:
-            await session.close()
 
     if pbar:
         pbar.update(1)
@@ -362,19 +333,15 @@ async def async_request_openai_completions(
 async def async_request_openai_chat_completions(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
-    session: Optional[aiohttp.ClientSession] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith(
         "chat/completions"
     ), "OpenAI Chat Completions API URL must end with 'chat/completions'."
 
-    _own_session = session is None
-    if _own_session:
-        session = aiohttp.ClientSession(trust_env=True,
-                                        timeout=AIOHTTP_TIMEOUT)
-    try:
-        content = [{"type": "text", "text": request_func_input.prompt}]
+    async with aiohttp.ClientSession(trust_env=True,
+                                     timeout=AIOHTTP_TIMEOUT) as session:
+        content = request_func_input.prompt
         if request_func_input.multi_modal_content:
             content = [{"type": "text", "text": request_func_input.prompt}]
             content.append(request_func_input.multi_modal_content)
@@ -421,30 +388,28 @@ async def async_request_openai_chat_completions(
 
                         chunk = chunk_bytes.decode("utf-8").removeprefix(
                             "data: ")
-                        if chunk == "[DONE]":
-                            break
+                        if chunk != "[DONE]":
+                            timestamp = time.perf_counter()
+                            data = json.loads(chunk)
 
-                        timestamp = time.perf_counter()
-                        data = json.loads(chunk)
+                            if choices := data.get("choices"):
+                                content = choices[0]["delta"].get("content")
+                                # First token
+                                if ttft == 0.0:
+                                    ttft = timestamp - st
+                                    output.ttft = ttft
 
-                        if choices := data.get("choices"):
-                            content = choices[0]["delta"].get("content")
-                            # First token
-                            if ttft == 0.0:
-                                ttft = timestamp - st
-                                output.ttft = ttft
+                                # Decoding phase
+                                else:
+                                    output.itl.append(timestamp -
+                                                      most_recent_timestamp)
 
-                            # Decoding phase
-                            else:
-                                output.itl.append(timestamp -
-                                                  most_recent_timestamp)
+                                generated_text += content or ""
+                            elif usage := data.get("usage"):
+                                output.output_tokens = usage.get(
+                                    "completion_tokens")
 
-                            generated_text += content or ""
-                        elif usage := data.get("usage"):
-                            output.output_tokens = usage.get(
-                                "completion_tokens")
-
-                        most_recent_timestamp = timestamp
+                            most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
                     output.success = True
@@ -456,13 +421,10 @@ async def async_request_openai_chat_completions(
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
-    finally:
-        if _own_session:
-            await session.close()
 
-        if pbar:
-            pbar.update(1)
-        return output
+    if pbar:
+        pbar.update(1)
+    return output
 
 
 def get_model(pretrained_model_name_or_path: str) -> str:
@@ -504,64 +466,46 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
     import json
     from pathlib import Path
 
-    def _resolve(filename):
-        """Return a filesystem path for `filename`, whether `model_path` is a
-        local directory or an HF Hub repo id. Returns None and logs a warning
-        on failure so we don't silently fail to apply the v5 fix."""
-        local = Path(model_path) / filename
-        if local.is_file():
-            return str(local)
-        try:
-            from huggingface_hub import hf_hub_download
-            return hf_hub_download(repo_id=model_path, filename=filename)
-        except Exception as e:
-            print(
-                f"v5 tokenizer fix: cannot resolve {filename} for {model_path!r} "
-                f"({type(e).__name__}: {e}); fix will not apply.",
-                flush=True,
-            )
-            return None
-
     backend = getattr(tokenizer, "_tokenizer", None)
     if backend is not None:
-        tok_file = _resolve("tokenizer.json")
-        if tok_file is not None:
+        try:
             from tokenizers import Tokenizer as RawTokenizer
-            raw = RawTokenizer.from_file(tok_file)
-            raw_pre = type(raw.pre_tokenizer).__name__ if raw.pre_tokenizer else None
-            loaded_pre = type(backend.pre_tokenizer).__name__ if backend.pre_tokenizer else None
-            if raw_pre and loaded_pre and raw_pre != loaded_pre:
-                print(
-                    f"v5 tokenizer fix: {model_path} pre_tokenizer {loaded_pre} -> {raw_pre}, "
-                    f"decoder {type(backend.decoder).__name__ if backend.decoder else None} -> "
-                    f"{type(raw.decoder).__name__ if raw.decoder else None}",
-                    flush=True,
-                )
-                backend.pre_tokenizer = raw.pre_tokenizer
-                backend.decoder = raw.decoder
+            tok_file = Path(model_path) / "tokenizer.json"
+            if tok_file.is_file():
+                raw = RawTokenizer.from_file(str(tok_file))
+                raw_pre = type(raw.pre_tokenizer).__name__ if raw.pre_tokenizer else None
+                loaded_pre = type(backend.pre_tokenizer).__name__ if backend.pre_tokenizer else None
+                if raw_pre and loaded_pre and raw_pre != loaded_pre:
+                    backend.pre_tokenizer = raw.pre_tokenizer
+                    backend.decoder = raw.decoder
+        except Exception:
+            pass
 
-    config_file = _resolve("tokenizer_config.json")
-    if config_file is not None:
-        with open(config_file) as f:
-            config = json.load(f)
-        tok_class = config.get("tokenizer_class", "")
-        bos_eos_classes = {
-            "LlamaTokenizer", "LlamaTokenizerFast",
-            "CodeLlamaTokenizer", "CodeLlamaTokenizerFast",
-            "GemmaTokenizer", "GemmaTokenizerFast", "CohereTokenizerFast",
-        }
-        if tok_class in bos_eos_classes:
-            defaults = {"add_bos_token": True, "add_eos_token": False}
-            changed = False
-            for attr in ("add_bos_token", "add_eos_token"):
-                val = config.get(attr)
-                if val is None:
-                    val = defaults.get(attr, False)
-                if getattr(tokenizer, attr, None) != val:
-                    setattr(tokenizer, f"_{attr}", val)
-                    changed = True
-            if changed and hasattr(tokenizer, "update_post_processor"):
-                tokenizer.update_post_processor()
+    try:
+        config_file = Path(model_path) / "tokenizer_config.json"
+        if config_file.is_file():
+            with open(config_file) as f:
+                config = json.load(f)
+            tok_class = config.get("tokenizer_class", "")
+            bos_eos_classes = {
+                "LlamaTokenizer", "LlamaTokenizerFast",
+                "CodeLlamaTokenizer", "CodeLlamaTokenizerFast",
+                "GemmaTokenizer", "GemmaTokenizerFast", "CohereTokenizerFast",
+            }
+            if tok_class in bos_eos_classes:
+                defaults = {"add_bos_token": True, "add_eos_token": False}
+                changed = False
+                for attr in ("add_bos_token", "add_eos_token"):
+                    val = config.get(attr)
+                    if val is None:
+                        val = defaults.get(attr, False)
+                    if getattr(tokenizer, attr, None) != val:
+                        setattr(tokenizer, f"_{attr}", val)
+                        changed = True
+                if changed and hasattr(tokenizer, "update_post_processor"):
+                    tokenizer.update_post_processor()
+    except Exception:
+        pass
 
     return tokenizer
 
