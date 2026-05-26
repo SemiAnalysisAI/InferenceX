@@ -4746,7 +4746,7 @@ minimaxm2.5-fp8-h200-vllm:
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200
