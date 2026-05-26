@@ -3141,3 +3141,15 @@
   description:
     - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
+
+- config-keys:
+    - glm5-fp8-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
+
+- config-keys:
+    - glm5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
