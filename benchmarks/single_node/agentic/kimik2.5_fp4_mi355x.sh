@@ -442,8 +442,16 @@ def _apply_patch():
 
     def _patched_get_finished(self, scheduler_output):
         result = _orig_get_finished(self, scheduler_output)
-        # Clean up chunk state for finished requests
-        for req in getattr(scheduler_output, "finished_req_ids", []):
+        # Clean up chunk state for finished requests.
+        # vLLM passes scheduler_output as a set of request-ID strings
+        # (not a SchedulerOutput object), so iterate directly when it
+        # is a set/frozenset; fall back to the attribute path for
+        # forward compatibility.
+        if isinstance(scheduler_output, (set, frozenset)):
+            finished = scheduler_output
+        else:
+            finished = getattr(scheduler_output, "finished_req_ids", [])
+        for req in finished:
             _chunk_state.pop(req, None)
         return result
 
