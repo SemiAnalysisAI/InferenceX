@@ -1781,7 +1781,7 @@ dsv4-fp4-b200-vllm-agentic:
       # Native vLLM CPU offload with HMA enabled. The benchmark script sizes
       # the aggregate native offload pool to the same 2.8 TB target used for
       # the blocked LMCache experiment.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [12, 16, 24, 32, 48, 64] }
+      # - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [12, 16, 24, 32, 48, 64] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [12, 16, 24, 32, 48, 64] }
 
 dsv4-fp4-b200-trt:
