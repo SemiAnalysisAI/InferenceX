@@ -113,6 +113,17 @@ jobs:
       EP_SIZE: ${{ matrix.config.ep }}
       DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
       CONC: ${{ matrix.config.conc }}
+      CONC_JSON: ${{ toJson(matrix.config.conc) }}
+      PREFILL_NUM_WORKERS: ${{ matrix.config.prefill['num-worker'] }}
+      PREFILL_TP: ${{ matrix.config.prefill.tp }}
+      PREFILL_EP: ${{ matrix.config.prefill.ep }}
+      PREFILL_DP_ATTN: ${{ matrix.config.prefill['dp-attn'] }}
+      PREFILL_ADDITIONAL_SETTINGS_JSON: ${{ toJson(matrix.config.prefill['additional-settings']) }}
+      DECODE_NUM_WORKERS: ${{ matrix.config.decode['num-worker'] }}
+      DECODE_TP: ${{ matrix.config.decode.tp }}
+      DECODE_EP: ${{ matrix.config.decode.ep }}
+      DECODE_DP_ATTN: ${{ matrix.config.decode['dp-attn'] }}
+      DECODE_ADDITIONAL_SETTINGS_JSON: ${{ toJson(matrix.config.decode['additional-settings']) }}
       SPEC_DECODING: ${{ matrix.config.spec-decoding }}
       DISAGG: ${{ matrix.config.disagg }}
       MOE_DEBUG: '0'
@@ -148,7 +159,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           clean: false
 
-      - name: Launch + Profile (single-node sglang/vllm)
+      - name: Launch + Profile
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -159,19 +170,108 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+
+          export_additional_settings() {
+            local settings_json="$1"
+            python3 - "$settings_json" <<'PY'
+          import json
+          import sys
+
+          raw = sys.argv[1]
+          if not raw or raw == "null":
+              raise SystemExit(0)
+          for item in json.loads(raw) or []:
+              print(item)
+          PY
+          }
+
+          normalize_conc() {
+            python3 - <<'PY'
+          import json
+          import os
+
+          raw = os.environ.get("CONC_JSON") or os.environ.get("CONC") or "[]"
+          try:
+              value = json.loads(raw)
+          except json.JSONDecodeError:
+              value = raw
+          if isinstance(value, list):
+              print("x".join(str(v) for v in value))
+          else:
+              print(str(value))
+          PY
+          }
+
+          if [ -n "${PREFILL_NUM_WORKERS:-}" ] && [ -n "${DECODE_NUM_WORKERS:-}" ]; then
+            conc_val="$(normalize_conc)"
+            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_prefill-tp${PREFILL_TP}-ep${PREFILL_EP}-dp${PREFILL_DP_ATTN}-nw${PREFILL_NUM_WORKERS}_decode-tp${DECODE_TP}-ep${DECODE_EP}-dp${DECODE_DP_ATTN}-nw${DECODE_NUM_WORKERS}_disagg-${DISAGG}_spec-${SPEC_DECODING}_conc${conc_val}_${RUNNER_NAME}"
+
+            echo "IS_MULTINODE=true" >> "$GITHUB_ENV"
+            echo "PREFILL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP))" >> "$GITHUB_ENV"
+            echo "DECODE_GPUS=$((DECODE_NUM_WORKERS * DECODE_TP))" >> "$GITHUB_ENV"
+
+            while IFS= read -r setting; do
+              if [ -n "$setting" ]; then
+                export "$setting"
+              fi
+            done < <(export_additional_settings "${PREFILL_ADDITIONAL_SETTINGS_JSON:-null}")
+            while IFS= read -r setting; do
+              if [ -n "$setting" ]; then
+                export "$setting"
+              fi
+            done < <(export_additional_settings "${DECODE_ADDITIONAL_SETTINGS_JSON:-null}")
+          else
+            ep_val="${EP_SIZE:-1}"
+            res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          fi
+
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
           if [ ! -f "${res_name}.json" ]; then
-            echo "Run failed: Benchmark result ${res_name}.json not found." >&2
-            exit 1
+            result_candidate="$(find . -maxdepth 1 -type f -name "${res_name}_*.json" | sort | head -n1 || true)"
+            if [ -n "$result_candidate" ] && [ -f "$result_candidate" ]; then
+              cp "$result_candidate" "${res_name}.json"
+            else
+              echo "Run failed: Benchmark result ${res_name}.json not found." >&2
+              exit 1
+            fi
           fi
 
           trace_path="profile_${res_name}.trace.json.gz"
+          if [ ! -f "$trace_path" ] && [ -d LOGS/profiles ]; then
+            trace_candidate="$(python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("LOGS/profiles")
+          candidates = [
+              p for p in root.rglob("*")
+              if p.is_file() and (
+                  p.name.endswith(".trace.json")
+                  or p.name.endswith(".trace.json.gz")
+                  or p.name.endswith(".pt.trace.json")
+                  or p.name.endswith(".json")
+              )
+          ]
+          candidates = [
+              p for p in candidates
+              if not p.name.startswith("results_") and "profile_export" not in p.name
+          ]
+          if candidates:
+              print(max(candidates, key=lambda p: p.stat().st_size))
+          PY
+          )"
+            if [ -n "$trace_candidate" ] && [ -f "$trace_candidate" ]; then
+              if [[ "$trace_candidate" == *.gz ]]; then
+                cp "$trace_candidate" "$trace_path"
+              else
+                gzip -c "$trace_candidate" > "$trace_path"
+              fi
+            fi
+          fi
+
           if [ -f "$trace_path" ]; then
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
             if [ "${FRAMEWORK}" = "sglang" ]; then
@@ -252,7 +352,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${RESULT_FILENAME}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
 
@@ -260,13 +360,13 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git commit -m "Add profile: ${GITHUB_SHA} ${RESULT_FILENAME}" || echo "Nothing to commit"
           git push
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${RESULT_FILENAME}/trace.json.gz"
+          export TITLE="${RESULT_FILENAME}"
 
           enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
           enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
