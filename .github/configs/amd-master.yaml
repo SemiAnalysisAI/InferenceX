@@ -26,6 +26,25 @@ dsr1-fp4-mi355x-sglang:
     #   search-space:
     #   - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
+dsr1-fp4-mi355x-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+  model: amd/DeepSeek-R1-0528-MXFP4
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
@@ -126,6 +145,25 @@ dsr1-fp8-mi355x-sglang:
       search-space:
       - { tp: 4, conc-start: 32, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
+dsr1-fp8-mi355x-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 qwen3.5-bf16-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517
@@ -286,7 +324,7 @@ qwen3.5-fp8-mi355x-sglang-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp8-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
@@ -966,7 +1004,7 @@ gptoss-fp4-mi355x-atom:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
 
 dsr1-fp8-mi355x-atom:
-  image: rocm/atom:rocm7.1.1-ubuntu24.04-pytorch2.9-atom0.1.1-MI350x
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
@@ -986,7 +1024,7 @@ dsr1-fp8-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 128 }
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.1-ubuntu24.04-pytorch2.9.1-atom0.1.2
+  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
@@ -1736,7 +1774,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-b19052c-20260518-DSv4
+  image: rocm/sgl-dev:rocm720-mi35x-8c3b5aa-20260521-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1748,13 +1786,13 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
-      - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 64 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
+      - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
-      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 64 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 512 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
 # nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
@@ -1776,7 +1814,7 @@ dsv4-fp4-mi355x-sglang:
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-b50646e5effd7cb5884cd96fdff4c53c18521198
+  image: vllm/vllm-openai-rocm:nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1788,11 +1826,11 @@ dsv4-fp4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 512 }
 
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
@@ -1862,6 +1900,44 @@ qwen3.5-fp8-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
+glm5-fp8-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
+glm5-fp8-mi325x-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
   runner: mi325x
   precision: fp8
   framework: sglang
