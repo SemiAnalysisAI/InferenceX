@@ -112,7 +112,7 @@ jobs:
       TP: ${{ matrix.config.tp }}
       EP_SIZE: ${{ matrix.config.ep }}
       DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
-      CONC: ${{ matrix.config.conc }}
+      CONC: ${{ toJson(matrix.config.conc) }}
       CONC_JSON: ${{ toJson(matrix.config.conc) }}
       PREFILL_NUM_WORKERS: ${{ matrix.config.prefill['num-worker'] }}
       PREFILL_TP: ${{ matrix.config.prefill.tp }}
