@@ -642,6 +642,22 @@ kimik2.5-fp4-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
+dsv4-fp4-b300-vllm-agentic:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 24, 32, 40, 48] }
+
 minimaxm2.5-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
