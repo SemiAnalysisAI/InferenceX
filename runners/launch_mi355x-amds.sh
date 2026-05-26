@@ -124,16 +124,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
-job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-prefixes = ["sglang", "vllm"]
+job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
 logs_root = f"{job_dir}/logs/"
 candidates = []
 if os.path.isdir(logs_root):
     for name in os.listdir(logs_root):
-        for pfx in prefixes:
-            subdir = f"{logs_root}{name}/{pfx}_isl_{isl}_osl_{osl}"
-            if os.path.isdir(subdir):
-                candidates.append(subdir)
+        subdir = f"{logs_root}{name}/{framework}_isl_{isl}_osl_{osl}"
+        if os.path.isdir(subdir):
+            candidates.append(subdir)
 for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
