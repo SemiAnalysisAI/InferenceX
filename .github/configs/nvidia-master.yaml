@@ -2697,9 +2697,9 @@ kimik2.5-fp4-b200-vllm-agentic:
     - duration: 1800
       search-space:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, offloading: cpu,  conc-list: [16, 24, 32, 36] }
+      # - { tp: 8, ep: 1, offloading: cpu,  conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, offloading: cpu,  conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+      # - { tp: 4, ep: 1, offloading: cpu,  conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.21.0
