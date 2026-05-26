@@ -101,7 +101,7 @@ case "$OFFLOADING" in
         # the full eager sweep before.
         #(srok), internal node limitation
         #TOTAL_CPU_DRAM_GB=2500
-        TOTAL_CPU_DRAM_GB=2500
+        TOTAL_CPU_DRAM_GB=1500
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
@@ -123,7 +123,7 @@ case "$OFFLOADING" in
         # cudaHostAlloc in LMCache 0.4.5's single-process local CPU backend.
         #(srok), internal node limitation
         #TOTAL_CPU_DRAM_GB=2500
-        TOTAL_CPU_DRAM_GB=2500
+        TOTAL_CPU_DRAM_GB=1500
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
