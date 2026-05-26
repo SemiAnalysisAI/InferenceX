@@ -90,43 +90,6 @@ wait_for_lmcache_ready() {
     exit 1
 }
 
-echo "Starting vllm server..."
-export TORCH_CUDA_ARCH_LIST="10.0"
-export PYTHONNOUSERSITE=1
-# Disable vLLM v0.21+ CUDA-graph memory estimator. Its pre-reservation
-# eats ~32% of HBM upfront which, combined with FP4 weights at TP=4
-# (~62 GB/GPU), leaves no room for KV blocks -- _check_enough_kv_cache_memory
-# trips before the engine starts. Our --gpu-memory-utilization=0.90 already
-# leaves ~18 GB/GPU slack outside vLLM's budget, which is the same safety
-# net the estimator provides, so disabling it is redundant rather than
-# unsafe.
-export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
-
-{ set +x; } 2>/dev/null
-VLLM_CMD=(
-    vllm serve "$MODEL"
-    --host 0.0.0.0
-    --port "$PORT"
-    --tensor-parallel-size="$TP"
-    --gpu-memory-utilization 0.90
-    --max-num-seqs "$CONC"
-    --reasoning-parser kimi_k2
-    --tool-call-parser kimi_k2
-    --compilation_config.pass_config.fuse_allreduce_rms true
-    --kv-cache-dtype fp8
-    --max-cudagraph-capture-size 2048
-    --stream-interval 20
-    --trust-remote-code
-    "${PREFIX_CACHE_ARGS[@]}"
-    "${OFFLOAD_ARGS[@]}"
-)
-printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
-printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
-"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-echo "Server PID: $SERVER_PID"
-
-
 case "$OFFLOADING" in
     none)
         ;;
@@ -210,6 +173,41 @@ case "$OFFLOADING" in
         ;;
 esac
 
+echo "Starting vllm server..."
+export TORCH_CUDA_ARCH_LIST="10.0"
+export PYTHONNOUSERSITE=1
+# Disable vLLM v0.21+ CUDA-graph memory estimator. Its pre-reservation
+# eats ~32% of HBM upfront which, combined with FP4 weights at TP=4
+# (~62 GB/GPU), leaves no room for KV blocks -- _check_enough_kv_cache_memory
+# trips before the engine starts. Our --gpu-memory-utilization=0.90 already
+# leaves ~18 GB/GPU slack outside vLLM's budget, which is the same safety
+# net the estimator provides, so disabling it is redundant rather than
+# unsafe.
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
+{ set +x; } 2>/dev/null
+VLLM_CMD=(
+    vllm serve "$MODEL"
+    --host 0.0.0.0
+    --port "$PORT"
+    --tensor-parallel-size="$TP"
+    --gpu-memory-utilization 0.90
+    --max-num-seqs "$CONC"
+    --reasoning-parser kimi_k2
+    --tool-call-parser kimi_k2
+    --compilation_config.pass_config.fuse_allreduce_rms true
+    --kv-cache-dtype fp8
+    --max-cudagraph-capture-size 2048
+    --stream-interval 20
+    --trust-remote-code
+    "${PREFIX_CACHE_ARGS[@]}"
+    "${OFFLOAD_ARGS[@]}"
+)
+printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
+printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
