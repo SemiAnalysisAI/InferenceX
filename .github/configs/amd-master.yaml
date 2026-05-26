@@ -616,8 +616,9 @@ kimik2.5-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, offloading: lmcache,  conc-list: [32, 40, 48, 56] }
-      - { tp: 4, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
+      - { tp: 8, offloading: lmcache,  conc-list: [40] }
+      #- { tp: 8, offloading: lmcache,  conc-list: [32, 40, 48, 56] }
+      #- { tp: 4, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
       #- { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
       #- { tp: 8, offloading: lmcache,  conc-list: [32, 40, 48, 56] }
       #- { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
