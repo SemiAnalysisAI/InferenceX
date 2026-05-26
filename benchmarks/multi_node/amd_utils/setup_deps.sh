@@ -720,11 +720,16 @@ print("[SETUP] Patched: gluon pa_mqa_logits 3D instr_shape for base variant")
 # Only install if GLM-5 is the active model (avoid overhead otherwise).
 # ---------------------------------------------------------------------------
 install_transformers_glm5() {
-    if [[ "$MODEL_NAME" != "GLM-5-FP8" ]]; then
+    if [[ "$MODEL_NAME" != "GLM-5-FP8" && "$MODEL_NAME" != "GLM-5-MXFP4" ]]; then
         return 0
     fi
 
-    if python3 -c "from transformers import AutoConfig; AutoConfig.from_pretrained('zai-org/GLM-5-FP8', trust_remote_code=True)" 2>/dev/null; then
+    _glm5_config_probe="zai-org/GLM-5-FP8"
+    if [[ "$MODEL_NAME" == "GLM-5-MXFP4" ]]; then
+        _glm5_config_probe="amd/GLM-5-MXFP4"
+    fi
+
+    if python3 -c "from transformers import AutoConfig; AutoConfig.from_pretrained('${_glm5_config_probe}', trust_remote_code=True)" 2>/dev/null; then
         echo "[SETUP] transformers already supports GLM-5 model type"
         return 0
     fi

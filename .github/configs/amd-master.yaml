@@ -656,6 +656,59 @@ glm5-fp8-mi355x-sglang-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
 
+glm5-fp4-mi355x-sglang-disagg:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
+  model: amd/GLM-5-MXFP4
+  model-prefix: glm5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
 glm5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: zai-org/GLM-5-FP8
