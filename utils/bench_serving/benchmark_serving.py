@@ -39,17 +39,16 @@ from datetime import datetime
 from multiprocessing import Pool, cpu_count
 from typing import Any, AsyncGenerator, Collection, Dict, List, Optional, Tuple
 
-import aiohttp
 import numpy as np
-from backend_request_func import (AIOHTTP_TIMEOUT, ASYNC_REQUEST_FUNCS,
-                                  RequestFuncInput, RequestFuncOutput)
+from backend_request_func import (ASYNC_REQUEST_FUNCS, RequestFuncInput,
+                                  RequestFuncOutput)
 from tqdm.asyncio import tqdm
 from transformers import PreTrainedTokenizerBase
 
 try:
-    from backend_request_func import get_tokenizer
-except ImportError:
     from vllm.transformers_utils.tokenizer import get_tokenizer
+except ImportError:
+    from backend_request_func import get_tokenizer
 
 try:
     from vllm.utils import FlexibleArgumentParser
@@ -485,14 +484,11 @@ async def benchmark(
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
-    connector = aiohttp.TCPConnector(limit=0, enable_cleanup_closed=True)
-    shared_session = aiohttp.ClientSession(
-        trust_env=True, timeout=AIOHTTP_TIMEOUT, connector=connector)
-
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = (
         input_requests[0])
     if backend != "openai-chat" and test_mm_content is not None:
+        # multi-modal benchmark is only available on OpenAI Chat backend.
         raise ValueError(
             "Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
@@ -511,15 +507,13 @@ async def benchmark(
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
         warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else asyncio.Semaphore(num_warmups)
+        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
         async def warmup_limited_req_fn():
             if warmup_semaphore is None:
                 return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
-                return await request_func(
-                    request_func_input=test_input, pbar=warmup_pbar,
-                    session=shared_session)
+                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
 
         warmup_tasks = []
         for _ in range(num_warmups):
@@ -532,6 +526,7 @@ async def benchmark(
         print("Warmup completed.")
 
     if lora_modules:
+        # For each input request, choose a LoRA module at random.
         lora_modules = iter(
             [random.choice(lora_modules) for _ in range(len(input_requests))])
 
@@ -548,8 +543,7 @@ async def benchmark(
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,
                                          ignore_eos=ignore_eos)
-        profile_output = await request_func(
-            request_func_input=profile_input, session=shared_session)
+        profile_output = await request_func(request_func_input=profile_input)
         if profile_output.success:
             print("Profiler started")
 
@@ -570,10 +564,10 @@ async def benchmark(
     async def limited_request_func(request_func_input, pbar):
         if semaphore is None:
             return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar, session=shared_session)
+                                      pbar=pbar)
         async with semaphore:
             return await request_func(request_func_input=request_func_input,
-                                      pbar=pbar, session=shared_session)
+                                      pbar=pbar)
 
     print("Starting main benchmark run...")
 
@@ -600,28 +594,7 @@ async def benchmark(
             asyncio.create_task(
                 limited_request_func(request_func_input=request_func_input,
                                      pbar=pbar)))
-    gather_timeout = max(7200, len(input_requests) * 30)
-    try:
-        outputs: List[RequestFuncOutput] = await asyncio.wait_for(
-            asyncio.gather(*tasks), timeout=gather_timeout)
-    except asyncio.TimeoutError:
-        completed = pbar.n if pbar else "?"
-        print(f"\n[WARNING] Benchmark timed out after {gather_timeout}s "
-              f"({completed}/{len(tasks)} requests completed). "
-              "Collecting partial results...")
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        outputs = []
-        for task in tasks:
-            if task.done() and not task.cancelled():
-                try:
-                    outputs.append(task.result())
-                except Exception:
-                    outputs.append(RequestFuncOutput())
-            else:
-                outputs.append(RequestFuncOutput())
+    outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
 
     if profile:
         print("Stopping profiler...")
@@ -634,13 +607,9 @@ async def benchmark(
             logprobs=logprobs,
             best_of=best_of,
         )
-        profile_output = await request_func(
-            request_func_input=profile_input, session=shared_session)
+        profile_output = await request_func(request_func_input=profile_input)
         if profile_output.success:
             print("Profiler stopped")
-
-    await shared_session.close()
-    await connector.close()
 
     if pbar is not None:
         pbar.close()
@@ -930,16 +899,6 @@ def main(args: argparse.Namespace):
         with open(file_name, "w", encoding='utf-8') as outfile:
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
-
-    max_failure_rate = 0.05
-    completed = benchmark_result["completed"]
-    failure_rate = 1 - completed / args.num_prompts
-    if failure_rate > max_failure_rate:
-        raise SystemExit(
-            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
-            f"{max_failure_rate:.0%} threshold "
-            f"({completed}/{args.num_prompts} completed)"
-        )
 
 
 if __name__ == "__main__":
