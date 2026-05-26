@@ -48,7 +48,7 @@ PROFILE_ARGS=()
 if [[ "${PROFILE:-}" == "1" ]]; then
     PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
     if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
-        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":1,\"max_iterations\":1,\"active_iterations\":1,\"torch_profiler_with_stack\":false}"
+        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":3,\"max_iterations\":1,\"active_iterations\":1,\"torch_profiler_with_stack\":false}"
     fi
     PROFILE_ARGS=(
         --profiler-config
@@ -74,7 +74,7 @@ BENCHMARK_MAX_CONCURRENCY=$CONC
 BENCHMARK_NUM_WARMUPS=$((2 * BENCHMARK_MAX_CONCURRENCY))
 
 if [[ "${PROFILE:-}" == "1" && "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
-    BENCHMARK_OUTPUT_LEN=1
+    BENCHMARK_OUTPUT_LEN=3
     BENCHMARK_NUM_PROMPTS=256
     BENCHMARK_MAX_CONCURRENCY=256
     BENCHMARK_NUM_WARMUPS=4096
