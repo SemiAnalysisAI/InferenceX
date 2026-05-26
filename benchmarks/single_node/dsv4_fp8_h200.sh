@@ -13,6 +13,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -35,7 +36,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN_ARG="--max-model-len $EVAL_MAX_MODEL_LEN"
 else
-    MAX_MODEL_LEN_ARG="--max-model-len 800000"
+    MAX_MODEL_LEN_ARG="--max-model-len $MAX_MODEL_LEN"
 fi
 
 # DP_ATTENTION=true runs DP-attention with expert parallel (DP size = TP);
@@ -62,6 +63,7 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 "${PARALLEL_ARGS[@]}" \
 "${EP_ARGS[@]}" \
 $MAX_MODEL_LEN_ARG \
+--quantization deepseek_v4_fp8 \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs 512 \
 --max-num-batched-tokens 512 \

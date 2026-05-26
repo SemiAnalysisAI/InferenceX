@@ -9,7 +9,6 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
-    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
@@ -28,7 +27,6 @@ PORT=${PORT:-8888}
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -44,12 +42,13 @@ set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
---max-num-seqs 256 \
---no-enable-prefix-caching \
 --trust-remote-code \
---compilation-config '{"cudagraph_mode":"PIECEWISE"}' > $SERVER_LOG 2>&1 &
+--enable-auto-tool-choice \
+--tool-call-parser minimax_m2 \
+--reasoning-parser minimax_m2_append_think \
+--compilation-config '{"mode":3,"pass_config":{"fuse_minimax_qk_norm":true}}' \
+--gpu-memory-utilization 0.9 \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
