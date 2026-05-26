@@ -43,14 +43,6 @@ NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
-    # Fast-path: if a squash file is already at the expected path (e.g.,
-    # a symlink to a prestaged file), skip srun entirely. Use [ -f ]
-    # rather than unsquashfs because the login node may not have the
-    # squashfs-tools binary installed.
-    if [ -f "$squash" ]; then
-        echo "Squash file already exists, skipping import: $squash"
-        return 0
-    fi
     srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
         # A previously failed enroot import on VAST can leave the lock
         # or squash as a self-referencing symlink, making subsequent
