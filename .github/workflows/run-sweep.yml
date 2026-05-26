@@ -214,7 +214,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
             }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
@@ -259,7 +259,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null'
             }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
@@ -278,7 +278,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != '[]'
             }}
@@ -315,7 +315,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != '[]'
             }}
@@ -335,7 +335,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null'
             }}
         uses: ./.github/workflows/benchmark-tmpl.yml
@@ -374,7 +374,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null'
             }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
@@ -420,7 +420,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
             }}
@@ -458,7 +458,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
-              needs.canary-sweep.result != 'failure' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
             }}
