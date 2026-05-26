@@ -28,6 +28,7 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 rocm-smi
+amd-smi || true
 
 # If the machine runs a MEC FW older than 177, RCCL cannot reclaim some memory.
 # See https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
