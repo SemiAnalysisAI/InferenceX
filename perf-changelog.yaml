@@ -2430,3 +2430,12 @@
   description:
     - "Update SGLang image from v0.5.10.post1-cu130 to v0.5.11-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1346
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Fix the eval result of dsr1 fp4 with fp8 blockwise combine"
+    - "Bump the image to May 19"
+    - "Add conc 512 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1566
