@@ -240,13 +240,13 @@ VLLM_CMD=(
     --port "$PORT"
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization 0.95
     --kv-cache-dtype fp8 \
-    --block-size=1
+    --block-size=32
     --trust-remote-code
+    --attention-backend "ROCM_AITER_FA" \
     --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$CONC"
-    --mm-encoder-tp-mode data
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )

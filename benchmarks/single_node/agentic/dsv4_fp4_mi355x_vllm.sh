@@ -240,13 +240,17 @@ VLLM_CMD=(
     --port "$PORT"
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization 0.80
     --kv-cache-dtype fp8 \
-    --block-size=1
+    --distributed-executor-backend mp \
+    --async-scheduling \
     --trust-remote-code
+    --moe-backend triton_unfused \
+    --tokenizer-mode deepseek_v4 \
+    --reasoning-parser deepseek_v4 \
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$CONC"
-    --mm-encoder-tp-mode data
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
