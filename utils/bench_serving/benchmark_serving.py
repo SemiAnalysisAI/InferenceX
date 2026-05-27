@@ -572,6 +572,7 @@ async def benchmark(
     print("Starting main benchmark run...")
 
     benchmark_start_time = time.perf_counter()
+    benchmark_start_time_unix = time.time()
     tasks: List[asyncio.Task] = []
     async for request in get_request(input_requests, request_rate, burstiness):
         prompt, prompt_len, output_len, mm_content = request
@@ -615,6 +616,7 @@ async def benchmark(
         pbar.close()
 
     benchmark_duration = time.perf_counter() - benchmark_start_time
+    benchmark_end_time_unix = time.time()
 
     metrics, actual_output_lens = calculate_metrics(
         input_requests=input_requests,
@@ -645,6 +647,8 @@ async def benchmark(
 
     result = {
         "duration": benchmark_duration,
+        "benchmark_start_time_unix": benchmark_start_time_unix,
+        "benchmark_end_time_unix": benchmark_end_time_unix,
         "completed": metrics.completed,
         "total_input_tokens": metrics.total_input,
         "total_output_tokens": metrics.total_output,
