@@ -41,7 +41,8 @@ WARMUP_ARGS=()
 CUDA_GRAPH_MAX_BS="$CONC"
 case "$OFFLOADING" in
     none)
-        CACHE_ARGS=(--disable-radix-cache)
+        # Leave SGLang's default RadixAttention prefix cache on — agentic
+        # replay needs it; --disable-radix-cache would zero the hit rate.
         ;;
     hicache)
         # MI355X nodes have about 3 TB of host DRAM, but Qwen3.5's hybrid

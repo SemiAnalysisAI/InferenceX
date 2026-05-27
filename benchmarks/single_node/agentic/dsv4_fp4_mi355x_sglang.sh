@@ -140,7 +140,6 @@ python3 -m sglang.launch_server \
     --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
-    --disable-radix-cache \
     --attention-backend compressed \
     --max-running-requests "$PER_ENGINE_MAX_RUNNING" \
     --cuda-graph-max-bs "$PER_ENGINE_MAX_RUNNING" \

@@ -46,7 +46,6 @@ python3 -m sglang.launch_server \
     --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
     --max-running-requests $CONC \
-    --disable-radix-cache \
     --max-prefill-tokens 32768 \
     --scheduler-recv-interval 30 \
     --mem-fraction-static 0.8 \

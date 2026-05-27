@@ -53,7 +53,6 @@ python3 -m sglang.launch_server \
 --chunked-prefill-size 32768 \
 --max-prefill-tokens 32768 \
 --context-length $MAX_MODEL_LEN \
---disable-radix-cache \
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
 --enable-flashinfer-allreduce-fusion \

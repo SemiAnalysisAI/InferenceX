@@ -38,7 +38,8 @@ mkdir -p "$RESULT_DIR"
 CACHE_ARGS=()
 case "$OFFLOADING" in
     none)
-        CACHE_ARGS=(--disable-radix-cache)
+        # Leave SGLang's default RadixAttention prefix cache on — agentic
+        # replay needs it; --disable-radix-cache would zero the hit rate.
         ;;
     hicache)
         # HiCache extends RadixAttention, so do not pass --disable-radix-cache.

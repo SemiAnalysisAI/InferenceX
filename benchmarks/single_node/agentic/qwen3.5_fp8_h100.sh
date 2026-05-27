@@ -13,7 +13,8 @@ set -x
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # OFFLOADING values:
-#   none    - SGLang GPU KV only with radix cache disabled.
+#   none    - SGLang GPU KV only (RadixAttention prefix cache stays on —
+#             agentic workloads rely on >95% theoretical hit rate).
 #   hicache - SGLang HiCache with local CPU hierarchical cache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -50,7 +51,8 @@ mkdir -p "$RESULT_DIR"
 CACHE_ARGS=()
 case "$OFFLOADING" in
     none)
-        CACHE_ARGS=(--disable-radix-cache)
+        # Leave SGLang's default RadixAttention prefix cache on — agentic
+        # replay needs it; --disable-radix-cache would zero the hit rate.
         ;;
     hicache)
         # HiCache extends RadixAttention, so do not pass --disable-radix-cache.

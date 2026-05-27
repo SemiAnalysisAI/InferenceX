@@ -58,7 +58,6 @@ python3 -m sglang.launch_server \
     --nsa-decode-backend tilelang \
     --kv-cache-dtype fp8_e4m3 \
     --tokenizer-worker-num $((TP*2)) \
-    --disable-radix-cache \
     --enable-metrics > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
