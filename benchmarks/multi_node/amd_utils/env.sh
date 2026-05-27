@@ -22,10 +22,11 @@ if [[ -z "$IBDEVICES" ]]; then
     DETECTED=$(ibv_devinfo 2>/dev/null | grep "hca_id:" | awk '{print $2}' | paste -sd',')
     if [[ -n "$DETECTED" ]]; then
         export IBDEVICES="$DETECTED"
+        echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES via ibv_devinfo on $(hostname -s)"
     else
-        echo "WARNING: Unable to detect RDMA devices. Set IBDEVICES explicitly." >&2
+        echo "ERROR: Unable to detect RDMA devices. Set IBDEVICES explicitly." >&2
+        exit 1
     fi
-    echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES from hostname $(hostname -s)"
 else
     echo "[INFO] Using IBDEVICES=$IBDEVICES (set by runner or environment)"
 fi
@@ -140,7 +141,7 @@ else
 
     # Enable spec v2
     export SGLANG_ENABLE_SPEC_V2=1
-    export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
+    export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
 
     export SGLANG_LOG_MS=true
     export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
