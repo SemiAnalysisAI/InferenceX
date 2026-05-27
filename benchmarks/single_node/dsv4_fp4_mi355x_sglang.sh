@@ -77,7 +77,7 @@ export SGLANG_FORCE_TRITON_MOE_FP8=0
 export SGLANG_HACK_FLASHMLA_BACKEND=triton
 export SGLANG_OPT_USE_TILELANG_INDEXER=true
 export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
-export AITER_BF16_FP8_MOE_BOUND=1
+export AITER_BF16_FP8_MOE_BOUND=0
 export SGLANG_OPT_FUSE_WQA_WKV=true
 export SGLANG_OPT_USE_FUSED_PAGED_COMPRESS=true
 export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=0
@@ -116,6 +116,8 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --attention-backend compressed \
     --max-running-requests ${CONC} \
+    --mem-fraction-static 0.90 \
+    --swa-full-tokens-ratio 0.15 \
     --page-size 256 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \
