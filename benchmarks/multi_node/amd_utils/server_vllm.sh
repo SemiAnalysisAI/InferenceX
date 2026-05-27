@@ -196,34 +196,6 @@ python3 $WS_PATH/sync.py barrier \
     --timeout 600
 
 # =============================================================================
-# ETCD Server Setup
-# =============================================================================
-
-# echo "Proceeding to start etcd server on $host_name"
-# bash ${WS_PATH}/start_etcd.sh > /dev/null 2>&1 &
-# etcd_pid=$!
-
-# echo "Waiting at etcd server barrier on $host_name"
-# python3 $WS_PATH/sync.py barrier \
-#     --node-ips ${IPADDRS} \
-#     --node-ports 2379 \
-#     --wait-for-all-ports \
-#     --timeout 300
-
-# echo "All etcd servers are up : $host_name"
-# sleep 3
-
-# echo "etcd endpoint health=================="
-# etcdctl endpoint health 2>&1 || /usr/local/bin/etcd/etcdctl endpoint health 2>&1 || true
-# echo "======================================"
-
-# python3 $WS_PATH/sync.py barrier \
-#     --node-ips ${IPADDRS} \
-#     --node-ports 2379 \
-#     --wait-for-all-ports \
-#     --timeout 300
-
-# =============================================================================
 # Cluster Topology Configuration
 # =============================================================================
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
@@ -245,15 +217,10 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
-# vLLM environment (UCX transport vars are set at the Docker level in job.slurm)
+# vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
-    export VLLM_USE_V1=1
-    export VLLM_SERVER_DEV_MODE=0
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
-    # Workaround: disable request-ID randomization so MoRI-IO connector can
-    # match completion IDs between prefill and decode without PR #34907 patch.
-    export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done

@@ -53,6 +53,10 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     # vLLM/Nixl-specific environment
     # =========================================================================
+    export VLLM_USE_V1=1
+    export VLLM_SERVER_DEV_MODE=0
+    export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
+
     set -x
 
     # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
