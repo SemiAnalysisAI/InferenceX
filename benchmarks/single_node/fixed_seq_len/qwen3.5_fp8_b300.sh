@@ -40,6 +40,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
 --attention-backend trtllm_mha \
+--mm-attention-backend triton_attn \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC \
 --max-running-requests $CONC \

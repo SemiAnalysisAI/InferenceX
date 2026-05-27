@@ -59,7 +59,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
-        BENCHMARK_SUBDIR="single_node"
+        BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
     JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
 
@@ -187,7 +187,11 @@ else
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    # Exclude known-bad mi355x compute nodes (KLAUD_DEBUG §5.1 / §5.2):
+    #   mia1-p01-g09: pyxis broken (persistently fails to create container filesystem)
+    #   mia1-p01-g11: docker.sock permissions denied (cluster-cleanup step fails)
+    # Both have been root-caused via #1431/#1432/#1440/#1441/#1443 sweep failures.
+    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -214,7 +218,7 @@ else
     fi
 
     # to prevent reading outdated saved model. use a fresh model from hf repo
-    if [[ "$FRAMEWORK" == "atom" ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+    if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
@@ -233,6 +237,7 @@ else
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
+        --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
 

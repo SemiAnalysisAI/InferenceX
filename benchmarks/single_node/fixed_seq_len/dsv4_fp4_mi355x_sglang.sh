@@ -55,10 +55,10 @@ PYEOF
 #                                    MoE fallback path.
 export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=true
-export SGLANG_OPT_USE_OLD_COMPRESSOR=true
+export SGLANG_OPT_USE_OLD_COMPRESSOR=false
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
 export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
-export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
+export SGLANG_OPT_USE_FUSED_HASH_TOPK=true
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
@@ -70,13 +70,17 @@ export SGLANG_USE_ROCM700A=1
 export SGLANG_TOPK_TRANSFORM_512_TORCH=0
 export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
 export SGLANG_DSV4_FP4_EXPERTS=True
-export SGLANG_OPT_DPSK_V4_RADIX=0
+export SGLANG_OPT_DPSK_V4_RADIX=1
 export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
-export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
+export SGLANG_OPT_USE_FUSED_STORE_CACHE=true
 export SGLANG_FORCE_TRITON_MOE_FP8=0
-export SGLANG_HACK_FLASHMLA_BACKEND=tilelang
+export SGLANG_HACK_FLASHMLA_BACKEND=triton
 export SGLANG_OPT_USE_TILELANG_INDEXER=true
 export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
+export AITER_BF16_FP8_MOE_BOUND=0
+export SGLANG_OPT_FUSE_WQA_WKV=true
+export SGLANG_OPT_USE_FUSED_PAGED_COMPRESS=true
+export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=0
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -112,7 +116,8 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --attention-backend compressed \
     --max-running-requests ${CONC} \
-    --cuda-graph-max-bs ${CONC} \
+    --mem-fraction-static 0.90 \
+    --swa-full-tokens-ratio 0.15 \
     --page-size 256 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \

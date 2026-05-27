@@ -1670,7 +1670,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1682,18 +1682,40 @@ dsr1-fp4-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
-    agentic-coding:
-    - duration: 1800
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
+    # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
+    # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
+    # `bmk_agentic_*`). Re-enable once that workflow is aligned.
+    # agentic-coding:
+    # - duration: 1800
+    #   search-space:
+    #   - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
+    #   - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
+
+dsr1-fp4-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: nvidia/DeepSeek-R1-0528-FP4-V2
+  model-prefix: dsr1
+  runner: b200
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
       search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
-      - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
@@ -1734,7 +1756,7 @@ dsv4-fp4-b200-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1829,7 +1851,7 @@ dsv4-fp4-b200-trt-mtp:
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1868,16 +1890,16 @@ dsr1-fp4-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 16 }
+      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
 
 dsr1-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1910,7 +1932,7 @@ dsr1-fp4-b200-trt:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
 dsr1-fp4-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1954,12 +1976,12 @@ dsr1-fp8-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -1977,12 +1999,12 @@ dsr1-fp8-b300-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
 
 # NOTE: https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
 # lists B200 (not B300) as the Blackwell target. This config reuses the
@@ -2056,7 +2078,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2075,7 +2097,7 @@ qwen3.5-bf16-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2093,27 +2115,25 @@ qwen3.5-bf16-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-# Diverged from qwen3.5-bf16-b200-sglang (agentic-coding sibling). Metadata is
-# identical to origin/main's qwen3.5-bf16-b200-sglang; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original qwen3.5-bf16-b200-sglang entry stays byte-identical to origin/main.
-qwen3.5-bf16-b200-sglang-agentic:
-  image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e
-  model: Qwen/Qwen3.5-397B-A17B
-  model-prefix: qwen3.5
-  runner: b200
-  precision: bf16
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+# agentic-coding sibling — temporarily disabled, blocked by e2e-tests.yml
+# artifact-name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads
+# as `bmk_agentic_*`). Re-enable once that workflow is aligned.
+# qwen3.5-bf16-b200-sglang-agentic:
+#   image: lmsysorg/sglang:v0.5.12-cu130
+#   model: Qwen/Qwen3.5-397B-A17B
+#   model-prefix: qwen3.5
+#   runner: b200
+#   precision: bf16
+#   framework: sglang
+#   multinode: false
+#   scenarios:
+#     agentic-coding:
+#     - duration: 1800
+#       search-space:
+#       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2153,7 +2173,7 @@ qwen3.5-fp8-b200-sglang-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2174,7 +2194,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2195,7 +2215,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 glm5-fp8-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b200
@@ -2214,7 +2234,7 @@ glm5-fp8-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b200
@@ -2241,7 +2261,7 @@ glm5-fp8-b200-sglang-mtp:
 # (either main had none or had a different conc/offload sweep).
 # The original glm5-fp8-b200-sglang entry stays byte-identical to origin/main.
 glm5-fp8-b200-sglang-agentic:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260317-1eea7448
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b200
@@ -2256,7 +2276,7 @@ glm5-fp8-b200-sglang-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2275,7 +2295,7 @@ glm5-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
 glm5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: b300
@@ -2381,7 +2401,7 @@ glm5-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2403,7 +2423,7 @@ qwen3.5-fp8-b200-sglang-mtp:
     
 
 qwen3.5-fp8-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b300
@@ -2422,7 +2442,7 @@ qwen3.5-fp8-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-b300-sglang:
-  image: lmsysorg/sglang:v0.5.10.post1-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b300
@@ -2456,7 +2476,7 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
 
 qwen3.5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2477,7 +2497,7 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2498,7 +2518,7 @@ qwen3.5-fp4-b300-sglang-mtp:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 qwen3.5-bf16-b300-sglang:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b300
@@ -2519,7 +2539,7 @@ qwen3.5-bf16-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.11-cu130
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b300
@@ -2590,7 +2610,7 @@ kimik2.5-int4-b200-vllm-agentic:
 # Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
@@ -2653,7 +2673,7 @@ kimik2.5-int4-h200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
 kimik2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.17.0
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200
@@ -2723,7 +2743,7 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -2756,11 +2776,11 @@ dsr1-fp8-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -2779,11 +2799,11 @@ dsr1-fp8-b300-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
 # Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
 # the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
@@ -2810,7 +2830,7 @@ kimik2.5-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -2833,7 +2853,7 @@ dsr1-fp8-b200-trt:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
 dsr1-fp8-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc6.post3
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b200
@@ -2875,11 +2895,30 @@ dsr1-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+dsr1-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # DeepSeek-V4-Pro H200 recipe from https://vllm.ai/blog/deepseek-v4
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
-  image: vllm/vllm-openai:deepseekv4-cu129
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2903,7 +2942,7 @@ dsv4-fp8-h200-vllm:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2998,7 +3037,7 @@ dsv4-fp8-h200-sglang-mtp:
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
   # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -3119,7 +3158,7 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.9-cu129-amd64
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -3157,10 +3196,10 @@ qwen3.5-fp8-h200-sglang-mtp:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 glm5-fp8-h200-sglang:
-  image: lmsysorg/sglang:glm5-hopper
+  image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
-  runner: h200
+  runner: h200-dgxc
   precision: fp8
   framework: sglang
   multinode: false
@@ -3175,8 +3214,27 @@ glm5-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+glm5-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: h200
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp8-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -3199,7 +3257,7 @@ dsr1-fp8-h200-trt:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
 
 dsr1-fp8-h200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.1.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -4212,7 +4270,7 @@ dsr1-fp8-h100-dynamo-trt:
           dp-attn: true
 
 gptoss-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.2.0rc2.post2
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -4241,7 +4299,7 @@ gptoss-fp4-b200-trt:
       - { tp: 8, conc-start:   4, conc-end:   4}
 
 gptoss-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -4287,7 +4345,7 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b200
@@ -4339,7 +4397,7 @@ minimaxm2.5-fp8-b200-vllm-agentic:
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -4388,7 +4446,7 @@ minimaxm2.5-fp8-b300-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
@@ -4443,7 +4501,7 @@ minimaxm2.5-fp4-b200-vllm-agentic:
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b300
@@ -4493,7 +4551,7 @@ gptoss-fp4-h100-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.19.1-cu130
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -4505,13 +4563,11 @@ minimaxm2.5-fp8-h100-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      # - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
 
 # Diverged from minimaxm2.5-fp8-h100-vllm (agentic-coding sibling). Metadata is
 # identical to origin/main's minimaxm2.5-fp8-h100-vllm; the split exists because this
@@ -4671,7 +4727,7 @@ dsr1-fp8-h100-dynamo-sglang:
           dp-attn: true
 
 gptoss-fp4-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc11
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h200
@@ -4734,11 +4790,11 @@ minimaxm2.5-fp8-h200-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
 
 # Diverged from minimaxm2.5-fp8-h200-vllm (agentic-coding sibling). Metadata is
 # identical to origin/main's minimaxm2.5-fp8-h200-vllm; the split exists because this
@@ -8555,7 +8611,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
 
       # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
       # 5 nodes total with a dedicated NATS/etcd infra node.
-      - conc-list: [128]
+      - conc-list: [128, 256, 512, 1024]
         spec-decoding: mtp
         prefill:
           num-worker: 1
@@ -8884,7 +8940,7 @@ dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang-staging:deepseek-v4-grace-blackwell-dev
+  image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
@@ -8981,6 +9037,219 @@ dsv4-fp4-gb300-dynamo-sglang:
           tp: 12
           ep: 12
           dp-attn: true
+
+glm5-fp8-b200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.11-cu130
+  model: zai-org/GLM-5-FP8
+  model-prefix: glm5
+  runner: b200-dgxc
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - conc-list: [2576]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [1248]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [800]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 3
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [576]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_3.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [512, 256, 128, 64, 32]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - conc-list: [560]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [240]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [224]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 3
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [200]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [128]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 5
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [64]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 7
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [12]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
 
 # MTP variant of dsv4-fp4-gb300-dynamo-sglang.
 dsv4-fp4-gb300-dynamo-sglang-mtp:
@@ -9108,3 +9377,237 @@ kimik2.5-int4-h100-vllm:
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
       - { tp: 8, offloading: cpu,  conc-list: [1, 2, 4, 8, 12, 16, 20] }
+
+qwen3.5-fp8-h100-sglang:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: h100
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
+
+qwen3.5-fp8-h100-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: h100
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
+glm5-fp4-gb300-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.11-cu130
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 5p1d wide-EP. 13 nodes (5P @ TP=4 + 1D @ TP=32 on 8 nodes).
+      - conc-list: [2048]
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 7p1d wide-EP. 15 nodes.
+      - conc-list: [3072]
+        prefill:
+          num-worker: 7
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 10p1d wide-EP. 18 nodes.
+      - conc-list: [4096]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p3d. 4 nodes (1P + 3 D workers @ 1 node each).
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 3
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p5d. 6 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p9d. 10 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 9
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p15d. 16 nodes.
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 15
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 3p1d wide-EP. 11 nodes. conc 16500.
+      - conc-list: [16500]
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 2p1d wide-EP. 10 nodes. conc 8300.
+      - conc-list: [8300]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p1d wide-EP. 9 nodes. conc sweep 2500x1024x512x256.
+      - conc-list: [2500, 1024, 512, 256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p17d low-latency, bs=32 sweep. 18 nodes.
+      - conc-list: [512, 256, 128, 64]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p17d low-latency, bs=1 (single-stream). 18 nodes.
+      - conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
