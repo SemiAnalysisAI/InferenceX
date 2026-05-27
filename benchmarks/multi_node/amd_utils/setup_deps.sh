@@ -763,7 +763,7 @@ fi
 
 _SETUP_END=$(date +%s)
 if [[ ${#_SETUP_INSTALLED[@]} -eq 0 ]]; then
-    echo "[SETUP] All dependencies already present (${_SETUP_END}s wallclock)"
+    echo "[SETUP] All dependencies already present ($(( _SETUP_END - _SETUP_START ))s wallclock)"
 else
     echo "[SETUP] Installed: ${_SETUP_INSTALLED[*]} in $(( _SETUP_END - _SETUP_START ))s"
 fi
