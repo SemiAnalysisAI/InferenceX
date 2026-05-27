@@ -1,4 +1,4 @@
-name: "svf-vllm-agg-gb200-flash-profile-16gpu-conc256-mtp3"
+name: "svf-vllm-agg-gb200-flash-profile-4gpu-conc256-mtp3"
 
 model:
   path: "deepseek-v4-flash"
@@ -21,9 +21,9 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 4
+  agg_nodes: 1
   agg_workers: 1
-  gpus_per_agg: 16
+  gpus_per_agg: 4
 
 frontend:
   type: dynamo
@@ -57,7 +57,7 @@ backend:
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
       data-parallel-hybrid-lb: true
-      data-parallel-size: 16
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
