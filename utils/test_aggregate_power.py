@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -445,3 +445,237 @@ def test_patch_agg_result_is_atomic_via_tempfile(tmp_path: Path):
     assert data["joules_per_total_token"] == 0.5
     # No .tmp leftover.
     assert not (tmp_path / "agg.json.tmp").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Multi-node CSV aggregation
+# --------------------------------------------------------------------------- #
+
+
+def test_aggregate_power_multi_node_namespaces_local_gpu_indices(tmp_path: Path):
+    """Two per-node CSVs each report local GPU indices 0..3.
+
+    Without per-source namespacing the union of gpu_keys would collapse to 4
+    instead of 8 — the bug this whole multinode change exists to prevent."""
+    base = 1_700_000_000.0
+    node1 = tmp_path / "perf_samples_node1.csv"
+    node2 = tmp_path / "perf_samples_node2.csv"
+    _write_nvidia_csv(node1, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+    _write_nvidia_csv(node2, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    result = aggregate_power([node1, node2], base, base + 10)
+    assert result is not None
+    avg_power, num_gpus = result
+    assert avg_power == pytest.approx(500.0)
+    assert num_gpus == 8
+
+
+def test_aggregate_power_multi_node_with_sub_second_clock_drift(tmp_path: Path):
+    """Per-node polls drift sub-second even on NTP-synced clusters.
+
+    Node1 polls at base+s, node2 at base+s+0.3 — rows land in different ms
+    buckets. Each bucket is then a single-node 4-GPU slice averaging to 500W,
+    and the mean across all buckets is the cluster per-GPU mean."""
+    base = 1_700_000_000.0
+    node1 = tmp_path / "perf_samples_node1.csv"
+    node2 = tmp_path / "perf_samples_node2.csv"
+    _write_nvidia_csv(node1, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+    _write_nvidia_csv(node2, [(base + s + 0.3, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    result = aggregate_power([node1, node2], base, base + 10)
+    assert result is not None
+    avg_power, num_gpus = result
+    assert avg_power == pytest.approx(500.0)
+    assert num_gpus == 8
+
+
+def test_aggregate_power_multi_node_asymmetric_prefill_decode_power(tmp_path: Path):
+    """Disagg topologies draw different per-GPU power on prefill vs decode nodes.
+
+    4 prefill GPUs at 600W + 4 decode GPUs at 400W: cluster mean is the
+    weighted average across all 8 GPUs = (4*600 + 4*400)/8 = 500W."""
+    base = 1_700_000_000.0
+    prefill = tmp_path / "perf_samples_prefill0.csv"
+    decode = tmp_path / "perf_samples_decode0.csv"
+    _write_nvidia_csv(prefill, [(base + s, gpu, 600.0) for s in range(3) for gpu in range(4)])
+    _write_nvidia_csv(decode, [(base + s, gpu, 400.0) for s in range(3) for gpu in range(4)])
+
+    result = aggregate_power([prefill, decode], base, base + 10)
+    assert result is not None
+    avg_power, num_gpus = result
+    assert avg_power == pytest.approx(500.0)
+    assert num_gpus == 8
+
+
+def test_aggregate_power_multi_node_skips_missing_csv_silently(tmp_path: Path):
+    """If a node failed to start perfmon, its CSV will be absent.
+
+    Aggregating over the remaining nodes is preferable to returning None —
+    losing one node's power data should not zero out the whole metric."""
+    base = 1_700_000_000.0
+    present = tmp_path / "perf_samples_node1.csv"
+    missing = tmp_path / "perf_samples_node2.csv"  # never written
+    _write_nvidia_csv(present, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    result = aggregate_power([present, missing], base, base + 10)
+    assert result is not None
+    avg_power, num_gpus = result
+    assert avg_power == pytest.approx(500.0)
+    assert num_gpus == 4  # only the node that emitted data
+
+
+def test_aggregate_power_single_path_in_list_matches_bare_path(tmp_path: Path):
+    """Backward compat: aggregate_power([csv], ...) == aggregate_power(csv, ...).
+
+    Single-source behavior must not change when the caller wraps the path in a
+    list — otherwise process_result.py-style callers that defensively normalize
+    to a list would see different num_gpus values than legacy bare-path calls."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_nvidia_csv(csv, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(8)])
+
+    bare = aggregate_power(csv, base, base + 10)
+    listed = aggregate_power([csv], base, base + 10)
+    assert bare == listed
+    assert bare == (pytest.approx(500.0), 8)
+
+
+def test_aggregate_power_accepts_iterable_not_just_list(tmp_path: Path):
+    """Signature is Iterable[Path] — generators (e.g. Path.glob()) must work."""
+    base = 1_700_000_000.0
+    node1 = tmp_path / "perf_samples_node1.csv"
+    node2 = tmp_path / "perf_samples_node2.csv"
+    _write_nvidia_csv(node1, [(base + s, gpu, 500.0) for s in range(2) for gpu in range(4)])
+    _write_nvidia_csv(node2, [(base + s, gpu, 500.0) for s in range(2) for gpu in range(4)])
+
+    result = aggregate_power(tmp_path.glob("perf_samples_*.csv"), base, base + 10)
+    assert result is not None
+    _, num_gpus = result
+    assert num_gpus == 8
+
+
+def test_run_multi_node_e2e_computes_joules_from_total_gpus(tmp_path: Path):
+    """End-to-end multinode: run() with a list of CSVs patches the agg JSON.
+
+    8 GPUs total at 500W for 10s → 40_000 J → 2.0 J/output_token for 20_000 tokens."""
+    base = 1_700_000_000.0
+    node1 = tmp_path / "perf_samples_node1.csv"
+    node2 = tmp_path / "perf_samples_node2.csv"
+    _write_nvidia_csv(node1, [(base + 1 + s, gpu, 500.0) for s in range(2) for gpu in range(4)])
+    _write_nvidia_csv(node2, [(base + 1 + s, gpu, 500.0) for s in range(2) for gpu in range(4)])
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(bench, start=base, end=base + 10, duration=10.0, total_output=20_000)
+    agg.write_text(json.dumps({"hw": "gb300", "conc": 8192}), encoding="utf-8")
+
+    exit_code = run([node1, node2], bench, agg)
+    assert exit_code == 0
+
+    patched = json.loads(agg.read_text())
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+    assert patched["joules_per_output_token"] == pytest.approx(2.0)
+
+
+def test_run_multi_node_skips_when_all_csvs_missing(tmp_path: Path):
+    """Entire monitoring failure (all per-node CSVs absent) skips cleanly without patching."""
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(bench, start=0.0, end=10.0, duration=10.0, total_output=1000)
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    exit_code = run([tmp_path / "absent1.csv", tmp_path / "absent2.csv"], bench, agg)
+    assert exit_code == 0
+
+    patched = json.loads(agg.read_text())
+    assert "avg_power_w" not in patched
+
+
+# --------------------------------------------------------------------------- #
+# _load_bench_window fallbacks for srt-slurm multinode result JSONs
+#
+# srt-slurm's sa-bench result writer emits `date` + `duration` but NOT the
+# benchmark_*_time_unix fields our single-node benchmark_serving.py adds.
+# Without a fallback, multinode runs would always hit "No bench window in
+# {bench_result}" and silently skip power aggregation end-to-end.
+# --------------------------------------------------------------------------- #
+
+
+def test_run_uses_date_field_when_unix_timestamps_absent(tmp_path: Path):
+    """Tier 2: parse `date` ("YYYYMMDD-HHMMSS" UTC) + `duration` for the window."""
+    # End of bench at a known UTC instant; CSV samples land in [end-10, end].
+    end_unix = datetime(2026, 5, 20, 3, 10, 29, tzinfo=timezone.utc).timestamp()
+    csv = tmp_path / "perf_samples_node0.csv"
+    _write_nvidia_csv(csv, [(end_unix - 1 - s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    bench = tmp_path / "bench.json"
+    bench.write_text(
+        json.dumps(
+            {
+                "date": "20260520-031029",
+                "duration": 10.0,
+                "total_output_tokens": 1000,
+                "total_input_tokens": 8000,
+            }
+        ),
+        encoding="utf-8",
+    )
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    assert run([csv], bench, agg) == 0
+    patched = json.loads(agg.read_text())
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+    # 4 GPUs × 500W × 10s = 20_000 J / 1000 output tokens = 20.0 J/output_token.
+    assert patched["joules_per_output_token"] == pytest.approx(20.0)
+    # 20_000 J / (1000 + 8000) total tokens ≈ 2.222 J/total_token.
+    assert patched["joules_per_total_token"] == pytest.approx(20_000 / 9_000)
+
+
+def test_run_uses_mtime_when_date_unparseable(tmp_path: Path):
+    """Tier 3a: malformed `date` falls through to file mtime as bench-end proxy."""
+    csv = tmp_path / "perf_samples_node0.csv"
+    bench = tmp_path / "bench.json"
+    bench.write_text(
+        json.dumps({"date": "not-a-date", "duration": 10.0, "total_output_tokens": 1000}),
+        encoding="utf-8",
+    )
+    # CSV samples bracket bench file's mtime so they fall inside the derived window.
+    end_unix = bench.stat().st_mtime
+    _write_nvidia_csv(csv, [(end_unix - 1 - s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+    assert run([csv], bench, agg) == 0
+    patched = json.loads(agg.read_text())
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+
+
+def test_run_uses_mtime_when_no_date_field(tmp_path: Path):
+    """Tier 3b: bench JSON has only `duration` → file mtime is end-of-bench."""
+    csv = tmp_path / "perf_samples_node0.csv"
+    bench = tmp_path / "bench.json"
+    bench.write_text(
+        json.dumps({"duration": 10.0, "total_output_tokens": 1000}),
+        encoding="utf-8",
+    )
+    end_unix = bench.stat().st_mtime
+    _write_nvidia_csv(csv, [(end_unix - 1 - s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+    assert run([csv], bench, agg) == 0
+    patched = json.loads(agg.read_text())
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+
+
+def test_run_skips_when_duration_missing(tmp_path: Path):
+    """No tier can resolve a window without `duration` — skip cleanly."""
+    csv = tmp_path / "perf_samples_node0.csv"
+    _write_nvidia_csv(csv, [(1_700_000_000.0, 0, 400.0)])
+    bench = tmp_path / "bench.json"
+    bench.write_text(json.dumps({"total_output_tokens": 1000}), encoding="utf-8")
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    assert run([csv], bench, agg) == 0
+    assert "avg_power_w" not in json.loads(agg.read_text())
