@@ -210,6 +210,7 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
+    local tokenizer=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -276,6 +277,10 @@ run_benchmark_serving() {
                 ;;
             --server-pid)
                 server_pid="$2"
+                shift 2
+                ;;
+            --tokenizer)
+                tokenizer="$2"
                 shift 2
                 ;;
             *)
@@ -383,6 +388,10 @@ run_benchmark_serving() {
     # Add --trust-remote-code if requested
     if [[ "$trust_remote_code" == true ]]; then
         benchmark_cmd+=(--trust-remote-code)
+    fi
+
+    if [[ -n "$tokenizer" ]]; then
+        benchmark_cmd+=(--tokenizer "$tokenizer")
     fi
 
     # Run benchmark with optional server monitoring
