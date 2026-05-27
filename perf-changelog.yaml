@@ -3138,3 +3138,17 @@
   description:
     - "Add --use-chat-template to run_benchmark_serving so prompts are formatted with the Qwen chat template (matching the other Qwen MTP recipes)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1555
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update MiniMax-M2.5 FP8 H200 vLLM to vllm/vllm-openai:v0.20.1-ubuntu2404"
+    - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Validates measured-power aggregation pipeline (PR #1558) on both NVIDIA (H200) and AMD (MI355X) hardware — different SMI tools (nvidia-smi vs amd-smi), different CSV schemas (power.draw [W] vs socket_power), same aggregator. No config change. Entry intentionally kept past merge so run-sweep produces canonical agg JSONs with avg_power_w + joules_per_output_token on main for both vendors, seeding the dashboard's day-zero data."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558

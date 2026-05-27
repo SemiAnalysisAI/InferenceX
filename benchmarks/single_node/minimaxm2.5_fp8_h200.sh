@@ -27,23 +27,40 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
-if [ "$EP_SIZE" -ge 1 ]; then
-  EP=" --enable-expert-parallel"
+export PYTHONNOUSERSITE=1
+export SAFETENSORS_FAST_GPU=1
+export VLLM_USE_DEEP_GEMM=0
+export VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER=0
+export VLLM_FLOAT32_MATMUL_PRECISION=high
+
+COMPILATION_CONFIG=${COMPILATION_CONFIG:-'{"mode":3,"cudagraph_mode":"PIECEWISE","pass_config":{"fuse_minimax_qk_norm":true}}'}
+MAX_NUM_SEQS=${MAX_NUM_SEQS:-512}
+MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-32768}
+
+if [ "$EP_SIZE" -gt 1 ]; then
+  EP=(--enable-expert-parallel)
 else
-  EP=" "
+  EP=()
 fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL --port $PORT \
---tensor-parallel-size=$TP \
-$EP \
+vllm serve "$MODEL" --port "$PORT" \
+--tensor-parallel-size="$TP" \
+"${EP[@]}" \
 --gpu-memory-utilization 0.95 \
---max-model-len $MAX_MODEL_LEN \
+--max-model-len "$MAX_MODEL_LEN" \
+--max-num-seqs "$MAX_NUM_SEQS" \
+--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
+--kv-cache-dtype fp8 \
+--moe-backend triton \
+--attention-backend FLASHINFER \
+--enable-flashinfer-autotune \
+--compilation-config "$COMPILATION_CONFIG" \
 --no-enable-prefix-caching \
---trust-remote-code > $SERVER_LOG 2>&1 &
+--trust-remote-code > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
