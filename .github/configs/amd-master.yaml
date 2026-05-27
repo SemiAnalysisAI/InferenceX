@@ -1774,7 +1774,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-8c3b5aa-20260521-DSv4
+  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260526-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1786,12 +1786,12 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 4096 }
       - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 512 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
