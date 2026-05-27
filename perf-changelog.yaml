@@ -2450,6 +2450,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1346
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Fix the eval result of dsr1 fp4 with fp8 blockwise combine"
+    - "Bump the image to May 19"
+    - "Add conc 512 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1566
+
+- config-keys:
     - kimik2.5-int4-h200-vllm
   description:
     - "Update vLLM image from v0.16.0 to v0.20.2"
