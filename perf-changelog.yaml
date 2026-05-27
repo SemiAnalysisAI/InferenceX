@@ -3171,3 +3171,12 @@
   description:
     - "Validates measured-power aggregation pipeline (PR #1558) on both NVIDIA (H200) and AMD (MI355X) hardware — different SMI tools (nvidia-smi vs amd-smi), different CSV schemas (power.draw [W] vs socket_power), same aggregator. No config change. Entry intentionally kept past merge so run-sweep produces canonical agg JSONs with avg_power_w + joules_per_output_token on main for both vendors, seeding the dashboard's day-zero data."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 MI355X SGLang disaggregated prefill-decode benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511"
+    - "1P+1D TP8/EP1 smoke sweep for 1k1k and 8k1k (conc 8-512); MoRI transfer backend"
+    - "Add models.yaml server flags and multinode launch script qwen3.5_fp8_mi355x_sglang-disagg.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1570
