@@ -69,7 +69,7 @@ backend:
       max-num-seqs: 256
       max-num-batched-tokens: 2048
       max-cudagraph-capture-size: 256
-      profiler-config: '{"profiler":"torch","torch_profiler_dir":"/logs/profiles/agg","ignore_frontend":true,"delay_iterations":1152,"max_iterations":1,"active_iterations":1,"torch_profiler_with_stack":false}'
+      profiler-config: '{"profiler":"torch","torch_profiler_dir":"/logs/profiles/agg","ignore_frontend":true,"delay_iterations":1296,"max_iterations":1,"active_iterations":1,"torch_profiler_with_stack":false}'
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -84,8 +84,8 @@ backend:
 profiling:
   type: "torch"
   aggregated:
-    start_step: 1152
-    stop_step: 1153
+    start_step: 1296
+    stop_step: 1297
 
 benchmark:
   type: "sa-bench"
