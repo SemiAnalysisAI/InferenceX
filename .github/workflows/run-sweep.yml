@@ -217,7 +217,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -262,7 +262,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -281,7 +281,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -318,7 +318,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -338,7 +338,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -377,7 +377,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -423,7 +423,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
@@ -461,7 +461,7 @@ jobs:
         needs: [setup, canary-select, canary-sweep]
         if: >-
             ${{
-              always() &&
+              !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
