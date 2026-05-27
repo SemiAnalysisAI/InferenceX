@@ -210,6 +210,7 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
+    local profile_extra_body=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -278,6 +279,10 @@ run_benchmark_serving() {
                 server_pid="$2"
                 shift 2
                 ;;
+            --profile-extra-body)
+                profile_extra_body="$2"
+                shift 2
+                ;;
             *)
                 echo "Unknown parameter: $1"
                 return 1
@@ -340,7 +345,7 @@ run_benchmark_serving() {
             mkdir -p "$_prof_dir"
         fi
         profile_flag+=(--profile)
-        num_prompts="$max_concurrency"
+        num_prompts="${PROFILE_NUM_PROMPTS:-$max_concurrency}"
     fi
 
     # Build benchmark command
@@ -383,6 +388,11 @@ run_benchmark_serving() {
     # Add --trust-remote-code if requested
     if [[ "$trust_remote_code" == true ]]; then
         benchmark_cmd+=(--trust-remote-code)
+    fi
+
+    # Add --profile-extra-body if provided
+    if [[ -n "$profile_extra_body" ]]; then
+        benchmark_cmd+=(--profile-extra-body "$profile_extra_body")
     fi
 
     # Run benchmark with optional server monitoring
