@@ -904,14 +904,14 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-with-subagents-051926"
+    local dataset="semianalysisai/cc-traces-weka-with-subagents-052726"
     # aiperf reads the corpus via its public-dataset registry. The
     # inferencex-agentx-mvp scenario hard-requires loader=one of
     # ['semianalysis_cc_traces_weka_with_subagents', 'weka_trace'] (see
     # aiperf src/aiperf/common/scenario/inferencex_agentx_mvp.py's
     # `require_loader`). The with-subagents corpus captures the parent +
     # Task-tool sub-agent fan-out structure of real Claude Code sessions
-    # (219 traces, v5-only, CC >= 2.1.139, classifier-call OSL spike
+    # (472 traces, v5-only, CC >= 2.1.139, classifier-call OSL spike
     # filtered).
     TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka_with_subagents"
     echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_with_subagents ($dataset)"
@@ -969,7 +969,7 @@ build_replay_cmd() {
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the 949-trace weka corpus on fast /tmp
+    # routinely takes 4-5 min for the Weka corpus on fast /tmp
     # (B300) but can stretch to 14 min on slower /tmp + parallel contention
     # (observed on H200 where all 14 R3 jobs hit aiperf's 900s Configure
     # Profiling timeout simultaneously). Bump to 1800s to absorb 3x
@@ -1019,11 +1019,11 @@ build_replay_cmd() {
     if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
         REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
     fi
-    # Default --num-dataset-entries is 100; the with-subagents weka corpus
-    # has 219. Cap at 219 so all unique traces are loaded (the loader treats
+    # Default --num-dataset-entries is 100; the with-subagents Weka corpus
+    # has 472. Cap at 472 so all unique traces are loaded (the loader treats
     # this as a ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 219"
+    REPLAY_CMD+=" --num-dataset-entries 472"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
