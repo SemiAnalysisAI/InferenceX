@@ -3181,3 +3181,13 @@
     - "Add models.yaml server flags and multinode launch script qwen3.5_fp8_mi355x_sglang-disagg.sh"
     - "8k1k row uses dp-attn=false (matches 1k1k): with --enable-dp-attention + --moe-a2a-backend mori, sglang auto-promotes moe_ep_size=tp_size=8, but is_deepep_class_backend() excludes MoRI, so num_shared_slots stays at the global value (1) and the (num_experts - num_shared_slots) % moe_ep_size assertion in fused_moe_triton/layer.py fires for Qwen3.5 (512 routed + 1 shared). Track upstream sglang; flip back to dp-attn=true once MoRI is added to is_deepep_class_backend() or shared-slot accounting is reconciled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1570
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang-disagg
+  description:
+    - "Add GLM-5-FP8 MI355X SGLang disaggregated prefill-decode benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517 (matches glm5-fp8-mi355x-sglang)"
+    - "1P+1D TP8/EP1 CI smoke sweep for 1k1k and 8k1k (conc 8-512)"
+    - "Add GLM-5-FP8 models.yaml flags, setup_deps.sh (aiter gluon + transformers glm_moe_dsa), GLM-5 env tuning in env.sh"
+    - "Add multinode launch script glm5_fp8_mi355x_sglang-disagg.sh; server.sh sources setup_deps.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1572
