@@ -3171,3 +3171,9 @@
   description:
     - "Validates measured-power aggregation pipeline (PR #1558) on both NVIDIA (H200) and AMD (MI355X) hardware — different SMI tools (nvidia-smi vs amd-smi), different CSV schemas (power.draw [W] vs socket_power), same aggregator. No config change. Entry intentionally kept past merge so run-sweep produces canonical agg JSONs with avg_power_w + joules_per_output_token on main for both vendors, seeding the dashboard's day-zero data."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Smoke run validating multinode measured-power aggregation (PR #1574). No config change; entry exists to trigger a sweep that produces the first multinode agg JSON with avg_power_w + joules_per_*_token populated from per-node srt-slurm perfmon CSVs. Validates per-source GPU-id namespacing in aggregate_power.py (without it, 14 nodes × 4 GPUs would report num_gpus=4 instead of 56) and the GPU_METRICS_CSV_GLOB env var bridge in process_result.py. Only the gb300-cw runner has the perfmon launcher changes; any gb300-nv runs in the sweep will succeed normally without power fields, which the dashboard handles gracefully (chart gates on field presence)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1574
