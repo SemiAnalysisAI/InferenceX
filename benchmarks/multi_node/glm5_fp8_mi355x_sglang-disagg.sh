@@ -19,7 +19,8 @@ check_env_vars \
     DECODE_DP_ATTN \
     PREFILL_NODES \
     DECODE_NODES \
-    RANDOM_RANGE_RATIO
+    RANDOM_RANGE_RATIO \
+    FRAMEWORK
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -73,7 +74,7 @@ JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     ${DECODE_ENABLE_EP} ${DECODE_ENABLE_DP} \
     ${PREFILL_TP} ${DECODE_TP} \
     ${RANDOM_RANGE_RATIO} \
-    ${NODE_LIST:-})
+    "${NODELIST:-}")
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to submit job" >&2
