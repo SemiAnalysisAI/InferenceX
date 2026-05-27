@@ -2699,13 +2699,15 @@ kimik2.5-fp4-b200-vllm:
 # Diverged from kimik2.5-fp4-b200-vllm (agentic-coding sibling). Reasons below;
 # the original kimik2.5-fp4-b200-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.17.0' -> 'vllm/vllm-openai:v0.20.2'
+#   - image: 'vllm/vllm-openai:v0.17.0' -> 'vllm/vllm-openai:v0.21.0'
 #   - runner: 'b200' -> 'b200-dgxc'
 kimik2.5-fp4-b200-vllm-agentic:
-  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
-  # cleared the agentic-coding warmup crash on max_model_len=131072 +
-  # prefix caching.
-  image: vllm/vllm-openai:v0.20.2
+  # v0.21.0 ships a newer huggingface_hub that resolves LFS content correctly
+  # in `hf download` (1.14.0 in v0.20.x silently fetched LFS pointer files,
+  # which pyarrow then choked on with "Missing a name for object member" --
+  # see run 26536606210). v0.20.x's flashinfer fix for the agentic-coding
+  # warmup crash on max_model_len=131072 + prefix caching is included.
+  image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200-dgxc
