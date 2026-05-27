@@ -3161,7 +3161,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
 
 - config-keys:
-    - kimik2.5-int4-h100-vllm
+    - gptoss-fp4-h100-vllm
   description:
-    - "TEMP T3 redo for PR #1503 — DO NOT MERGE — verifies empty-canary-config skip path (agentic-only config) + agentic fan-out on full search space under !cancelled() gate"
+    - "TEMP T1 redo for PR #1503 — DO NOT MERGE — verifies canary success → fan-out runs on remaining-search-space-config (canary entry de-duped) under !cancelled() gate"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1503
