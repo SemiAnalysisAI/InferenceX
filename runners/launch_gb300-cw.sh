@@ -12,8 +12,13 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/mnt/vast/models/dsv4"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="main"
+        # Pinned to our SemiAnalysisAI fork of NVIDIA/srt-slurm to pick up
+        # PR #35 (per-node nvidia-smi monitoring during the benchmark sweep)
+        # ahead of its upstream merge. The branch tracks PR #35's head SHA:
+        # to bump, re-fetch refs/pull/35/head from NVIDIA/srt-slurm and force-
+        # push to SemiAnalysisAI/srt-slurm:feat/inferencex-perfmon.
+        SRT_SLURM_RECIPES_REPO="https://github.com/SemiAnalysisAI/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="feat/inferencex-perfmon"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -105,6 +110,19 @@ git checkout "$SRT_SLURM_RECIPES_REF"
 # Overlay the hand-rolled DSV4 recipes onto the selected srt-slurm checkout.
 mkdir -p "$SRT_RECIPE_DST"
 cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
+
+# Enable per-node GPU perfmon (PR #35) on every overlaid recipe. `monitoring`
+# is a top-level SrtConfig field and defaults to None, so without this the
+# orchestrator's _start_perf_monitor short-circuits and no perf_samples_*.csv
+# are ever written — multinode measured-power aggregation would silently
+# skip. Idempotent: skips recipes that already declare `monitoring:`.
+for recipe in "$SRT_RECIPE_DST"/*.yaml; do
+    [ -f "$recipe" ] || continue
+    if ! grep -q '^monitoring:' "$recipe"; then
+        printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$recipe"
+        echo "[perfmon] enabled monitoring in recipe: $recipe"
+    fi
+done
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -277,6 +295,25 @@ if [ -d "$LOGS_DIR" ]; then
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+# Hand the per-node perfmon CSVs off to the downstream "Process result" step
+# in benchmark-multinode-tmpl.yml. srt-slurm's perfmon (PR #35) writes
+# perf_samples_{node}.csv straight into $LOGS_DIR on the host. process_result.py
+# already invokes aggregate_power.run() inline; teaching it to read
+# GPU_METRICS_CSV_GLOB lets utils/aggregate_power.py do the multi-CSV
+# aggregation (each agg JSON gets avg_power_w / joules_per_*_token patched in
+# place). Use an absolute glob because process_result.py runs from
+# $GITHUB_WORKSPACE, not from this srt-slurm checkout.
+if [ -d "$LOGS_DIR" ]; then
+    perf_glob_dir="$(pwd)/$LOGS_DIR"
+    perf_csv_count=$(ls "$perf_glob_dir"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$perf_csv_count" -gt 0 ]; then
+        echo "[perfmon] Found $perf_csv_count per-node perf_samples_*.csv under $perf_glob_dir/"
+        echo "GPU_METRICS_CSV_GLOB=$perf_glob_dir/perf_samples_*.csv" >> "$GITHUB_ENV"
+    else
+        echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv found in $perf_glob_dir — measured power aggregation will be skipped"
+    fi
 fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
