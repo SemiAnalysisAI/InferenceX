@@ -190,8 +190,16 @@ def aggregate_power(
     return mean(per_sample_mean_per_gpu), num_gpus
 
 
-def _load_bench_window(bench_result_path: Path) -> tuple[float, float, float, int] | None:
-    """Read (start_unix, end_unix, duration_s, total_output_tokens) from the raw bench JSON."""
+def _load_bench_window(
+    bench_result_path: Path,
+) -> tuple[float, float, float, int, int] | None:
+    """Read (start_unix, end_unix, duration_s, total_output_tokens, total_input_tokens)
+    from the raw bench JSON. Returns None if any required field is missing.
+
+    total_input_tokens defaults to 0 if absent (older bench JSONs may not have it);
+    this only degrades joules_per_total_token to equal joules_per_output_token in
+    that case, never breaks the rest of the aggregation.
+    """
     try:
         bench = json.loads(bench_result_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -200,22 +208,27 @@ def _load_bench_window(bench_result_path: Path) -> tuple[float, float, float, in
     end = bench.get("benchmark_end_time_unix")
     duration = bench.get("duration")
     total_output = bench.get("total_output_tokens")
+    total_input = bench.get("total_input_tokens", 0)
     if not all(isinstance(v, (int, float)) for v in (start, end, duration)):
         return None
     if not isinstance(total_output, int) or total_output <= 0:
         return None
-    return float(start), float(end), float(duration), int(total_output)
+    if not isinstance(total_input, int) or total_input < 0:
+        total_input = 0
+    return float(start), float(end), float(duration), int(total_output), int(total_input)
 
 
 def patch_agg_result(
     agg_path: Path,
     avg_power_w: float,
     joules_per_output_token: float,
+    joules_per_total_token: float,
 ) -> None:
-    """Read the agg JSON, add the two power keys, and write it back atomically."""
+    """Read the agg JSON, add the three power keys, and write it back atomically."""
     data = json.loads(agg_path.read_text(encoding="utf-8"))
     data["avg_power_w"] = round(avg_power_w, 3)
     data["joules_per_output_token"] = round(joules_per_output_token, 6)
+    data["joules_per_total_token"] = round(joules_per_total_token, 6)
     tmp_path = agg_path.with_suffix(agg_path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp_path.replace(agg_path)
@@ -229,7 +242,7 @@ def run(csv_path: Path, bench_result: Path, agg_result: Path) -> int:
             file=sys.stderr,
         )
         return 0
-    start, end, duration, total_output = window
+    start, end, duration, total_output, total_input = window
 
     result = aggregate_power(csv_path, start, end)
     if result is None:
@@ -241,8 +254,15 @@ def run(csv_path: Path, bench_result: Path, agg_result: Path) -> int:
         return 0
     avg_power_w, num_gpus = result
 
-    # Joules consumed by the system during the bench window / output tokens.
-    joules_per_output_token = (avg_power_w * num_gpus * duration) / total_output
+    # Joules consumed by the system during the bench window, divided by either
+    # output tokens (for generation-cost metrics) or all tokens (for whole-
+    # workload efficiency).
+    total_system_energy_j = avg_power_w * num_gpus * duration
+    joules_per_output_token = total_system_energy_j / total_output
+    total_tokens = total_output + total_input
+    joules_per_total_token = (
+        total_system_energy_j / total_tokens if total_tokens > 0 else joules_per_output_token
+    )
 
     if not agg_result.is_file():
         print(
@@ -252,7 +272,9 @@ def run(csv_path: Path, bench_result: Path, agg_result: Path) -> int:
         return 0
 
     try:
-        patch_agg_result(agg_result, avg_power_w, joules_per_output_token)
+        patch_agg_result(
+            agg_result, avg_power_w, joules_per_output_token, joules_per_total_token
+        )
     except (OSError, json.JSONDecodeError) as exc:
         print(f"[aggregate_power] Failed to patch {agg_result}: {exc}", file=sys.stderr)
         return 0
@@ -260,7 +282,9 @@ def run(csv_path: Path, bench_result: Path, agg_result: Path) -> int:
     print(
         f"[aggregate_power] avg_power_w={avg_power_w:.2f} (per GPU, n={num_gpus}) "
         f"joules_per_output_token={joules_per_output_token:.4f} "
-        f"duration={duration:.1f}s output_tokens={total_output} -> {agg_result}"
+        f"joules_per_total_token={joules_per_total_token:.4f} "
+        f"duration={duration:.1f}s output_tokens={total_output} input_tokens={total_input} "
+        f"-> {agg_result}"
     )
     return 0
 

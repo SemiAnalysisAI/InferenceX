@@ -8,6 +8,7 @@ Covers:
     then mean over samples — yields per-GPU mean)
   - Missing / empty / malformed CSV: returns None, no exception
   - End-to-end run(): patches agg JSON with avg_power_w + joules_per_output_token
+    + joules_per_total_token
   - Missing bench window keys: skips gracefully without patching
 """
 from __future__ import annotations
@@ -283,7 +284,15 @@ def test_aggregate_power_invalid_window_returns_none(tmp_path: Path):
 # --------------------------------------------------------------------------- #
 
 
-def _write_bench_result(path: Path, *, start: float, end: float, duration: float, total_output: int) -> None:
+def _write_bench_result(
+    path: Path,
+    *,
+    start: float,
+    end: float,
+    duration: float,
+    total_output: int,
+    total_input: int = 0,
+) -> None:
     path.write_text(
         json.dumps(
             {
@@ -291,6 +300,7 @@ def _write_bench_result(path: Path, *, start: float, end: float, duration: float
                 "benchmark_end_time_unix": end,
                 "duration": duration,
                 "total_output_tokens": total_output,
+                "total_input_tokens": total_input,
             }
         ),
         encoding="utf-8",
@@ -324,6 +334,54 @@ def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
     assert patched["avg_power_w"] == pytest.approx(500.0)
     # J/output_token = 500W × 8 GPUs × 10s / 20_000 tokens = 2.0
     assert patched["joules_per_output_token"] == pytest.approx(2.0)
+    # No input tokens were supplied -> J/total_token falls back to J/output_token.
+    assert patched["joules_per_total_token"] == pytest.approx(2.0)
+
+
+def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
+    """Verifies the J/total-token metric uses (input + output) as denominator.
+
+    For long-prompt workloads (8K in, 1K out) this should be ~9x smaller than
+    J/output-token because the workload's total token count is 9x the output.
+    """
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_nvidia_csv(
+        csv,
+        [
+            (base + 1 + sample_idx, gpu, 500.0)
+            for sample_idx in range(2)
+            for gpu in range(8)
+        ],
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    # 64 prompts × 8K input + 1K output each = 524_288 input, 65_536 output.
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        total_output=65_536,
+        total_input=524_288,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(csv, bench, agg)
+    assert exit_code == 0
+
+    patched = json.loads(agg.read_text())
+    system_energy = 500.0 * 8 * 10.0  # 40_000 J
+    # Aggregator rounds to 6 decimal places, so allow a generous tolerance.
+    assert patched["joules_per_output_token"] == pytest.approx(
+        system_energy / 65_536, abs=1e-5
+    )
+    assert patched["joules_per_total_token"] == pytest.approx(
+        system_energy / (65_536 + 524_288), abs=1e-5
+    )
+    # Sanity: 8k1k workload makes J/total roughly 9x smaller than J/output.
+    ratio = patched["joules_per_output_token"] / patched["joules_per_total_token"]
+    assert 8.5 < ratio < 9.5
 
 
 def test_run_skips_when_bench_window_missing(tmp_path: Path):
@@ -375,9 +433,15 @@ def test_run_skips_when_total_output_tokens_zero(tmp_path: Path):
 def test_patch_agg_result_is_atomic_via_tempfile(tmp_path: Path):
     agg = tmp_path / "agg.json"
     agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
-    patch_agg_result(agg, avg_power_w=400.0, joules_per_output_token=1.5)
+    patch_agg_result(
+        agg,
+        avg_power_w=400.0,
+        joules_per_output_token=1.5,
+        joules_per_total_token=0.5,
+    )
     data = json.loads(agg.read_text())
     assert data["avg_power_w"] == 400.0
     assert data["joules_per_output_token"] == 1.5
+    assert data["joules_per_total_token"] == 0.5
     # No .tmp leftover.
     assert not (tmp_path / "agg.json.tmp").exists()
