@@ -228,6 +228,10 @@ jobs:
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
+          echo "Removing stale profile artifacts from previous runs"
+          rm -rf LOGS
+          rm -f profile_*.trace.json.gz multinode_server_logs.tar.gz
+
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
           if [ ! -f "${res_name}.json" ]; then
@@ -246,26 +250,22 @@ jobs:
           from pathlib import Path
 
           root = Path("LOGS")
-          candidates = [
-              p for p in root.rglob("*")
-              if p.is_file() and (
-                  p.name.endswith(".trace.json")
-                  or p.name.endswith(".trace.json.gz")
-                  or p.name.endswith(".pt.trace.json")
-                  or p.name.endswith(".pt.trace.json.gz")
-                  or p.name.endswith(".json.gz")
-                  or p.name.endswith(".json")
-              )
-          ]
-          candidates = [
-              p for p in candidates
-              if not p.name.startswith("results_") and "profile_export" not in p.name
-          ]
+
+          def is_trace_candidate(path: Path) -> bool:
+              name = path.name
+              if name.startswith("results_") or "profile_export" in name:
+                  return False
+              if name.endswith((".trace.json", ".trace.json.gz", ".pt.trace.json", ".pt.trace.json.gz")):
+                  return True
+              return "trace" in name and name.endswith((".json", ".json.gz"))
+
+          candidates = [p for p in root.rglob("*") if p.is_file() and is_trace_candidate(p)]
           if candidates:
-              print(max(candidates, key=lambda p: p.stat().st_size))
+              print(max(candidates, key=lambda p: (p.stat().st_mtime_ns, p.stat().st_size)))
           PY
           )"
             if [ -n "$trace_candidate" ] && [ -f "$trace_candidate" ]; then
+              echo "Selected profile trace candidate: $trace_candidate"
               if [[ "$trace_candidate" == *.gz ]]; then
                 cp "$trace_candidate" "$trace_path"
               else
@@ -275,6 +275,48 @@ jobs:
           fi
 
           if [ -f "$trace_path" ]; then
+            echo "Profile trace prepared: $trace_path"
+            ls -lh "$trace_path"
+            sha256sum "$trace_path"
+            python3 - "$trace_path" <<'PY'
+          import gzip
+          import os
+          import re
+          import sys
+
+          trace_path = sys.argv[1]
+          expected = set()
+          worker_gpus = []
+          for workers_key, tp_key in (
+              ("PREFILL_NUM_WORKERS", "PREFILL_TP"),
+              ("DECODE_NUM_WORKERS", "DECODE_TP"),
+          ):
+              workers = os.environ.get(workers_key)
+              tp = os.environ.get(tp_key)
+              if workers and workers.isdigit() and tp and tp.isdigit():
+                  gpus = int(workers) * int(tp)
+                  if gpus:
+                      expected.add(gpus)
+                      worker_gpus.append(gpus)
+          if len(worker_gpus) > 1:
+              expected.add(sum(worker_gpus))
+
+          opener = gzip.open if trace_path.endswith(".gz") else open
+          with opener(trace_path, "rt", errors="replace") as f:
+              prefix = f.read(1024 * 1024)
+
+          if '"traceEvents"' not in prefix:
+              raise SystemExit(f"{trace_path} does not look like a Perfetto trace: traceEvents key not found near start")
+
+          match = re.search(r'"world_size"\s*:\s*(\d+)', prefix)
+          if expected and match:
+              world_size = int(match.group(1))
+              if world_size not in expected:
+                  allowed = ", ".join(str(v) for v in sorted(expected))
+                  raise SystemExit(
+                      f"{trace_path} has distributed world_size={world_size}, expected one of: {allowed}"
+                  )
+          PY
             echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
             if [ "${FRAMEWORK}" = "sglang" ]; then
               # Try to locate corresponding TP-0 traces produced by SGLang profiler

@@ -304,6 +304,7 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    rm -rf "$GITHUB_WORKSPACE/LOGS"
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 else
