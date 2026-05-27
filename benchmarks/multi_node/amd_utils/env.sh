@@ -140,6 +140,13 @@ else
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 
+    # GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
+    if [[ "$MODEL_NAME" == "GLM-5-FP8" ]]; then
+        export SGLANG_ROCM_FUSED_DECODE_MLA=0
+        export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+        export SAFETENSORS_FAST_GPU=1
+    fi
+
     # Disable allocating memory in one pass
     export MORI_SHMEM_MODE=ISOLATION
 
