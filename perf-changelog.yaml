@@ -3137,3 +3137,9 @@
     - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
 
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-f96ac98-20260526-DSv4"
+    - "Add args to avoid kvcache pool full issue on high conc"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1568
