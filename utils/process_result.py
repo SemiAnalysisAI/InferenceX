@@ -133,5 +133,28 @@ for key, value in bmk_result.items():
 
 print(json.dumps(data, indent=2))
 
-with open(f'agg_{result_filename}.json', 'w') as f:
+agg_path = Path(f'agg_{result_filename}.json')
+with open(agg_path, 'w') as f:
     json.dump(data, f, indent=2)
+
+# Best-effort: patch measured power into the agg JSON. Never fails the run.
+try:
+    from aggregate_power import run as _aggregate_power_run
+
+    _csv_candidates = [
+        os.environ.get('GPU_METRICS_CSV'),
+        'gpu_metrics.csv',
+        '/workspace/gpu_metrics.csv',
+    ]
+    _csv_path = next(
+        (Path(p) for p in _csv_candidates if p and Path(p).is_file()),
+        None,
+    )
+    if _csv_path is not None:
+        _aggregate_power_run(
+            csv_path=_csv_path,
+            bench_result=Path(f'{result_filename}.json'),
+            agg_result=agg_path,
+        )
+except Exception as exc:  # noqa: BLE001 — never block on telemetry
+    print(f'[process_result] power aggregation skipped: {exc}', file=sys.stderr)

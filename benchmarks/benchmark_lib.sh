@@ -15,6 +15,7 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
 GPU_MONITOR_PID=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+export GPU_METRICS_CSV
 
 # Start background GPU monitoring that logs metrics every second to CSV.
 # Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
@@ -32,6 +33,7 @@ start_gpu_monitor() {
     done
 
     GPU_METRICS_CSV="$output"
+    export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
         nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
