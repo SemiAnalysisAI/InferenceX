@@ -24,13 +24,6 @@ nvidia-smi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# Downgrade flashinfer to the version pinned in sglang v0.5.11 to test the
-# trtllm batched-GEMM regression suspicion from sgl-project/sglang#25563
-# (suggested by @trevor-m). sglang v0.5.12's pyproject.toml moved from
-# flashinfer_python==0.6.8.post1 → 0.6.11.post1, and the trtllm GEMM crash
-# at bs=128 + EAGLE on B300 appeared in the same image bump.
-pip install --no-deps "flashinfer_python==0.6.8.post1" "flashinfer_cubin==0.6.8.post1"
-
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 

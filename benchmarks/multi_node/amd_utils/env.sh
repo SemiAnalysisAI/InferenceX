@@ -118,10 +118,9 @@ else
     # SGLang/MoRI-specific environment
     # =========================================================================
 
-    export SGLANG_USE_AITER=1
-
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    export SGLANG_MORI_FP8_COMB=true
+    export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
+    export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
     export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
