@@ -117,7 +117,7 @@ python3 -m sglang.launch_server \
     --attention-backend compressed \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.1 \
+    --swa-full-tokens-ratio 0.2 \
     --page-size 256 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \
