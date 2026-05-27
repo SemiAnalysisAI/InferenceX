@@ -1704,7 +1704,7 @@ dsv4-fp4-b200-sglang:
   framework: sglang
   multinode: false
   # Two recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # are selected inside benchmarks/single_node/dsv4_fp4_b200.sh by DP_ATTENTION:
+  # are selected inside benchmarks/single_node/fixed_seq_len/dsv4_fp4_b200.sh by DP_ATTENTION:
   #   low-latency  (DP_ATTENTION=false): TP-only, flashinfer_mxfp4
   #   DP-attention  (DP_ATTENTION=true):  DP-attn + DeepEP + mega_moe opts
   # The DP-attention recipe covers both "balanced" (conc 64-128) and
@@ -1998,7 +1998,7 @@ dsv4-fp4-b300-sglang:
   framework: sglang
   multinode: false
   # Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-  # are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh by CONC:
+  # are selected inside benchmarks/single_node/fixed_seq_len/dsv4_fp4_b300_sglang.sh by CONC:
   #   low-latency    (CONC <= 32):       TP-only
   #   balanced       (32 < CONC <= 128): + DP-attn
   #   max-throughput (CONC > 128):       + DP-attn
@@ -2024,7 +2024,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
-  # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
+  # selected inside benchmarks/single_node/fixed_seq_len/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
   #   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
   #                     + EAGLE (3,1,4) + mem-fraction 0.90
