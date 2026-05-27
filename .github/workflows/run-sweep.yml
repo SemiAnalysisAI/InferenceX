@@ -147,8 +147,7 @@ jobs:
         if: >-
             needs.setup.outputs.reuse-enabled != 'true' &&
             github.event_name == 'pull_request' &&
-            contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') &&
-            !contains(github.event.pull_request.labels.*.name, 'evals-only')
+            contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
