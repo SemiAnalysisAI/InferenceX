@@ -911,17 +911,27 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-with-subagents-052726"
-    # aiperf reads the corpus via its public-dataset registry. The
-    # inferencex-agentx-mvp scenario hard-requires loader=one of
-    # ['semianalysis_cc_traces_weka_with_subagents', 'weka_trace'] (see
-    # aiperf src/aiperf/common/scenario/inferencex_agentx_mvp.py's
-    # `require_loader`). The with-subagents corpus captures the parent +
-    # Task-tool sub-agent fan-out structure of real Claude Code sessions
-    # (472 traces, v5-only, CC >= 2.1.139, classifier-call OSL spike
-    # filtered).
-    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka_with_subagents"
-    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_with_subagents ($dataset)"
+    # Per-recipe override: set WEKA_LOADER_OVERRIDE to one of the aiperf
+    # public-dataset loader names allowed by the inferencex-agentx-mvp
+    # scenario. Used by recipes whose servers have non-default context
+    # caps (e.g. minimaxm2.5 at max_model_len ~256k can't replay the
+    # unfiltered 052726 corpus and switches to the 256k-capped variant).
+    local loader="${WEKA_LOADER_OVERRIDE:-semianalysis_cc_traces_weka_with_subagents}"
+    local dataset
+    case "$loader" in
+        semianalysis_cc_traces_weka_with_subagents)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-052726"
+            ;;
+        semianalysis_cc_traces_weka_with_subagents_256k)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-051926-256k"
+            ;;
+        *)
+            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k" >&2
+            exit 1
+            ;;
+    esac
+    TRACE_SOURCE_FLAG="--public-dataset $loader"
+    echo "Loading traces via aiperf public-dataset: $loader ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
     # for model weights) so subsequent runs read from cache instead of
     # re-downloading every job.
