@@ -923,7 +923,7 @@ resolve_trace_source() {
             dataset="semianalysisai/cc-traces-weka-with-subagents-052726"
             ;;
         semianalysis_cc_traces_weka_with_subagents_256k)
-            dataset="semianalysisai/cc-traces-weka-with-subagents-051926-256k"
+            dataset="semianalysisai/cc-traces-weka-with-subagents-052726-256k"
             ;;
         *)
             echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k" >&2
