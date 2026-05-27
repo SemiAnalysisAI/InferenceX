@@ -3159,9 +3159,3 @@
   description:
     - "Validates measured-power aggregation pipeline (PR #1558) on both NVIDIA (H200) and AMD (MI355X) hardware — different SMI tools (nvidia-smi vs amd-smi), different CSV schemas (power.draw [W] vs socket_power), same aggregator. No config change. Entry intentionally kept past merge so run-sweep produces canonical agg JSONs with avg_power_w + joules_per_output_token on main for both vendors, seeding the dashboard's day-zero data."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
-
-- config-keys:
-    - gptoss-fp4-h100-vllm
-  description:
-    - "TEMP T1 redo for PR #1503 — DO NOT MERGE — verifies canary success → fan-out runs on remaining-search-space-config (canary entry de-duped) under !cancelled() gate"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1503
