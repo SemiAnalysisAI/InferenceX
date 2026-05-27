@@ -1350,8 +1350,9 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+
 dsr1-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.10.post1-rocm720-mi35x-20260501
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1540,6 +1541,25 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=2"
           - "DECODE_MTP_SIZE=0"
 
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "none"
+        conc-list: [ 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "none"
         conc-list: [ 1024, 2048, 4096 ]
@@ -1560,7 +1580,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.10.post1-rocm720-mi35x-20260501
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1730,24 +1750,43 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=2"
           - "DECODE_MTP_SIZE=2"
 
-      # 1P2D TP4
+      # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 64, 128, 256 ]
+        conc-list: [ 128, 512 ]
         prefill:
           num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
         decode:
-          num-worker: 2
+          num-worker: 1
           tp: 8
-          ep: 1
-          dp-attn: false
+          ep: 8
+          dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
@@ -1774,7 +1813,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-8c3b5aa-20260521-DSv4
+  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260526-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1786,12 +1825,12 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
       - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 512 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
