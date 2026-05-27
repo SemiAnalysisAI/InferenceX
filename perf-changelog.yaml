@@ -3137,3 +3137,9 @@
     - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
 
+- config-keys:
+    - gptoss-fp4-h100-vllm
+  description:
+    - "TEMP T6 cancellation test for PR #1503 — DO NOT MERGE — verifies always() defeats workflow cancellation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1503
+
