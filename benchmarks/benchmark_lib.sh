@@ -15,6 +15,7 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
 GPU_MONITOR_PID=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+export GPU_METRICS_CSV
 
 # Start background GPU monitoring that logs metrics every second to CSV.
 # Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
@@ -32,6 +33,7 @@ start_gpu_monitor() {
     done
 
     GPU_METRICS_CSV="$output"
+    export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
         nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
@@ -208,6 +210,7 @@ run_benchmark_serving() {
     local dsv4=false
     local trust_remote_code=false
     local server_pid=""
+    local tokenizer=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -274,6 +277,10 @@ run_benchmark_serving() {
                 ;;
             --server-pid)
                 server_pid="$2"
+                shift 2
+                ;;
+            --tokenizer)
+                tokenizer="$2"
                 shift 2
                 ;;
             *)
@@ -381,6 +388,10 @@ run_benchmark_serving() {
     # Add --trust-remote-code if requested
     if [[ "$trust_remote_code" == true ]]; then
         benchmark_cmd+=(--trust-remote-code)
+    fi
+
+    if [[ -n "$tokenizer" ]]; then
+        benchmark_cmd+=(--tokenizer "$tokenizer")
     fi
 
     # Run benchmark with optional server monitoring
