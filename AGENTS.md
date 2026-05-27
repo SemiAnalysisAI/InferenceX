@@ -61,12 +61,12 @@ Git: conventional commit messages. `[skip-sweep]` in commit message skips benchm
 
 PRs do not run the sweep automatically - `run-sweep.yml` is gated on a label. Pick exactly one; setting both is rejected by the workflow's `setup` job.
 
-- `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single highest concurrency). Default for most PRs.
+- `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single lowest concurrency). Default for most PRs.
 - `full-sweep-enabled` - runs the full intermediate concurrency sweep, identical to push-to-main. Use when intermediate points matter (e.g. a recipe change shifts the throughput/latency curve, not just its endpoints).
 
 **The sweep does not trigger while the PR has merge conflicts.** Even with `sweep-enabled` / `full-sweep-enabled` applied, the `run-sweep.yml` workflow will not start until the PR cleanly merges into main — a stale claude/* or update-* branch with a `perf-changelog.yaml` conflict (the common case) will sit in NO_SWEEP / NO_SUCCESS until rebased. Resolution recipe is documented in `KLAUD_DEBUG.md §1.1`: `git merge origin/main`, then `git checkout origin/main -- perf-changelog.yaml`, then re-append the PR's own changelog entry at the tail. Don't 3-way merge `perf-changelog.yaml`; whitespace edits silently re-trigger the deletion check.
 
-Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the highest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[max(conc)]`.
+Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the lowest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[min(conc)]`.
 
 ## Common Tasks
 

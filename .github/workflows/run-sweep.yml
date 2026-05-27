@@ -88,7 +88,7 @@ jobs:
                   contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
                   contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
               run: |
-                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to max(conc) per parallelism config."
+                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to min(conc) per parallelism config."
                   exit 1
 
             - name: Checkout code
