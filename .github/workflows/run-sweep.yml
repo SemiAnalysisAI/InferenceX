@@ -95,7 +95,7 @@ jobs:
                     (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled'))
                   )
               run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to max(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), or 'non-canary-full-sweep-enabled' (full sweep, no canary gate)."
+                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), or 'non-canary-full-sweep-enabled' (full sweep, no canary gate)."
                   exit 1
 
             - name: Checkout code
