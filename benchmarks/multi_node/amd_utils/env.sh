@@ -22,10 +22,11 @@ if [[ -z "$IBDEVICES" ]]; then
     DETECTED=$(ibv_devinfo 2>/dev/null | grep "hca_id:" | awk '{print $2}' | paste -sd',')
     if [[ -n "$DETECTED" ]]; then
         export IBDEVICES="$DETECTED"
+        echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES via ibv_devinfo on $(hostname -s)"
     else
-        echo "WARNING: Unable to detect RDMA devices. Set IBDEVICES explicitly." >&2
+        echo "ERROR: Unable to detect RDMA devices. Set IBDEVICES explicitly." >&2
+        exit 1
     fi
-    echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES from hostname $(hostname -s)"
 else
     echo "[INFO] Using IBDEVICES=$IBDEVICES (set by runner or environment)"
 fi
@@ -52,6 +53,10 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     # vLLM/Nixl-specific environment
     # =========================================================================
+    export VLLM_USE_V1=1
+    export VLLM_SERVER_DEV_MODE=0
+    export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
+
     set -x
 
     export VLLM_MORIIO_QP_PER_TRANSFER=4
@@ -129,7 +134,8 @@ else
     export SGLANG_USE_AITER=1
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    export SGLANG_MORI_FP8_COMB=true
+    export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
+    export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
     export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
@@ -148,7 +154,7 @@ else
 
     # Enable spec v2
     export SGLANG_ENABLE_SPEC_V2=1
-    export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=1
+    export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
 
     export SGLANG_LOG_MS=true
     export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
