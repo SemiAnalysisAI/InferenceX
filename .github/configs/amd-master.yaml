@@ -403,7 +403,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # Matches qwen3.5-fp8-mi355x-sglang TP2/EP2 low-concurrency sweep
+      # 1P+1D TP8/EP1 smoke sweep with dp-attn (prefill + decode); conc-list 8-512
       - spec-decoding: "none"
         conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
         prefill:
