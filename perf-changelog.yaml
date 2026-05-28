@@ -3192,3 +3192,10 @@
     - "Add GLM-5-FP8 models.yaml flags, setup_deps.sh (aiter gluon + transformers glm_moe_dsa), GLM-5 env tuning in env.sh"
     - "Add multinode launch script glm5_fp8_mi355x_sglang-disagg.sh; server.sh sources setup_deps.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1572
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-vllm
+  description:
+    - "Bump vLLM image from vllm/vllm-openai:v0.18.0-cu130 to vllm/vllm-openai:v0.21.0"
+  pr-link: TBD
+
