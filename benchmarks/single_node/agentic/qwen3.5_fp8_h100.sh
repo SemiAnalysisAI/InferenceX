@@ -22,9 +22,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -112,7 +109,6 @@ SGLANG_CMD=(
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     # --tokenizer-worker-num 6
     --tokenizer-path "$MODEL"
-    --context-length "$MAX_MODEL_LEN"
     --enable-metrics
     "${CACHE_ARGS[@]}"
 )
