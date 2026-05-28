@@ -48,10 +48,18 @@ start_gpu_monitor() {
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
-        # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
+        # amd-smi metric flags: -p power, -c clocks, -t temperature, -u usage,
+        # -w <interval> native watch mode (emits a timestamp column per sample),
+        # --csv. The awk filter keeps the first CSV header line and drops
+        # amd-smi's preamble / repeated headers. Header match is case-insensitive
+        # (tolower) so a capitalized "Timestamp," header — should amd-smi ever
+        # emit one — still passes through; aggregate_power's column detection is
+        # case-insensitive too. NOTE: amd-smi timestamps are node-local wall
+        # clock, so multinode aggregation assumes cluster clocks are NTP-synced
+        # (same assumption as nvidia-smi; aggregate_power windows by absolute
+        # epoch from benchmark_serving.py).
         amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+            | awk 'tolower($0) ~ /^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
@@ -70,9 +78,73 @@ stop_gpu_monitor() {
             local lines
             lines=$(wc -l < "$GPU_METRICS_CSV")
             echo "[GPU Monitor] Collected $lines rows -> $GPU_METRICS_CSV"
+            # Echo the captured header so a vendor-SMI schema mismatch (the one
+            # thing that silently yields 0 usable power samples downstream) is
+            # visible in CI logs without re-running on hardware.
+            echo "[GPU Monitor] CSV header: $(head -1 "$GPU_METRICS_CSV" 2>/dev/null)"
         fi
     fi
     GPU_MONITOR_PID=""
+}
+
+# Start a per-node GPU power monitor for multi-node disaggregated runs.
+#
+# This is the AMD/SGLang/vLLM analogue of NVIDIA srt-slurm's per-node perfmon
+# (PR #35): there is no orchestrator to spawn nvidia-smi on each node, so each
+# node starts its own amd-smi/nvidia-smi monitor here. The output filename
+# encodes the worker role and index in exactly the format
+# utils/aggregate_power.py's _parse_perfmon_label expects:
+#
+#     perf_samples_<role>_w<worker_idx>_<host>.csv
+#
+# so the downstream aggregation can attribute energy per worker and (for disagg)
+# per stage. role must be one of: prefill, decode, agg, frontend.
+#
+# Output goes to $PERFMON_OUTPUT_DIR, which job.slurm points at the NFS-shared
+# /benchmark_logs/perfmon mount so every node's CSV lands in one directory the
+# runner can collect. The monitor runs for the whole server lifetime;
+# aggregate_power.py windows the samples down to each concurrency's benchmark
+# load window using the timestamps benchmark_serving.py writes.
+#
+# Best-effort by design: an unset output dir, an unknown role, or a missing
+# amd-smi/nvidia-smi is a no-op that returns 0 — a monitoring hiccup must never
+# fail the benchmark.
+#
+# Usage: start_perf_monitor <role> <worker_idx> [interval_seconds]
+start_perf_monitor() {
+    local role="$1"
+    local worker_idx="$2"
+    local interval="${3:-${PERFMON_SAMPLE_INTERVAL:-1}}"
+
+    local out_dir="${PERFMON_OUTPUT_DIR:-}"
+    if [[ -z "$out_dir" ]]; then
+        echo "[perfmon] PERFMON_OUTPUT_DIR unset — skipping per-node power monitor"
+        return 0
+    fi
+    case "$role" in
+        prefill|decode|agg|frontend) ;;
+        *)
+            echo "[perfmon] unknown role '$role' (expected prefill|decode|agg|frontend) — skipping monitor"
+            return 0
+            ;;
+    esac
+    if ! mkdir -p "$out_dir" 2>/dev/null; then
+        echo "[perfmon] cannot create $out_dir — skipping per-node power monitor"
+        return 0
+    fi
+
+    # Sanitize the host component so the filename stays parseable by
+    # aggregate_power's regex (role/idx anchors are unambiguous, but keep the
+    # host free of separators that could confuse a future tightening). Prefer
+    # the short hostname; fall back to the FQDN.
+    local host
+    host=$(hostname -s 2>/dev/null || hostname)
+    host=$(printf '%s' "$host" | tr -c 'A-Za-z0-9.-' '_')
+
+    local out="${out_dir}/perf_samples_${role}_w${worker_idx}_${host}.csv"
+    echo "[perfmon] starting per-node power monitor: role=$role worker=$worker_idx host=$host interval=${interval}s -> $out"
+    start_gpu_monitor --output "$out" --interval "$interval"
+    return 0
 }
 
 # Check if required environment variables are set

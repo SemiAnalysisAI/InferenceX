@@ -117,6 +117,43 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     set -x
 
+    # ── Per-node measured-power CSVs ──────────────────────────────────────
+    # Collect these FIRST — immediately after the job completes and before the
+    # result-processing block below, which has early `exit 1` paths (e.g. no
+    # logs dir found). Any early exit fires the EXIT trap (cleanup_and_save_logs),
+    # which `sudo rm -rf`s the whole $BENCHMARK_LOGS_DIR — so anything that needs
+    # to survive must be copied out before then. This mirrors launch_gb300-cw.sh,
+    # which collects srt-slurm's perfmon CSVs right after the job completes.
+    #
+    # Each node's server script (server_sglang.sh / server_vllm.sh) wrote
+    # perf_samples_<role>_w<idx>_<host>.csv into $BENCHMARK_LOGS_DIR/perfmon
+    # (NFS-shared, one file per node). Copy them into the GH workspace and point
+    # the downstream "Process result" step at them via GPU_METRICS_CSV_GLOB so
+    # utils/aggregate_power.py can do the multi-CSV per-worker / per-stage
+    # aggregation. Best-effort: a monitoring hiccup must never fail the upload.
+    PERFMON_SRC_DIR="$BENCHMARK_LOGS_DIR/perfmon"
+    if ls "$PERFMON_SRC_DIR"/perf_samples_*.csv >/dev/null 2>&1; then
+        PERFMON_DST_DIR="$GITHUB_WORKSPACE/perfmon"
+        mkdir -p "$PERFMON_DST_DIR"
+        cp "$PERFMON_SRC_DIR"/perf_samples_*.csv "$PERFMON_DST_DIR"/ 2>/dev/null \
+            || sudo cp "$PERFMON_SRC_DIR"/perf_samples_*.csv "$PERFMON_DST_DIR"/ 2>/dev/null \
+            || true
+        # CSVs may be root-owned on NFS (containers run as root); make them
+        # readable by the runner user for the Process result step.
+        sudo chown -R "$(id -u):$(id -g)" "$PERFMON_DST_DIR" 2>/dev/null || true
+        perf_csv_count=$(ls "$PERFMON_DST_DIR"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$perf_csv_count" -gt 0 ]; then
+            echo "[perfmon] Collected $perf_csv_count per-node perf_samples_*.csv -> $PERFMON_DST_DIR"
+            if [ -n "${GITHUB_ENV:-}" ]; then
+                echo "GPU_METRICS_CSV_GLOB=$PERFMON_DST_DIR/perf_samples_*.csv" >> "$GITHUB_ENV"
+            fi
+        else
+            echo "[perfmon] WARNING: perf_samples_*.csv present under $PERFMON_SRC_DIR but none copied to $PERFMON_DST_DIR — measured power aggregation will be skipped"
+        fi
+    else
+        echo "[perfmon] No perf_samples_*.csv found under $PERFMON_SRC_DIR — measured power aggregation will be skipped"
+    fi
+
     # FIXME: The below is bad and is a result of the indirection of the ways in which
     # Dynamo jobs are launched. In a follow-up PR, the location of the result file should not
     # depend on the runner, it should always be in the same spot in the GH workspace.
@@ -182,6 +219,7 @@ PY
     fi
 
     echo "All result files processed"
+
     # Use sync scancel to ensure nfs file handle is released in time
     set +x
     scancel_sync $JOB_ID

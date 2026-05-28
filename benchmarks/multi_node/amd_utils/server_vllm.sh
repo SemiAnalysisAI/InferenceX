@@ -50,6 +50,9 @@ MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
 # Dependencies and Environment Setup
 # =============================================================================
 source $WS_PATH/env.sh
+# Power-monitoring helpers (start_perf_monitor / stop_gpu_monitor). WS_PATH is
+# .../benchmarks/multi_node/amd_utils, so the shared lib is two levels up.
+source "$WS_PATH/../../benchmark_lib.sh"
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 # RDMA IP for Nixl KV transfer (prefer 192.168.x.x subnet if available)
@@ -213,6 +216,25 @@ done
 
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
+
+# =============================================================================
+# Per-node measured-power monitor (best-effort)
+# =============================================================================
+# vLLM places one worker per node: ranks [0, xP) are prefill (kv_producer),
+# ranks [xP, xP+yD) are decode (kv_consumer) — see the role branches below.
+# Node 0 is the proxy too, but its GPUs run the first prefill worker, so it is
+# correctly labeled prefill. The monitor runs for the whole server lifetime;
+# aggregate_power.py windows the samples down to each concurrency's load window.
+if [ "$NODE_RANK" -lt "$xP" ]; then
+    PERF_ROLE="prefill"
+    PERF_WORKER_IDX=$NODE_RANK
+else
+    PERF_ROLE="decode"
+    PERF_WORKER_IDX=$(( NODE_RANK - xP ))
+fi
+if [[ "$DRY_RUN" -ne 1 ]]; then
+    start_perf_monitor "$PERF_ROLE" "$PERF_WORKER_IDX"
+fi
 
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
@@ -408,6 +430,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
         echo "ERROR: eval failed; exiting node-0 with rc=1"
+        stop_gpu_monitor
         exit 1
     fi
 
@@ -522,6 +545,9 @@ fi
 # echo "Killing the etcd server"
 # kill $etcd_pid 2>/dev/null || true
 # pkill -f etcd 2>/dev/null || true
+
+# Stop the per-node power monitor and flush its CSV before the container exits.
+stop_gpu_monitor
 
 echo "Script completed successfully"
 exit 0
