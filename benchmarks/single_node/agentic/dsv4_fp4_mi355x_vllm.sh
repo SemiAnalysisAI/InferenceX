@@ -61,6 +61,7 @@ LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
+HYBRID_KV_ARGS=(--no-disable-hybrid-kv-cache-manager)
 PREFIX_CACHE_ARGS=()
 LMCACHE_PID=""
 
@@ -193,6 +194,7 @@ case "$OFFLOADING" in
         echo "LMCache server PID: $LMCACHE_PID"
         wait_for_lmcache_ready
 
+        HYBRID_KV_ARGS=(--disable-hybrid-kv-cache-manager)
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         OFFLOAD_ARGS=(
             --kv-transfer-config
@@ -229,6 +231,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --max-num-seqs "$CONC"
+    "${HYBRID_KV_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
