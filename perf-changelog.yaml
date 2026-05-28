@@ -3200,3 +3200,10 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523, 1P1D TP8/EP1, dp-attn false, conc [8..512]"
     - "MoRI conn.py overlay (48e459bd) via job.slurm; launcher qwen3.5_fp4_mi355x_sglang-disagg.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
+
+- config-keys:
+    - glm5-fp4-gb300-dynamo-sglang
+  description:
+    - "Update GB300 FP4 GLM-5 8k1k low-latency sweep to mirror NVIDIA/srt-slurm#175: add a 5th 1p17d topology (decode_nodes/workers=17), and lower decode max-running-requests / cuda-graph-max-bs / benchmark concurrency per-zip-index from a flat 4096/1024 to 128/64/32/16/1 (mrr & cuda-graph) and 128/64/32/16/12 (concurrency)"
+  pr-link: TBD
+
