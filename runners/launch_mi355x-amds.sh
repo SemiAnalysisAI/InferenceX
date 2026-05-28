@@ -90,11 +90,27 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Give slurm time to start the job and create log file
     sleep 10
 
+    # Whether $JOB_ID is still in the SLURM queue, resilient to transient
+    # slurmctld timeouts ("slurm_load_jobs error: Socket timed out") — common
+    # when a full sweep floods the controller. A FAILED squeue (non-zero exit)
+    # is treated as "still alive" so a scheduler blip can't be misread as job
+    # death; only a SUCCESSFUL squeue that omits the job means it's gone, and we
+    # re-check once before declaring it gone to avoid a single-sample race.
+    job_alive() {
+        local out rc
+        out=$(squeue -u "$USER" --noheader --format='%i' 2>/dev/null); rc=$?
+        [[ $rc -ne 0 ]] && return 0          # scheduler hiccup → assume alive
+        grep -qw "$JOB_ID" <<<"$out" && return 0
+        sleep 5
+        out=$(squeue -u "$USER" --noheader --format='%i' 2>/dev/null) || return 0
+        grep -qw "$JOB_ID" <<<"$out"
+    }
+
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
+        if ! job_alive; then
+            echo "ERROR: Job $JOB_ID is no longer in the queue and never created a log file"
+            scontrol show job "$JOB_ID" 2>/dev/null || true
             exit 1
         fi
         sleep 5
@@ -102,9 +118,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     set +x
 
-    # Poll for job completion in background
+    # Poll for job completion in background (tolerant of transient squeue
+    # timeouts via job_alive — a scheduler blip must not look like completion).
     (
-        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+        while job_alive; do
             sleep 10
         done
     ) &
