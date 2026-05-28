@@ -1196,6 +1196,46 @@ def test_detect_all_columns_amd_style():
     assert cols["mem"] is None
 
 
+def test_detect_all_columns_amd_smi_full():
+    """Real amd-smi `metric -p -c -t -u -m --csv` header on a data-center part.
+
+    Exercises: gfx_activity as util (not umc/mm_activity), used_vram as mem (not
+    total/free_vram, mem_clock, mem_voltage, or mem_temperature), and
+    hotspot_temperature preferred over the N/A edge_temperature.
+    """
+    header = [
+        "timestamp", "gpu",
+        "socket_power", "mem_voltage",            # -p
+        "gfx_clock", "mem_clock",                 # -c
+        "edge_temperature", "hotspot_temperature", "mem_temperature",  # -t
+        "gfx_activity", "umc_activity", "mm_activity",                 # -u
+        "total_vram", "used_vram", "free_vram",   # -m
+    ]
+    cols = _detect_all_columns(header)
+    assert cols["power"] == "socket_power"
+    assert cols["util"] == "gfx_activity"
+    assert cols["mem"] == "used_vram"
+    # Hotspot/junction preferred over edge (edge reads N/A on MI300/MI355).
+    assert cols["temp"] == "hotspot_temperature"
+
+
+def test_detect_all_columns_temp_prefers_junction():
+    """junction_temperature wins over a leading edge_temperature column."""
+    header = ["timestamp", "gpu", "socket_power",
+              "edge_temperature", "junction_temperature"]
+    assert _detect_all_columns(header)["temp"] == "junction_temperature"
+
+
+def test_detect_all_columns_mem_vram_used_variants():
+    """Both used_vram and vram_used resolve; total/free_vram never do."""
+    assert _detect_all_columns(
+        ["timestamp", "power_w", "total_vram", "vram_used", "free_vram"]
+    )["mem"] == "vram_used"
+    assert _detect_all_columns(
+        ["timestamp", "power_w", "total_vram", "free_vram"]
+    )["mem"] is None
+
+
 def test_detect_all_columns_excludes_memory_total():
     """memory.total must not be picked as the memory column (we want USED memory)."""
     header = ["timestamp", "index", "power.draw [W]", "memory.total [MiB]", "memory.used [MiB]"]

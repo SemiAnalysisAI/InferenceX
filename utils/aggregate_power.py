@@ -57,14 +57,18 @@ Vendor schema detection is regex-based:
   - Power: timestamp + column whose name contains "power" (excluding
     "limit"/"cap"/"max"/"min"). NVIDIA: "power.draw [W]". AMD: "socket_power".
     srt-slurm: "power_w".
-  - Temperature: column name contains "temp". NVIDIA: "temperature.gpu". AMD:
-    "temperature". srt-slurm: "temp_c". Unit: Celsius.
-  - Utilization: column name starts with "utilization" or contains "util".
+  - Temperature: column name contains "temp"; hotspot/junction columns are
+    preferred over the first match because data-center AMD parts report edge
+    temperature as N/A. NVIDIA: "temperature.gpu". AMD amd-smi: "edge_temperature"
+    / "hotspot_temperature" (junction picked). srt-slurm: "temp_c". Unit: Celsius.
+  - Utilization: column starts with "utilization" or contains "util", or is
+    amd-smi's "gfx_activity" (umc_activity / mm_activity are not matched).
     NVIDIA: "utilization.gpu". srt-slurm: "util_pct". Unit: percent.
-  - Memory: column name contains "mem" but not "total"/"clock"/"util" — so
-    "memory.total", "clocks.current.memory" (a frequency), and
-    "utilization.memory" (a percent) are all rejected; only memory *used* is
-    picked. NVIDIA: "memory.used [MiB]". srt-slurm: "mem_used_mb". Unit: MiB/MB.
+  - Memory used: column mentions memory/vram AND "used" — picks NVIDIA
+    "memory.used [MiB]", srt-slurm "mem_used_mb", amd-smi "used_vram"; rejects
+    decoys lacking "used" (memory.total / total_vram / free_vram, the memory
+    *clock* "clocks.current.memory", utilization.memory, mem_temperature,
+    mem_voltage). Unit: MiB/MB.
 
 Power is required for aggregation to fire; the other metrics degrade gracefully
 when their columns are absent (those fields are simply omitted from the output).
@@ -90,14 +94,24 @@ from statistics import mean
 _POWER_COL_RE = re.compile(r"power", re.IGNORECASE)
 _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)
 _TEMP_COL_RE = re.compile(r"temp", re.IGNORECASE)
-_UTIL_COL_RE = re.compile(r"^utilization|util", re.IGNORECASE)
-_MEM_COL_RE = re.compile(r"mem", re.IGNORECASE)
-# Exclude "total" (memory.total), "clock" (clocks.current.memory — a frequency,
-# not memory used), and "util" (utilization.memory — a percent). nvidia-smi's
-# query emits clocks.current.memory BEFORE any used-memory column, so without
-# these excludes _MEM_COL_RE would grab the memory *clock* (~2500 MHz) as
-# avg_mem_used_mb.
-_MEM_EXCLUDE_RE = re.compile(r"total|clock|util", re.IGNORECASE)
+# Data-center AMD parts (MI300/MI355) report edge temperature as N/A and expose
+# the real die temperature as hotspot/junction; prefer those when present so
+# avg_temp_c isn't computed over an all-N/A edge column. NVIDIA's single
+# "temperature.gpu" and srt-slurm's "temp_c" have neither token and fall through
+# to the first temperature column unchanged.
+_TEMP_PREFER_RE = re.compile(r"hotspot|junction", re.IGNORECASE)
+# Utilization: NVIDIA "utilization.gpu", srt-slurm "util_pct", AMD amd-smi
+# "gfx_activity" (the GPU/graphics-engine busy percent). amd-smi's other usage
+# columns — umc_activity (memory controller), mm_activity (multimedia) — are
+# intentionally NOT matched so gfx_activity is the one picked.
+_UTIL_COL_RE = re.compile(r"^utilization|util|gfx_activity", re.IGNORECASE)
+# Memory *used*: match positively on a column that mentions both memory/vram and
+# "used" rather than broad "mem" + a growing exclude list. This naturally picks
+# NVIDIA "memory.used [MiB]", srt-slurm "mem_used_mb", and amd-smi "used_vram"
+# while rejecting same-prefix decoys that lack "used": memory.total / total_vram /
+# free_vram, clocks.current.memory (a frequency), utilization.memory (a percent),
+# and amd-smi's mem_temperature / mem_voltage.
+_MEM_COL_RE = re.compile(r"(?:mem|vram).*used|used.*(?:mem|vram)", re.IGNORECASE)
 _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
 _GPU_INDEX_COL_RE = re.compile(r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -208,12 +222,14 @@ def _detect_all_columns(header: list[str]) -> dict[str, str | None]:
         (c for c in header if _POWER_COL_RE.search(c) and not _POWER_EXCLUDE_RE.search(c)),
         None,
     )
-    temp_col = next((c for c in header if _TEMP_COL_RE.search(c)), None)
-    util_col = next((c for c in header if _UTIL_COL_RE.search(c)), None)
-    mem_col = next(
-        (c for c in header if _MEM_COL_RE.search(c) and not _MEM_EXCLUDE_RE.search(c)),
-        None,
+    temp_cols = [c for c in header if _TEMP_COL_RE.search(c)]
+    # Prefer hotspot/junction (the real die temp on data-center AMD parts) over
+    # the first temperature column (edge on AMD, temperature.gpu on NVIDIA).
+    temp_col = next((c for c in temp_cols if _TEMP_PREFER_RE.search(c)), None) or (
+        temp_cols[0] if temp_cols else None
     )
+    util_col = next((c for c in header if _UTIL_COL_RE.search(c)), None)
+    mem_col = next((c for c in header if _MEM_COL_RE.search(c)), None)
     gpu_col = next((c for c in header if _GPU_INDEX_COL_RE.match(c.strip())), None)
     return {
         "timestamp": timestamp_col,

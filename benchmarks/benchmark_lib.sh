@@ -48,9 +48,11 @@ start_gpu_monitor() {
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
-        # amd-smi metric flags: -p power, -c clocks, -t temperature, -u usage,
-        # -w <interval> native watch mode (emits a timestamp column per sample),
-        # --csv. The awk filter keeps the first CSV header line and drops
+        # amd-smi metric flags: -p power, -c clocks, -t temperature, -u usage
+        # (gfx_activity), -m mem-usage (used_vram), -w <interval> native watch
+        # mode (emits a timestamp column per sample), --csv. Without -m there is
+        # no VRAM column, so avg_mem_used_mb would never populate on AMD.
+        # The awk filter keeps the first CSV header line and drops
         # amd-smi's preamble / repeated headers. Header match is case-insensitive
         # (tolower) so a capitalized "Timestamp," header — should amd-smi ever
         # emit one — still passes through; aggregate_power's column detection is
@@ -58,7 +60,7 @@ start_gpu_monitor() {
         # clock, so multinode aggregation assumes cluster clocks are NTP-synced
         # (same assumption as nvidia-smi; aggregate_power windows by absolute
         # epoch from benchmark_serving.py).
-        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+        amd-smi metric -p -c -t -u -m -w "$interval" --csv 2>/dev/null \
             | awk 'tolower($0) ~ /^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
