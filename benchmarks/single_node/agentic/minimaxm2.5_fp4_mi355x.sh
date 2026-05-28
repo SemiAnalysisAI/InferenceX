@@ -149,19 +149,6 @@ case "$OFFLOADING" in
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
 
-        LMCACHE_ROCM_PATCH_DIR="$RESULT_DIR/lmcache_rocm_patch"
-        write_lmcache_rocm_mp_patch "$LMCACHE_ROCM_PATCH_DIR"
-        write_chunked_connector_patch "$LMCACHE_ROCM_PATCH_DIR"
-        write_scheduler_assertion_patch "$LMCACHE_ROCM_PATCH_DIR"
-        export LMCACHE_ROCM_MP_BLOCK_FALLBACK=1
-        export LMCACHE_ROCM_MP_BLOCK_FALLBACK_DTYPE=bfloat16
-        export LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR=1
-        # Cap external KV tokens loaded per scheduling step to prevent GPU
-        # block exhaustion deadlock at high concurrency (c>=32).  Default
-        # 32768 keeps peak block demand within the GPU KV pool.  Set to 0 to
-        # disable chunking (only safe at low concurrency).
-        export CHUNKED_LMCACHE_MAX_TOKENS_PER_LOAD="${CHUNKED_LMCACHE_MAX_TOKENS_PER_LOAD:-32768}"
-        export PYTHONPATH="$LMCACHE_ROCM_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
         # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
