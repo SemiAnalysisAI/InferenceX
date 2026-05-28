@@ -38,6 +38,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_JOB_NAME="benchmark-${FRAMEWORK}.job"
 
     export MODEL_NAME=${MODEL##*/}
+    export MODEL_FULL_ID="${MODEL}"  # e.g. Qwen/Qwen3.5-397B-A17B-FP8 (for HF cache lookup)
     export MODEL_PATH="/nfsdata/sa/gharunner/gharunners/hf-hub-cache"
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104

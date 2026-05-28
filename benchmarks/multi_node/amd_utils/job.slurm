@@ -177,12 +177,31 @@ else
         fi
     }
 
+    # Check model weights exist on "$MODEL_DIR/$MODEL_NAME" (flat dir)
+    # or in HuggingFace cache format "$MODEL_DIR/models--<org>--<name>/snapshots/<hash>/"
+    # MODEL_FULL_ID has the org prefix (e.g. Qwen/Qwen3.5-397B-A17B-FP8), fall back to MODEL_NAME
+    HF_CACHE_MODEL_ID=$(echo "${MODEL_FULL_ID:-$MODEL_NAME}" | sed 's|/|--|g')
+    HF_CACHE_REPO_DIR="$MODEL_DIR/models--${HF_CACHE_MODEL_ID}"
+    MODEL_IS_HF_CACHE=false
+
     if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
         MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
-        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        echo "Selected MODEL_PATH: $MODEL_PATH (flat directory, available on all nodes)"
+    elif [[ -d "$HF_CACHE_REPO_DIR/snapshots" ]]; then
+        HF_SNAPSHOT_HASH=$(ls "$HF_CACHE_REPO_DIR/snapshots/" | head -1)
+        HF_SNAPSHOT_DIR="$HF_CACHE_REPO_DIR/snapshots/$HF_SNAPSHOT_HASH"
+        if check_model_path "$HF_SNAPSHOT_DIR" "HF cache"; then
+            MODEL_PATH="$HF_SNAPSHOT_DIR"
+            MODEL_IS_HF_CACHE=true
+            echo "Selected MODEL_PATH: $MODEL_PATH (HF cache format, available on all nodes)"
+        else
+            echo "FATAL ERROR: Model '$MODEL_NAME' HF cache snapshot not available on all nodes"
+            exit 1
+        fi
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-        echo "  - $MODEL_DIR/$MODEL_NAME"
+        echo "  - $MODEL_DIR/$MODEL_NAME (flat directory)"
+        echo "  - $HF_CACHE_REPO_DIR (HF cache format)"
         exit 1
     fi
     echo "Final MODEL_PATH: $MODEL_PATH"
@@ -257,6 +276,9 @@ export NNODES=$NNODES
 export NODE0_ADDR=$NODE0_ADDR
 export MODEL_PATH=$MODEL_PATH
 export MODEL_DIR=$MODEL_DIR
+export MODEL_IS_HF_CACHE=${MODEL_IS_HF_CACHE:-false}
+export MODEL_FULL_ID=${MODEL_FULL_ID:-$MODEL_NAME}
+export HF_SNAPSHOT_HASH=${HF_SNAPSHOT_HASH:-}
 export xP=$xP
 export yD=$yD
 export MODEL_NAME=$MODEL_NAME
@@ -359,6 +381,9 @@ DOCKER_ENV_COMMON=(
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e MODEL_IS_HF_CACHE=\$MODEL_IS_HF_CACHE
+    -e MODEL_FULL_ID=\$MODEL_FULL_ID
+    -e HF_SNAPSHOT_HASH=\$HF_SNAPSHOT_HASH
 )
 
 # Engine-specific env vars
@@ -471,6 +496,12 @@ fi
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
+        # If model is in HF cache format, create symlink so /models/$MODEL_NAME resolves
+        if [[ \"\$MODEL_IS_HF_CACHE\" == \"true\" ]]; then
+            HF_CACHE_DIR=\"/models/models--\$(echo \$MODEL_FULL_ID | sed s:/:--:g)\"
+            ln -sfn \"\$HF_CACHE_DIR/snapshots/\$HF_SNAPSHOT_HASH\" \"/models/\$MODEL_NAME\"
+            echo \"[job.slurm] Created HF cache symlink: /models/\$MODEL_NAME -> \$HF_CACHE_DIR/snapshots/\$HF_SNAPSHOT_HASH\"
+        fi
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
