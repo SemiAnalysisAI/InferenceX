@@ -65,8 +65,10 @@ Vendor schema detection is regex-based:
     "temperature". srt-slurm: "temp_c". Unit: Celsius.
   - Utilization: column name starts with "utilization" or contains "util".
     NVIDIA: "utilization.gpu". srt-slurm: "util_pct". Unit: percent.
-  - Memory: column name contains "mem" but not "total" (avoid "memory.total").
-    NVIDIA: "memory.used [MiB]". srt-slurm: "mem_used_mb". Unit: MiB/MB.
+  - Memory: column name contains "mem" but not "total"/"clock"/"util" — so
+    "memory.total", "clocks.current.memory" (a frequency), and
+    "utilization.memory" (a percent) are all rejected; only memory *used* is
+    picked. NVIDIA: "memory.used [MiB]". srt-slurm: "mem_used_mb". Unit: MiB/MB.
 
 Power is required for aggregation to fire; the other metrics degrade gracefully
 when their columns are absent (those fields are simply omitted from the output).
@@ -94,7 +96,12 @@ _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)
 _TEMP_COL_RE = re.compile(r"temp", re.IGNORECASE)
 _UTIL_COL_RE = re.compile(r"^utilization|util", re.IGNORECASE)
 _MEM_COL_RE = re.compile(r"mem", re.IGNORECASE)
-_MEM_EXCLUDE_RE = re.compile(r"total", re.IGNORECASE)
+# Exclude "total" (memory.total), "clock" (clocks.current.memory — a frequency,
+# not memory used), and "util" (utilization.memory — a percent). nvidia-smi's
+# query emits clocks.current.memory BEFORE any used-memory column, so without
+# these excludes _MEM_COL_RE would grab the memory *clock* (~2500 MHz) as
+# avg_mem_used_mb.
+_MEM_EXCLUDE_RE = re.compile(r"total|clock|util", re.IGNORECASE)
 _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
 _GPU_INDEX_COL_RE = re.compile(r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -688,16 +695,6 @@ def _disagg_stage_rollup(
         "prefill_avg_power_w": prefill_pw_x_gpus / prefill_gpus if prefill_gpus else None,
         "decode_avg_power_w": decode_pw_x_gpus / decode_gpus if decode_gpus else None,
     }
-
-
-# Backward-compat shim — the original API returned just the two energy values.
-def _disagg_stage_energies(
-    workers: list[dict], duration: float
-) -> tuple[float, float] | None:
-    res = _disagg_stage_rollup(workers, duration)
-    if res is None:
-        return None
-    return res["prefill_energy_j"], res["decode_energy_j"]
 
 
 def run(

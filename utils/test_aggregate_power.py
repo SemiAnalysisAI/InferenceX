@@ -1205,6 +1205,24 @@ def test_detect_all_columns_excludes_memory_total():
     assert cols["mem"] == "memory.used [MiB]"
 
 
+def test_detect_all_columns_mem_ignores_clock_and_util_memory():
+    """The real nvidia-smi query has NO used-memory column — only
+    clocks.current.memory (a frequency) and utilization.memory (a percent),
+    both of which contain "mem". Neither is memory *used*, so the mem column
+    must resolve to None rather than mislabeling the memory clock as
+    avg_mem_used_mb. Regression for the r"mem" over-match."""
+    header = [
+        "timestamp", "index", "power.draw [W]", "temperature.gpu",
+        "clocks.current.sm [MHz]", "clocks.current.memory [MHz]",
+        "utilization.gpu [%]", "utilization.memory [%]",
+    ]
+    cols = _detect_all_columns(header)
+    assert cols["mem"] is None, f"mem should be None, got {cols['mem']!r}"
+    # The real used-memory column, when present, is still picked.
+    cols2 = _detect_all_columns(header + ["memory.used [MiB]"])
+    assert cols2["mem"] == "memory.used [MiB]"
+
+
 def test_detect_all_columns_missing_optional_metrics():
     """Only power present — temp/util/mem all None."""
     header = ["timestamp", "index", "power.draw [W]"]
