@@ -110,7 +110,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.75
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
-    --tokenizer-worker-num 6
+    # --tokenizer-worker-num 6
     --tokenizer-path "$MODEL"
     --context-length "$MAX_MODEL_LEN"
     --enable-metrics
