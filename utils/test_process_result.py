@@ -755,14 +755,14 @@ class TestPowerAggregationIntegration:
         patched = json.loads(agg_path.read_text())
         assert "avg_power_w" not in patched
 
-    def test_disagg_multinode_emits_per_worker_and_per_stage_joules(self, tmp_path, multinode_env_vars):
+    def test_disagg_multinode_emits_workers_and_per_stage_joules(self, tmp_path, multinode_env_vars):
         """End-to-end disagg wiring: DISAGG=true + per-node labeled CSVs →
         process_result.py passes disagg through to aggregate_power, which emits
-        power_by_worker + joules_per_input_token using per-stage attribution.
+        workers[] + per-stage scalars alongside the cluster-wide joules.
 
-        Without the disagg=disagg propagation in process_result.py, the run
-        would silently fall back to cluster-wide joules math and the user-facing
-        per-stage J/input metric would be missing."""
+        Without the disagg=disagg propagation in process_result.py, the
+        per-stage scalars (joules_per_input_token, joules_per_output_token_decode,
+        prefill_avg_power_w, decode_avg_power_w) would be missing."""
         start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
         # 1 prefill worker × 4 GPUs @ 600W on its own node
         self._write_nvidia_csv(
@@ -796,21 +796,28 @@ class TestPowerAggregationIntegration:
 
         patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
 
-        # Per-stage attribution: prefill_energy / input, decode_energy / output.
+        # Per-stage attribution scalars: prefill_energy / input, decode_energy / output.
         # Prefill: 600 × 4 × 60 = 144_000 J  → / 240_000 = 0.6 J/input_tok.
-        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok.
+        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok_decode.
         assert patched["joules_per_input_token"] == pytest.approx(0.6, abs=0.01)
-        assert patched["joules_per_output_token"] == pytest.approx(3.2, abs=0.01)
+        assert patched["joules_per_output_token_decode"] == pytest.approx(3.2, abs=0.01)
+        assert patched["prefill_avg_power_w"] == pytest.approx(600.0, abs=0.5)
+        assert patched["decode_avg_power_w"] == pytest.approx(400.0, abs=0.5)
+
+        # Cluster-wide J/output (frontend would be incl. here too if present).
+        # Total energy = (600+400) × 4 × 60 = 240_000 J → / 30_000 = 8.0 J/output_tok.
+        assert patched["joules_per_output_token"] == pytest.approx(8.0, abs=0.05)
 
         # Per-worker breakdown labeled with role.
-        workers = patched["power_by_worker"]
+        workers = patched["workers"]
         assert {w["role"] for w in workers} == {"prefill", "decode"}
         for w in workers:
             assert w["num_gpus"] == 4
             assert w["worker_idx"] == 0
 
     def test_non_disagg_multinode_keeps_cluster_wide_joules_math(self, tmp_path, multinode_env_vars):
-        """Multinode but DISAGG=false → keep cluster-wide ratios, no J/input.
+        """Multinode but DISAGG=false → keep cluster-wide ratios, no per-stage
+        scalars.
 
         Sanity check that the disagg flag is the gate, not just multinode-ness."""
         start, end = 1_700_000_100.0, 1_700_000_160.0
@@ -841,7 +848,13 @@ class TestPowerAggregationIntegration:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
-        assert "joules_per_input_token" not in patched
-        # power_by_worker still emitted (filename labels exist) — useful for
+        for absent in (
+            "joules_per_input_token",
+            "joules_per_output_token_decode",
+            "prefill_avg_power_w",
+            "decode_avg_power_w",
+        ):
+            assert absent not in patched, f"unexpected per-stage key {absent}"
+        # workers[] still emitted (filename labels exist) — useful for
         # observability even on non-disagg runs.
-        assert patched["power_by_worker"][0]["role"] == "agg"
+        assert patched["workers"][0]["role"] == "agg"
