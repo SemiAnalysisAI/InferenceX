@@ -1,4 +1,4 @@
-name: "svf-vllm-agg-gb200-flash-profile-dep16-conc16-mtp3"
+name: "svf-vllm-agg-gb200-flash-profile-eplp-dep16-conc16-mtp3"
 
 model:
   path: "deepseek-v4-flash"
@@ -61,6 +61,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
+      expert-placement-strategy: round_robin
       moe-backend: deep_gemm_mega_moe
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       attention-config: '{"use_fp4_indexer_cache":true}'
