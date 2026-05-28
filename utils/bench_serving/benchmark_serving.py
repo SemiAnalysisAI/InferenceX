@@ -95,10 +95,44 @@ class BenchmarkMetrics:
 _worker_tokenizer = None
 
 
+def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
+    """Load tokenizer for random-prompt generation.
+
+    vLLM's get_tokenizer can raise AttributeError when transformers removes
+    LlamaTokenizer.all_special_tokens_extended (e.g. Qwen3.5 with newer
+    transformers). Prefer backend_request_func.get_tokenizer on fallback so
+    client tokenization stays aligned with the sglang server (#1381, #1428).
+    """
+    try:
+        return get_tokenizer(
+            tokenizer_id,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+        )
+    except AttributeError as exc:
+        if "all_special_tokens_extended" not in str(exc):
+            raise
+        try:
+            from backend_request_func import get_tokenizer as _backend_get_tokenizer
+            return _backend_get_tokenizer(
+                tokenizer_id,
+                tokenizer_mode=tokenizer_mode,
+                trust_remote_code=trust_remote_code,
+            )
+        except ImportError:
+            from transformers import AutoTokenizer
+            use_fast = tokenizer_mode != "slow"
+            return AutoTokenizer.from_pretrained(
+                tokenizer_id,
+                trust_remote_code=trust_remote_code,
+                use_fast=use_fast,
+            )
+
+
 def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
     """Initialize tokenizer once per worker process."""
     global _worker_tokenizer
-    _worker_tokenizer = get_tokenizer(
+    _worker_tokenizer = _load_tokenizer(
         tokenizer_id,
         tokenizer_mode=tokenizer_mode,
         trust_remote_code=trust_remote_code,
@@ -572,6 +606,7 @@ async def benchmark(
     print("Starting main benchmark run...")
 
     benchmark_start_time = time.perf_counter()
+    benchmark_start_time_unix = time.time()
     tasks: List[asyncio.Task] = []
     async for request in get_request(input_requests, request_rate, burstiness):
         prompt, prompt_len, output_len, mm_content = request
@@ -615,6 +650,7 @@ async def benchmark(
         pbar.close()
 
     benchmark_duration = time.perf_counter() - benchmark_start_time
+    benchmark_end_time_unix = time.time()
 
     metrics, actual_output_lens = calculate_metrics(
         input_requests=input_requests,
@@ -645,6 +681,8 @@ async def benchmark(
 
     result = {
         "duration": benchmark_duration,
+        "benchmark_start_time_unix": benchmark_start_time_unix,
+        "benchmark_end_time_unix": benchmark_end_time_unix,
         "completed": metrics.completed,
         "total_input_tokens": metrics.total_input,
         "total_output_tokens": metrics.total_output,
@@ -783,9 +821,11 @@ def main(args: argparse.Namespace):
         api_url = f"http://{args.host}:{args.port}{args.endpoint}"
         base_url = f"http://{args.host}:{args.port}"
 
-    tokenizer = get_tokenizer(tokenizer_id,
-                              tokenizer_mode=tokenizer_mode,
-                              trust_remote_code=args.trust_remote_code)
+    tokenizer = _load_tokenizer(
+        tokenizer_id,
+        tokenizer_mode=tokenizer_mode,
+        trust_remote_code=args.trust_remote_code,
+    )
 
 
     if args.dataset_name == "random":
