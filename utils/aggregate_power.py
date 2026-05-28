@@ -48,6 +48,27 @@ _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
 _GPU_INDEX_COL_RE = re.compile(r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
+# Matches perf_samples_<role>_w<worker_idx>_<host>.csv as written by srt-slurm's
+# perfmon (SemiAnalysisAI/srt-slurm:feat/inferencex-perfmon). Hostnames can
+# contain underscores and digits, so the role and idx are anchored before the
+# host portion. Old-format filenames (perf_samples_<host>.csv) don't match
+# and fall through to the unlabeled cluster-wide path.
+_FILENAME_ROLE_RE = re.compile(r"^perf_samples_(?P<role>[a-z]+)_w(?P<idx>\d+)_(?P<host>.+)$")
+
+
+def _parse_role_from_filename(path: Path) -> tuple[str | None, int | None]:
+    """Return (role, worker_idx) parsed from the CSV stem, or (None, None).
+
+    Role is one of "prefill", "decode", "agg", "frontend" depending on what
+    srt-slurm's _start_perf_monitor labels the node with. Unlabeled filenames
+    (old format) return (None, None) so callers can treat them as cluster-wide
+    contributions without per-worker attribution.
+    """
+    m = _FILENAME_ROLE_RE.match(path.stem)
+    if not m:
+        return None, None
+    return m.group("role"), int(m.group("idx"))
+
 
 def _parse_timestamp(value: str) -> float | None:
     """Best-effort timestamp parse to Unix epoch seconds (local wall clock).
@@ -209,6 +230,70 @@ def aggregate_power(
     return mean(per_sample_mean_per_gpu), num_gpus
 
 
+def aggregate_power_per_worker(
+    csv_path: Path | Iterable[Path],
+    start_unix: float,
+    end_unix: float,
+) -> dict | None:
+    """Aggregate measured power both cluster-wide and per worker.
+
+    Returns a dict with:
+
+      - cluster_avg_power_w: same number as aggregate_power's first tuple element
+      - cluster_num_gpus:    same as aggregate_power's second tuple element
+      - workers:             list of {role, worker_idx, num_gpus, avg_power_w}
+                             dicts — one per (role, worker_idx) group derived
+                             from CSV filenames. Empty list when no filenames
+                             match the labeled format (single-node single-CSV
+                             input, or older perfmon writing unlabeled paths).
+
+    Worker grouping is by filename: each path's role + worker_idx are parsed
+    from ``perf_samples_<role>_w<idx>_<host>.csv``. Multiple CSVs sharing the
+    same (role, worker_idx) — e.g. a multi-node TP=16 worker spanning 4 nodes —
+    aggregate together as one worker. Unlabeled paths are silently dropped
+    from the per-worker output but still contribute to the cluster-wide
+    average via the underlying aggregate_power call.
+
+    Returns None when the cluster-wide aggregation returns None.
+    """
+    paths = [csv_path] if isinstance(csv_path, Path) else list(csv_path)
+    if not paths or end_unix <= start_unix:
+        return None
+
+    cluster = aggregate_power(paths, start_unix, end_unix)
+    if cluster is None:
+        return None
+    cluster_avg, cluster_n = cluster
+
+    # Group paths by (role, worker_idx); silently skip files whose names
+    # don't match the labeled format.
+    groups: dict[tuple[str, int], list[Path]] = {}
+    for p in paths:
+        role, idx = _parse_role_from_filename(p)
+        if role is None or idx is None:
+            continue
+        groups.setdefault((role, idx), []).append(p)
+
+    workers: list[dict] = []
+    for (role, idx), group_paths in sorted(groups.items()):
+        result = aggregate_power(group_paths, start_unix, end_unix)
+        if result is None:
+            continue
+        avg, n = result
+        workers.append({
+            "role": role,
+            "worker_idx": idx,
+            "num_gpus": n,
+            "avg_power_w": round(avg, 3),
+        })
+
+    return {
+        "cluster_avg_power_w": cluster_avg,
+        "cluster_num_gpus": cluster_n,
+        "workers": workers,
+    }
+
+
 def _load_bench_window(
     bench_result_path: Path,
 ) -> tuple[float, float, float, int, int] | None:
@@ -285,12 +370,21 @@ def patch_agg_result(
     avg_power_w: float,
     joules_per_output_token: float,
     joules_per_total_token: float,
+    extras: dict | None = None,
 ) -> None:
-    """Read the agg JSON, add the three power keys, and write it back atomically."""
+    """Read the agg JSON, add the three base power keys + any extras, write back atomically.
+
+    ``extras`` is merged after the base three keys. Used for per-worker
+    breakdowns (``workers``) and role-split energy metrics
+    (``joules_per_input_token``, ``joules_per_output_token_decode``,
+    ``prefill_avg_power_w``, ``decode_avg_power_w``) on disagg runs.
+    """
     data = json.loads(agg_path.read_text(encoding="utf-8"))
     data["avg_power_w"] = round(avg_power_w, 3)
     data["joules_per_output_token"] = round(joules_per_output_token, 6)
     data["joules_per_total_token"] = round(joules_per_total_token, 6)
+    if extras:
+        data.update(extras)
     tmp_path = agg_path.with_suffix(agg_path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp_path.replace(agg_path)
@@ -307,7 +401,7 @@ def run(csv_path: Path | Iterable[Path], bench_result: Path, agg_result: Path) -
     start, end, duration, total_output, total_input = window
 
     paths = [csv_path] if isinstance(csv_path, Path) else list(csv_path)
-    result = aggregate_power(paths, start, end)
+    result = aggregate_power_per_worker(paths, start, end)
     if result is None:
         label = str(paths[0]) if len(paths) == 1 else f"{len(paths)} CSVs"
         print(
@@ -316,17 +410,47 @@ def run(csv_path: Path | Iterable[Path], bench_result: Path, agg_result: Path) -
             file=sys.stderr,
         )
         return 0
-    avg_power_w, num_gpus = result
+    avg_power_w = result["cluster_avg_power_w"]
+    num_gpus = result["cluster_num_gpus"]
+    workers = result["workers"]
 
-    # Joules consumed by the system during the bench window, divided by either
-    # output tokens (for generation-cost metrics) or all tokens (for whole-
-    # workload efficiency).
+    # Cluster-wide energy and per-token metrics (existing behavior, unchanged).
     total_system_energy_j = avg_power_w * num_gpus * duration
     joules_per_output_token = total_system_energy_j / total_output
     total_tokens = total_output + total_input
     joules_per_total_token = (
         total_system_energy_j / total_tokens if total_tokens > 0 else joules_per_output_token
     )
+
+    # Per-role breakdown — only emitted when filenames had role labels (i.e.
+    # srt-slurm's perfmon was the source). Role-split energy is only meaningful
+    # for disagg runs (both prefill and decode workers present); aggregated
+    # runs and frontend-only nodes don't contribute to the role-split fields.
+    extras: dict = {}
+    if workers:
+        extras["workers"] = workers
+        prefill = [w for w in workers if w["role"] == "prefill"]
+        decode = [w for w in workers if w["role"] == "decode"]
+        if prefill and decode:
+            prefill_gpus = sum(w["num_gpus"] for w in prefill)
+            decode_gpus = sum(w["num_gpus"] for w in decode)
+            prefill_energy_j = sum(
+                w["avg_power_w"] * w["num_gpus"] * duration for w in prefill
+            )
+            decode_energy_j = sum(
+                w["avg_power_w"] * w["num_gpus"] * duration for w in decode
+            )
+            extras["prefill_avg_power_w"] = round(
+                sum(w["avg_power_w"] * w["num_gpus"] for w in prefill) / prefill_gpus, 3
+            )
+            extras["decode_avg_power_w"] = round(
+                sum(w["avg_power_w"] * w["num_gpus"] for w in decode) / decode_gpus, 3
+            )
+            if total_input > 0:
+                extras["joules_per_input_token"] = round(prefill_energy_j / total_input, 6)
+            extras["joules_per_output_token_decode"] = round(
+                decode_energy_j / total_output, 6
+            )
 
     if not agg_result.is_file():
         print(
@@ -337,18 +461,27 @@ def run(csv_path: Path | Iterable[Path], bench_result: Path, agg_result: Path) -
 
     try:
         patch_agg_result(
-            agg_result, avg_power_w, joules_per_output_token, joules_per_total_token
+            agg_result,
+            avg_power_w,
+            joules_per_output_token,
+            joules_per_total_token,
+            extras=extras,
         )
     except (OSError, json.JSONDecodeError) as exc:
         print(f"[aggregate_power] Failed to patch {agg_result}: {exc}", file=sys.stderr)
         return 0
 
+    role_summary = (
+        f" prefill={extras['prefill_avg_power_w']:.0f}W decode={extras['decode_avg_power_w']:.0f}W"
+        if "prefill_avg_power_w" in extras and "decode_avg_power_w" in extras
+        else ""
+    )
     print(
-        f"[aggregate_power] avg_power_w={avg_power_w:.2f} (per GPU, n={num_gpus}) "
+        f"[aggregate_power] avg_power_w={avg_power_w:.2f} (per GPU, n={num_gpus}){role_summary} "
         f"joules_per_output_token={joules_per_output_token:.4f} "
         f"joules_per_total_token={joules_per_total_token:.4f} "
         f"duration={duration:.1f}s output_tokens={total_output} input_tokens={total_input} "
-        f"-> {agg_result}"
+        f"workers={len(workers)} -> {agg_result}"
     )
     return 0
 
