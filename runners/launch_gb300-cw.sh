@@ -116,13 +116,24 @@ cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
 # orchestrator's _start_perf_monitor short-circuits and no perf_samples_*.csv
 # are ever written — multinode measured-power aggregation would silently
 # skip. Idempotent: skips recipes that already declare `monitoring:`.
-for recipe in "$SRT_RECIPE_DST"/*.yaml; do
-    [ -f "$recipe" ] || continue
+#
+# CRITICAL: use `find` recursively, not a flat `*.yaml` glob. Recipes live
+# in $SRT_RECIPE_DST/<workload>/*.yaml (e.g. .../8k1k/*.yaml) — a flat glob
+# matches zero files, the loop runs zero times, no recipe gets monitoring,
+# and perfmon never spawns. PR #1574's first real sweep (#26548110246) hit
+# exactly this: completed "success" with no power data because the glob
+# matched nothing and the failure was silent end-to-end.
+INJECTED_COUNT=0
+while IFS= read -r recipe; do
     if ! grep -q '^monitoring:' "$recipe"; then
         printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$recipe"
         echo "[perfmon] enabled monitoring in recipe: $recipe"
+        INJECTED_COUNT=$((INJECTED_COUNT + 1))
     fi
-done
+done < <(find "$SRT_RECIPE_DST" -type f -name '*.yaml')
+if [ "$INJECTED_COUNT" -eq 0 ]; then
+    echo "[perfmon] WARNING: zero recipes received monitoring injection under $SRT_RECIPE_DST. Either every recipe already had it, or the directory layout changed — power data will be MISSING from this run." >&2
+fi
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
