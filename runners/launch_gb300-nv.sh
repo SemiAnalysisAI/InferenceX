@@ -95,11 +95,9 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    # Custom srt-slurm fork that recognizes resources.spread_workers and
-    # dynamo.wheel schema fields used by the minimax pareto recipes.
-    git clone https://github.com/jasonlizhengjian/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout lijas/spread-workers
+    git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m2.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5" recipes/vllm/minimax-m2.5
 else

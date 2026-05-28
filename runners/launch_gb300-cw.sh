@@ -30,10 +30,8 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/mnt/vast/models/MiniMax-M2.5-NVFP4"
 
     if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-        # Custom srt-slurm fork that recognizes resources.spread_workers and
-        # dynamo.wheel schema fields used by the minimax pareto recipes.
-        SRT_SLURM_RECIPES_REPO="https://github.com/jasonlizhengjian/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="lijas/spread-workers"
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="sa-submission-q2-2026"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5"
         SRT_RECIPE_DST="recipes/vllm/minimax-m2.5"
     else

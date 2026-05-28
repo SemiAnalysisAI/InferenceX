@@ -65,12 +65,9 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    # Custom srt-slurm fork that recognizes resources.spread_workers,
-    # dynamo.wheel, and backend.allow_prefill_decode_colocation schema
-    # fields used by the minimax pareto recipes. Same branch as gb300-nv.
-    git clone https://github.com/jasonlizhengjian/srt-slurm.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout lijas/spread-workers
+    git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m2.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300" recipes/vllm/minimax-m2.5
 else
