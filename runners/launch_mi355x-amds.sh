@@ -52,11 +52,32 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Ensure root-owned files are cleaned up even on early exit to prevent
-    # EACCES errors when the next GH Actions job checks out on this runner
-    trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+    # EACCES errors when the next GH Actions job checks out on this runner.
+    # Always preserve slurm logs as CI artifacts for debugging.
+    # KEEP_LOGS=1 disables the trap entirely (local-debug knob).
+    cleanup_and_save_logs() {
+        if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
+            local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            mkdir -p "$art_dir"
+            cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+        fi
+        # Print .err inline so failures are visible in CI output
+        local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
+        if [[ -s "$err_file" ]]; then
+            echo "=== Slurm job stderr ==="
+            tail -100 "$err_file"
+            echo "========================"
+        fi
+        sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    }
+    if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
+        trap '' EXIT
+    else
+        trap cleanup_and_save_logs EXIT
+    fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node"
@@ -108,12 +129,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
-sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
+logs_root = f"{job_dir}/logs/"
+candidates = []
+if os.path.isdir(logs_root):
+    for name in os.listdir(logs_root):
+        subdir = f"{logs_root}{name}/{framework}_isl_{isl}_osl_{osl}"
+        if os.path.isdir(subdir):
+            candidates.append(subdir)
+for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
-        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
+        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1 "$FRAMEWORK")
         if [ -z "$LOGS_DIR" ]; then
             echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
             exit 1
@@ -162,16 +190,7 @@ PY
 
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
-    # Upload logs as artifact if running in GitHub Actions
-    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-        ARTIFACT_DIR="$GITHUB_WORKSPACE/benchmark_artifacts"
-        mkdir -p "$ARTIFACT_DIR"
-        cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$ARTIFACT_DIR/" 2>/dev/null || true
-        echo "Logs copied to $ARTIFACT_DIR for artifact upload"
-    fi
-
-    # Clean up root-owned files to prevent EACCES on GH Actions checkout cleanup
-    sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
 
 else
 
@@ -237,6 +256,7 @@ else
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
+        --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
 

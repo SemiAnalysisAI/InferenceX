@@ -8,6 +8,7 @@ concurrency:
           (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
           github.event.label.name != 'sweep-enabled' &&
           github.event.label.name != 'full-sweep-enabled' &&
+          github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.run_id ||
           'active'
         }}
@@ -39,7 +40,8 @@ jobs:
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled'
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled'
             )
         steps:
             - name: Checkout code
@@ -61,12 +63,14 @@ jobs:
               !github.event.pull_request.draft &&
               (
                 contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
-                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')
               ) &&
               (
                 (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
                 github.event.label.name == 'sweep-enabled' ||
-                github.event.label.name == 'full-sweep-enabled'
+                github.event.label.name == 'full-sweep-enabled' ||
+                github.event.label.name == 'non-canary-full-sweep-enabled'
               )
             ) ||
             (
@@ -85,10 +89,13 @@ jobs:
             - name: Reject conflicting sweep labels
               if: >-
                   github.event_name == 'pull_request' &&
-                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') &&
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+                  (
+                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')) ||
+                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
+                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled'))
+                  )
               run: |
-                  echo "::error::PR has both 'sweep-enabled' and 'full-sweep-enabled' labels. Remove one — 'full-sweep-enabled' runs the full intermediate concurrency sweep; 'sweep-enabled' trims to max(conc) per parallelism config."
+                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), or 'non-canary-full-sweep-enabled' (full sweep, no canary gate)."
                   exit 1
 
             - name: Checkout code
@@ -135,9 +142,87 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    sweep-multi-node-1k1k:
+    canary-select:
         needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null' }}
+        if: >-
+            needs.setup.outputs.reuse-enabled != 'true' &&
+            github.event_name == 'pull_request' &&
+            contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+        runs-on: ubuntu-latest
+        outputs:
+            canary-config: ${{ steps.pick.outputs.canary-config }}
+            remaining-search-space-config: ${{ steps.pick.outputs.remaining-search-space-config }}
+        steps:
+            - id: pick
+              env:
+                  SEARCH_SPACE: ${{ needs.setup.outputs.search-space-config }}
+              run: |
+                  selection=$(jq -c '
+                    def remove_one($needle):
+                      if $needle == null then .
+                      else
+                        (index($needle)) as $idx
+                        | if $idx == null then . else del(.[$idx]) end
+                      end;
+
+                    # Canary is a benchmark-only smoke test — exclude entries
+                    # whose primary purpose is eval (run-eval == true) so the
+                    # picked canary never runs an eval pass.
+                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []))
+                      | map(select(.["run-eval"] != true))) as $candidates
+                    | (if ($candidates | length) == 0 then null else ($candidates | min_by(.conc)) end) as $canary
+                    | {
+                        canary: (if $canary == null then [] else [$canary] end),
+                        remaining: (
+                          .
+                          | .single_node = (.single_node // {})
+                          | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
+                          | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
+                        )
+                      }
+                  ' <<<"$SEARCH_SPACE")
+                  echo "canary-config=$(jq -c '.canary' <<<"$selection")" >> "$GITHUB_OUTPUT"
+                  echo "remaining-search-space-config=$(jq -c '.remaining' <<<"$selection")" >> "$GITHUB_OUTPUT"
+
+    canary-sweep:
+        needs: canary-select
+        if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: canary /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+            run-eval: false
+
+    sweep-multi-node-1k1k:
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
@@ -174,8 +259,15 @@ jobs:
             run-eval: false
 
     sweep-multi-node-8k1k:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
@@ -186,14 +278,22 @@ jobs:
         with: *multi-node-inputs
 
     sweep-single-node-1k1k:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != '[]'
+            }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['1k1k'] }}
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets: inherit
         with: &single-node-inputs
             exp-name: ${{ matrix.config.exp-name }}
@@ -215,20 +315,35 @@ jobs:
             run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-8k1k:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != '[]'
+            }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
             fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['8k1k'] }}
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets: inherit
         with: *single-node-inputs
 
     sweep-agentic:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -259,8 +374,15 @@ jobs:
             scenario-type: agentic-coding
 
     sweep-multi-node-agentic:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
@@ -298,8 +420,16 @@ jobs:
             scenario-type: agentic-coding
 
     sweep-evals:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
@@ -328,8 +458,16 @@ jobs:
             eval-only: true
 
     sweep-multi-node-evals:
-        needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled != 'true' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null' }}
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
+            }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -368,6 +506,7 @@ jobs:
     collect-results:
         needs:
             [
+                canary-sweep,
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
                 sweep-agentic,
@@ -381,6 +520,7 @@ jobs:
               always() &&
               needs.setup.result == 'success' &&
               (
+                needs.canary-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
@@ -592,12 +732,14 @@ jobs:
             !github.event.pull_request.draft &&
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled'
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled'
             )
         runs-on: ubuntu-latest
         permissions:

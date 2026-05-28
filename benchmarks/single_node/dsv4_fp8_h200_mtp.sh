@@ -70,6 +70,7 @@ vllm serve $MODEL --host 0.0.0.0 --port $PORT \
 "${PARALLEL_ARGS[@]}" \
 "${EP_ARGS[@]}" \
 $MAX_MODEL_LEN_ARG \
+--quantization deepseek_v4_fp8 \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs 512 \
 --max-num-batched-tokens 512 \

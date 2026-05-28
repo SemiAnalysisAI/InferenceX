@@ -276,7 +276,11 @@ def main() -> int:
     parser.add_argument("--event-name", required=True)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--workflow-id", default="run-sweep.yml")
-    parser.add_argument("--full-sweep-label", default="full-sweep-enabled")
+    parser.add_argument(
+        "--full-sweep-label",
+        default="full-sweep-enabled,non-canary-full-sweep-enabled",
+        help="Comma-separated PR labels treated as 'full sweep'; reuse requires at least one.",
+    )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
     parser.add_argument(
         "--allowed-author-associations",
@@ -355,10 +359,16 @@ def main() -> int:
 
     pr = github_api(args.repo, f"/pulls/{pr_number}", token)
     labels = label_names(pr)
-    if args.full_sweep_label not in labels:
+    accepted_full_sweep_labels = {
+        value.strip()
+        for value in args.full_sweep_label.split(",")
+        if value.strip()
+    }
+    if not accepted_full_sweep_labels.intersection(labels):
+        accepted = ", ".join(sorted(accepted_full_sweep_labels))
         raise RuntimeError(
-            f"PR #{pr_number} has {args.pinned_run_command} authorization but not "
-            f"{args.full_sweep_label}."
+            f"PR #{pr_number} has {args.pinned_run_command} authorization but is "
+            f"missing any of: {accepted}."
         )
     if not pr.get("merged_at"):
         raise RuntimeError(f"PR #{pr_number} is not marked as merged.")

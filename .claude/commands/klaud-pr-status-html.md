@@ -30,7 +30,7 @@ State buckets:
 - **RUNNING** — no failed checks; at least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
 - **READY** — no failed, no pending, and at least one `Run Sweep` check is `SUCCESS`.
 - **NO_SUCCESS** — sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP** — no `Run Sweep` check exists for this head SHA at all (sweep never triggered — usually missing `full-sweep-enabled` label).
+- **NO_SWEEP** — no `Run Sweep` check exists for this head SHA at all (sweep never triggered — usually missing a sweep label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`).
 
 ```bash
 : > /tmp/klaud_pr_status.tsv

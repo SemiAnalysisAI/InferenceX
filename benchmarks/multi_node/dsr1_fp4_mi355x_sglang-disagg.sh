@@ -19,7 +19,8 @@ check_env_vars \
     DECODE_DP_ATTN \
     PREFILL_NODES \
     DECODE_NODES \
-    RANDOM_RANGE_RATIO
+    RANDOM_RANGE_RATIO \
+    FRAMEWORK
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
