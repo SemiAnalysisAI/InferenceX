@@ -74,7 +74,7 @@ backend:
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL","mode":3}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","mode":3}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
       no-disable-hybrid-kv-cache-manager: true
