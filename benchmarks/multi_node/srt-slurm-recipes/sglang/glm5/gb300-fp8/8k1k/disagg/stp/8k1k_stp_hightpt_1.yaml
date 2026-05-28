@@ -134,7 +134,7 @@ backend:
       moe-a2a-backend: deepep
       deepep-mode: low_latency
       deepep-config: /configs/deepep_config.json
-      max-running-requests: 1700
+      max-running-requests: 1680
       cuda-graph-max-bs: 70
 health_check:
   max_attempts: 360

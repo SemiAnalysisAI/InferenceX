@@ -12,6 +12,18 @@ check_env_vars \
     RESULT_FILENAME \
     EP_SIZE
 
+# `hf download` creates the target dir if missing and is itself idempotent. 
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
@@ -31,9 +43,9 @@ fi
 start_gpu_monitor
 
 set -x
-SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
+--tensor-parallel-size $TP --data-parallel-size 1 --expert-parallel-size $EP_SIZE \
 --enable-symm-mem \
 --disable-radix-cache \
 --quantization fp8 \
@@ -50,7 +62,7 @@ SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --mod
 --stream-interval 50 \
 --scheduler-recv-interval 10 \
 --tokenizer-worker-num 6 \
---tokenizer-path $MODEL \
+--tokenizer-path $MODEL_PATH \
 --speculative-algorithm EAGLE \
 --speculative-num-steps 3 \
 --speculative-eagle-topk 1 \
