@@ -2450,6 +2450,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1346
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Fix the eval result of dsr1 fp4 with fp8 blockwise combine"
+    - "Bump the image to May 19"
+    - "Add conc 512 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1566
+
+- config-keys:
     - kimik2.5-int4-h200-vllm
   description:
     - "Update vLLM image from v0.16.0 to v0.20.2"
@@ -2966,6 +2975,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1440
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Add Kimi-K2.5-MXFP4 FP4 vLLM disagg PD recipe (1P2D, MoRI-EP + MoRI-IO) for MI355X on vllm/vllm-openai-rocm:nightly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1569
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm-disagg
+  description:
+    - "Add MiniMax-M2.5 FP8 vLLM disagg PD recipe (1P2D, MoRI-EP + MoRI-IO) for MI355X on vllm/vllm-openai-rocm:nightly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1569
+
+- config-keys:
     - dsv4-fp4-mi355x-vllm
   description:
     - "Following recipe from https://github.com/vllm-project/recipes/pull/433"
@@ -3131,24 +3152,51 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1555
 
 - config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update MiniMax-M2.5 FP8 H200 vLLM to vllm/vllm-openai:v0.20.1-ubuntu2404"
+    - "Set vLLM serving knobs in benchmarks/single_node/minimaxm2.5_fp8_h200.sh: generated benchmark max-model-len, previous eval max-model-len handling, fp8 KV cache, FlashInfer attention/autotune, Triton MoE, and MiniMax QK norm fusion"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1354
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to rocm/sgl-dev:rocm720-mi35x-f96ac98-20260526-DSv4"
+    - "Add args to avoid kvcache pool full issue on high conc"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1568
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+    - dsr1-fp8-mi355x-sglang
+  description:
+    - "Validates measured-power aggregation pipeline (PR #1558) on both NVIDIA (H200) and AMD (MI355X) hardware — different SMI tools (nvidia-smi vs amd-smi), different CSV schemas (power.draw [W] vs socket_power), same aggregator. No config change. Entry intentionally kept past merge so run-sweep produces canonical agg JSONs with avg_power_w + joules_per_output_token on main for both vendors, seeding the dashboard's day-zero data."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1558
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 MI355X SGLang disaggregated prefill-decode benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511"
+    - "1P+1D TP8/EP1 smoke sweep for 1k1k and 8k1k (conc 8-512); MoRI transfer backend"
+    - "Add models.yaml server flags and multinode launch script qwen3.5_fp8_mi355x_sglang-disagg.sh"
+    - "8k1k row uses dp-attn=false (matches 1k1k): with --enable-dp-attention + --moe-a2a-backend mori, sglang auto-promotes moe_ep_size=tp_size=8, but is_deepep_class_backend() excludes MoRI, so num_shared_slots stays at the global value (1) and the (num_experts - num_shared_slots) % moe_ep_size assertion in fused_moe_triton/layer.py fires for Qwen3.5 (512 routed + 1 shared). Track upstream sglang; flip back to dp-attn=true once MoRI is added to is_deepep_class_backend() or shared-slot accounting is reconciled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1570
+
+- config-keys:
+    - glm5-fp8-mi355x-sglang-disagg
+  description:
+    - "Add GLM-5-FP8 MI355X SGLang disaggregated prefill-decode benchmark"
+    - "Image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523 (bumped from .v0.5.12-...-20260517 to unlock the PD-disagg MoRI overlay; matches chun-chang/sglang-disagg-qwen3.5)"
+    - "Adds patches/mori_conn.py overlay (bind-mounted via job.slurm) to fix sglang v0.5.12.post1 MoRI/PD startup crashes for hybrid-attention models (GLM-5 NSA, etc.): sender flatten, state_types plural fallback, consumer normalize, SWA/DSA rank/length normalize. Validated: GSM8K=0.971 strict/0.970 flexible on chun-chang. Auto-applied for v0.5.12.post1 images; opt-out via MORI_CONN_PATCH=skip."
+    - "1P+1D TP8/EP1 CI smoke sweep for 1k1k and 8k1k (conc 8-512)"
+    - "Add GLM-5-FP8 models.yaml flags, setup_deps.sh (aiter gluon + transformers glm_moe_dsa), GLM-5 env tuning in env.sh"
+    - "Add multinode launch script glm5_fp8_mi355x_sglang-disagg.sh; server.sh sources setup_deps.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1572
+
+- config-keys:
     - glm5-fp4-b200-sglang
-  description:
-    - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
-
-- config-keys:
     - glm5-fp4-b200-sglang-mtp
-  description:
-    - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
-
-- config-keys:
     - glm5-fp8-b200-sglang
-  description:
-    - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1561
-
-- config-keys:
     - glm5-fp8-b200-sglang-mtp
   description:
     - "Update SGLang image from v0.5.11-cu130 to nightly-dev-cu13-20260523-c112f762"
