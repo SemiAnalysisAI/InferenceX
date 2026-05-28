@@ -1,4 +1,4 @@
-name: "svf-vllm-agg-gb200-flash-profile-4gpu-conc256-mtp3"
+name: "svf-vllm-agg-gb200-flash-profile-4gpu-conc16-mtp3"
 
 model:
   path: "deepseek-v4-flash"
@@ -66,10 +66,10 @@ backend:
       attention-config: '{"use_fp4_indexer_cache":true}'
       tokenizer-mode: deepseek_v4
       max-model-len: 8704
-      max-num-seqs: 256
+      max-num-seqs: 16
       max-num-batched-tokens: 2048
-      max-cudagraph-capture-size: 256
-      profiler-config: '{"profiler":"torch","torch_profiler_dir":"/logs/profiles/agg","ignore_frontend":true,"delay_iterations":1296,"max_iterations":1,"active_iterations":1,"torch_profiler_with_stack":false}'
+      max-cudagraph-capture-size: 16
+      profiler-config: '{"profiler":"torch","torch_profiler_dir":"/logs/profiles/agg","ignore_frontend":true,"delay_iterations":384,"max_iterations":1,"active_iterations":1,"torch_profiler_with_stack":false}'
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -84,14 +84,14 @@ backend:
 profiling:
   type: "torch"
   aggregated:
-    start_step: 1296
-    stop_step: 1297
+    start_step: 384
+    stop_step: 385
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 256
-  concurrencies: "256"
+  concurrencies: "16"
   req_rate: "inf"
   num_prompts_mult: 1
   num_warmup_mult: 4
