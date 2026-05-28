@@ -3116,6 +3116,7 @@
     - "Enable W4A4 (MXFP4) megamoe by setting SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1 and SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1 in the megamoe environment blocks (not the low-latency 1p1d-tp4-tp4 or the 4p1d recipe)"
     - "Update SGLang image from nightly-dev-cu13-20260510-2473659e to nightly-dev-20260527-14f81a67"
     - "Switch moe-a2a-backend from deepep to megamoe and drop the deepep-config override"
+    - "Add two high concurrency configs"
     - "Clean up obsolete environs in the 8k1k disagg recipes: drop SGLANG_OPT_USE_JIT_NORM / SGLANG_OPT_USE_JIT_INDEXER_METADATA / SGLANG_OPT_USE_TOPK_V2 (now default-on); drop the auto-set MegaMoE companions (SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE, SGLANG_OPT_FIX_HASH_MEGA_MOE, SGLANG_OPT_FIX_MEGA_MOE_MEMORY, SGLANG_OPT_FIX_NEXTN_MEGA_MOE, SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK); drop SGLANG_OPT_USE_FAST_MASK_EP which no longer exists in sglang environ.py (SGLANG_RADIX_DISABLE_REUSE is kept)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1378
 
