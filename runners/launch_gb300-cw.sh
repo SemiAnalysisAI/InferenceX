@@ -166,16 +166,25 @@ cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
 # and perfmon never spawns. PR #1574's first real sweep (#26548110246) hit
 # exactly this: completed "success" with no power data because the glob
 # matched nothing and the failure was silent end-to-end.
+FOUND_COUNT=0
 INJECTED_COUNT=0
 while IFS= read -r recipe; do
+    FOUND_COUNT=$((FOUND_COUNT + 1))
     if ! grep -q '^monitoring:' "$recipe"; then
         printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$recipe"
         echo "[perfmon] enabled monitoring in recipe: $recipe"
         INJECTED_COUNT=$((INJECTED_COUNT + 1))
     fi
 done < <(find "$SRT_RECIPE_DST" -type f -name '*.yaml')
-if [ "$INJECTED_COUNT" -eq 0 ]; then
-    echo "[perfmon] WARNING: zero recipes received monitoring injection under $SRT_RECIPE_DST. Either every recipe already had it, or the directory layout changed — power data will be MISSING from this run." >&2
+# Distinguish "found 0 recipes" (real bug — directory wrong/empty) from "all
+# already had monitoring:" (benign — happens on reruns or if a recipe author
+# pre-declared the block). Only the former is a missing-power-data risk.
+if [ "$FOUND_COUNT" -eq 0 ]; then
+    echo "[perfmon] WARNING: zero recipe YAMLs found under $SRT_RECIPE_DST. The directory layout may have changed — power data will be MISSING from this run." >&2
+elif [ "$INJECTED_COUNT" -eq 0 ]; then
+    echo "[perfmon] all $FOUND_COUNT recipes already declared monitoring: — no injection needed."
+else
+    echo "[perfmon] injected monitoring: into $INJECTED_COUNT of $FOUND_COUNT recipes."
 fi
 
 echo "Installing srtctl..."

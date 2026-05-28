@@ -24,9 +24,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from aggregate_power import (  # noqa: E402
     _detect_columns,
+    _parse_perfmon_label,
     _parse_power,
     _parse_timestamp,
     aggregate_power,
+    aggregate_power_by_worker,
     patch_agg_result,
     run,
 )
@@ -679,3 +681,367 @@ def test_run_skips_when_duration_missing(tmp_path: Path):
 
     assert run([csv], bench, agg) == 0
     assert "avg_power_w" not in json.loads(agg.read_text())
+
+
+# --------------------------------------------------------------------------- #
+# Perfmon filename label parsing — drives per-worker grouping
+# --------------------------------------------------------------------------- #
+
+
+def test_parse_perfmon_label_prefill(tmp_path: Path):
+    role, idx, host = _parse_perfmon_label(tmp_path / "perf_samples_prefill_w0_node1.csv")
+    assert (role, idx, host) == ("prefill", 0, "node1")
+
+
+def test_parse_perfmon_label_decode_high_worker_idx(tmp_path: Path):
+    """Worker index can be multi-digit (e.g. 16-way prefill)."""
+    role, idx, host = _parse_perfmon_label(tmp_path / "perf_samples_decode_w15_node-42.csv")
+    assert (role, idx, host) == ("decode", 15, "node-42")
+
+
+def test_parse_perfmon_label_host_with_hyphens_and_digits(tmp_path: Path):
+    """CoreWeave-style hostnames like `slurm-compute-gpu-019-42b` must round-trip."""
+    role, idx, host = _parse_perfmon_label(
+        tmp_path / "perf_samples_prefill_w3_slurm-compute-gpu-019-42b.csv"
+    )
+    assert (role, idx, host) == ("prefill", 3, "slurm-compute-gpu-019-42b")
+
+
+def test_parse_perfmon_label_agg_role(tmp_path: Path):
+    """Non-disagg multinode uses role='agg' (not prefill/decode)."""
+    role, idx, host = _parse_perfmon_label(tmp_path / "perf_samples_agg_w0_node1.csv")
+    assert (role, idx, host) == ("agg", 0, "node1")
+
+
+def test_parse_perfmon_label_frontend_role(tmp_path: Path):
+    """Head-only nodes (no backend workers) get role='frontend'."""
+    role, idx, host = _parse_perfmon_label(tmp_path / "perf_samples_frontend_w0_head.csv")
+    assert (role, idx, host) == ("frontend", 0, "head")
+
+
+def test_parse_perfmon_label_unlabeled_returns_none(tmp_path: Path):
+    """Single-node `gpu_metrics.csv` doesn't match — caller should treat as None."""
+    assert _parse_perfmon_label(tmp_path / "gpu_metrics.csv") is None
+    assert _parse_perfmon_label(tmp_path / "perf_samples_node1.csv") is None
+    assert _parse_perfmon_label(tmp_path / "perf_samples_unknownrole_w0_host.csv") is None
+
+
+# --------------------------------------------------------------------------- #
+# Per-worker aggregation — groups node-CSVs by (role, worker_idx)
+# --------------------------------------------------------------------------- #
+
+
+def test_aggregate_power_by_worker_one_csv_per_worker(tmp_path: Path):
+    """4 prefill workers (one per node) + 1 decode worker on a single node.
+
+    Reflects the smallest disagg topology — every CSV is its own worker."""
+    base = 1_700_000_000.0
+    for w in range(4):
+        _write_nvidia_csv(
+            tmp_path / f"perf_samples_prefill_w{w}_pnode{w}.csv",
+            [(base + s, gpu, 600.0) for s in range(3) for gpu in range(4)],
+        )
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_decode_w0_dnode0.csv",
+        [(base + s, gpu, 400.0) for s in range(3) for gpu in range(4)],
+    )
+
+    workers = aggregate_power_by_worker(
+        list(tmp_path.glob("perf_samples_*.csv")), base, base + 10
+    )
+    assert workers is not None
+    # Ordered: prefill (w0..w3), then decode (w0).
+    assert [w["role"] for w in workers] == ["prefill"] * 4 + ["decode"]
+    assert [w["worker_idx"] for w in workers] == [0, 1, 2, 3, 0]
+    # Each worker is 4 GPUs at its respective wattage.
+    for w in workers[:4]:
+        assert w["num_gpus"] == 4
+        assert w["avg_power_w"] == pytest.approx(600.0)
+        assert len(w["hosts"]) == 1
+    assert workers[4]["num_gpus"] == 4
+    assert workers[4]["avg_power_w"] == pytest.approx(400.0)
+
+
+def test_aggregate_power_by_worker_one_worker_spans_multiple_nodes(tmp_path: Path):
+    """Decode_w0 spans 4 nodes × 4 GPUs = 16 GPUs.
+
+    Mirrors the typical wide-EP DSV4 topology (gpus_per_decode=16,
+    decode_workers=1). All 4 node-CSVs share the same (role, worker_idx)
+    and must collapse into ONE worker entry with num_gpus=16."""
+    base = 1_700_000_000.0
+    hosts = ["dnode0", "dnode1", "dnode2", "dnode3"]
+    for h in hosts:
+        _write_nvidia_csv(
+            tmp_path / f"perf_samples_decode_w0_{h}.csv",
+            [(base + s, gpu, 400.0) for s in range(3) for gpu in range(4)],
+        )
+
+    workers = aggregate_power_by_worker(
+        list(tmp_path.glob("perf_samples_*.csv")), base, base + 10
+    )
+    assert workers is not None
+    assert len(workers) == 1
+    w = workers[0]
+    assert w["role"] == "decode"
+    assert w["worker_idx"] == 0
+    assert w["num_gpus"] == 16  # 4 nodes × 4 GPUs
+    assert w["avg_power_w"] == pytest.approx(400.0)
+    assert w["hosts"] == sorted(hosts)
+
+
+def test_aggregate_power_by_worker_returns_none_when_no_labels(tmp_path: Path):
+    """Single-node `gpu_metrics.csv` has no perfmon label — returns None.
+
+    Caller (run()) then omits power_by_worker from the agg JSON entirely."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_nvidia_csv(csv, [(base + s, gpu, 500.0) for s in range(3) for gpu in range(4)])
+    assert aggregate_power_by_worker([csv], base, base + 10) is None
+
+
+def test_aggregate_power_by_worker_returns_none_for_empty_input(tmp_path: Path):
+    assert aggregate_power_by_worker([], 0.0, 100.0) is None
+
+
+def test_aggregate_power_by_worker_skips_unlabeled_silently(tmp_path: Path):
+    """Mixed input: one labeled CSV + one unlabeled. Only labeled is grouped."""
+    base = 1_700_000_000.0
+    labeled = tmp_path / "perf_samples_prefill_w0_n1.csv"
+    unlabeled = tmp_path / "gpu_metrics.csv"
+    _write_nvidia_csv(labeled, [(base + s, gpu, 600.0) for s in range(3) for gpu in range(4)])
+    _write_nvidia_csv(unlabeled, [(base + s, gpu, 999.0) for s in range(3) for gpu in range(4)])
+
+    workers = aggregate_power_by_worker([labeled, unlabeled], base, base + 10)
+    assert workers is not None
+    assert len(workers) == 1
+    assert workers[0]["role"] == "prefill"
+    # Unlabeled CSV's wattage must not bleed into the prefill worker.
+    assert workers[0]["avg_power_w"] == pytest.approx(600.0)
+
+
+# --------------------------------------------------------------------------- #
+# End-to-end disagg: run(..., disagg=True) emits per-worker + per-stage J/token
+# --------------------------------------------------------------------------- #
+
+
+def test_run_disagg_emits_power_by_worker_and_per_stage_joules(tmp_path: Path):
+    """Full disagg pipeline: per-worker breakdown + per-stage J/input + J/output.
+
+    Topology: 2 prefill workers × 4 GPUs @ 600W, 1 decode worker × 8 GPUs @ 400W.
+    Over a 10s bench window with 8000 input + 1000 output tokens:
+      - prefill energy = 600 × 8 × 10 = 48_000 J  → J/input = 48_000 / 8000 = 6.0
+      - decode energy  = 400 × 8 × 10 = 32_000 J  → J/output = 32_000 / 1000 = 32.0
+      - total energy   = 80_000 J                  → J/total = 80_000 / 9000 ≈ 8.889
+    Cluster-wide avg_power_w stays the weighted mean across all 16 GPUs."""
+    base = 1_700_000_000.0
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_prefill_w0_pn0.csv",
+        [(base + 1 + s, gpu, 600.0) for s in range(8) for gpu in range(4)],
+    )
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_prefill_w1_pn1.csv",
+        [(base + 1 + s, gpu, 600.0) for s in range(8) for gpu in range(4)],
+    )
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_decode_w0_dn0.csv",
+        [(base + 1 + s, gpu, 400.0) for s in range(8) for gpu in range(4)],
+    )
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_decode_w0_dn1.csv",
+        [(base + 1 + s, gpu, 400.0) for s in range(8) for gpu in range(4)],
+    )
+
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        total_output=1000,
+        total_input=8000,
+    )
+    agg.write_text(json.dumps({"hw": "gb300", "disagg": True}), encoding="utf-8")
+
+    assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
+    patched = json.loads(agg.read_text())
+
+    # Cluster-wide avg = (8*600 + 8*400) / 16 = 500W.
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+
+    # Per-stage J/token: prefill energy / input, decode energy / output.
+    assert patched["joules_per_input_token"] == pytest.approx(48_000 / 8000)   # 6.0
+    assert patched["joules_per_output_token"] == pytest.approx(32_000 / 1000)  # 32.0
+    assert patched["joules_per_total_token"] == pytest.approx(80_000 / 9000)   # ≈ 8.889
+
+    workers = patched["power_by_worker"]
+    assert [w["role"] for w in workers] == ["prefill", "prefill", "decode"]
+    assert [w["worker_idx"] for w in workers] == [0, 1, 0]
+    # Decode_w0 collapsed across 2 hosts → 8 GPUs total.
+    decode = workers[2]
+    assert decode["num_gpus"] == 8
+    assert decode["avg_power_w"] == pytest.approx(400.0)
+    assert decode["hosts"] == ["dn0", "dn1"]
+    # Each prefill worker is one node, 4 GPUs.
+    for w in workers[:2]:
+        assert w["num_gpus"] == 4
+        assert w["avg_power_w"] == pytest.approx(600.0)
+        assert len(w["hosts"]) == 1
+
+
+def test_run_disagg_excludes_frontend_from_per_stage_energy(tmp_path: Path):
+    """A frontend-only node's power must not contribute to J/input or J/output.
+
+    Frontend nodes don't run any backend worker — their (typically near-idle)
+    GPU draw would skew per-stage attribution if counted. They still appear
+    in power_by_worker for observability."""
+    base = 1_700_000_000.0
+    # Prefill worker — 4 GPUs @ 600W → 24_000 J in 10s
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_prefill_w0_pn0.csv",
+        [(base + 1 + s, gpu, 600.0) for s in range(8) for gpu in range(4)],
+    )
+    # Decode worker — 4 GPUs @ 400W → 16_000 J
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_decode_w0_dn0.csv",
+        [(base + 1 + s, gpu, 400.0) for s in range(8) for gpu in range(4)],
+    )
+    # Frontend node — would erroneously add 4_000 J if counted.
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_frontend_w0_head.csv",
+        [(base + 1 + s, gpu, 100.0) for s in range(8) for gpu in range(4)],
+    )
+
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(
+        bench, start=base, end=base + 10, duration=10.0, total_output=1000, total_input=8000
+    )
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
+    patched = json.loads(agg.read_text())
+
+    # J/input = 24_000 / 8000 = 3.0 (frontend excluded).
+    assert patched["joules_per_input_token"] == pytest.approx(3.0)
+    # J/output = 16_000 / 1000 = 16.0 (frontend excluded).
+    assert patched["joules_per_output_token"] == pytest.approx(16.0)
+    # Frontend still appears in the worker list for observability.
+    roles = [w["role"] for w in patched["power_by_worker"]]
+    assert "frontend" in roles
+
+
+def test_run_non_disagg_omits_joules_per_input_token(tmp_path: Path):
+    """Non-disagg runs (single-node or multinode-agg) keep the legacy schema.
+
+    No joules_per_input_token field — it'd be meaningless without a prefill
+    stage to attribute energy to. Existing fields must keep their pre-disagg
+    semantics (total_system_energy / token_count)."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_nvidia_csv(
+        csv, [(base + 1 + s, gpu, 500.0) for s in range(8) for gpu in range(8)]
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(
+        bench, start=base, end=base + 10, duration=10.0, total_output=20_000
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    assert run(csv, bench, agg, disagg=False) == 0
+    patched = json.loads(agg.read_text())
+    assert "joules_per_input_token" not in patched
+    assert "power_by_worker" not in patched
+    # Legacy semantics: total energy / token count.
+    assert patched["joules_per_output_token"] == pytest.approx(2.0)
+    assert patched["joules_per_total_token"] == pytest.approx(2.0)
+
+
+def test_run_disagg_falls_back_to_cluster_when_only_one_stage_present(tmp_path: Path):
+    """If only prefill or only decode CSVs survived, per-stage attribution
+    isn't possible — must fall back to cluster-wide ratios so the run still
+    publishes something useful instead of dropping the field entirely."""
+    base = 1_700_000_000.0
+    # Only prefill CSVs — decode is missing entirely.
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_prefill_w0_pn0.csv",
+        [(base + 1 + s, gpu, 600.0) for s in range(8) for gpu in range(4)],
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(
+        bench, start=base, end=base + 10, duration=10.0, total_output=1000, total_input=8000
+    )
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
+    patched = json.loads(agg.read_text())
+    # power_by_worker still emitted (one prefill worker).
+    assert len(patched["power_by_worker"]) == 1
+    # J/input absent (no per-stage attribution possible).
+    assert "joules_per_input_token" not in patched
+    # J/output falls back to cluster-wide (total_energy / output_tokens).
+    assert patched["joules_per_output_token"] == pytest.approx(24_000 / 1000)
+
+
+def test_run_disagg_handles_zero_input_tokens(tmp_path: Path):
+    """total_input_tokens=0 (rare degenerate case) → joules_per_input_token
+    omitted, no ZeroDivisionError."""
+    base = 1_700_000_000.0
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_prefill_w0_pn0.csv",
+        [(base + 1 + s, gpu, 600.0) for s in range(8) for gpu in range(4)],
+    )
+    _write_nvidia_csv(
+        tmp_path / "perf_samples_decode_w0_dn0.csv",
+        [(base + 1 + s, gpu, 400.0) for s in range(8) for gpu in range(4)],
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    _write_bench_result(
+        bench, start=base, end=base + 10, duration=10.0, total_output=1000, total_input=0
+    )
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+
+    assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
+    patched = json.loads(agg.read_text())
+    assert "joules_per_input_token" not in patched
+    assert patched["joules_per_output_token"] == pytest.approx(16_000 / 1000)
+
+
+def test_patch_agg_result_with_per_worker_and_per_stage(tmp_path: Path):
+    """patch_agg_result emits the new optional fields when supplied."""
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "gb300"}), encoding="utf-8")
+    workers = [
+        {"role": "prefill", "worker_idx": 0, "hosts": ["pn0"], "num_gpus": 4, "avg_power_w": 600.0},
+        {"role": "decode", "worker_idx": 0, "hosts": ["dn0"], "num_gpus": 4, "avg_power_w": 400.0},
+    ]
+    patch_agg_result(
+        agg,
+        avg_power_w=500.0,
+        joules_per_output_token=16.0,
+        joules_per_total_token=4.44,
+        joules_per_input_token=3.0,
+        power_by_worker=workers,
+    )
+    data = json.loads(agg.read_text())
+    assert data["avg_power_w"] == 500.0
+    assert data["joules_per_input_token"] == 3.0
+    assert data["power_by_worker"] == workers
+
+
+def test_patch_agg_result_omits_optional_fields_when_none(tmp_path: Path):
+    """Backward compat: caller passing None for new fields → fields absent."""
+    agg = tmp_path / "agg.json"
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+    patch_agg_result(
+        agg,
+        avg_power_w=400.0,
+        joules_per_output_token=1.5,
+        joules_per_total_token=0.5,
+    )
+    data = json.loads(agg.read_text())
+    assert "joules_per_input_token" not in data
+    assert "power_by_worker" not in data

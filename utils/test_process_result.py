@@ -754,3 +754,94 @@ class TestPowerAggregationIntegration:
         agg_path = tmp_path / "agg_benchmark_result.json"
         patched = json.loads(agg_path.read_text())
         assert "avg_power_w" not in patched
+
+    def test_disagg_multinode_emits_per_worker_and_per_stage_joules(self, tmp_path, multinode_env_vars):
+        """End-to-end disagg wiring: DISAGG=true + per-node labeled CSVs →
+        process_result.py passes disagg through to aggregate_power, which emits
+        power_by_worker + joules_per_input_token using per-stage attribution.
+
+        Without the disagg=disagg propagation in process_result.py, the run
+        would silently fall back to cluster-wide joules math and the user-facing
+        per-stage J/input metric would be missing."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
+        # 1 prefill worker × 4 GPUs @ 600W on its own node
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_prefill_w0_pn0.csv",
+            start, end, watts_per_gpu=600.0, num_gpus=4,
+        )
+        # 1 decode worker × 4 GPUs @ 400W on its own node
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_decode_w0_dn0.csv",
+            start, end, watts_per_gpu=400.0, num_gpus=4,
+        )
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+            "total_input_tokens": 240_000,
+        }
+        env = {
+            **multinode_env_vars,
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+
+        # Per-stage attribution: prefill_energy / input, decode_energy / output.
+        # Prefill: 600 × 4 × 60 = 144_000 J  → / 240_000 = 0.6 J/input_tok.
+        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok.
+        assert patched["joules_per_input_token"] == pytest.approx(0.6, abs=0.01)
+        assert patched["joules_per_output_token"] == pytest.approx(3.2, abs=0.01)
+
+        # Per-worker breakdown labeled with role.
+        workers = patched["power_by_worker"]
+        assert {w["role"] for w in workers} == {"prefill", "decode"}
+        for w in workers:
+            assert w["num_gpus"] == 4
+            assert w["worker_idx"] == 0
+
+    def test_non_disagg_multinode_keeps_cluster_wide_joules_math(self, tmp_path, multinode_env_vars):
+        """Multinode but DISAGG=false → keep cluster-wide ratios, no J/input.
+
+        Sanity check that the disagg flag is the gate, not just multinode-ness."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_agg_w0_n0.csv",
+            start, end, watts_per_gpu=500.0, num_gpus=4,
+        )
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+            "total_input_tokens": 240_000,
+        }
+        # Multinode env, but DISAGG=false → non-disagg multinode (rare but valid).
+        env = {
+            **multinode_env_vars,
+            "DISAGG": "false",
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert "joules_per_input_token" not in patched
+        # power_by_worker still emitted (filename labels exist) — useful for
+        # observability even on non-disagg runs.
+        assert patched["power_by_worker"][0]["role"] == "agg"
