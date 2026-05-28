@@ -44,7 +44,41 @@ else
     MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
 fi
 
+PROFILE_ARGS=()
+if [[ "${PROFILE:-}" == "1" ]]; then
+    PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}"
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+        PROFILER_CONFIG="{\"profiler\":\"torch\",\"torch_profiler_dir\":\"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\",\"ignore_frontend\":true,\"delay_iterations\":3,\"max_iterations\":1,\"active_iterations\":1,\"torch_profiler_with_stack\":false}"
+    fi
+    PROFILE_ARGS=(
+        --profiler-config
+        "$PROFILER_CONFIG"
+    )
+fi
+
+COMPILATION_ARGS=(
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --max-cudagraph-capture-size 2048
+)
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+    COMPILATION_ARGS=(
+        --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+        --max-cudagraph-capture-size 2048
+    )
+fi
+
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
+BENCHMARK_OUTPUT_LEN=$OSL
+BENCHMARK_NUM_PROMPTS=$((CONC * 10))
+BENCHMARK_MAX_CONCURRENCY=$CONC
+BENCHMARK_NUM_WARMUPS=$((2 * BENCHMARK_MAX_CONCURRENCY))
+
+if [[ "${PROFILE:-}" == "1" && "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+    BENCHMARK_OUTPUT_LEN=3
+    BENCHMARK_NUM_PROMPTS=256
+    BENCHMARK_MAX_CONCURRENCY=256
+    BENCHMARK_NUM_WARMUPS=4096
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
@@ -54,8 +88,12 @@ else
     SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
 fi
 
-# use 2 speculative tokens for all configs for now
+# Keep the existing Pro MTP profile at 2 speculative tokens; Flash uses the
+# requested 3-token MTP profile.
 NUM_SPEC_TOKENS=2
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+    NUM_SPEC_TOKENS=3
+fi
 
 start_gpu_monitor
 
@@ -69,13 +107,13 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+    "${PROFILE_ARGS[@]}" \
+    "${COMPILATION_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-cudagraph-capture-size 2048 \
     --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
@@ -93,10 +131,11 @@ run_benchmark_serving \
     --port "$PORT" \
     --backend vllm \
     --input-len "$ISL" \
-    --output-len "$OSL" \
+    --output-len "$BENCHMARK_OUTPUT_LEN" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
-    --max-concurrency "$CONC" \
+    --num-prompts "$BENCHMARK_NUM_PROMPTS" \
+    --max-concurrency "$BENCHMARK_MAX_CONCURRENCY" \
+    --num-warmups "$BENCHMARK_NUM_WARMUPS" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --trust-remote-code \

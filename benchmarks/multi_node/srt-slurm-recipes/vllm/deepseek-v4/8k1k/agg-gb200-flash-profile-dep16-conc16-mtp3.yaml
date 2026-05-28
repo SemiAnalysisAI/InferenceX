@@ -1,0 +1,107 @@
+name: "svf-vllm-agg-gb200-flash-profile-dep16-conc16-mtp3"
+
+model:
+  path: "deepseek-v4-flash"
+  container: "vllm/vllm-openai:v0.21.0-ubuntu2404"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "1800000"
+    VLLM_TORCH_PROFILER_DIR: "/logs/profiles/agg"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_P2P_LEVEL: NVL
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Flash"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-hybrid-lb: true
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      moe-backend: deep_gemm_mega_moe
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      attention-config: '{"use_fp4_indexer_cache":true}'
+      tokenizer-mode: deepseek_v4
+      max-model-len: 8704
+      max-num-seqs: 16
+      max-num-batched-tokens: 2048
+      max-cudagraph-capture-size: 16
+      profiler-config: '{"profiler":"torch","torch_profiler_dir":"/logs/profiles/agg","ignore_frontend":true,"delay_iterations":384,"max_iterations":1,"active_iterations":1,"torch_profiler_with_stack":false}'
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+
+profiling:
+  type: "torch"
+  aggregated:
+    start_step: 384
+    stop_step: 385
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 256
+  concurrencies: "16"
+  req_rate: "inf"
+  num_prompts_mult: 1
+  num_warmup_mult: 4
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Flash"
+  container:
+    image: "vllm/vllm-openai:v0.21.0-ubuntu2404"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"

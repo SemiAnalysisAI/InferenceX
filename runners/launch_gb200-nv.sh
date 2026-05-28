@@ -16,11 +16,15 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Same compute-node-local NVMe path as the dynamo-vllm dsv4
-        # branch — see that branch for rationale. SRT_SLURM_MODEL_PREFIX
-        # matches the model.path alias in our DSV4 sglang recipes.
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our DSV4
+        # sglang recipes.
+        if [[ $MODEL == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+            export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Flash/"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-flash"
+        else
+            export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        fi
     else
         export MODEL_PATH=$MODEL
     fi
@@ -49,11 +53,15 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
-        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
-        # model.path alias in our DSV4 recipes.
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our DSV4
+        # recipes.
+        if [[ $MODEL == "deepseek-ai/DeepSeek-V4-Flash" ]]; then
+            export MODEL_PATH="/mnt/lustre01/users/sa-shared/DeepSeek-V4-Flash/"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-flash"
+        else
+            export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        fi
     else
         echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
         exit 1
@@ -296,6 +304,7 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    rm -rf "$GITHUB_WORKSPACE/LOGS"
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 else

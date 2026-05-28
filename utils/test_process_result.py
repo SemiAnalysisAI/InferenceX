@@ -342,6 +342,22 @@ class TestCalculations:
         assert output_data["intvty_p50"] == pytest.approx(50.0)
         assert output_data["intvty_p99"] == pytest.approx(20.0)
 
+    def test_zero_tpot_interactivity_is_guarded(self, tmp_path, single_node_env_vars):
+        """Test that zero TPOT fields do not crash interactivity conversion."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 1,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 800.0,
+            "mean_tpot_ms": 0.0,
+        }
+
+        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["mean_intvty"] == pytest.approx(0.0)
+
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """Test throughput per GPU calculation for single node."""
         benchmark_result = {

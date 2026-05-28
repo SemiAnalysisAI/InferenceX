@@ -287,7 +287,7 @@ else
     HF_HUB_CACHE_MOUNT="/data/models"
     if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
         export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+    elif [[ "$MODEL_PREFIX" == "dsv4" && "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
         export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
     fi
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

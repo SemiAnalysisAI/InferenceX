@@ -2038,6 +2038,77 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
+# Targeted single-point Flash config for profile.yml. Keep the existing Pro
+# sweep entry above unchanged; this profile-only key reuses the same B300
+# SGLang launch path at the 1k1k, conc=64 point.
+dsv4-flash-fp4-b300-sglang:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 1, conc-start: 64, conc-end: 64 }
+
+# Targeted single-point Flash vLLM profile matching the SGLang profile point
+# above. Keep this narrow so profile.yml dispatches only the intended 1k1k run.
+dsv4-flash-fp4-b300-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 1, conc-start: 64, conc-end: 64 }
+
+# Targeted Flash vLLM MTP DEP8 profile at the same single-point profile
+# location. The shared launcher maps dp-attn=true to DP without TP, and selects
+# 3 speculative tokens for this model.
+dsv4-flash-fp4-b300-vllm-mtp:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 8, spec-decoding: mtp }
+
+# Targeted Flash MTP profile: DEP4 at the same 1k1k conc=64 point as the
+# non-MTP Flash profile above. The shared SGLang MTP launcher selects the
+# Flash-only (steps=3, draft-tokens=3) speculative settings for this model.
+dsv4-flash-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
+
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
@@ -8606,6 +8677,37 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           tp: 8
           ep: 8
           dp-attn: true
+
+# Dedicated profile point for a 16-GPU GB200 / global batch 16 shape:
+# aggregated DP-attention + expert-parallel on GB200, MTP3, conc=16.
+dsv4-flash-fp4-gb200-dynamo-vllm-mtp3-profile:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - conc-list: [16]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 16
+          tp: 1
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-gb200-flash-profile-dep16-conc16-mtp3.yaml"
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 1
+          dp-attn: false
 
 dsv4-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.1

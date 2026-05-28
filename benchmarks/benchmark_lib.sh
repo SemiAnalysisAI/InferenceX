@@ -180,6 +180,7 @@ wait_for_server_ready() {
 #   --max-concurrency: Max concurrency
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
+#   --num-warmups: Optional warmup request count before benchmark/profile
 #   --use-chat-template: Optional flag to enable chat template
 #   --dsv4: Optional flag to use the DeepSeek-V4 chat template
 #           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
@@ -206,6 +207,7 @@ run_benchmark_serving() {
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
+    local num_warmups=""
     local use_chat_template=false
     local dsv4=false
     local trust_remote_code=false
@@ -260,6 +262,10 @@ run_benchmark_serving() {
                 ;;
             --bench-serving-dir)
                 workspace_dir="$2"
+                shift 2
+                ;;
+            --num-warmups)
+                num_warmups="$2"
                 shift 2
                 ;;
             --use-chat-template)
@@ -348,6 +354,10 @@ run_benchmark_serving() {
         num_prompts="$max_concurrency"
     fi
 
+    if [[ -z "$num_warmups" ]]; then
+        num_warmups="$((2 * max_concurrency))"
+    fi
+
     # Build benchmark command
     local benchmark_cmd=(
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
@@ -364,7 +374,7 @@ run_benchmark_serving() {
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((2 * max_concurrency))" \
+        --num-warmups "$num_warmups" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
@@ -519,7 +529,7 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    local dest_trace="$PWD/profile_${RESULT_FILENAME}.trace.json.gz"
     if [[ "$trace_file" == *.gz ]]; then
         cp -f "$trace_file" "$dest_trace"
     else
