@@ -27,6 +27,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
+ENABLE_DSV4_REASONING_PARSER=${ENABLE_DSV4_REASONING_PARSER:-false}
 
 # DeepSeek-V4-Pro weights are large; engine startup can exceed the default
 # 600s. Give it an hour to load.
@@ -51,6 +52,11 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+REASONING_PARSER_ARGS=()
+if [[ "${ENABLE_DSV4_REASONING_PARSER}" == "true" ]]; then
+    REASONING_PARSER_ARGS+=(--reasoning-parser deepseek_v4)
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -72,7 +78,7 @@ $MAX_MODEL_LEN_ARG \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
---reasoning-parser deepseek_v4 > $SERVER_LOG 2>&1 &
+"${REASONING_PARSER_ARGS[@]}" > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
