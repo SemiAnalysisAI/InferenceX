@@ -22,13 +22,9 @@ MAX_DELAY=${MAX_DELAY:-60}
 ADVANCE_MIN=${ADVANCE_MIN:-0.0}
 ADVANCE_MAX=${ADVANCE_MAX:-0.7}
 EP_SIZE=${EP_SIZE:-1}
-# Kimi-K2.5 advertises a 262144-token context window in vLLM 0.21.0.
-# Matrix defaults may export MAX_MODEL_LEN=0 to mean "server default"; for this
-# script we need the concrete value so AgentX filters prompt+max_tokens against
-# the same limit vLLM enforces.
-if [[ -z "${MAX_MODEL_LEN:-}" || "$MAX_MODEL_LEN" == "0" ]]; then
-    MAX_MODEL_LEN=262144
-fi
+#if [[ -z "${MAX_MODEL_LEN:-}" || "$MAX_MODEL_LEN" == "0" ]]; then
+#    MAX_MODEL_LEN=262144
+#fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -245,7 +241,6 @@ VLLM_CMD=(
     --block-size=32
     --trust-remote-code
     --attention-backend "ROCM_AITER_FA" \
-    --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$CONC"
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"

@@ -652,8 +652,8 @@ dsv4-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
-      - { tp: 4, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
+      - { tp: 8, offloading: none, conc-list: [16, 24, 32, 40] }
+      - { tp: 8, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
 
 minimaxm2.5-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.21.0
@@ -786,8 +786,8 @@ minimaxm2.5-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
-      - { tp: 4, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
+      - { tp: 1, offloading: none, conc-list: [16, 24, 32, 40] }
+      - { tp: 1, offloading: lmcache,  conc-list: [16, 24, 32, 40] }
 
 minimaxm2.5-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.16.0
