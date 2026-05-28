@@ -38,8 +38,13 @@ PR_STATE="$(jq -r '.state' <<<"$PR_INFO")"
 [ "$PR_STATE" = "OPEN" ] || die "PR #${PR} is ${PR_STATE}, expected OPEN"
 
 HEAD_BRANCH="$(jq -r '.headRefName' <<<"$PR_INFO")"
-HAS_FULL_SWEEP="$(jq -r '[.labels[].name] | index("full-sweep-enabled") // ""' <<<"$PR_INFO")"
-[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing the 'full-sweep-enabled' label"
+HAS_FULL_SWEEP="$(jq -r '
+    [.labels[].name] as $names
+    | if (($names | index("full-sweep-enabled")) != null)
+         or (($names | index("non-canary-full-sweep-enabled")) != null)
+      then "1" else "" end
+' <<<"$PR_INFO")"
+[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing 'full-sweep-enabled' or 'non-canary-full-sweep-enabled' label"
 
 # Warn early if no successful run exists on any current PR commit.
 PR_SHAS="$(gh api "repos/${REPO}/pulls/${PR}/commits" --paginate --jq '.[].sha')"
