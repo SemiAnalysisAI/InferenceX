@@ -796,17 +796,18 @@ class TestPowerAggregationIntegration:
 
         patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
 
-        # Per-stage attribution scalars: prefill_energy / input, decode_energy / output.
+        # Per-stage attribution: input divided by prefill energy, output by decode.
         # Prefill: 600 × 4 × 60 = 144_000 J  → / 240_000 = 0.6 J/input_tok.
-        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok_decode.
+        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok.
         assert patched["joules_per_input_token"] == pytest.approx(0.6, abs=0.01)
-        assert patched["joules_per_output_token_decode"] == pytest.approx(3.2, abs=0.01)
+        assert patched["joules_per_output_token"] == pytest.approx(3.2, abs=0.01)  # decode
+        assert "joules_per_output_token_decode" not in patched
         assert patched["prefill_avg_power_w"] == pytest.approx(600.0, abs=0.5)
         assert patched["decode_avg_power_w"] == pytest.approx(400.0, abs=0.5)
 
-        # Cluster-wide J/output (frontend would be incl. here too if present).
-        # Total energy = (600+400) × 4 × 60 = 240_000 J → / 30_000 = 8.0 J/output_tok.
-        assert patched["joules_per_output_token"] == pytest.approx(8.0, abs=0.05)
+        # Cluster-wide total efficiency still counts ALL energy.
+        # Total energy = (600+400) × 4 × 60 = 240_000 J → / 270_000 ≈ 0.889 J/total_tok.
+        assert patched["joules_per_total_token"] == pytest.approx(240_000 / 270_000, abs=0.01)
 
         # Per-worker breakdown labeled with role.
         workers = patched["workers"]

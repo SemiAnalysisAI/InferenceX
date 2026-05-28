@@ -876,16 +876,16 @@ def test_run_disagg_emits_workers_and_per_stage_joules(tmp_path: Path):
     # Cluster-wide avg = (8*600 + 8*400) / 16 = 500W.
     assert patched["avg_power_w"] == pytest.approx(500.0)
 
-    # Cluster-wide joules (total_system_energy / token_count) — same math as
-    # single-node so the metric stays comparable across topologies.
-    assert patched["joules_per_output_token"] == pytest.approx(80_000 / 1000)   # 80.0
+    # joules_per_total_token stays cluster-wide (all energy / all tokens).
     assert patched["joules_per_total_token"] == pytest.approx(80_000 / 9000)    # ≈ 8.889
 
-    # Per-stage scalars (new): prefill_avg, decode_avg, J/input, J/output_decode.
+    # Per-stage attribution: input divided by prefill energy, output by decode
+    # energy (the disagg convention).
     assert patched["prefill_avg_power_w"] == pytest.approx(600.0)
     assert patched["decode_avg_power_w"] == pytest.approx(400.0)
-    assert patched["joules_per_input_token"] == pytest.approx(48_000 / 8000)   # 6.0
-    assert patched["joules_per_output_token_decode"] == pytest.approx(32_000 / 1000)  # 32.0
+    assert patched["joules_per_input_token"] == pytest.approx(48_000 / 8000)   # 6.0 (prefill)
+    assert patched["joules_per_output_token"] == pytest.approx(32_000 / 1000)  # 32.0 (decode)
+    assert "joules_per_output_token_decode" not in patched  # folded into joules_per_output_token
 
     # workers[] (renamed from power_by_worker).
     workers = patched["workers"]
@@ -939,17 +939,17 @@ def test_run_disagg_excludes_frontend_from_per_stage_energy(tmp_path: Path):
     assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
     patched = json.loads(agg.read_text())
 
-    # Per-stage scalars (frontend excluded).
-    # J/input = 24_000 / 8000 = 3.0.
+    # Per-stage attribution excludes the frontend node.
+    # J/input  = prefill 24_000 / 8000 = 3.0.
+    # J/output = decode  16_000 / 1000 = 16.0 (frontend's 4_000 J NOT counted).
     assert patched["joules_per_input_token"] == pytest.approx(3.0)
-    # J/output_decode = 16_000 / 1000 = 16.0.
-    assert patched["joules_per_output_token_decode"] == pytest.approx(16.0)
+    assert patched["joules_per_output_token"] == pytest.approx(16.0)
     assert patched["prefill_avg_power_w"] == pytest.approx(600.0)
     assert patched["decode_avg_power_w"] == pytest.approx(400.0)
 
-    # Cluster-wide J/output still uses TOTAL energy (incl. frontend).
-    # total energy = (600+400+100) × 4 × 10 = 44_000 J → 44.0 J/output_tok.
-    assert patched["joules_per_output_token"] == pytest.approx(44.0)
+    # But the frontend's energy IS counted in the cluster-wide total efficiency:
+    # total energy = (600+400+100) × 4 × 10 = 44_000 J → / 9000 tokens ≈ 4.889.
+    assert patched["joules_per_total_token"] == pytest.approx(44_000 / 9000)
 
     # Frontend still appears in the worker list for observability.
     roles = [w["role"] for w in patched["workers"]]
@@ -1049,12 +1049,12 @@ def test_run_disagg_handles_zero_input_tokens(tmp_path: Path):
     assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
     patched = json.loads(agg.read_text())
     assert "joules_per_input_token" not in patched
-    # Per-stage decode still works — depends only on decode_energy / output.
-    assert patched["joules_per_output_token_decode"] == pytest.approx(16_000 / 1000)
+    # Per-stage output still works — depends only on decode_energy / output.
+    assert patched["joules_per_output_token"] == pytest.approx(16_000 / 1000)  # decode
     assert patched["prefill_avg_power_w"] == pytest.approx(600.0)
     assert patched["decode_avg_power_w"] == pytest.approx(400.0)
-    # Cluster-wide J/output uses TOTAL energy. (600+400) × 4 × 10 = 40_000 J.
-    assert patched["joules_per_output_token"] == pytest.approx(40_000 / 1000)
+    # Cluster-wide total uses TOTAL energy. (600+400) × 4 × 10 = 40_000 J / 1000.
+    assert patched["joules_per_total_token"] == pytest.approx(40_000 / 1000)
 
 
 def test_patch_agg_result_with_workers_and_per_stage(tmp_path: Path):
@@ -1071,7 +1071,6 @@ def test_patch_agg_result_with_workers_and_per_stage(tmp_path: Path):
         joules_per_output_token=40.0,
         joules_per_total_token=4.44,
         joules_per_input_token=3.0,
-        joules_per_output_token_decode=16.0,
         prefill_avg_power_w=600.0,
         decode_avg_power_w=400.0,
         workers=workers,
@@ -1080,7 +1079,6 @@ def test_patch_agg_result_with_workers_and_per_stage(tmp_path: Path):
     assert data["avg_power_w"] == 500.0
     assert data["joules_per_output_token"] == 40.0
     assert data["joules_per_input_token"] == 3.0
-    assert data["joules_per_output_token_decode"] == 16.0
     assert data["prefill_avg_power_w"] == 600.0
     assert data["decode_avg_power_w"] == 400.0
     assert data["workers"] == workers
@@ -1610,16 +1608,15 @@ def test_run_disagg_amd_emits_workers_and_per_stage_joules(tmp_path: Path):
     assert run(list(tmp_path.glob("perf_samples_*.csv")), bench, agg, disagg=True) == 0
     patched = json.loads(agg.read_text())
 
-    # Cluster-wide (vendor-agnostic, same math as single-node / NVIDIA).
+    # Cluster-wide total (vendor-agnostic, same math as single-node / NVIDIA).
     assert patched["avg_power_w"] == pytest.approx(500.0)
-    assert patched["joules_per_output_token"] == pytest.approx(80_000 / 1000)  # 80.0
     assert patched["joules_per_total_token"] == pytest.approx(80_000 / 9000)   # ≈ 8.889
 
-    # Per-stage scalars from amd-smi CSVs.
+    # Per-stage attribution from amd-smi CSVs: input=prefill energy, output=decode energy.
     assert patched["prefill_avg_power_w"] == pytest.approx(600.0)
     assert patched["decode_avg_power_w"] == pytest.approx(400.0)
-    assert patched["joules_per_input_token"] == pytest.approx(48_000 / 8000)   # 6.0
-    assert patched["joules_per_output_token_decode"] == pytest.approx(32_000 / 1000)  # 32.0
+    assert patched["joules_per_input_token"] == pytest.approx(48_000 / 8000)   # 6.0 (prefill)
+    assert patched["joules_per_output_token"] == pytest.approx(32_000 / 1000)  # 32.0 (decode)
 
     # workers[] breakdown.
     workers = patched["workers"]
@@ -1661,6 +1658,6 @@ def test_run_disagg_amd_vllm_topology_one_worker_per_node(tmp_path: Path):
     # 2 prefill workers × 8 GPUs @ 600W → 96_000 J / 8000 input = 12.0.
     assert patched["joules_per_input_token"] == pytest.approx(96_000 / 8000)
     # 2 decode workers × 8 GPUs @ 400W → 64_000 J / 1000 output = 64.0.
-    assert patched["joules_per_output_token_decode"] == pytest.approx(64_000 / 1000)
+    assert patched["joules_per_output_token"] == pytest.approx(64_000 / 1000)
     assert patched["prefill_avg_power_w"] == pytest.approx(600.0)
     assert patched["decode_avg_power_w"] == pytest.approx(400.0)

@@ -9,12 +9,12 @@ consumed by InferenceX-app's ETL.
 
 Cluster-wide fields (always written when any power data exists):
   - avg_power_w:               mean per-GPU power draw (W) during the load window
-  - joules_per_output_token:   total_system_energy / total_output_tokens
-                               (cluster-wide; always — same math single-node and
-                               multinode disagg, so the metric stays comparable
-                               across topologies in the dashboard)
+  - joules_per_output_token:   energy / total_output_tokens. CLUSTER-WIDE
+                               (total_system_energy) on single-node / non-disagg;
+                               OVERRIDDEN to per-stage decode_energy for disagg
+                               (see below).
   - joules_per_total_token:    total_system_energy / (input + output) tokens
-                               (cluster-wide; always)
+                               (cluster-wide; always — overall efficiency number)
   - avg_temp_c:                mean per-GPU temperature (Celsius), when the
                                CSV exposes a temperature column
   - peak_temp_c:               max instantaneous per-GPU temperature in window
@@ -22,22 +22,18 @@ Cluster-wide fields (always written when any power data exists):
   - avg_mem_used_mb:           mean per-GPU memory used (MiB/MB)
 
 For disaggregated multinode runs (DISAGG=true) where filenames carry the perfmon
-role/index encoding AND both prefill+decode workers are present, additional flat
-per-stage scalars are emitted alongside (NOT instead of) the cluster-wide keys:
+role/index encoding AND both prefill+decode workers are present, the per-token
+energy metrics use PER-STAGE attribution — each token type is divided by only the
+GPUs of the stage that produces it (the standard disagg-serving convention):
 
-  - prefill_avg_power_w:           per-GPU mean power across prefill workers
-  - decode_avg_power_w:            per-GPU mean power across decode workers
-  - joules_per_input_token:        prefill_energy / total_input_tokens
-                                   (per-stage attribution — prefill processes
-                                   input tokens, so its energy / input gives the
-                                   prefill-side per-token cost)
-  - joules_per_output_token_decode: decode_energy / total_output_tokens
-                                   (per-stage attribution; the _decode suffix is
-                                   load-bearing — keeps the cluster-wide
-                                   joules_per_output_token comparable across
-                                   single-node and disagg deployments and exposes
-                                   decode-only energy as a separate key for users
-                                   who specifically want it.)
+  - joules_per_input_token:    prefill_energy / total_input_tokens — input tokens
+                               are processed by the prefill GPUs only.
+  - joules_per_output_token:   decode_energy / total_output_tokens — output tokens
+                               are produced by the decode GPUs only. (For
+                               single-node / non-disagg this stays the cluster-wide
+                               total_system_energy / output_tokens.)
+  - prefill_avg_power_w:       per-GPU mean power across prefill workers
+  - decode_avg_power_w:        per-GPU mean power across decode workers
 
 Per-worker breakdown (multinode only — single-node has no role concept), emitted
 under the `workers` key to match InferenceX-app's BenchmarkRow.workers shape:
@@ -607,7 +603,6 @@ def patch_agg_result(
     joules_per_output_token: float,
     joules_per_total_token: float,
     joules_per_input_token: float | None = None,
-    joules_per_output_token_decode: float | None = None,
     prefill_avg_power_w: float | None = None,
     decode_avg_power_w: float | None = None,
     avg_temp_c: float | None = None,
@@ -629,8 +624,6 @@ def patch_agg_result(
     data["joules_per_total_token"] = round(joules_per_total_token, 6)
     if joules_per_input_token is not None:
         data["joules_per_input_token"] = round(joules_per_input_token, 6)
-    if joules_per_output_token_decode is not None:
-        data["joules_per_output_token_decode"] = round(joules_per_output_token_decode, 6)
     if prefill_avg_power_w is not None:
         data["prefill_avg_power_w"] = round(prefill_avg_power_w, 3)
     if decode_avg_power_w is not None:
@@ -735,40 +728,39 @@ def run(
     # parse, so aggregate_power_by_worker returns None and the field is omitted.
     workers = aggregate_power_by_worker(paths, start, end)
 
-    # Cluster-wide energy + per-token attribution. We ALWAYS report
-    # joules_per_output_token / joules_per_total_token as cluster-wide ratios
-    # (total_system_energy / token_count), regardless of disagg. This keeps the
-    # metric comparable across single-node, multinode-agg, and multinode-disagg
-    # topologies in the dashboard. Per-stage attribution lives in separate
-    # *_decode / joules_per_input_token keys (only emitted when disagg AND both
-    # stages present).
+    # Per-token energy attribution.
+    #   - joules_per_total_token stays CLUSTER-WIDE on every topology
+    #     (total_system_energy / all tokens) — the overall efficiency number.
+    #   - For disagg with BOTH stages present, joules_per_output_token and
+    #     joules_per_input_token use PER-STAGE energy: output tokens are produced
+    #     by the decode GPUs (decode_energy / output), input tokens by the
+    #     prefill GPUs (prefill_energy / input). This is the standard per-stage
+    #     attribution requested for disagg serving.
+    #   - Single-node / non-disagg / single-stage fall back to the cluster-wide
+    #     output ratio so the field is always populated.
     total_system_energy_j = avg_power_w * num_gpus * duration
     total_tokens = total_output + total_input
-    joules_per_output_token = total_system_energy_j / total_output
+    joules_per_output_token = total_system_energy_j / total_output  # cluster fallback
     joules_per_total_token = (
         total_system_energy_j / total_tokens if total_tokens > 0 else joules_per_output_token
     )
 
     joules_per_input_token: float | None = None
-    joules_per_output_token_decode: float | None = None
     prefill_avg_power_w: float | None = None
     decode_avg_power_w: float | None = None
 
     if disagg and workers is not None:
         stage = _disagg_stage_rollup(workers, duration)
         if stage is not None:
-            # Per-stage attribution: prefill workers process input tokens,
-            # decode workers process output tokens. Strictly more accurate
-            # than total-energy ratios when prefill/decode have different
-            # per-GPU power profiles (typical: prefill is compute-bound and
-            # draws more than memory-bound decode). Exposed as additional
-            # flat scalars so the cluster-wide joules_per_output_token stays
-            # comparable across topologies.
+            # Per-stage attribution: decode GPUs produce output tokens, prefill
+            # GPUs process input tokens. Strictly more accurate than total-energy
+            # ratios when prefill/decode have different per-GPU power profiles
+            # (typical: prefill is compute-bound and draws more than memory-bound
+            # decode). joules_per_output_token is OVERRIDDEN to the decode-only
+            # value here (symmetric with the prefill-only joules_per_input_token).
             prefill_avg_power_w = stage["prefill_avg_power_w"]
             decode_avg_power_w = stage["decode_avg_power_w"]
-            joules_per_output_token_decode = (
-                stage["decode_energy_j"] / total_output
-            )
+            joules_per_output_token = stage["decode_energy_j"] / total_output
             joules_per_input_token = (
                 stage["prefill_energy_j"] / total_input if total_input > 0 else None
             )
@@ -787,7 +779,6 @@ def run(
             joules_per_output_token,
             joules_per_total_token,
             joules_per_input_token=joules_per_input_token,
-            joules_per_output_token_decode=joules_per_output_token_decode,
             prefill_avg_power_w=prefill_avg_power_w,
             decode_avg_power_w=decode_avg_power_w,
             avg_temp_c=avg_temp_c,
@@ -851,12 +842,12 @@ def main() -> int:
     parser.add_argument(
         "--disagg",
         action="store_true",
-        help="Treat as disaggregated inference: emit prefill_avg_power_w, "
-        "decode_avg_power_w, joules_per_input_token, and "
-        "joules_per_output_token_decode using per-stage energy attribution "
-        "(prefill workers' energy / input tokens, decode workers' energy / "
-        "output tokens). Requires CSV filenames to carry the perfmon role/index "
-        "encoding.",
+        help="Treat as disaggregated inference: emit prefill_avg_power_w / "
+        "decode_avg_power_w, and use PER-STAGE energy attribution for "
+        "joules_per_input_token (prefill energy / input tokens) and "
+        "joules_per_output_token (decode energy / output tokens). "
+        "joules_per_total_token stays cluster-wide. Requires CSV filenames to "
+        "carry the perfmon role/index encoding.",
     )
     args = parser.parse_args()
 
