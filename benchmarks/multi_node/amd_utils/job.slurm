@@ -55,6 +55,30 @@ echo "Runfile set: $RUN_FILE"
 # $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
 export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
+# ── In-tree sglang patches: auto-apply for known-affected images ──────
+# sglang v0.5.12.post1 ships a known-broken MoRI PD-disaggregation
+# backend that crashes hybrid-attention models (GLM-5, Qwen3.5-MoE,
+# anything with state_types: List[StateType]) at startup. We carry an
+# in-tree overlay of mori/conn.py that fixes the wire format + the
+# legacy state_type fallback (see patches/README.md for the bug
+# analysis and patch detail).
+#
+# Auto-applied when the image tag contains "v0.5.12.post1", unless the
+# caller sets MORI_CONN_PATCH=skip. The overlay is appended to
+# ${EXTRA_DOCKER_MOUNTS:-} so callers can still inject other mounts.
+# Dedup guard avoids double-mounting if EXTRA_DOCKER_MOUNTS already
+# contains the target path (docker rejects duplicate destinations).
+_MORI_PATCH_FILE="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/mori_conn.py"
+_MORI_PATCH_TARGET="/sgl-workspace/sglang/python/sglang/srt/disaggregation/mori/conn.py"
+if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
+   && [[ -f "$_MORI_PATCH_FILE" ]] \
+   && [[ "${DOCKER_IMAGE_NAME:-}" == *"v0.5.12.post1"* ]] \
+   && [[ "${EXTRA_DOCKER_MOUNTS:-}" != *"$_MORI_PATCH_TARGET"* ]]; then
+    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v ${_MORI_PATCH_FILE}:${_MORI_PATCH_TARGET}:ro"
+    export EXTRA_DOCKER_MOUNTS
+    echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
+fi
+
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -465,6 +489,7 @@ fi
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
+    ${EXTRA_DOCKER_MOUNTS:-} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
     --name \"$DOCKER_CONT_NAME\" \
