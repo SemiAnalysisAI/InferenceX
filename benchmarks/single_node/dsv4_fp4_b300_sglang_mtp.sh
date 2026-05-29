@@ -23,14 +23,20 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-if [[ -n "$SLURM_JOB_ID" ]]; then
-  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
+# `hf download` creates the target dir if missing and is itself idempotent. 
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
 fi
 
-# The B300 runner overrides MODEL to a pre-staged /data/models path, so skip
-# `hf download`. Only fetch when MODEL looks like a HF repo ID.
-if [[ "$MODEL" != /* ]]; then
-    hf download "$MODEL"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+  echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 nvidia-smi
@@ -121,7 +127,7 @@ fi
 
 set -x
 PYTHONNOUSERSITE=1 sglang serve \
-    --model-path $MODEL \
+    --model-path $MODEL_PATH --served-model-name $MODEL \
     --host 0.0.0.0 \
     --port $PORT \
     --trust-remote-code \
