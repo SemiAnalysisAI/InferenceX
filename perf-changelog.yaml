@@ -3205,3 +3205,4 @@
     - dsv4-fp4-b300-vllm
   description:
     - "Update DSv4 FP4 B300 vLLM image tag to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1588
