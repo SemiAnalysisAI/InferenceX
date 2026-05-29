@@ -1579,7 +1579,11 @@ kimik2.5-fp4-mi355x-vllm-disagg:
 
 kimik2.5-int4-mi355x-vllm-disagg:
   image: vllm/vllm-openai-rocm:v0.21.0
-  model: moonshotai/Kimi-K2.5-INT4
+  # INT4 is a runtime quant of the base repo (precision: int4 ->
+  # VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4), not separate weights.
+  # moonshotai/Kimi-K2.5-INT4 is not a real HF repo (404); load the base
+  # moonshotai/Kimi-K2.5, exactly like the single-node kimik2.5-int4 recipes.
+  model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x-disagg
   precision: int4
