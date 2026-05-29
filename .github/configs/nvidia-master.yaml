@@ -8694,7 +8694,7 @@ dsv4-flash-fp4-gb200-dynamo-vllm-mtp3-profile:
   scenarios:
     fixed-seq-len:
     - isl: 8192
-      osl: 256
+      osl: 1
       search-space:
       - conc-list: [16]
         spec-decoding: mtp
