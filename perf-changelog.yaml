@@ -3200,3 +3200,16 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523, 1P1D TP8/EP1, dp-attn false, conc [8..512]"
     - "MoRI conn.py overlay (48e459bd) via job.slurm; launcher qwen3.5_fp4_mi355x_sglang-disagg.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Update sglang image to nightly-dev-cu13-20260529-a8cfae0b"
+    - "Refactor benchmark script to dispatch by CONC instead of nested DP_ATTENTION/CONC/EP_SIZE"
+    - "Switch CONC 2048/4096/8192 from --moe-a2a-backend deepep to megamoe"
+    - "Remove env vars deleted from sglang main (SGLANG_OPT_USE_JIT_NORM, SGLANG_OPT_USE_FAST_MASK_EP, SGLANG_OPT_FIX_NEXTN_MEGA_MOE, SGLANG_OPT_FIX_HASH_MEGA_MOE)"
+    - "Remove env vars redundant with sglang defaults (SGLANG_OPT_USE_JIT_INDEXER_METADATA, SGLANG_OPT_USE_TOPK_V2, SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2)"
+    - "Remove env vars auto-set by megamoe backend (SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE, SGLANG_OPT_FIX_MEGA_MOE_MEMORY)"
+    - "Remove --deepep-config and SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK (unused by megamoe/StandardDispatcher)"
+    - "Fix CONC=512 yaml ep from 4 to 1 (flashinfer_mxfp4 does not set ep=tp)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1506
