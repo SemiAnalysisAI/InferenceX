@@ -12,13 +12,24 @@ check_env_vars \
     RESULT_FILENAME \
     EP_SIZE
 
+# `hf download` creates the target dir if missing and is itself idempotent. 
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export NCCL_NVLS_ENABLE=1
 export SGL_ENABLE_JIT_DEEPGEMM=false
@@ -52,9 +63,9 @@ echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL,
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---served-model-name "Qwen/Qwen3.5-397B-A17B" --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 --ep-size $EP_SIZE \
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --host 0.0.0.0 --port $PORT \
+--served-model-name $MODEL --trust-remote-code \
+--tensor-parallel-size $TP --data-parallel-size 1 --ep-size $EP_SIZE \
 --cuda-graph-max-bs $CUDA_GRAPH_MAX_BATCH_SIZE --max-running-requests $MAX_RUNNING_REQUESTS \
 --mem-fraction-static $MEM_FRAC_STATIC --chunked-prefill-size $CHUNKED_PREFILL_SIZE --max-prefill-tokens $MAX_PREFILL_TOKENS \
 --context-length $CONTEXT_LENGTH --disable-radix-cache \
