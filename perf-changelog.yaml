@@ -3200,3 +3200,10 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523, 1P1D TP8/EP1, dp-attn false, conc [8..512]"
     - "MoRI conn.py overlay (48e459bd) via job.slurm; launcher qwen3.5_fp4_mi355x_sglang-disagg.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Bump the image to May 26"
+    - "Add conc 128/256 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1584
