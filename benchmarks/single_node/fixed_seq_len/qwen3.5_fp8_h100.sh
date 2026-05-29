@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 # Qwen-3.5-397B-A17B FP8 on H100 via sglang.
-# Uses TP8/EP1 at conc 1-8, TP8/EP8 at conc 16-64,
-# and TP8/EP8 with DP attention at conc 128-256.
+# Uses TP8/EP1 at conc 1-8 and TP8/EP8 at conc 16-256.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -54,6 +53,9 @@ if [ "${DP_ATTENTION}" != "true" ]; then
         ;;
       64)
         SCHEDULER_RECV_INTERVAL=600
+        ;;
+      128|256)
+        SCHEDULER_RECV_INTERVAL=1920
         ;;
       *)
         echo "Unsupported CONC=$CONC for qwen3.5 FP8 H100 SGLang recipe" >&2
