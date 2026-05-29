@@ -12,7 +12,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260501"
+  wheel: "1.2.0.dev20260526"
 
 setup_script: install-deps.sh
 
@@ -56,6 +56,7 @@ backend:
       max-model-len: 2048
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 2048
+      stream-interval: 32
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -67,6 +68,7 @@ backend:
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 2048
       gpu-memory-utilization: 0.90
+      stream-interval: 32
 
 benchmark:
   type: "sa-bench"
