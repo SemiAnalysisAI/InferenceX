@@ -242,6 +242,22 @@ if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
 
+# High-interactivity / latency-tuning knobs (each is a single-token env var so it
+# survives `export A=1 B=2` shell join from the workflow's additional-settings).
+# Set any of these via additional-settings to opt in per search-space entry.
+if [[ "${PREFILL_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --enable-torch-compile --torch-compile-max-bs ${PREFILL_TORCH_COMPILE_MAX_BS:-32}"
+fi
+if [[ "${DECODE_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --enable-torch-compile --torch-compile-max-bs ${DECODE_TORCH_COMPILE_MAX_BS:-32}"
+fi
+if [[ -n "${DECODE_SCHEDULE_CONSERVATIVENESS:-}" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --schedule-conservativeness ${DECODE_SCHEDULE_CONSERVATIVENESS}"
+fi
+if [[ -n "${PREFILL_SCHEDULE_CONSERVATIVENESS:-}" ]]; then
+    PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --schedule-conservativeness ${PREFILL_SCHEDULE_CONSERVATIVENESS}"
+fi
+
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
