@@ -1862,7 +1862,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
+  image: rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260526-sync
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -2030,7 +2030,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
@@ -2049,7 +2049,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
@@ -2068,7 +2068,26 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
