@@ -31,7 +31,7 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 
     if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="sa-submission-q2-2026"
+        SRT_SLURM_RECIPES_REF="main"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5"
         SRT_RECIPE_DST="recipes/vllm/minimax-m2.5"
     else
