@@ -3204,5 +3204,5 @@
 - config-keys:
     - dsv4-fp4-b200-vllm
   description:
-    - "Update vLLM image"
+    - "Update vLLM image tag to nightly-626fa9bba5663a5cf6a870debf031ee344ddb822"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1384
