@@ -25,8 +25,20 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         echo "Unsupported framework on gb300-cw for dsv4/fp4: $FRAMEWORK. Currently supported: dynamo-sglang, dynamo-vllm"
         exit 1
     fi
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="/mnt/vast/models/GLM-5-FP8"
+
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="sa-submission-q2-2026"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5"
+        SRT_RECIPE_DST="recipes/sglang/glm5"
+    else
+        echo "Unsupported framework on gb300-cw for glm5/fp8: $FRAMEWORK. Currently supported: dynamo-sglang"
+        exit 1
+    fi
 else
-    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8"
     exit 1
 fi
 
@@ -183,6 +195,8 @@ model_paths:
   # is not a local model path and is not defined in srtslurm.yaml
   # model_paths".
   deepseek-v4-pro: "${MODEL_PATH}"
+  # GLM-5 FP8 sglang recipes use `model.path: glm-5-fp8`.
+  glm-5-fp8: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
