@@ -5,7 +5,7 @@
 # Dispatched by $ENGINE (set by server.sh dispatcher):
 #   vllm-disagg   -> vLLM/MoRI-IO patches + UCX/RIXL path exports
 #                    (base image: vllm/vllm-openai-rocm:v0.18.0)
-#   sglang-disagg -> SGLang aiter gluon patch + per-model installs
+#   sglang-disagg -> per-model installs (e.g. transformers for GLM-5)
 #                    (base image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-*)
 #
 # Sourced by server_vllm.sh and server_sglang.sh so PATH / LD_LIBRARY_PATH
@@ -630,89 +630,6 @@ except Exception as e:
 }
 
 # ---------------------------------------------------------------------------
-# SGLang: Patch aiter gluon pa_mqa_logits — fix 2D → 3D instr_shape for
-# Triton ≥ 3.5.
-#
-# Bug: _gluon_deepgemm_fp8_paged_mqa_logits (the non-preshuffle variant)
-# hardcodes AMDMFMALayout(instr_shape=[16, 16]) which fails on Triton
-# builds where AMDMFMALayout requires 3D (M, N, K) format.
-#
-# The two preshuffle variants already conditionally select 2D vs 3D via
-# the module-level _Use_2d_instr_shape_mfma_layout flag, but the base
-# variant was missed. This patch brings it in line.
-#
-# Affects: GLM-5 (NSA attention) and any future model that uses
-# deepgemm_fp8_paged_mqa_logits with Preshuffle=False.
-# ---------------------------------------------------------------------------
-patch_gluon_pa_mqa_logits_instr_shape() {
-    python3 -c '
-import os, sys
-
-target = "/sgl-workspace/aiter/aiter/ops/triton/gluon/pa_mqa_logits.py"
-if not os.path.isfile(target):
-    print("[SETUP] gluon pa_mqa_logits.py not found, skipping")
-    sys.exit(0)
-
-src = open(target).read()
-
-if "[PATCHED] 3D instr_shape for base gluon variant" in src:
-    print("[SETUP] gluon pa_mqa_logits 3D instr_shape patch already applied")
-    sys.exit(0)
-
-# The buggy code: the base _gluon_deepgemm_fp8_paged_mqa_logits uses 2D
-# instr_shape unconditionally.  We replace it with a conditional that
-# mirrors the preshuffle variants.
-old = """\
-    mfma_layout: gl.constexpr = gl.amd.AMDMFMALayout(
-        version=CDNA_VERSION,
-        instr_shape=[16, 16],
-        transposed=False,
-        warps_per_cta=[1, NumWarps],
-    )
-    mfma_layout_a: gl.constexpr = gl.DotOperandLayout(
-        operand_index=0, parent=mfma_layout, k_width=16
-    )
-    mfma_layout_b: gl.constexpr = gl.DotOperandLayout(
-        operand_index=1, parent=mfma_layout, k_width=16
-    )"""
-
-new = """\
-    # [PATCHED] 3D instr_shape for base gluon variant
-    if _Use_2d_instr_shape_mfma_layout:
-        mfma_layout: gl.constexpr = gl.amd.AMDMFMALayout(
-            version=CDNA_VERSION,
-            instr_shape=[16, 16],
-            transposed=False,
-            warps_per_cta=[1, NumWarps],
-        )
-    else:
-        mfma_layout: gl.constexpr = gl.amd.AMDMFMALayout(
-            version=CDNA_VERSION,
-            instr_shape=[16, 16, 32],
-            transposed=False,
-            warps_per_cta=[1, NumWarps],
-        )
-    mfma_layout_a: gl.constexpr = gl.DotOperandLayout(
-        operand_index=0, parent=mfma_layout, k_width=16
-    )
-    mfma_layout_b: gl.constexpr = gl.DotOperandLayout(
-        operand_index=1, parent=mfma_layout, k_width=16
-    )"""
-
-if old not in src:
-    print("[SETUP] WARN: gluon pa_mqa_logits pattern not found — aiter version may have changed")
-    sys.exit(0)
-
-# Only replace the FIRST occurrence (the base variant, not preshuffle ones)
-new_src = src.replace(old, new, 1)
-
-open(target, "w").write(new_src)
-print("[SETUP] Patched: gluon pa_mqa_logits 3D instr_shape for base variant")
-'
-    _SETUP_INSTALLED+=("gluon-instr-shape-fix")
-}
-
-# ---------------------------------------------------------------------------
 # SGLang: Install latest transformers for GLM-5 model type support.
 #
 # GLM-5 (zai-org/GLM-5-FP8) requires a transformers build that includes
@@ -757,7 +674,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else
-    patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
 fi
 
