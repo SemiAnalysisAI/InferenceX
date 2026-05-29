@@ -879,6 +879,21 @@ def main(args: argparse.Namespace):
             lora_modules=args.lora_modules,
         ))
 
+    # Gate the run BEFORE writing any result file. A sub-threshold (or
+    # zero-completion) run must not leave a schema-valid JSON on disk:
+    # downstream collectors (launch_mi355x-amds.sh, benchmark-multinode-tmpl.yml)
+    # treat file *existence* as success, so a written-then-failed file looks
+    # successful. Raising here keeps disk state consistent with the exit code.
+    max_failure_rate = 0.05
+    completed = benchmark_result["completed"]
+    failure_rate = 1 - completed / args.num_prompts
+    if failure_rate > max_failure_rate:
+        raise SystemExit(
+            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
+            f"{max_failure_rate:.0%} threshold "
+            f"({completed}/{args.num_prompts} completed)"
+        )
+
     # Save config and results to json
     if args.save_result:
         result_json: Dict[str, Any] = {}
@@ -939,16 +954,6 @@ def main(args: argparse.Namespace):
         with open(file_name, "w", encoding='utf-8') as outfile:
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
-
-    max_failure_rate = 0.05
-    completed = benchmark_result["completed"]
-    failure_rate = 1 - completed / args.num_prompts
-    if failure_rate > max_failure_rate:
-        raise SystemExit(
-            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
-            f"{max_failure_rate:.0%} threshold "
-            f"({completed}/{args.num_prompts} completed)"
-        )
 
 
 if __name__ == "__main__":
