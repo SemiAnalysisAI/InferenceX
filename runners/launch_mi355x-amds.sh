@@ -52,11 +52,32 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Ensure root-owned files are cleaned up even on early exit to prevent
-    # EACCES errors when the next GH Actions job checks out on this runner
-    trap 'sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true' EXIT
+    # EACCES errors when the next GH Actions job checks out on this runner.
+    # Always preserve slurm logs as CI artifacts for debugging.
+    # KEEP_LOGS=1 disables the trap entirely (local-debug knob).
+    cleanup_and_save_logs() {
+        if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
+            local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            mkdir -p "$art_dir"
+            cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+        fi
+        # Print .err inline so failures are visible in CI output
+        local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
+        if [[ -s "$err_file" ]]; then
+            echo "=== Slurm job stderr ==="
+            tail -100 "$err_file"
+            echo "========================"
+        fi
+        sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    }
+    if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
+        trap '' EXIT
+    else
+        trap cleanup_and_save_logs EXIT
+    fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node"
@@ -108,12 +129,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
-sgl_job_dir, isl, osl, nexp = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-for path in sorted([f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/sglang_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
+logs_root = f"{job_dir}/logs/"
+candidates = []
+if os.path.isdir(logs_root):
+    for name in os.listdir(logs_root):
+        subdir = f"{logs_root}{name}/{framework}_isl_{isl}_osl_{osl}"
+        if os.path.isdir(subdir):
+            candidates.append(subdir)
+for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
-        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1)
+        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1 "$FRAMEWORK")
         if [ -z "$LOGS_DIR" ]; then
             echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
             exit 1
@@ -162,20 +190,12 @@ PY
 
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
-    # Upload logs as artifact if running in GitHub Actions
-    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-        ARTIFACT_DIR="$GITHUB_WORKSPACE/benchmark_artifacts"
-        mkdir -p "$ARTIFACT_DIR"
-        cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$ARTIFACT_DIR/" 2>/dev/null || true
-        echo "Logs copied to $ARTIFACT_DIR for artifact upload"
-    fi
-
-    # Clean up root-owned files to prevent EACCES on GH Actions checkout cleanup
-    sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
+    # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
 
 else
 
     export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
+    export AIPERF_MMAP_CACHE_HOST_PATH="/it-share/aiperf-cache/"
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
@@ -186,7 +206,11 @@ else
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    # Exclude known-bad mi355x compute nodes (KLAUD_DEBUG §5.1 / §5.2):
+    #   mia1-p01-g09: pyxis broken (persistently fails to create container filesystem)
+    #   mia1-p01-g11: docker.sock permissions denied (cluster-cleanup step fails)
+    # Both have been root-caused via #1431/#1432/#1440/#1441/#1443 sweep failures.
+    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -213,7 +237,7 @@ else
     fi
 
     # to prevent reading outdated saved model. use a fresh model from hf repo
-    if [[ "$FRAMEWORK" == "atom" ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+    if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
@@ -228,11 +252,12 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
-        --no-container-entrypoint --export=ALL \
+        --container-remap-root \
+        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
 
     scancel $JOB_ID

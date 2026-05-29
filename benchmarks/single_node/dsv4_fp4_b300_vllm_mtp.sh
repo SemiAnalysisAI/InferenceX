@@ -13,13 +13,24 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
+# `hf download` creates the target dir if missing and is itself idempotent. 
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -36,7 +47,14 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+MOE_ARGS=()
+if [ "${DP_ATTENTION}" = "true" ]; then
+    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+    MAX_NUM_BATCHED_TOKENS=2048
+else
+    MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
+fi
+
 BENCHMARK_MAX_MODEL_LEN=$MAX_MODEL_LEN
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -53,7 +71,7 @@ NUM_SPEC_TOKENS=2
 start_gpu_monitor
 
 set -x
-vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --pipeline-parallel-size 1 \
     --kv-cache-dtype fp8 \
@@ -61,6 +79,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --block-size 256 \
     --no-enable-prefix-caching \
     "${EP_ARGS[@]}" \
+    "${MOE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache True \
     --tokenizer-mode deepseek_v4 \

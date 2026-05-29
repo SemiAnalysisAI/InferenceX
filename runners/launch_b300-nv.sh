@@ -279,24 +279,55 @@ done
 find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
+    # HF_HUB_CACHE is set to help with dataset download inside the container
+    # for eval jobs. Can be updated to some other path on the cluster and
+    # mounted just like HF_HUB_CACHE_MOUNT.
+    export HF_HUB_CACHE="$HOME/.cache/huggingface"
 
-    # Pre-staged models on the B300 cluster live under /data/models. Point MODEL
-    # at the local copy so the benchmark skips `hf download` and reads from the
-    # mounted dir. Other models fall through and use `hf download` from their
-    # benchmark script.
-    HF_HUB_CACHE_MOUNT="/data/models"
-    if [[ "$MODEL" == "Qwen/Qwen3.5-397B-A17B-FP8" ]]; then
-        export MODEL="$HF_HUB_CACHE_MOUNT/${MODEL#*/}"
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-        export MODEL="$HF_HUB_CACHE_MOUNT/dsv4-pro"
+    # HF_HUB_CACHE_MOUNT is read-only and holds the pre-staged weights below.
+    # WRITABLE_MODELS_DIR is writable; the benchmark script downloads anything not
+    # in the staged list there.
+    HF_HUB_CACHE_MOUNT="/scratch/models/"
+    WRITABLE_MODELS_DIR="/data/models/"
+
+    # Pre-staged model 
+    STAGED_MODELS=(
+        DeepSeek-R1-0528
+        DeepSeek-R1-0528-NVFP4-v2
+        DeepSeek-V4-Flash
+        DeepSeek-V4-Pro
+        GLM-5-FP8
+        GLM-5-NVFP4
+        GLM-5.1
+        Kimi-K2.5
+        Kimi-K2.5-NVFP4
+        Kimi-K2.6
+        MiniMax-M2.5
+        MiniMax-M2.5-NVFP4
+        MiniMax-M2.7
+        MiniMax-M2.7-NVFP4
+        Qwen3.5-397B-A17B
+        Qwen3.5-397B-A17B-FP8
+        Qwen3.5-397B-A17B-NVFP4
+        gpt-oss-120b
+    )
+
+    # MODEL stays as the HF id for the client (--served-model-name, tokenizer);
+    # MODEL_PATH is what the server reads weights from.
+    MODEL_BASENAME="${MODEL##*/}"
+    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+        export MODEL_PATH="${HF_HUB_CACHE_MOUNT%/}/${MODEL_BASENAME}"
+    else
+        export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"
     fi
+
     SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else)
     # for scripts that haven't been retagged yet.
-    BENCH_BASE="benchmarks/single_node/${EXP_NAME%%_*}_${PRECISION}_b300"
+    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b300"
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
@@ -331,15 +362,13 @@ else
         fi
     )
 
-    # Pin to one of the known-good B300 nodes; others have hardware/network
-    # issues that cause benchmarks to hang or fail to start.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodelist=b300-[001-006,008-012,017-020] -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
         --mpi=none \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \

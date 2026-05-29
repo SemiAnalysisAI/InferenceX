@@ -2,6 +2,8 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
+
 ## Project Overview
 
 InferenceX is an open-source automated benchmarking system that tracks LLM inference performance across hardware (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results published to https://inferencex.com/.
@@ -57,12 +59,15 @@ Git: conventional commit messages. `[skip-sweep]` in commit message skips benchm
 
 ### Pull Request Sweep Labels
 
-PRs do not run the sweep automatically - `run-sweep.yml` is gated on a label. Pick exactly one; setting both is rejected by the workflow's `setup` job.
+PRs do not run the sweep automatically - `run-sweep.yml` is gated on a label. Pick exactly one; setting multiple sweep labels is rejected by the workflow's `setup` job.
 
-- `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single highest concurrency). Default for most PRs.
-- `full-sweep-enabled` - runs the full intermediate concurrency sweep, identical to push-to-main. Use when intermediate points matter (e.g. a recipe change shifts the throughput/latency curve, not just its endpoints).
+- `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single lowest concurrency). Default for most PRs.
+- `full-sweep-enabled` - runs the full intermediate concurrency sweep behind a sequential single-node canary gate. Use when intermediate points matter (e.g. a recipe change shifts the throughput/latency curve, not just its endpoints).
+- `non-canary-full-sweep-enabled` - runs the full intermediate concurrency sweep without the canary gate. Use when the canary is flaky or not representative of the affected configuration.
 
-Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the highest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[max(conc)]`.
+**The sweep does not trigger while the PR has merge conflicts.** Even with `sweep-enabled`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled` applied, the `run-sweep.yml` workflow will not start until the PR cleanly merges into main — a stale claude/* or update-* branch with a `perf-changelog.yaml` conflict (the common case) will sit in NO_SWEEP / NO_SUCCESS until rebased. Resolution recipe is documented in `KLAUD_DEBUG.md §1.1`: `git merge origin/main`, then `git checkout origin/main -- perf-changelog.yaml`, then re-append the PR's own changelog entry at the tail. Don't 3-way merge `perf-changelog.yaml`; whitespace edits silently re-trigger the deletion check.
+
+Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the lowest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[min(conc)]`.
 
 ## Common Tasks
 
