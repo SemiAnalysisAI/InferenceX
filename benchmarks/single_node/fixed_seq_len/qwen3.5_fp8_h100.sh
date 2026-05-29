@@ -8,7 +8,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
-    DP_ATTENTION \
     CONC \
     ISL \
     OSL \
@@ -37,42 +36,37 @@ if [ "${EP_SIZE}" -gt 1 ]; then
 fi
 
 SCHEDULER_RECV_INTERVAL=
-if [ "${DP_ATTENTION}" != "true" ]; then
-    case "$CONC" in
-      1|2|4)
-        SCHEDULER_RECV_INTERVAL=2
-        ;;
-      8)
-        SCHEDULER_RECV_INTERVAL=60
-        ;;
-      16)
-        SCHEDULER_RECV_INTERVAL=30
-        ;;
-      32)
-        SCHEDULER_RECV_INTERVAL=1200
-        ;;
-      64)
-        SCHEDULER_RECV_INTERVAL=600
-        ;;
-      128|256)
-        SCHEDULER_RECV_INTERVAL=1920
-        ;;
-      *)
-        echo "Unsupported CONC=$CONC for qwen3.5 FP8 H100 SGLang recipe" >&2
-        exit 1
-        ;;
-    esac
-fi
+case "$CONC" in
+  1|2|4)
+    SCHEDULER_RECV_INTERVAL=2
+    ;;
+  8)
+    SCHEDULER_RECV_INTERVAL=60
+    ;;
+  16)
+    SCHEDULER_RECV_INTERVAL=30
+    ;;
+  32)
+    SCHEDULER_RECV_INTERVAL=1200
+    ;;
+  64)
+    SCHEDULER_RECV_INTERVAL=600
+    ;;
+  128|256)
+    SCHEDULER_RECV_INTERVAL=1920
+    ;;
+  *)
+    echo "Unsupported CONC=$CONC for qwen3.5 FP8 H100 SGLang recipe" >&2
+    exit 1
+    ;;
+esac
 
 SCHEDULER_ARGS=()
 if [ -n "$SCHEDULER_RECV_INTERVAL" ]; then
     SCHEDULER_ARGS=(--scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL")
 fi
-if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention)
-fi
 
-echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
 echo "SCHEDULER_RECV_INTERVAL: ${SCHEDULER_RECV_INTERVAL:-none}"
 echo "SCHEDULER_ARGS: ${SCHEDULER_ARGS[*]}"
 
