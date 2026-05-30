@@ -2,7 +2,6 @@
 set -euo pipefail
 
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
-export PORT=8888
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -10,7 +9,7 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 cleanup_stale_benchmark_logs() {
     if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
-        sudo rm -rf "$GITHUB_WORKSPACE/benchmark_logs" 2>/dev/null || \
+        sudo -n rm -rf "$GITHUB_WORKSPACE/benchmark_logs" 2>/dev/null || \
             rm -rf "$GITHUB_WORKSPACE/benchmark_logs" 2>/dev/null || true
     fi
 }
@@ -28,6 +27,8 @@ if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2
     exit 1
 fi
+
+export PORT=$(( 40000 + (JOB_ID % 10000) ))
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; cleanup_stale_benchmark_logs; exit "$rc"' EXIT
 
