@@ -24,9 +24,17 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# following AMD andy's recipe 
-# https://www.linkedin.com/posts/andyluo77_day-0-support-of-minimax-25-on-amd-gpu-activity-7428151527309025280-hXR8/
 export VLLM_ROCM_USE_AITER=1
+
+ENABLE_SHUFFLE_KV_CACHE_LAYOUT=0
+if   [[ "$TP" == "2" && "$EP_SIZE" == "1" ]] && (( CONC <= 16 )); then
+    ENABLE_SHUFFLE_KV_CACHE_LAYOUT=1
+elif [[ "$TP" == "8" && "$EP_SIZE" == "8" ]] && (( CONC <= 64 )); then
+    ENABLE_SHUFFLE_KV_CACHE_LAYOUT=1
+fi
+if (( ENABLE_SHUFFLE_KV_CACHE_LAYOUT )); then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -52,6 +60,8 @@ $EP \
 --max-model-len $MAX_MODEL_LEN \
 --block-size=32 \
 --no-enable-prefix-caching \
+--attention-backend ROCM_AITER_FA \
+--compilation-config '{"mode":3,"cudagraph_mode":"PIECEWISE"}' \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
