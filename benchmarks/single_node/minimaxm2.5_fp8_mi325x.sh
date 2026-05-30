@@ -25,7 +25,16 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+
+ENABLE_SHUFFLE_KV_CACHE_LAYOUT=0
+if   [[ "$TP" == "2" && "$EP_SIZE" == "1" ]] && (( CONC <= 16 )); then
+    ENABLE_SHUFFLE_KV_CACHE_LAYOUT=1
+elif [[ "$TP" == "8" && "$EP_SIZE" == "8" ]] && (( CONC <= 64 )); then
+    ENABLE_SHUFFLE_KV_CACHE_LAYOUT=1
+fi
+if (( ENABLE_SHUFFLE_KV_CACHE_LAYOUT )); then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+fi
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
