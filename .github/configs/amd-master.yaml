@@ -971,7 +971,7 @@ minimaxm2.5-fp4-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/MiniMax-M2.5-MXFP4
   model-prefix: minimaxm2.5
   runner: mi355x
