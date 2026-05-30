@@ -3239,3 +3239,9 @@
     - "Add --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"PIECEWISE\"}' to vllm serve, mirroring `model.base_args` from the upstream recipe. `pass_config.fuse_minimax_qk_norm` from the recipe is intentionally omitted — it triggers an upstream NameError on ROCm because vllm/compilation/passes/pass_manager.py imports MiniMaxQKNormPass under `is_cuda()` (NVIDIA-only) while using it unconditionally"
     - "Conditionally enable VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 per (TP, EP, CONC) — on for shapes where the AITER ASM paged-attention kernel exists in the gfx942 heuristic table (TP=2 EP=1 CONC<=16, TP=8 EP=8 CONC<=64), off otherwise. Above the thresholds vllm/v1/attention/backends/rocm_aiter_fa.py routes decode through aiter pa_fwd_asm and crashes with `RuntimeError: get_heuristic_kernel: cannot get heuristic kernel!` for MiniMax-M2.5's attention shape (gqa=6 block_size=32 qTile=0); below them the ASM auto-dispatch is the perf win the recipe wants. Thresholds confirmed across 17 bench cells + 3 eval cells in PR #1594 sweep run 26692603804. Mirrors the per-shape toggle pattern in benchmarks/single_node/minimaxm2.5_fp8_mi355x.sh; can collapse to unconditional SHUFFLE=1 once AITER registers the missing kernel on gfx942"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1594
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1623
