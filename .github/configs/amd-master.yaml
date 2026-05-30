@@ -2135,7 +2135,7 @@ dsv4-fp4-mi355x-sglang:
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
