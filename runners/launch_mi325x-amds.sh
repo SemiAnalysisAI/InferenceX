@@ -8,6 +8,14 @@ PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
+cleanup_stale_benchmark_logs() {
+    if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
+        sudo rm -rf "$GITHUB_WORKSPACE/benchmark_logs" 2>/dev/null || \
+            rm -rf "$GITHUB_WORKSPACE/benchmark_logs" 2>/dev/null || true
+    fi
+}
+cleanup_stale_benchmark_logs
+
 set -x
 
 # Exclude known-broken mi325x nodes:
@@ -21,7 +29,7 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; cleanup_stale_benchmark_logs; exit "$rc"' EXIT
 
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
