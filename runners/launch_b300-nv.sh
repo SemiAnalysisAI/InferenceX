@@ -358,32 +358,9 @@ else
             echo "Squash file already exists and is valid, skipping import"
         else
             rm -f "$SQUASH_FILE"
-            # /etc/enroot/enroot.conf{,.d} pin enroot's runtime/cache/data/temp
-            # dirs under /scratch. On this head node /scratch is an NFS mount that
-            # can go stale ("Stale file handle"), which makes `enroot import` fail
-            # to create its working dirs and produce no .sqsh -- surfacing later as
-            # a cryptic pyxis "No such file or directory" on the compute node. When
-            # /scratch is unusable, redirect enroot to the healthy /data share for
-            # this import only. These exports stay inside this subshell, so the
-            # salloc/srun below (and the compute node's own /scratch) are untouched.
-            scratch_probe="/scratch/tmp/.estale_probe.$$"
-            if { mkdir -p /scratch/tmp && touch "$scratch_probe"; } 2>/dev/null; then
-                rm -f "$scratch_probe"
-            else
-                enroot_fallback="$(dirname "$(dirname "$SQUASH_FILE")")/enroot"
-                enroot_uid="$(id -u)"
-                echo "WARN: /scratch unusable (stale handle?); redirecting enroot to $enroot_fallback for this import" >&2
-                export ENROOT_RUNTIME_PATH="$enroot_fallback/runtime/user-$enroot_uid"
-                export ENROOT_CACHE_PATH="$enroot_fallback/cache/user-$enroot_uid"
-                export ENROOT_DATA_PATH="$enroot_fallback/data/user-$enroot_uid"
-                export ENROOT_TEMP_PATH="$enroot_fallback/tmp"
-                mkdir -p "$ENROOT_RUNTIME_PATH" "$ENROOT_CACHE_PATH" \
-                         "$ENROOT_DATA_PATH" "$ENROOT_TEMP_PATH"
-            fi
-            enroot import -o "$SQUASH_FILE" "docker://$IMAGE" \
-                || { echo "enroot import failed for $IMAGE" >&2; exit 1; }
+            enroot import -o "$SQUASH_FILE" "docker://$IMAGE"
         fi
-    ) || exit 1
+    )
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
