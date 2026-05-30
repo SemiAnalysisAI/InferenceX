@@ -3220,3 +3220,11 @@
   description:
     - "Update GB300 FP4 GLM-5 8k1k low-latency sweep to mirror NVIDIA/srt-slurm#175: add a 5th 1p17d topology (decode_nodes/workers=17), and lower decode max-running-requests / cuda-graph-max-bs / benchmark concurrency per-zip-index from a flat 4096/1024 to 128/64/32/16/1 (mrr & cuda-graph) and 128/64/32/16/12 (concurrency)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1583
+
+- config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Bump SGLang ROCm image from v0.5.10rc0-rocm720-mi35x-20260415 to v0.5.12.post1-rocm720-mi35x-20260529"
+    - "Picks up the fix for the GSM8K accuracy regression reported in sgl-project/sglang#25742 (v0.5.12-20260517 collapsed to ~0.32 at TP=2)"
+    - "Local eval-only runs on MI355X recover to gsm8k strict-match 0.975 at TP=2/conc=64 and 0.974 at TP=4/conc=16, well above the 0.92 upstream gate added in sgl-project/sglang#26396"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1593
