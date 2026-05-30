@@ -24,8 +24,11 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH=/scratch/models/GLM-5-FP8
+    export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8"
     exit 1
 fi
 
@@ -72,11 +75,6 @@ if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
-    # Hand-rolled GLM-5 sglang recipes (one flat yaml per topology,
-    # derived from upstream srt-slurm PR #152's combined glm5.yaml).
-    # Directory layout mirrors SemiAnalysisAI/InferenceX PR #1372:
-    #   sglang/glm5/<hw>-<precision>/<seq>/disagg/stp/<seq>_stp_<variant>_<idx>.yaml
-    # so multiple precisions (fp4/fp8) and hardware targets can coexist.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
