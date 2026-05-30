@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
 export PORT=8888
@@ -13,17 +14,20 @@ set -x
 #   chi-mi325x-pod1-121: enroot-aufs2ovlfs setcap fails on this node's NFS-backed
 #                        squash dir; container image import never completes
 #                        (root-caused via #1467/#1468/#1469 sweep failures).
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
-    echo "ERROR: salloc failed to allocate a job"
+    echo "ERROR: salloc failed to allocate a job" >&2
     exit 1
 fi
 
+trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+
 # Use flock to serialize concurrent imports to the same squash file
-srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
+srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
+    set -euo pipefail
     exec 9>\"$LOCK_FILE\"
-    flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+    flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE' >&2; exit 1; }
     if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
         echo 'Squash file already exists and is valid, skipping import'
     else
@@ -31,9 +35,9 @@ srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
         enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
     fi
 "
-srun --jobid=$JOB_ID \
---container-image=$SQUASH_FILE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+srun --jobid="$JOB_ID" \
+--container-image="$SQUASH_FILE" \
+--container-mounts="$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE" \
 --container-mount-home \
 --container-writable \
 --container-remap-root \
