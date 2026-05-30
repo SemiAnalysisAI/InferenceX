@@ -1,0 +1,13 @@
+# Acceptance Length (AL) reference values measured with SPEED-Bench
+# dataset: coding | temperature: 1.0 | thinking: true
+# key = num_speculative_tokens (MTP level), value = golden AL
+
+deepseek-v4-pro:
+  1: 1.90
+  2: 2.60
+  3: 2.97
+  4: 3.04
+  5: 3.13
+  6: 3.08
+  7: 3.13
+  8: 3.12
