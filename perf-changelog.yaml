@@ -3228,3 +3228,11 @@
     - "Picks up the fix for the GSM8K accuracy regression reported in sgl-project/sglang#25742 (v0.5.12-20260517 collapsed to ~0.32 at TP=2)"
     - "Local eval-only runs on MI355X recover to gsm8k strict-match 0.975 at TP=2/conc=64 and 0.974 at TP=4/conc=16, well above the 0.92 upstream gate added in sgl-project/sglang#26396"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1593
+
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Pin AITER FA attention backend in benchmarks/single_node/minimaxm2.5_fp8_mi325x.sh to recover the ~38% MI325X throughput regression introduced when vLLM PR #36702 (between v0.18.0 and v0.21.0) flipped the dense full-attention default on ROCm from ROCM_AITER_FA to ROCM_ATTN (vllm-project/vllm#43029)"
+    - "Export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 to enable the AITER asm/hip paged-attention auto-dispatch"
+    - "Pass --attention-backend ROCM_AITER_FA to vllm serve, aligning with the merged upstream MiniMax ROCm recipe (vllm-project/recipes#481)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1594
