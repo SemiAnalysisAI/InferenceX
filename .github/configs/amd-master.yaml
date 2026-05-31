@@ -2046,7 +2046,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 512 ]
+        conc-list: [ 640, 512 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2123,7 +2123,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 2048, 4096 ]
+        conc-list: [ 1024, 2048, 4096 ]
         prefill:
           num-worker: 2
           tp: 8
