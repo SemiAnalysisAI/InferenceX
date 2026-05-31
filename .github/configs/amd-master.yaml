@@ -875,7 +875,7 @@ kimik2.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
 minimaxm2.5-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -971,7 +971,7 @@ minimaxm2.5-fp4-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 minimaxm2.5-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/MiniMax-M2.5-MXFP4
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -1038,7 +1038,7 @@ minimaxm2.5-fp8-mi300x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 minimaxm2.5-fp8-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.20.2
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -1108,7 +1108,7 @@ gptoss-fp4-mi300x-vllm:
       - { tp: 8, conc-start: 1, conc-end: 16 }
 
 gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi325x
@@ -1133,7 +1133,7 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/gpt-oss-120b-w-mxfp4-a-fp8
   model-prefix: gptoss
   runner: mi355x
@@ -2135,7 +2135,7 @@ dsv4-fp4-mi355x-sglang:
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
