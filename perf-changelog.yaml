@@ -3333,7 +3333,7 @@
 - config-keys:
     - dsr1-fp4-mi355x-atom-mtp
   description:
-    - "Update ATOM image from rocm7.2.3_..._atom20260511 to nightly_202605301523"
+    - "Update ATOM image to rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
     - "Update model from amd/DeepSeek-R1-0528-MXFP4 to amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4"
     - "Switch to TP=4 only (drop TP=8 search-space); enable isl=8192 TP=4 sweep"
     - "isl=1024/osl=1024 TP=4: +5.7% to +16.6% improvement at conc 4-64 vs prior InferenceX numbers"
