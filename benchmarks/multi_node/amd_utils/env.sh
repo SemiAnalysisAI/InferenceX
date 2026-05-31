@@ -124,6 +124,7 @@ else
     # =========================================================================
 
     export SGLANG_USE_AITER=1
+    export AITER_LOG_LEVEL=ERROR
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
     export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
