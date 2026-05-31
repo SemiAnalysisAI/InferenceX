@@ -2169,13 +2169,19 @@ dsv4-fp4-mi355x-sglang:
 # MTP variant of dsv4-fp4-mi355x-sglang. Mirrors the base search space and adds
 # spec-decoding: mtp, which routes to dsv4_fp4_mi355x_sglang_mtp.sh (EAGLE
 # speculative decoding), per sgl-project/sglang#26383 ([AMD][DSV4] DSV4 MTP
-# graph + sparse triton attn optimizations, merged 2026-05-27). That PR fixes
-# the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl #20404)
-# and validates GSM8K 0.950 with MTP on. Image pins the newest amd/deepseek_v4
-# build (SHA f96ac98); MTP correctness depends on the build carrying #26383, so
-# the matrix lm-eval (RUN_EVAL on the high-conc points) gates the first sweep.
+# graph + sparse triton attn optimizations, merged to main 2026-05-27). That PR
+# fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
+# #20404) and validates GSM8K 0.950 with MTP on.
+#
+# Image: the amd/deepseek_v4 -DSv4 branch builds ended at f96ac98 (2026-05-27),
+# which predates #26383 and crashes during MTP graph capture (kv_score dtype
+# mismatch in compress_state, run 26723126211). #26383 merged to main, so this
+# pins the newest mainline ROCm nightly (v0.5.12.post1-rocm720-mi35x-20260531)
+# where the fix lives. Lineage differs from the base STP entry (still on
+# f96ac98) until the nightly is confirmed to serve DSv4-Pro FP4 cleanly; the
+# matrix lm-eval (RUN_EVAL on the high-conc points) gates correctness.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260527-DSv4
+  image: rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260531
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x

@@ -10,12 +10,13 @@
 # for the DP-attention path (steps=2, topk=1, draft=3); the TP-only
 # low-concurrency path uses the (3,1,4) chain shared with dsr1_fp4_mi355x_mtp.sh.
 #
-# IMPORTANT (image dependency): MTP correctness requires the sglang build in
-# the image to carry #26383. The amd/deepseek_v4 branch images are tagged by
-# SHA, so a build predating the fix will silently regress (cf. #20404). The
-# matrix runs lm-eval on the high-concurrency points (RUN_EVAL), so the first
-# sweep validates GSM8K before any throughput number is trusted; bump the image
-# tag in amd-master.yaml if the eval gate fails.
+# IMPORTANT (image dependency): MTP requires the sglang build to carry #26383.
+# The amd/deepseek_v4 -DSv4 branch builds ended at f96ac98 (2026-05-27), which
+# predates the fix and hard-crashes during MTP CUDA-graph capture (kv_score
+# dtype mismatch in compress_state, run 26723126211). #26383 merged to main, so
+# amd-master.yaml pins the newest mainline ROCm nightly instead. The matrix runs
+# lm-eval on the high-concurrency points (RUN_EVAL), so the first sweep validates
+# GSM8K before any throughput number is trusted; bump the image if it regresses.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
