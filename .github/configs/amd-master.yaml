@@ -2166,6 +2166,35 @@ dsv4-fp4-mi355x-sglang:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
 
+# MTP variant of dsv4-fp4-mi355x-sglang. Mirrors the base search space and adds
+# spec-decoding: mtp, which routes to dsv4_fp4_mi355x_sglang_mtp.sh (EAGLE
+# speculative decoding), per sgl-project/sglang#26383 ([AMD][DSV4] DSV4 MTP
+# graph + sparse triton attn optimizations, merged 2026-05-27). That PR fixes
+# the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl #20404)
+# and validates GSM8K 0.950 with MTP on. Image pins the newest amd/deepseek_v4
+# build (SHA f96ac98); MTP correctness depends on the build carrying #26383, so
+# the matrix lm-eval (RUN_EVAL on the high-conc points) gates the first sweep.
+dsv4-fp4-mi355x-sglang-mtp:
+  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260527-DSv4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048, spec-decoding: mtp }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048, spec-decoding: mtp }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
 # nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
 # on 2026-05-05, so any nightly built after that includes the
