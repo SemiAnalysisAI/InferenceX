@@ -65,7 +65,7 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --use-chat-template \
+    --dsv4 \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
