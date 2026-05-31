@@ -22,11 +22,14 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
 
-if [ "$EP_SIZE" -gt 1 ]; then
-  EP=" --enable-expert-parallel"
-else
-  EP=" "
-fi
+PARALLEL_ARGS=(-tp "$TP") #TP
+if [ "$DP_ATTENTION" = "true" ]; then
+    if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
+        PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
+    else #DP+TP
+        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+    fi
+fi 
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -38,8 +41,8 @@ export ATOM_MOE_GU_ITLV=1
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    -tp $TP \
-    --kv_cache_dtype fp8 $EP \
+    "${PARALLEL_ARGS[@]}" \
+    --kv_cache_dtype fp8 \
     --trust-remote-code \
     > $SERVER_LOG 2>&1 &
 
