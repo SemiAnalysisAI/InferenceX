@@ -49,7 +49,7 @@ set -x
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    "${PARALLEL_ARGS[@]}" \ 
+    "${PARALLEL_ARGS[@]}" \
     "${SPEC_ARGS[@]}" \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN \
     > $SERVER_LOG 2>&1 &
