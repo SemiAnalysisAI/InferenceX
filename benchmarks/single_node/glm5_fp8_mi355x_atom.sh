@@ -46,7 +46,7 @@ pip install -U transformers
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    --tp $TP \ 
+    --tp $TP \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --default-chat-template-kwargs '{"enable_thinking": false}' \
