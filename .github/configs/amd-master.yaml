@@ -2027,7 +2027,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1P2D TP8
       - spec-decoding: "mtp"
-        conc-list: [ 72, 64 ]
+        conc-list: [ 32, 64 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2046,7 +2046,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 640, 512 ]
+        conc-list: [ 512 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2065,7 +2065,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 288, 256 ]
+        conc-list: [ 256 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2085,7 +2085,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 144, 128 ]
+        conc-list: [ 128 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2104,7 +2104,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 72, 64 ]
+        conc-list: [ 64 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2123,7 +2123,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
+        conc-list: [ 2048, 4096 ]
         prefill:
           num-worker: 2
           tp: 8
