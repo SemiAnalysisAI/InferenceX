@@ -3348,9 +3348,15 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM DP-attention benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1626
-  
+
 - config-keys:
     - dsv4-fp4-mi355x-vllm-mtp
   description:
     - "Add MTP speculative-decoding sibling for dsv4-fp4-mi355x-vllm (model: deepseek-ai/DeepSeek-V4-Pro) on vllm/vllm-openai-rocm:v0.22.0, per vllm-project/vllm#43385"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1630
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM MTP3 benchmark; image rocm/atom-dev:nightly_202605301523, concurrency 4-256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1627
