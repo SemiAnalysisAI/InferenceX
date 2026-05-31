@@ -37,6 +37,15 @@ else
   EP=" "
 fi
 
+PARALLEL_ARGS=(-tp "$TP") #TP
+if [ "$DP_ATTENTION" = "true" ]; then
+    if [ "$EP_SIZE" -gt 1 ]; then #DEP
+        PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
+    else #TEP
+        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+    fi
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 MEM_FRAC_STATIC=0.9
@@ -46,8 +55,8 @@ pip install -U transformers
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
+    "${PARALLEL_ARGS[@]}" \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --default-chat-template-kwargs '{"enable_thinking": false}' \
     --trust-remote-code \
