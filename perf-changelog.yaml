@@ -3335,3 +3335,9 @@
   description:
     - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1616
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-dp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM DP-attention benchmark; image rocm/atom-dev:nightly_202605301523, concurrency 64-1024"
+  pr-link: TBD
