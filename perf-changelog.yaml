@@ -3338,7 +3338,7 @@
     - "Switch to TP=4 only (drop TP=8 search-space); enable isl=8192 TP=4 sweep"
     - "isl=1024/osl=1024 TP=4: +5.7% to +16.6% improvement at conc 4-64 vs prior InferenceX numbers"
     - "isl=1024/osl=1024 TP=4: -0.6% to -1.9% at high concurrency (conc 128-256)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1629
 
 - config-keys:
     - kimik2.5-fp4-mi355x-vllm
