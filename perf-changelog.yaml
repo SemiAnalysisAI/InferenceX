@@ -3331,6 +3331,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1624
 
 - config-keys:
+    - dsr1-fp4-mi355x-atom-mtp
+  description:
+    - "Update ATOM image from rocm7.2.3_..._atom20260511 to nightly_202605301523"
+    - "Update model from amd/DeepSeek-R1-0528-MXFP4 to amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4"
+    - "Switch to TP=4 only (drop TP=8 search-space); enable isl=8192 TP=4 sweep"
+    - "isl=1024/osl=1024 TP=4: +5.7% to +16.6% improvement at conc 4-64 vs prior InferenceX numbers"
+    - "isl=1024/osl=1024 TP=4: -0.6% to -1.9% at high concurrency (conc 128-256)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+
+- config-keys:
     - kimik2.5-fp4-mi355x-vllm
   description:
     - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
