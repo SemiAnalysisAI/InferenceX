@@ -3330,3 +3330,15 @@
   description:
     - "Update vLLM image from v0.21.0 to v0.22.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1602
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1624
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1616
