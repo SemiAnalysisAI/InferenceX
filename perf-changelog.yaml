@@ -3202,6 +3202,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Bump the image to May 26"
+    - "Add conc 128/256 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1584
+
+- config-keys:
     - glm5-fp8-gb300-dynamo-sglang
   description:
     - "Add GLM-5 FP8 GB300 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
