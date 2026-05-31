@@ -1197,7 +1197,7 @@ dsr1-fp8-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 128 }
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+  image: rocm/atom-dev:nightly_202605301523
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x

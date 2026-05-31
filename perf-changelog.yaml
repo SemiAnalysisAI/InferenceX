@@ -3331,6 +3331,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1624
 
 - config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM image from rocm7.2.3_..._atom20260511 to nightly_202605301523"
+    - "isl=1024/osl=1024: +47% to +116% improvement across conc 4-256 vs prior InferenceX numbers"
+    - "isl=8192/osl=1024: +47% to +131% improvement across conc 4-256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+
+- config-keys:
     - kimik2.5-fp4-mi355x-vllm
   description:
     - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
