@@ -2223,7 +2223,7 @@ dsv4-fp4-mi355x-atom:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 1024 }
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 512 }
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x

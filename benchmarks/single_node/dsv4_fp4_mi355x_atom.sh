@@ -38,6 +38,8 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
+# TODO: add --no-enable_chunked_prefill, when dsv4 prefix caching is supported 
+#https://github.com/ROCm/ATOM/commit/7df93a181da4d3c3250c2441c7d5e2745a03d0cd#diff-61b1ba0b8b74523530d2d5cdc739d4f3a23a43bedf69015a5235844d46e9373bL1127
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
