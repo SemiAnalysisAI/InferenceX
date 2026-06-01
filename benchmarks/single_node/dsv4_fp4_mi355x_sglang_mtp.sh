@@ -126,6 +126,11 @@ export SGLANG_OPT_C4_SPARSE_TOPK=512
 #                                       also skips the post-load deep_gemm
 #                                       transform_sf_into_required_layout that crashed.
 #   SGLANG_TOPK_TRANSFORM_512_TORCH=1 -> torch topk-transform instead of the kernel.
+#   SGLANG_OPT_USE_TOPK_V2=0          -> skip plan_topk_v2 in the indexer metadata;
+#                                       its jit kernel is CUDA-only (topk/ptx.cuh
+#                                       #includes <cuda/ptx>) and won't build for
+#                                       gfx950. topk_metadata is unused on the torch
+#                                       topk path, so empty is fine.
 #   SGLANG_ENABLE_JIT_DEEPGEMM=0     -> global off; nothing to JIT without the module.
 if python3 -c "import deep_gemm" >/dev/null 2>&1; then
     echo "deep_gemm present -> using fp8 wo_a / deep_gemm perf path"
@@ -133,6 +138,7 @@ else
     echo "deep_gemm absent -> routing DSv4 fp8 wo_a / topk around it (mainline nightly)"
     export SGLANG_OPT_FP8_WO_A_GEMM=0
     export SGLANG_TOPK_TRANSFORM_512_TORCH=1
+    export SGLANG_OPT_USE_TOPK_V2=0
     export SGLANG_ENABLE_JIT_DEEPGEMM=0
 fi
 
