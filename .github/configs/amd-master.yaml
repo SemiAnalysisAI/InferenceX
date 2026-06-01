@@ -2173,16 +2173,15 @@ dsv4-fp4-mi355x-sglang:
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
 #
-# BLOCKED on an image: no published build both loads DSv4-Pro AND has #26383.
-#   - rocm/sgl-dev:...-DSv4 builds are the only lineage bundling deep_gemm (so
-#     the only ones that load DSv4-Pro), but they ended at f96ac98 (2026-05-27),
-#     pre-#26383 -> MTP graph capture crashes (kv_score dtype, run 26723126211).
-#   - mainline v0.5.12.post1 ROCm nightlies carry #26383 but omit deep_gemm, so
-#     DSv4-Pro weight load fails in _setup_fp8_wo_a_scales (run 26727984372).
-# Pinned to the latest -DSv4 build as the correct lineage placeholder. Unblock by
-# bumping to the first -DSv4 image that carries #26383. PR #1631 parked as draft.
+# #26383 is on sglang `main`, NOT the amd/deepseek_v4 branch the rocm/sgl-dev:*-DSv4
+# builds are cut from (latest da28108 = f96ac98 + build fixes + an unrelated
+# MLA-decode refactor, still pre-#26383 -> kv_score crash, run 26723126211). So we
+# pin the mainline ROCm nightly, which carries #26383. Mainline omits deep_gemm,
+# but the recipe detects that and routes the DSv4 fp8 wo_a / topk paths to their
+# torch fallbacks (see dsv4_fp4_mi355x_sglang_mtp.sh). When a -DSv4 image carrying
+# #26383 ships, bump to it; the recipe auto-restores the deep_gemm perf path.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260527-DSv4
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260601
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2240,6 +2239,33 @@ dsv4-fp4-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 512 }
 
+# MTP variant of dsv4-fp4-mi355x-vllm. Mirrors the base recipe's search space
+# and adds spec-decoding: mtp, which routes to dsv4_fp4_mi355x_vllm_mtp.sh
+# (--speculative-config '{"method":"mtp","num_speculative_tokens":2}'), per
+# vllm-project/vllm#43385 (ROCm DeepSeek-V4 MTP, merged 2026-05-24, included in
+# v0.22.0). Full conc 4-512 range maps the complete crossover curve: MTP wins
+# at low batch (PR perf data: +75% @ conc1, +38% @ conc8) and falls behind STP
+# above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
+# build, which already contains the MTP commit.
+dsv4-fp4-mi355x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
 # that OOM once warmup/prefill batches multiple requests; keep CONC=1 until
@@ -2248,7 +2274,7 @@ dsv4-fp4-mi355x-vllm:
 # the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
 # the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
 dsv4-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202605130853
+  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2260,11 +2286,13 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 512 }
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
