@@ -46,6 +46,7 @@ python3 -m atom.entrypoints.openai_server \
     "${PARALLEL_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
+    --gpu-memory-utilization 0.85 \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
