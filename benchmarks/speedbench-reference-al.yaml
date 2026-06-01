@@ -1,13 +1,29 @@
-# Acceptance Length (AL) reference values measured with SPEED-Bench
-# dataset: coding | temperature: 1.0 | thinking: true
-# key = num_speculative_tokens (MTP level), value = golden AL
-
+# Acceptance Length (AL) reference values measured with SPEED-Bench.
+# dataset: coding | temperature: 1.0 | output_len: 4096
+# Measured on DeepSeek-V4-Pro (B300, vLLM MTP), per num_speculative_tokens.
+#
+# Two modes are reported:
+#   thinking_on  - reasoning enabled; this is the PRODUCTION configuration and
+#                  the golden reference used for synthetic-acceptance modeling.
+#   thinking_off - reasoning disabled; provided for comparison only.
+#
+# key = num_speculative_tokens (MTP level); value = golden AL
 deepseek-v4-pro:
-  1: 1.90
-  2: 2.60
-  3: 2.97
-  4: 3.04
-  5: 3.13
-  6: 3.08
-  7: 3.13
-  8: 3.12
+  thinking_on:
+    1: 1.79
+    2: 2.27
+    3: 2.47
+    4: 2.54
+    5: 2.52
+    6: 2.54
+    7: 2.54
+    8: 2.56
+  thinking_off:
+    1: 1.92
+    2: 2.60
+    3: 2.97
+    4: 3.04
+    5: 3.13
+    6: 3.08
+    7: 3.13
+    8: 3.12
