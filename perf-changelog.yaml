@@ -3202,6 +3202,154 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Bump the image to May 26"
+    - "Add conc 128/256 new sweep point"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1584
+
+- config-keys:
+    - glm5-fp8-gb300-dynamo-sglang
+  description:
+    - "Add GLM-5 FP8 GB300 Dynamo SGLang disaggregated multi-node coverage using lmsysorg/sglang:v0.5.11-cu130"
+    - "1k1k and 8k1k STP hightpt and lowlat srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp8/ (resolved from upstream srt-slurm PR #160 via srtctl resolve-override)"
+    - "Wire glm5/fp8 model + dynamo-sglang framework branches into runners/launch_gb300-nv.sh with SA upstream defaults (SLURM_PARTITION=batch_1, SLURM_ACCOUNT=benchmark, SQUASH_FILE under /home/sa-shared/gharunners/squash/)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1557
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Update vLLM image tag to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1384
+
+- config-keys:
+    - glm5-fp4-gb300-dynamo-sglang
+  description:
+    - "Update GB300 FP4 GLM-5 8k1k low-latency sweep to mirror NVIDIA/srt-slurm#175: add a 5th 1p17d topology (decode_nodes/workers=17), and lower decode max-running-requests / cuda-graph-max-bs / benchmark concurrency per-zip-index from a flat 4096/1024 to 128/64/32/16/1 (mrr & cuda-graph) and 128/64/32/16/12 (concurrency)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1583
+
+- config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Bump SGLang ROCm image from v0.5.10rc0-rocm720-mi35x-20260415 to v0.5.12.post1-rocm720-mi35x-20260529"
+    - "Picks up the fix for the GSM8K accuracy regression reported in sgl-project/sglang#25742 (v0.5.12-20260517 collapsed to ~0.32 at TP=2)"
+    - "Local eval-only runs on MI355X recover to gsm8k strict-match 0.975 at TP=2/conc=64 and 0.974 at TP=4/conc=16, well above the 0.92 upstream gate added in sgl-project/sglang#26396"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1593
+
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Pin AITER FA attention backend in benchmarks/single_node/minimaxm2.5_fp8_mi325x.sh to recover the ~38% MI325X throughput regression introduced when vLLM PR #36702 (between v0.18.0 and v0.21.0) flipped the dense full-attention default on ROCm from ROCM_AITER_FA to ROCM_ATTN (vllm-project/vllm#43029)"
+    - "Export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 to enable the AITER asm/hip paged-attention auto-dispatch"
+    - "Pass --attention-backend ROCM_AITER_FA to vllm serve, aligning with the merged upstream MiniMax ROCm recipe (vllm-project/recipes#481)"
+    - "Pin image vllm/vllm-openai-rocm:v0.20.2 — the version the upstream recipe explicitly validates (`min_vllm_version: 0.20.2`). v0.21.0 separately crashes during AITER MoE CUDA-graph capture on MiniMax-M2.5 (silent worker death, `Engine core initialization failed`) reproducible via the recipe's exact flags; v0.20.2 + recipe completes a 100-prompt vllm bench serve cleanly at 2030 tok/s total throughput on MI325X (TP=4)"
+    - "Add --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"PIECEWISE\"}' to vllm serve, mirroring `model.base_args` from the upstream recipe. `pass_config.fuse_minimax_qk_norm` from the recipe is intentionally omitted — it triggers an upstream NameError on ROCm because vllm/compilation/passes/pass_manager.py imports MiniMaxQKNormPass under `is_cuda()` (NVIDIA-only) while using it unconditionally"
+    - "Conditionally enable VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 per (TP, EP, CONC) — on for shapes where the AITER ASM paged-attention kernel exists in the gfx942 heuristic table (TP=2 EP=1 CONC<=16, TP=8 EP=8 CONC<=64), off otherwise. Above the thresholds vllm/v1/attention/backends/rocm_aiter_fa.py routes decode through aiter pa_fwd_asm and crashes with `RuntimeError: get_heuristic_kernel: cannot get heuristic kernel!` for MiniMax-M2.5's attention shape (gqa=6 block_size=32 qTile=0); below them the ASM auto-dispatch is the perf win the recipe wants. Thresholds confirmed across 17 bench cells + 3 eval cells in PR #1594 sweep run 26692603804. Mirrors the per-shape toggle pattern in benchmarks/single_node/minimaxm2.5_fp8_mi355x.sh; can collapse to unconditional SHUFFLE=1 once AITER registers the missing kernel on gfx942"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1594
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1623
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1610
+
+- config-keys:
+    - gptoss-fp4-h200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1606
+
+- config-keys:
+    - kimik2.5-int4-h200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1600
+
+- config-keys:
+    - minimaxm2.5-fp8-h100-vllm
+  description:
+    - "Update vLLM image from v0.19.1-cu130 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1609
+
+- config-keys:
+    - minimaxm2.5-fp8-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.20.2 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1619
+
+- config-keys:
+    - gptoss-fp4-mi325x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1622
+
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1620
+
+- config-keys:
+    - minimaxm2.5-fp8-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1617
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1611
+
+- config-keys:
+    - gptoss-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1604
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1598
+
+- config-keys:
+    - minimaxm2.5-fp8-b200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1607
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1602
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from nightly-4f940896a32c9e2a0eba7f50d521bf5f6b4de458 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1624
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from v0.21.0 to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1616
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-mtp
+  description:
+    - "Add MTP speculative-decoding sibling for dsv4-fp4-mi355x-vllm (model: deepseek-ai/DeepSeek-V4-Pro) on vllm/vllm-openai-rocm:v0.22.0, per vllm-project/vllm#43385"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1630
+
+- config-keys:
     - dsv4-fp4-b300-vllm
   description:
     - "Update DSv4 FP4 B300 vLLM image tag to v0.22.0"
