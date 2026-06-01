@@ -358,6 +358,23 @@ else
             echo "Squash file already exists and is valid, skipping import"
         else
             rm -f "$SQUASH_FILE"
+            # enroot's working dirs are pinned to NFS /scratch by
+            # /etc/enroot/enroot.conf, but enroot-aufs2ovlfs unpacks the image's
+            # root-owned whiteout markers into a sticky /tmp and then can't unlink
+            # them over NFS -- root-squash strips the CAP_FOWNER it would need, so
+            # it fails with "failed to remove aufs whiteout: Operation not
+            # permitted" and writes no .sqsh. Run the import on local disk, where
+            # the extracted files are owned by us and removable. Scoped to this
+            # subshell (and cleaned up on exit), so the salloc/srun below and the
+            # compute node's own /scratch are unaffected.
+            enroot_local="$(mktemp -d /tmp/enroot-import.XXXXXX)"
+            trap 'rm -rf "$enroot_local"' EXIT
+            export ENROOT_TEMP_PATH="$enroot_local/tmp"
+            export ENROOT_CACHE_PATH="$enroot_local/cache"
+            export ENROOT_DATA_PATH="$enroot_local/data"
+            export ENROOT_RUNTIME_PATH="$enroot_local/run"
+            mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
+                     "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
             enroot import -o "$SQUASH_FILE" "docker://$IMAGE"
         fi
     )
