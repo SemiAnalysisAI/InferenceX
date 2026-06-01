@@ -52,6 +52,7 @@ python3 -m atom.entrypoints.openai_server \
     "${PARALLEL_ARGS[@]}" \
     "${SPEC_ARGS[@]}" \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN \
+    --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
