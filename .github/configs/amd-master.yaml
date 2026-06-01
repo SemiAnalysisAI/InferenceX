@@ -2204,6 +2204,40 @@ dsv4-fp4-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 512 }
 
+# MTP variant of dsv4-fp4-mi355x-vllm. Mirrors the base recipe's search space
+# and adds spec-decoding: mtp, which routes to dsv4_fp4_mi355x_vllm_mtp.sh
+# (--speculative-config '{"method":"mtp","num_speculative_tokens":2}'), per
+# vllm-project/vllm#43385 (ROCm DeepSeek-V4 MTP, merged 2026-05-24, included in
+# v0.22.0). Full conc 4-512 range maps the complete crossover curve: MTP wins
+# at low batch (PR perf data: +75% @ conc1, +38% @ conc8) and falls behind STP
+# above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
+# build, which already contains the MTP commit.
+dsv4-fp4-mi355x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+
+# Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
+# PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
+# that OOM once warmup/prefill batches multiple requests; keep CONC=1 until
+# the AITER sparse-attention kernel / multi-request path lands upstream.
+# --enforce-eager and ATOM_USE_TRITON_MOE=1 are required on gfx950. Image is
+# the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
+# the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
 dsv4-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
   model: deepseek-ai/DeepSeek-V4-Pro
