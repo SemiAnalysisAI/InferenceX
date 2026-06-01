@@ -54,6 +54,12 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
+# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
+# tokenizer ships without a jinja chat_template, so plain --use-chat-template
+# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
+# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
+# silently regresses on raw random tokens).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -65,7 +71,6 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --dsv4 \
     --trust-remote-code
 
 # After throughput, run evaluation only if RUN_EVAL is true
