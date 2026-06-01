@@ -589,6 +589,98 @@ kimik2.5-int4-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+kimik2.5-mxfp4-mi355x-vllm-eagle3:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+
+kimik2.5-int4-mi355x-vllm-eagle3:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+
+kimik2.5-int4-mi355x-vllm-fixed-ar-mtp:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-ar-mtp:
+    - isl: 1024
+      osl: 1024
+      draft-model: nvidia/Kimi-K2.5-Thinking-Eagle3
+      num-speculative-tokens: 3
+      rejection-sample-method: synthetic
+      synthetic-acceptance-rates: [0.778774, 0.57543, 0.412793]
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+    - isl: 8192
+      osl: 1024
+      draft-model: nvidia/Kimi-K2.5-Thinking-Eagle3
+      num-speculative-tokens: 3
+      rejection-sample-method: synthetic
+      synthetic-acceptance-rates: [0.778774, 0.57543, 0.412793]
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+
+kimik2.5-fp4-mi355x-vllm-fixed-ar-mtp:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-ar-mtp:
+    - isl: 1024
+      osl: 1024
+      draft-model: lightseekorg/kimi-k2.5-eagle3
+      num-speculative-tokens: 3
+      rejection-sample-method: synthetic
+      synthetic-acceptance-rates: [0.778774, 0.57543, 0.412793]
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+    - isl: 8192
+      osl: 1024
+      draft-model: lightseekorg/kimi-k2.5-eagle3
+      num-speculative-tokens: 3
+      rejection-sample-method: synthetic
+      synthetic-acceptance-rates: [0.778774, 0.57543, 0.412793]
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+
 kimik2.5-int4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.21.0
   model: moonshotai/Kimi-K2.5
@@ -723,6 +815,25 @@ minimaxm2.5-fp8-mi355x-vllm:
       - { tp: 2, ep: 2, conc-start: 2, conc-end: 256 }
       - { tp: 4, ep: 4, conc-start: 4, conc-end: 512 }
       - { tp: 8, ep: 8, conc-start: 2, conc-end: 2 }
+
+minimaxm2.5-fp8-mi355x-vllm-eagle3:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: eagle3 }
 
 # Diverged from minimaxm2.5-fp8-mi355x-vllm (agentic-coding sibling). Reasons below;
 # the original minimaxm2.5-fp8-mi355x-vllm entry is left identical to origin/main so

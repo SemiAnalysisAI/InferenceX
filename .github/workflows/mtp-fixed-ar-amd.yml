@@ -1,0 +1,619 @@
+name: MTP benchmark with fixed AR
+run-name: MTP fixed AR - ${{ inputs.test-name || inputs.model }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-name:
+        description: "Display name for this run"
+        required: false
+        type: string
+        default: "lcb-v6-kimik2.5-MXFP4-mtp-fixed-ar"
+      runner:
+        description: "MI355X self-hosted runner to use"
+        required: true
+        type: string
+        default: "mi355x-amds_0"
+      image:
+        description: "ROCm vLLM Docker image"
+        required: true
+        type: string
+        default: "vllm/vllm-openai-rocm:v0.21.0"
+      model:
+        description: "Target model served by vLLM"
+        required: true
+        type: string
+        default: "amd/Kimi-K2.5-MXFP4"
+      draft-model:
+        description: "Draft model used by Eagle3 speculative decoding"
+        required: true
+        type: string
+        default: "lightseekorg/kimi-k2.5-eagle3"
+      dataset:
+        description: "Hugging Face dataset used for acceptance-rate sampling"
+        required: true
+        type: string
+        default: "livecodebench/code_generation_lite"
+      dataset-config:
+        description: "Optional Hugging Face dataset config/subset name"
+        required: false
+        type: string
+        default: ""
+      dataset-split:
+        description: "Dataset split to load. Empty means test if present, otherwise first split."
+        required: false
+        type: string
+        default: "test6"
+      dataset-prompt-fields:
+        description: "Comma-separated candidate prompt fields, supports dotted paths"
+        required: false
+        type: string
+        default: "question_content"
+      prompt-turns:
+        description: "For list-based prompts such as MT-Bench turns: first or all"
+        required: true
+        type: choice
+        options:
+          - first
+          - all
+        default: "first"
+      num-prompts:
+        description: "Number of prompts to sample from the dataset"
+        required: true
+        type: string
+        default: "200"
+      max-concurrency:
+        description: "vLLM bench serve max concurrency. Supports a single value or comma-separated values, e.g. 32,64"
+        required: true
+        type: string
+        default: "32,64"
+      port:
+        description: "vLLM server port"
+        required: true
+        type: string
+        default: "8000"
+      num-speculative-tokens:
+        description: "Number of speculative tokens"
+        required: true
+        type: string
+        default: "3"
+      tensor-parallel-size:
+        description: "Tensor parallel size for vLLM serve"
+        required: true
+        type: string
+        default: "8"
+      draft-tensor-parallel-size:
+        description: "Draft model tensor parallel size for Eagle3 speculative decoding"
+        required: true
+        type: string
+        default: "1"
+      vllm-env-json:
+        description: "Optional JSON object of extra environment variables for vLLM serve"
+        required: false
+        type: string
+        default: '{"VLLM_ROCM_USE_AITER":"1","VLLM_ROCM_QUICK_REDUCE_QUANTIZATION":"INT4","VLLM_ROCM_USE_AITER_RMSNORM":"0"}'
+      vllm-extra-args:
+        description: "Optional extra arguments appended to vLLM serve"
+        required: false
+        type: string
+        default: "--enable-expert-parallel --long-prefill-token-threshold 8192 --max-num-batched-tokens 16384"
+      bench-extra-args:
+        description: "Optional extra arguments appended to vLLM bench serve"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  generate-synthetic-acceptance-rates:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 500
+    outputs:
+      synthetic-acceptance-rates: ${{ steps.compute-rates.outputs.synthetic_acceptance_rates }}
+      speculative-config: ${{ steps.compute-rates.outputs.speculative_config }}
+
+    env:
+      CONTAINER_NAME: mtp-fixed-ar-${{ github.run_id }}-${{ github.run_attempt }}
+      HOST_WORK_DIR: /tmp/mtp-fixed-ar-${{ github.run_id }}-${{ github.run_attempt }}
+      CONTAINER_WORK_DIR: /work/tmp/mtp-fixed-ar-${{ github.run_id }}-${{ github.run_attempt }}
+      DATASET_JSONL: dataset_prompts.jsonl
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Prepare workspace
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOST_WORK_DIR"
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+      - name: Launch ROCm vLLM container
+        run: |
+          set -euo pipefail
+          docker run -d -it \
+            --ipc=host \
+            --network=host \
+            --privileged \
+            --cap-add=CAP_SYS_ADMIN \
+            --device=/dev/kfd \
+            --device=/dev/dri \
+            --device=/dev/mem \
+            --group-add video \
+            --cap-add=SYS_PTRACE \
+            --security-opt seccomp=unconfined \
+            --shm-size 32G \
+            -e HF_TOKEN \
+            -e HUGGING_FACE_HUB_TOKEN \
+            -v ~/.cache/huggingface:/root/.cache/huggingface \
+            -v /:/work \
+            --entrypoint "/bin/bash" \
+            --name "$CONTAINER_NAME" \
+            "${{ inputs.image }}"
+
+      - name: Download dataset and convert to vLLM JSONL
+        env:
+          DATASET: ${{ inputs.dataset }}
+          DATASET_CONFIG: ${{ inputs.dataset-config }}
+          DATASET_SPLIT: ${{ inputs.dataset-split }}
+          DATASET_PROMPT_FIELDS: ${{ inputs.dataset-prompt-fields }}
+          PROMPT_TURNS: ${{ inputs.prompt-turns }}
+          NUM_PROMPTS: ${{ inputs.num-prompts }}
+        run: |
+          set -euo pipefail
+          docker exec \
+            -e HF_TOKEN \
+            -e HUGGING_FACE_HUB_TOKEN \
+            -e DATASET \
+            -e DATASET_CONFIG \
+            -e DATASET_SPLIT \
+            -e DATASET_PROMPT_FIELDS \
+            -e PROMPT_TURNS \
+            -e NUM_PROMPTS \
+            -e CONTAINER_WORK_DIR \
+            -e DATASET_JSONL \
+            "$CONTAINER_NAME" \
+            bash -lc '
+              set -euo pipefail
+              mkdir -p "$CONTAINER_WORK_DIR"
+              python3 -m pip install -q --no-cache-dir datasets huggingface_hub || \
+                python3 -m pip install -q --no-cache-dir --break-system-packages datasets huggingface_hub
+              hf download "$DATASET" --repo-type=dataset >/dev/null
+              python3 - <<'"'"'PY'"'"'
+          import json
+          import os
+          from pathlib import Path
+          from datasets import get_dataset_split_names, load_dataset
+          from huggingface_hub import snapshot_download
+
+          dataset_name = os.environ["DATASET"]
+          dataset_config = os.environ.get("DATASET_CONFIG") or None
+          requested_split = os.environ.get("DATASET_SPLIT") or None
+          prompt_fields = [
+              field.strip()
+              for field in os.environ.get("DATASET_PROMPT_FIELDS", "").split(",")
+              if field.strip()
+          ]
+          prompt_turns = os.environ.get("PROMPT_TURNS", "first")
+          num_prompts = int(os.environ["NUM_PROMPTS"])
+          out_path = os.path.join(os.environ["CONTAINER_WORK_DIR"], os.environ["DATASET_JSONL"])
+
+          split_kwargs = {"path": dataset_name}
+          load_kwargs = {"path": dataset_name}
+          if dataset_config:
+              split_kwargs["name"] = dataset_config
+              load_kwargs["name"] = dataset_config
+
+          def get_path(row, path):
+              value = row
+              for part in path.split("."):
+                  if isinstance(value, dict) and part in value:
+                      value = value[part]
+                  else:
+                      return None
+              return value
+
+          def message_text(message):
+              if isinstance(message, str):
+                  return message
+              if isinstance(message, dict):
+                  content = message.get("content") or message.get("value") or message.get("text")
+                  if isinstance(content, str):
+                      return content
+              return None
+
+          def normalize_prompt(value):
+              if isinstance(value, str) and value.strip():
+                  return value
+              if isinstance(value, list):
+                  texts = []
+                  for item in value:
+                      text = message_text(item)
+                      if text and text.strip():
+                          texts.append(text)
+                  if texts:
+                      return "\n\n".join(texts) if prompt_turns == "all" else texts[0]
+              if isinstance(value, dict):
+                  for key in ("prompt", "content", "value", "text"):
+                      prompt = normalize_prompt(value.get(key))
+                      if prompt:
+                          return prompt
+              return None
+
+          def load_rows_from_downloaded_files():
+              snapshot = Path(snapshot_download(dataset_name, repo_type="dataset"))
+              split_name = requested_split or "test"
+              candidates = [snapshot / f"{split_name}.jsonl", snapshot / f"{split_name}.json"]
+              if not requested_split:
+                  candidates.extend(sorted(snapshot.glob("*.jsonl")))
+                  candidates.extend(sorted(snapshot.glob("*.json")))
+
+              data_file = next((path for path in candidates if path.is_file()), None)
+              if data_file is None:
+                  raise FileNotFoundError(
+                      f"No JSON/JSONL data file found in downloaded dataset snapshot: {snapshot}"
+                  )
+
+              rows = []
+              with data_file.open(encoding="utf-8") as fh:
+                  if data_file.suffix == ".jsonl":
+                      for line in fh:
+                          if line.strip():
+                              rows.append(json.loads(line))
+                              if len(rows) >= num_prompts:
+                                  break
+                  else:
+                      data = json.load(fh)
+                      if isinstance(data, dict):
+                          for key in ("data", "rows", "examples"):
+                              if isinstance(data.get(key), list):
+                                  data = data[key]
+                                  break
+                      if not isinstance(data, list):
+                          raise ValueError(f"Unsupported JSON dataset shape in {data_file}")
+                      rows = data[:num_prompts]
+              return rows, data_file.name
+
+          try:
+              splits = get_dataset_split_names(**split_kwargs)
+              split = requested_split or ("test" if "test" in splits else splits[0])
+              dataset = load_dataset(**load_kwargs, split=split)
+              rows = dataset.select(range(min(num_prompts, len(dataset))))
+              source = f"split={split}"
+          except RuntimeError as exc:
+              if "Dataset scripts are no longer supported" not in str(exc):
+                  raise
+              rows, source = load_rows_from_downloaded_files()
+
+          rows = list(rows)
+          if rows and len(rows) < num_prompts:
+              rows = [rows[i % len(rows)] for i in range(num_prompts)]
+
+          # vLLM's custom dataset mode consumes JSONL rows with a prompt field.
+          # This replaces a fixed path like /work/.../livecodebench_v6_prompts.jsonl.
+          with open(out_path, "w", encoding="utf-8") as out:
+              for row in rows:
+                  prompt = None
+                  for field in prompt_fields:
+                      prompt = normalize_prompt(get_path(row, field))
+                      if prompt:
+                          break
+                  if prompt is None:
+                      prompt = json.dumps(row, ensure_ascii=False)
+                  out.write(json.dumps({"prompt": prompt}, ensure_ascii=False) + "\n")
+
+          print(f"Wrote prompts from {dataset_name} {source} to {out_path}")
+          PY
+            '
+
+      - name: Launch vLLM server with standard speculative decoding
+        env:
+          MODEL: ${{ inputs.model }}
+          DRAFT_MODEL: ${{ inputs.draft-model }}
+          PORT: ${{ inputs.port }}
+          NUM_SPECULATIVE_TOKENS: ${{ inputs.num-speculative-tokens }}
+          TENSOR_PARALLEL_SIZE: ${{ inputs.tensor-parallel-size }}
+          DRAFT_TENSOR_PARALLEL_SIZE: ${{ inputs.draft-tensor-parallel-size }}
+          VLLM_ENV_JSON: ${{ inputs.vllm-env-json }}
+          VLLM_EXTRA_ARGS: ${{ inputs.vllm-extra-args }}
+        run: |
+          set -euo pipefail
+          docker exec -d \
+            -e MODEL \
+            -e DRAFT_MODEL \
+            -e PORT \
+            -e NUM_SPECULATIVE_TOKENS \
+            -e TENSOR_PARALLEL_SIZE \
+            -e DRAFT_TENSOR_PARALLEL_SIZE \
+            -e VLLM_ENV_JSON \
+            -e VLLM_EXTRA_ARGS \
+            -e CONTAINER_WORK_DIR \
+            "$CONTAINER_NAME" \
+            bash -lc '
+              set -euo pipefail
+              DEFAULT_DRAFT_MODEL="lightseekorg/kimi-k2.5-eagle3"
+              DEFAULT_VLLM_ENV_JSON='"'"'{"VLLM_ROCM_USE_AITER":"1","VLLM_ROCM_QUICK_REDUCE_QUANTIZATION":"INT4","VLLM_ROCM_USE_AITER_RMSNORM":"0"}'"'"'
+              DEFAULT_VLLM_EXTRA_ARGS="--enable-expert-parallel --long-prefill-token-threshold 8192 --max-num-batched-tokens 16384"
+              if [[ "$MODEL" == "moonshotai/Kimi-K2.5" || "$MODEL" == "amd/Kimi-K2.5-MXFP4" ]]; then
+                if [[ -z "${VLLM_EXTRA_ARGS:-}" ]]; then
+                  VLLM_EXTRA_ARGS="$DEFAULT_VLLM_EXTRA_ARGS"
+                fi
+              fi
+              if [[ "$MODEL" == "MiniMaxAI/MiniMax-M2.5" ]]; then
+                if [[ "$DRAFT_MODEL" == "$DEFAULT_DRAFT_MODEL" ]]; then
+                  DRAFT_MODEL="thoughtworks/MiniMax-M2.5-Eagle3"
+                fi
+                if [[ "${VLLM_ENV_JSON:-}" == "$DEFAULT_VLLM_ENV_JSON" ]]; then
+                  VLLM_ENV_JSON='"'"'{"VLLM_ROCM_USE_AITER":"1","VLLM_ROCM_QUICK_REDUCE_QUANTIZATION":"INT4"}'"'"'
+                fi
+                if [[ -z "${VLLM_EXTRA_ARGS:-}" || "${VLLM_EXTRA_ARGS:-}" == "$DEFAULT_VLLM_EXTRA_ARGS" ]]; then
+                  VLLM_EXTRA_ARGS="--enable-expert-parallel --kv-cache-dtype fp8 --block-size=32 --attention-backend ROCM_AITER_FA"
+                fi
+              fi
+              python3 -m pip install -q --no-cache-dir amd-quark || \
+                python3 -m pip install -q --no-cache-dir --break-system-packages amd-quark
+              SPECULATIVE_CONFIG=$(python3 - <<'"'"'PY'"'"'
+          import json
+          import os
+
+          print(json.dumps({
+              "model": os.environ["DRAFT_MODEL"],
+              "method": "eagle3",
+              "num_speculative_tokens": int(os.environ["NUM_SPECULATIVE_TOKENS"]),
+              "rejection_sample_method": "standard",
+              "draft_tensor_parallel_size": int(os.environ["DRAFT_TENSOR_PARALLEL_SIZE"]),
+          }))
+          PY
+          )
+              while IFS= read -r export_line; do
+                export "$export_line"
+              done < <(python3 - <<'"'"'PY'"'"'
+          import json
+          import os
+
+          env = json.loads(os.environ.get("VLLM_ENV_JSON") or "{}")
+          if not isinstance(env, dict):
+              raise SystemExit("vllm-env-json must be a JSON object")
+          for key, value in env.items():
+              print(f"{key}={value}")
+          PY
+          )
+              vllm serve "$MODEL" \
+                --host 0.0.0.0 \
+                --port "$PORT" \
+                -tp "$TENSOR_PARALLEL_SIZE" \
+                --mm-encoder-tp-mode data \
+                --no-enable-prefix-caching \
+                --speculative-config "$SPECULATIVE_CONFIG" \
+                --trust-remote-code \
+                $VLLM_EXTRA_ARGS \
+                > "$CONTAINER_WORK_DIR/vllm_server.log" 2>&1
+            '
+
+      - name: Wait for vLLM server
+        env:
+          PORT: ${{ inputs.port }}
+        run: |
+          set -euo pipefail
+          for i in {1..180}; do
+            if curl --silent --fail "http://127.0.0.1:${PORT}/health" >/dev/null; then
+              exit 0
+            fi
+            docker exec "$CONTAINER_NAME" bash -lc "tail -n 80 '$CONTAINER_WORK_DIR/vllm_server.log' 2>/dev/null || true"
+            sleep 10
+          done
+          echo "vLLM server did not become healthy" >&2
+          exit 1
+
+      - name: Run LiveCodeBench sampling benchmark
+        env:
+          MODEL: ${{ inputs.model }}
+          PORT: ${{ inputs.port }}
+          NUM_PROMPTS: ${{ inputs.num-prompts }}
+          MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+          BENCH_EXTRA_ARGS: ${{ inputs.bench-extra-args }}
+        run: |
+          set -euo pipefail
+          docker exec \
+            -e MODEL \
+            -e PORT \
+            -e NUM_PROMPTS \
+            -e MAX_CONCURRENCY \
+            -e BENCH_EXTRA_ARGS \
+            -e CONTAINER_WORK_DIR \
+            -e DATASET_JSONL \
+            "$CONTAINER_NAME" \
+            bash -lc '
+              set -euo pipefail
+              combined_log="$CONTAINER_WORK_DIR/vllm_bench_serve.log"
+              : > "$combined_log"
+
+              IFS="," read -ra concurrency_values <<< "$MAX_CONCURRENCY"
+              ran_any=false
+              for raw_concurrency in "${concurrency_values[@]}"; do
+                concurrency="${raw_concurrency//[[:space:]]/}"
+                if [[ -z "$concurrency" ]]; then
+                  continue
+                fi
+                if [[ ! "$concurrency" =~ ^[0-9]+$ ]]; then
+                  echo "Invalid max-concurrency value: $raw_concurrency" >&2
+                  exit 1
+                fi
+
+                log_file="$CONTAINER_WORK_DIR/vllm_bench_serve_conc${concurrency}.log"
+                ran_any=true
+                {
+                  echo "===== max-concurrency=${concurrency} ====="
+                  echo "dataset=$CONTAINER_WORK_DIR/$DATASET_JSONL"
+                  echo "num-prompts=$NUM_PROMPTS"
+                  echo ""
+                } > "$log_file"
+
+                if ! vllm bench serve \
+                  --backend openai \
+                  --base-url "http://127.0.0.1:${PORT}" \
+                  --endpoint /v1/completions \
+                  --model "$MODEL" \
+                  --dataset-name custom \
+                  --dataset-path "$CONTAINER_WORK_DIR/$DATASET_JSONL" \
+                  --num-prompts "$NUM_PROMPTS" \
+                  --max-concurrency "$concurrency" \
+                  --request-rate inf \
+                  --temperature 0.0 \
+                  --ignore-eos \
+                  --trust-remote-code \
+                  $BENCH_EXTRA_ARGS \
+                  >> "$log_file" 2>&1; then
+                  cat "$log_file" >> "$combined_log"
+                  exit 1
+                fi
+
+                cat "$log_file" >> "$combined_log"
+                echo "" >> "$combined_log"
+              done
+
+              if [[ "$ran_any" != "true" ]]; then
+                echo "No max-concurrency values were provided." >&2
+                exit 1
+              fi
+            '
+
+      - name: Capture vLLM metrics
+        env:
+          PORT: ${{ inputs.port }}
+        run: |
+          set -euo pipefail
+          curl --silent --fail "http://127.0.0.1:${PORT}/metrics" -o "$HOST_WORK_DIR/livecodebench_metrics.txt"
+
+      - name: Compute synthetic acceptance rates
+        id: compute-rates
+        env:
+          MODEL: ${{ inputs.model }}
+          DRAFT_MODEL: ${{ inputs.draft-model }}
+          NUM_SPECULATIVE_TOKENS: ${{ inputs.num-speculative-tokens }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$HOST_WORK_DIR/synthetic_acceptance_rates.log"
+          import json
+          import os
+          import re
+          from collections import defaultdict
+          from pathlib import Path
+
+          path = Path(os.environ["HOST_WORK_DIR"]) / "livecodebench_metrics.txt"
+
+          drafts_by_metric = defaultdict(float)
+          accepted_by_metric = defaultdict(lambda: defaultdict(float))
+
+          for line in path.read_text(encoding="utf-8").splitlines():
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+
+              parts = line.split()
+              if len(parts) < 2:
+                  continue
+
+              series, value = parts[0], float(parts[1])
+              metric = series.split("{", 1)[0]
+
+              if metric in ("vllm:spec_decode_num_drafts_total", "vllm:spec_decode_num_drafts"):
+                  drafts_by_metric[metric] += value
+
+              if metric in (
+                  "vllm:spec_decode_num_accepted_tokens_per_pos_total",
+                  "vllm:spec_decode_num_accepted_tokens_per_pos",
+              ):
+                  match = re.search(r'position="(\d+)"', series)
+                  if match:
+                      accepted_by_metric[metric][int(match.group(1))] += value
+
+          draft_metric = (
+              "vllm:spec_decode_num_drafts_total"
+              if drafts_by_metric["vllm:spec_decode_num_drafts_total"] > 0
+              else "vllm:spec_decode_num_drafts"
+          )
+          accepted_metric = (
+              "vllm:spec_decode_num_accepted_tokens_per_pos_total"
+              if accepted_by_metric["vllm:spec_decode_num_accepted_tokens_per_pos_total"]
+              else "vllm:spec_decode_num_accepted_tokens_per_pos"
+          )
+
+          num_drafts = drafts_by_metric[draft_metric]
+          accepted = accepted_by_metric[accepted_metric]
+          num_speculative_tokens = int(os.environ["NUM_SPECULATIVE_TOKENS"])
+
+          if num_drafts <= 0:
+              raise SystemExit("No spec decode drafts found. Did you run standard speculative decoding first?")
+
+          rates = [accepted[i] / num_drafts for i in range(num_speculative_tokens)]
+          rounded_rates = [round(rate, 6) for rate in rates]
+          draft_model = os.environ["DRAFT_MODEL"]
+          if (
+              os.environ["MODEL"] == "MiniMaxAI/MiniMax-M2.5"
+              and draft_model == "lightseekorg/kimi-k2.5-eagle3"
+          ):
+              draft_model = "thoughtworks/MiniMax-M2.5-Eagle3"
+
+          speculative_config = {
+              "method": "eagle3",
+              "model": draft_model,
+              "num_speculative_tokens": num_speculative_tokens,
+              "rejection_sample_method": "synthetic",
+              "synthetic_acceptance_rates": rounded_rates,
+          }
+
+          out_dir = Path(os.environ["HOST_WORK_DIR"])
+          (out_dir / "synthetic_acceptance_rates.json").write_text(
+              json.dumps({
+                  "num_drafts": int(num_drafts),
+                  "accepted_per_position": {str(i): int(accepted[i]) for i in range(num_speculative_tokens)},
+                  "synthetic_acceptance_rates": rounded_rates,
+                  "speculative_config": speculative_config,
+              }, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          print("num_drafts =", int(num_drafts))
+          print("accepted_per_position =", {i: int(accepted[i]) for i in range(num_speculative_tokens)})
+          print("synthetic_acceptance_rates =", json.dumps(rounded_rates))
+          print("speculative_config =", json.dumps(speculative_config))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"synthetic_acceptance_rates={json.dumps(rounded_rates)}\n")
+              fh.write(f"speculative_config={json.dumps(speculative_config)}\n")
+          PY
+
+      - name: Add workflow summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## Synthetic Acceptance Rates"
+            echo ""
+            echo '```text'
+            cat "$HOST_WORK_DIR/synthetic_acceptance_rates.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload acceptance-rate artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mtp-fixed-ar-artifacts
+          path: |
+            ${{ env.HOST_WORK_DIR }}/${{ env.DATASET_JSONL }}
+            ${{ env.HOST_WORK_DIR }}/livecodebench_metrics.txt
+            ${{ env.HOST_WORK_DIR }}/synthetic_acceptance_rates.json
+            ${{ env.HOST_WORK_DIR }}/synthetic_acceptance_rates.log
+            ${{ env.HOST_WORK_DIR }}/vllm_server.log
+            ${{ env.HOST_WORK_DIR }}/vllm_bench_serve*.log
+          if-no-files-found: ignore
+
+      - name: Cleanup container
+        if: always()
+        run: |
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true

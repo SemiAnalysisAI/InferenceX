@@ -26,6 +26,7 @@ class Fields(Enum):
     # Scenario type keys
     FIXED_SEQ_LEN = 'fixed-seq-len'
     AGENTIC_CODING = 'agentic-coding'
+    FIXED_AR_MTP = 'fixed-ar-mtp'
 
     # Seq-len-config fields
     ISL = 'isl'
@@ -52,6 +53,12 @@ class Fields(Enum):
     # Agentic coding fields
     OFFLOADING = 'offloading'
     DURATION = 'duration'
+
+    # Fixed acceptance-rate MTP fields
+    DRAFT_MODEL = 'draft-model'
+    NUM_SPECULATIVE_TOKENS = 'num-speculative-tokens'
+    REJECTION_SAMPLE_METHOD = 'rejection-sample-method'
+    SYNTHETIC_ACCEPTANCE_RATES = 'synthetic-acceptance-rates'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -86,7 +93,7 @@ class SingleNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -101,6 +108,28 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+
+
+class SingleNodeFixedArMtpMatrixEntry(SingleNodeMatrixEntry):
+    """Single-node throughput entry with synthetic fixed acceptance rates for MTP."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    scenario_type: Literal["fixed-ar-mtp"] = Field(alias=Fields.SCENARIO_TYPE.value)
+    draft_model: str = Field(alias=Fields.DRAFT_MODEL.value)
+    num_speculative_tokens: int = Field(alias=Fields.NUM_SPECULATIVE_TOKENS.value)
+    rejection_sample_method: Literal["synthetic"] = Field(alias=Fields.REJECTION_SAMPLE_METHOD.value)
+    synthetic_acceptance_rates: List[float] = Field(alias=Fields.SYNTHETIC_ACCEPTANCE_RATES.value)
+
+    @model_validator(mode='after')
+    def validate_synthetic_acceptance_rates(self):
+        if self.spec_decoding != "eagle3":
+            raise ValueError("fixed-ar-mtp entries must use spec-decoding: eagle3")
+        if len(self.synthetic_acceptance_rates) != self.num_speculative_tokens:
+            raise ValueError(
+                f"'{Fields.SYNTHETIC_ACCEPTANCE_RATES.value}' length must match "
+                f"'{Fields.NUM_SPECULATIVE_TOKENS.value}'"
+            )
+        return self
 
 
 class WorkerConfig(BaseModel):
@@ -125,7 +154,7 @@ class MultiNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -171,7 +200,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -207,7 +236,11 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
     Returns the original list if all entries are valid.
     """
     try:
-        if is_multinode:
+        if entry.get(Fields.SCENARIO_TYPE.value) == Fields.FIXED_AR_MTP.value:
+            if is_multinode:
+                raise ValueError("fixed-ar-mtp is only supported for single-node entries")
+            SingleNodeFixedArMtpMatrixEntry(**entry)
+        elif is_multinode:
             MultiNodeMatrixEntry(**entry)
         else:
             SingleNodeMatrixEntry(**entry)
@@ -271,7 +304,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
 
     tp: int
     ep: Optional[int] = None
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     dp_attn: Optional[bool] = Field(
         default=None, alias=Fields.DP_ATTN.value)
@@ -291,7 +324,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     """Multinode search space configuration."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: WorkerConfig
     decode: WorkerConfig
@@ -317,6 +350,28 @@ class SingleNodeSeqLenConfig(BaseModel):
         alias=Fields.SEARCH_SPACE.value)
 
 
+class FixedArMtpSeqLenConfig(BaseModel):
+    """Single-node fixed-AR MTP scenario configuration."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    isl: int
+    osl: int
+    draft_model: str = Field(alias=Fields.DRAFT_MODEL.value)
+    num_speculative_tokens: int = Field(alias=Fields.NUM_SPECULATIVE_TOKENS.value)
+    rejection_sample_method: Literal["synthetic"] = Field(alias=Fields.REJECTION_SAMPLE_METHOD.value)
+    synthetic_acceptance_rates: List[float] = Field(alias=Fields.SYNTHETIC_ACCEPTANCE_RATES.value)
+    search_space: List[SingleNodeSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+
+    @model_validator(mode='after')
+    def validate_synthetic_acceptance_rates(self):
+        if len(self.synthetic_acceptance_rates) != self.num_speculative_tokens:
+            raise ValueError(
+                f"'{Fields.SYNTHETIC_ACCEPTANCE_RATES.value}' length must match "
+                f"'{Fields.NUM_SPECULATIVE_TOKENS.value}'"
+            )
+        return self
+
+
 class MultiNodeSeqLenConfig(BaseModel):
     """Multinode sequence length configuration."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -334,7 +389,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     tp: Optional[int] = None
     ep: Optional[int] = None
     dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "eagle3", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
@@ -375,12 +430,14 @@ class SingleNodeScenarios(BaseModel):
 
     fixed_seq_len: Optional[List[SingleNodeSeqLenConfig]] = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value)
+    fixed_ar_mtp: Optional[List[FixedArMtpSeqLenConfig]] = Field(
+        default=None, alias=Fields.FIXED_AR_MTP.value)
     agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
         default=None, alias=Fields.AGENTIC_CODING.value)
 
     @model_validator(mode='after')
     def at_least_one_scenario(self):
-        if not self.fixed_seq_len and not self.agentic_coding:
+        if not self.fixed_seq_len and not self.fixed_ar_mtp and not self.agentic_coding:
             raise ValueError("At least one scenario type must be specified")
         return self
 
@@ -504,7 +561,7 @@ class ChangelogMatrixEntry(BaseModel):
     """
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    single_node: dict[str, list[Union[SingleNodeMatrixEntry, SingleNodeAgenticMatrixEntry]]
+    single_node: dict[str, list[Union[SingleNodeMatrixEntry, SingleNodeFixedArMtpMatrixEntry, SingleNodeAgenticMatrixEntry]]
                       ] = Field(default_factory=dict)
     multi_node: dict[str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
                      ] = Field(default_factory=dict)
