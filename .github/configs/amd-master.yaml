@@ -2173,15 +2173,16 @@ dsv4-fp4-mi355x-sglang:
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
 #
-# Image: the amd/deepseek_v4 -DSv4 branch builds ended at f96ac98 (2026-05-27),
-# which predates #26383 and crashes during MTP graph capture (kv_score dtype
-# mismatch in compress_state, run 26723126211). #26383 merged to main, so this
-# pins the newest mainline ROCm nightly (v0.5.12.post1-rocm720-mi35x-20260531)
-# where the fix lives. Lineage differs from the base STP entry (still on
-# f96ac98) until the nightly is confirmed to serve DSv4-Pro FP4 cleanly; the
-# matrix lm-eval (RUN_EVAL on the high-conc points) gates correctness.
+# BLOCKED on an image: no published build both loads DSv4-Pro AND has #26383.
+#   - rocm/sgl-dev:...-DSv4 builds are the only lineage bundling deep_gemm (so
+#     the only ones that load DSv4-Pro), but they ended at f96ac98 (2026-05-27),
+#     pre-#26383 -> MTP graph capture crashes (kv_score dtype, run 26723126211).
+#   - mainline v0.5.12.post1 ROCm nightlies carry #26383 but omit deep_gemm, so
+#     DSv4-Pro weight load fails in _setup_fp8_wo_a_scales (run 26727984372).
+# Pinned to the latest -DSv4 build as the correct lineage placeholder. Unblock by
+# bumping to the first -DSv4 image that carries #26383. PR #1631 parked as draft.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260531
+  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260527-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x

@@ -10,13 +10,15 @@
 # for the DP-attention path (steps=2, topk=1, draft=3); the TP-only
 # low-concurrency path uses the (3,1,4) chain shared with dsr1_fp4_mi355x_mtp.sh.
 #
-# IMPORTANT (image dependency): MTP requires the sglang build to carry #26383.
-# The amd/deepseek_v4 -DSv4 branch builds ended at f96ac98 (2026-05-27), which
-# predates the fix and hard-crashes during MTP CUDA-graph capture (kv_score
-# dtype mismatch in compress_state, run 26723126211). #26383 merged to main, so
-# amd-master.yaml pins the newest mainline ROCm nightly instead. The matrix runs
-# lm-eval on the high-concurrency points (RUN_EVAL), so the first sweep validates
-# GSM8K before any throughput number is trusted; bump the image if it regresses.
+# IMPORTANT (blocked on image): MTP needs a build that BOTH loads DSv4-Pro AND
+# carries sgl#26383. None exists yet:
+#   - rocm/sgl-dev:...-DSv4 builds are the only lineage bundling deep_gemm (so
+#     the only ones that load DSv4-Pro), but ended at f96ac98 (2026-05-27,
+#     pre-#26383) and crash at MTP graph capture (kv_score dtype, run 26723126211).
+#   - mainline v0.5.12.post1 nightlies carry #26383 but omit deep_gemm and fail
+#     DSv4-Pro weight load in _setup_fp8_wo_a_scales (run 26727984372).
+# amd-master.yaml pins the latest -DSv4 build; bump to the first -DSv4 image with
+# #26383 to unblock. RUN_EVAL on the high-conc points then gates accuracy.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
