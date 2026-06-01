@@ -3354,3 +3354,10 @@
   description:
     - "Add MTP speculative-decoding sibling for dsv4-fp4-mi355x-vllm (model: deepseek-ai/DeepSeek-V4-Pro) on vllm/vllm-openai-rocm:v0.22.0, per vllm-project/vllm#43385"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1630
+
+- config-keys:
+    - dsv4-fp4-b200-trt
+    - dsv4-fp4-b300-trt
+  description:
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
