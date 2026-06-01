@@ -1,2 +1,0 @@
-synthetic_acceptance_rates=[0.664606, 0.419918, 0.259226]
-speculative_config={"method": "eagle3", "model": "thoughtworks/MiniMax-M2.5-Eagle3", "num_speculative_tokens": 3, "rejection_sample_method": "synthetic", "synthetic_acceptance_rates": [0.664606, 0.419918, 0.259226]}
