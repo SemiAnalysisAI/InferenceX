@@ -1861,8 +1861,8 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
 
-dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
+dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1970,7 +1970,19 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
+  
 
+dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:
@@ -2015,7 +2027,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
       # 1P2D TP8
       - spec-decoding: "mtp"
-        conc-list: [ 64, 128, 256 ]
+        conc-list: [ 32, 64 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2030,11 +2042,11 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 128, 512 ]
+        conc-list: [ 640, 512 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2049,11 +2061,11 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 64, 256 ]
+        conc-list: [ 256 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2068,7 +2080,46 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
+
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
@@ -2088,7 +2139,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
-      
+
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
