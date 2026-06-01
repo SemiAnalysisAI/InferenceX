@@ -1861,8 +1861,8 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
 
-dsr1-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
+dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1970,7 +1970,19 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
+  
 
+dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:
@@ -2015,7 +2027,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 
       # 1P2D TP8
       - spec-decoding: "mtp"
-        conc-list: [ 64, 128, 256 ]
+        conc-list: [ 32, 64 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2030,11 +2042,11 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 128, 512 ]
+        conc-list: [ 640, 512 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2049,11 +2061,11 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 64, 256 ]
+        conc-list: [ 256 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -2068,7 +2080,46 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
+
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
@@ -2088,7 +2139,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
-      
+
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
@@ -2153,6 +2204,33 @@ dsv4-fp4-mi355x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 512 }
 
+# MTP variant of dsv4-fp4-mi355x-vllm. Mirrors the base recipe's search space
+# and adds spec-decoding: mtp, which routes to dsv4_fp4_mi355x_vllm_mtp.sh
+# (--speculative-config '{"method":"mtp","num_speculative_tokens":2}'), per
+# vllm-project/vllm#43385 (ROCm DeepSeek-V4 MTP, merged 2026-05-24, included in
+# v0.22.0). Full conc 4-512 range maps the complete crossover curve: MTP wins
+# at low batch (PR perf data: +75% @ conc1, +38% @ conc8) and falls behind STP
+# above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
+# build, which already contains the MTP commit.
+dsv4-fp4-mi355x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+
 # Day-0 single-sequence marker for DeepSeek-V4 on ATOM (ROCm/ATOM#650).
 # PR1 of the ATOM DSv4 series still uses torch sparse-attention fallbacks
 # that OOM once warmup/prefill batches multiple requests; keep CONC=1 until
@@ -2161,7 +2239,7 @@ dsv4-fp4-mi355x-vllm:
 # the standard atom0.1.2.post MI355X base (matching qwen3.5-fp8-mi355x-atom);
 # the DSv4 PR is overlaid at runtime by dsv4_fp4_mi355x_atom.sh at a pinned SHA.
 dsv4-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202605130853
+  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2173,11 +2251,13 @@ dsv4-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512 }
+      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 512 }
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
