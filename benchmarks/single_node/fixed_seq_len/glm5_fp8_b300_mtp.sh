@@ -15,13 +15,24 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
+# `hf download` creates the target dir if missing and is itself idempotent. 
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
 
@@ -46,9 +57,9 @@ fi
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
+PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
---tensor-parallel-size=$TP \
+--tensor-parallel-size $TP \
 --data-parallel-size 1 --expert-parallel-size 1 \
 --tool-call-parser glm47 \
 --reasoning-parser glm45 \
