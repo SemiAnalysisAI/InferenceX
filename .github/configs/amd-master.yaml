@@ -68,7 +68,7 @@ dsr1-fp4-mi355x-atom:
 
 dsr1-fp4-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
-  model: amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4
+  model: amd/DeepSeek-R1-0528-MXFP4-v2 
   model-prefix: dsr1
   runner: mi355x
   precision: fp4
