@@ -1804,7 +1804,7 @@ dsv4-fp4-b200-trt-mtp:
 # MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-vllm-mtp:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -2474,7 +2474,7 @@ kimik2.5-int4-b200-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
@@ -2535,7 +2535,7 @@ kimik2.5-fp4-b200-vllm:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -2686,7 +2686,7 @@ dsr1-fp8-h200-sglang-mtp:
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2710,7 +2710,7 @@ dsv4-fp8-h200-vllm:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -2852,7 +2852,7 @@ dsv4-fp4-b300-trt-mtp:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
 
 dsv4-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -4067,7 +4067,7 @@ minimaxm2.5-fp8-b200-vllm:
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -4123,7 +4123,7 @@ minimaxm2.5-fp4-b200-vllm:
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 minimaxm2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b300
@@ -4150,7 +4150,7 @@ minimaxm2.5-fp4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
 gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: h100
@@ -7883,7 +7883,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
           dp-attn: true
 
 kimik2.5-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.18.0-cu130
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: gb200
@@ -7985,7 +7985,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-b200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-multinode
@@ -8041,7 +8041,7 @@ dsv4-fp4-b200-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
@@ -8141,7 +8141,7 @@ dsv4-fp4-gb200-dynamo-vllm:
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
-  image: vllm/vllm-openai:v0.20.1-ubuntu2404
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
@@ -8221,7 +8221,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           dp-attn: true
 
 dsv4-fp4-b300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -8277,7 +8277,7 @@ dsv4-fp4-b300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-nv
@@ -9295,7 +9295,7 @@ glm5-fp8-gb300-dynamo-sglang:
 # its fixed-seq-len sweep is unaffected.
 #   - runner: 'b200-dsv4' -> 'b200-dgxc'
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
@@ -9364,7 +9364,7 @@ kimik2.5-int4-b200-vllm-agentic:
   # during warmup `profile_run` on the agentic-coding path
   # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
   # flashinfer fix.
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200-dgxc
@@ -9387,7 +9387,7 @@ kimik2.5-int4-b200-vllm-agentic:
 # its fixed-seq-len sweep is unaffected.
 #   - runner: 'h200' -> 'h200-dgxc'
 kimik2.5-int4-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   # Pinned to h200-dgxc (NVIDIA DGX Cloud Slurm pool) so we hit a host with
@@ -9417,7 +9417,7 @@ kimik2.5-fp4-b200-vllm-agentic:
   # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
   # cleared the agentic-coding warmup crash on max_model_len=131072 +
   # prefix caching.
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200-dgxc
@@ -9451,7 +9451,7 @@ kimik2.5-fp4-b300-vllm-agentic:
   # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
   # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
   # INT4 B300 sister already uses successfully.
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300
@@ -9473,7 +9473,7 @@ kimik2.5-fp4-b300-vllm-agentic:
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4' -> 'vllm/vllm-openai:deepseekv4-cu129'
 dsv4-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:deepseekv4-cu129
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -9496,7 +9496,7 @@ dsv4-fp8-h200-vllm-agentic:
 # (either main had none or had a different conc/offload sweep).
 # The original dsv4-fp4-b300-vllm entry stays byte-identical to origin/main.
 dsv4-fp4-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.0-cu130
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -9519,7 +9519,7 @@ dsv4-fp4-b300-vllm-agentic:
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai:v0.15.1' -> 'vllm/vllm-openai:v0.19.1'
 gptoss-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.22.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: b200
@@ -9541,7 +9541,7 @@ gptoss-fp4-b200-vllm-agentic:
 #   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
 #   - runner: 'b200' -> 'b200-dgxc'
 minimaxm2.5-fp8-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b200-dgxc
@@ -9567,7 +9567,7 @@ minimaxm2.5-fp8-b200-vllm-agentic:
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
 minimaxm2.5-fp8-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
+  image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -9593,7 +9593,7 @@ minimaxm2.5-fp8-b300-vllm-agentic:
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp4-b200-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.0-cu130
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
@@ -9616,7 +9616,7 @@ minimaxm2.5-fp4-b200-vllm-agentic:
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp8-h100-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -9639,7 +9639,7 @@ minimaxm2.5-fp8-h100-vllm-agentic:
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200
@@ -9656,7 +9656,7 @@ minimaxm2.5-fp8-h200-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [24, 28, 32, 36, 40, 48] }
 
 kimik2.5-int4-h100-vllm:
-  image: vllm/vllm-openai:v0.20.2
+  image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: h100
@@ -9691,7 +9691,7 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b200-dgxc
@@ -9721,7 +9721,7 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
 #     overlays into the cquil11/srt-slurm-nv fork at run time (the IS_AGENTIC
 #     branch). Local-overlay pattern mirrors the existing 8k1k overlay.
 dsv4-fp4-gb300-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   # gb300-nv (not generic gb300) — the generic label is shared by both NV
@@ -9810,7 +9810,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
 # overlay (recipes/vllm/deepseek-v4/agentic/), so a change to the recipe
 # applies to both clusters with no duplication.
 dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw

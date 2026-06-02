@@ -705,7 +705,7 @@ glm5.1-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x
@@ -724,7 +724,7 @@ kimik2.5-int4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x
@@ -743,7 +743,7 @@ kimik2.5-int4-mi325x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi300x
@@ -896,7 +896,7 @@ minimaxm2.5-fp4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
@@ -938,7 +938,7 @@ minimaxm2.5-fp8-mi325x-vllm:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 256 }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.17.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
@@ -1379,7 +1379,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1433,7 +1433,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-a6682d1d259cca69a9ae737ea5608fbbe7520031
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg
@@ -2558,7 +2558,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
   # (51f22dcf...) which was carrying the SimpleCPUOffloadConnector ROCm
   # cpu_offload_blocks > 0 fix. v0.21.0 is much newer than that fix and
   # includes all subsequent ROCm offload work.
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
@@ -2591,7 +2591,7 @@ minimaxm2.5-fp8-mi355x-vllm-agentic:
   # which enables SimpleCPUOffloadConnector on ROCm. Required for the
   # cpu-offload sweep points to use the same offload path as the NVIDIA
   # agentic-coding configs.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -2614,7 +2614,7 @@ minimaxm2.5-fp8-mi355x-vllm-agentic:
 #   - image: 'vllm/vllm-openai-rocm:v0.16.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
 minimaxm2.5-fp8-mi300x-vllm-agentic:
   # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
@@ -2637,7 +2637,7 @@ minimaxm2.5-fp8-mi300x-vllm-agentic:
 #   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
 minimaxm2.5-fp8-mi325x-vllm-agentic:
   # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -2671,7 +2671,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
 
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
