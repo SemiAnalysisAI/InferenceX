@@ -31,6 +31,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi 
 
+SPEC_ARGS=(--method mtp --num-speculative-tokens 3 )
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -38,15 +40,13 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
-# TODO: add --no-enable_chunked_prefill, when dsv4 prefix caching is supported 
-#https://github.com/ROCm/ATOM/commit/7df93a181da4d3c3250c2441c7d5e2745a03d0cd#diff-61b1ba0b8b74523530d2d5cdc739d4f3a23a43bedf69015a5235844d46e9373bL1127
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     "${PARALLEL_ARGS[@]}" \
+    "${SPEC_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.85 \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -54,6 +54,12 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
+# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
+# tokenizer ships without a jinja chat_template, so plain --use-chat-template
+# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
+# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
+# silently regresses on raw random tokens).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -65,7 +71,8 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --trust-remote-code
+    --trust-remote-code \
+    --dsv4
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
