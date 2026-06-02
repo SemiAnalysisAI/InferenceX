@@ -18,7 +18,7 @@ Authentication:
   --hf-token or env HF_TOKEN     (huggingface_hub also accepts ~/.cache/huggingface/token)
 
 Example:
-    python utils/build_weka_hf_dataset.py \\
+    python utils/agentic/build_weka_hf_dataset.py \\
         --repo-base semianalysisai/cc-traces-weka-with-subagents-060226 \\
         --repo-256k semianalysisai/cc-traces-weka-with-subagents-060226-256k \\
         --min-trace-version 6 --max-trace-version 6 \\
@@ -283,7 +283,7 @@ def _build_readme(
         f"{front_matter}"
         f"# {repo_id}\n\n"
         f"WekaTrace corpus derived from SemiAnalysis Claude Code proxy traces. "
-        f"Built {now} via `utils/build_weka_hf_dataset.py`.\n"
+        f"Built {now} via `utils/agentic/build_weka_hf_dataset.py`.\n"
         f"{parent_block}\n"
         f"## Filters\n\n{filters_block}\n"
         f"{bullet_filter}\n"
@@ -490,7 +490,7 @@ def stage_upload(args, payload_dir: Path, repo_id: str, commit_msg: str) -> None
 
 def _reconstruct_sampler_cmd(args) -> list:
     """The exact sample_proxy_traces.py invocation, for the README."""
-    cmd = ["python", "utils/sample_proxy_traces.py",
+    cmd = ["python", "utils/agentic/sample_proxy_traces.py",
            "--out", "<workdir>/proxy", "--sampling", args.sampling]
     for flag, val in [
         ("--min-trace-version", args.min_trace_version),
