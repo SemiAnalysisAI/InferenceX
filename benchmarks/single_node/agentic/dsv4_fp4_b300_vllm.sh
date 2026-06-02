@@ -52,6 +52,13 @@ install_agentic_deps
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
+# vllm-project/vllm#43447: keep SWA prefix-cache tails sparsely so transient
+# sliding-window allocations don't evict useful prefix entries. 32k matches
+# the trace-replay tuning the PR author validated (0% -> 74% hit rate).
+# Requires the custom image (cquil/vllm-openai:*-7ead0a0f...) that carries
+# the patch; on stock images the env var is ignored.
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
