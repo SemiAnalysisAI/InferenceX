@@ -387,6 +387,7 @@ else
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
+        --container-remap-root \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"
