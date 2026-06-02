@@ -3395,3 +3395,10 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM MTP3 benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1627
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "One-off (throwaway, not for merge): gsm8k eval for the DEP8 + MTP3 mid-pareto disagg config (conc 64-640) that mark_eval_entries skips because it shares the (dp=true) eval group with the higher-conc DEP8 MTP1 entry. Config search-space temporarily narrowed to just this entry so exactly one eval runs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  evals-only: true
