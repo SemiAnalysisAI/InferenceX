@@ -3372,7 +3372,7 @@
     - dsv4-fp4-b200-trt
     - dsv4-fp4-b300-trt
   description:
-    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6"
+    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:fix-dsv4-swa-scratch-revert-shrink-c914d6d (TRT-LLM feat/deepseek_v4 @ 084cf2ba + kv_cache_manager_v2 fix: free SWA scratch slots on shrink instead of asserting, which crashed the engine on attention-DP context/generation reverts at high concurrency, e.g. b300 8k1k conc>=512)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
 
 - config-keys:
