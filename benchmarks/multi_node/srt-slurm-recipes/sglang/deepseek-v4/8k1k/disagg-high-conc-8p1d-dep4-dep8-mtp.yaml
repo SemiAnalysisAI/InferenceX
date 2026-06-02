@@ -1,4 +1,4 @@
-name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-4p1d-dep4-dep8-mtp"
+name: "dsv4-pro-gb300-disagg-8k1k-high-conc-8p1d-dep4-dep8-mtp"
 
 frontend:
   type: dynamo
@@ -21,8 +21,8 @@ sbatch_directives:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 4
-  prefill_workers: 4
+  prefill_nodes: 8
+  prefill_workers: 8
   gpus_per_prefill: 4
   decode_nodes: 2
   decode_workers: 1
@@ -119,15 +119,15 @@ backend:
       moe-a2a-backend: "megamoe"
 
       speculative-algo: "EAGLE"
-      speculative-num-steps: 3
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 2
 
-      mem-fraction-static: 0.9
-      max-running-requests: 3072
-      cuda-graph-max-bs: 1024
-      swa-full-tokens-ratio: 0.15
-      context-length: 16384
+      mem-fraction-static: 0.85
+      max-running-requests: 8192
+      cuda-graph-max-bs: 1280
+      swa-full-tokens-ratio: 0.1
+      context-length: 9216
       stream-interval: 60
 
 benchmark:
@@ -135,7 +135,7 @@ benchmark:
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8
-  concurrencies: "1024"
+  concurrencies: "8192"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
