@@ -19,18 +19,17 @@ set -x
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#
+# OFFLOADING values:
+#   none        - vLLM GPU KV only, with DSv4 hybrid KV manager enabled.
+#   cpu         - vLLM native OffloadingConnector, with hybrid KV manager enabled.
+#   lmcache-mp  - Temporarily disabled for DSv4. LMCache PR #3261 must merge
+#                 first so LMCacheMPConnector can support HMA block-id tuples.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR
+check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-PORT=${PORT:-8888}
-DURATION=${DURATION:-1800}
-MAX_DELAY=${MAX_DELAY:-60}
-ADVANCE_MIN=${ADVANCE_MIN:-0.0}
-ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-EP_SIZE=${EP_SIZE:-1}
-DP_ATTENTION=${DP_ATTENTION:-false}
 if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
     MAX_MODEL_LEN=1000000
 fi
@@ -51,45 +50,145 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
-OFFLOAD_ARGS=""
+OFFLOAD_ARGS=()
+HYBRID_KV_ARGS=(--no-disable-hybrid-kv-cache-manager)
+LMCACHE_PID=""
+
+cleanup_lmcache_server() {
+    if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
+        kill "$LMCACHE_PID" 2>/dev/null || true
+        wait "$LMCACHE_PID" 2>/dev/null || true
+    fi
+}
+
+trap cleanup_lmcache_server EXIT
+
+wait_for_lmcache_ready() {
+    { set +x; } 2>/dev/null
+    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+    local tail_pid=""
+
+    while [ ! -f "$LMCACHE_LOG" ]; do
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before creating log file. Exiting." >&2
+            exit 1
+        fi
+        sleep 1
+    done
+
+    tail -f -n +1 "$LMCACHE_LOG" &
+    tail_pid=$!
+
+    for ((i = 1; i <= attempts; i++)); do
+        if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+            return 0
+        fi
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before becoming healthy. Log follows:" >&2
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+            cat "$LMCACHE_LOG" >&2 || true
+            exit 1
+        fi
+        sleep 1
+    done
+
+    echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+    cat "$LMCACHE_LOG" >&2 || true
+    exit 1
+}
+
 case "$OFFLOADING" in
     none) ;;
     cpu)
         # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~1.5 TB total host
-        # CPU pool across the engine(s).
+        # individual jobs to a fraction of that. Aim for ~1.2 TB total native
+        # CPU offload pool across the engine(s); previously 2.8 TB but every
+        # DP-attn worker stalled for 4+ min during pinned-CPU-tensor allocation
+        # and the shm_broadcast watchdog killed them (run 26246044726). 150 GB
+        # per worker (1.2 TB / 8) completes the alloc within the 60 s window.
         #
-        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
-        # parallel_config.world_size (= TP*PP, NOT including DP — see
-        # vllm/config/parallel.py and parallel.py docstrings). So:
-        #   - DP-attn=true  → each of $TP DP engines has world_size=1 in
-        #     its parallel_config; the connector does no internal divide,
-        #     and each engine torch.zeros + pin_tensor allocates the full
-        #     --kv_offloading_size value. Pre-divide by $TP here so the
-        #     aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
-        #   - DP-attn=false → single engine with world_size=TP. Pass the
-        #     full TOTAL_CPU_DRAM_GB; the connector's internal divide
-        #     yields TOTAL/TP per rank, and TP-shared mmap (PR #37206)
-        #     keeps the aggregate at TOTAL.
-        TOTAL_CPU_DRAM_GB=1500
+        # Native --kv-offloading-size becomes OffloadingConnector's
+        # cpu_bytes_to_use. For DP-attn there are $TP independent DP engines,
+        # so pre-divide to keep aggregate host commit near TOTAL_CPU_DRAM_GB.
+        # For pure TP, vLLM treats the size as the total across TP ranks.
+        TOTAL_CPU_DRAM_GB=1200
         if [ "$DP_ATTENTION" = "true" ]; then
             PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         else
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
-        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        # Use --kv-transfer-config JSON to also pass lazy_offload=true. Eager
-        # mode (default) hits an AssertionError in
-        # vllm/v1/core/kv_cache_utils.py:269 popleft_n at low/mid CONC; lazy
-        # mode defers the store path and clears low/mid CONC at 80-100%.
-        # See SimpleCPUOffloadConnector PR #37160 for the lazy_offload knob.
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        OFFLOAD_ARGS=(
+            --kv-offloading-backend native
+            --kv-offloading-size "$PER_ENGINE_GB"
+        )
+        ;;
+    lmcache-mp)
+        { set +x; } 2>/dev/null
+        # LMCacheMPConnector needs HMA support before it can run DSv4 with the
+        # hybrid KV manager. Re-enable this path after
+        # https://github.com/LMCache/LMCache/pull/3261 is merged.
+        echo "Error: OFFLOADING=lmcache-mp is disabled for DSv4 until LMCache PR #3261 adds HMA support." >&2
+        exit 1
+
+        # LMCache docs recommend MP mode for production: start an external
+        # `lmcache server`, then point vLLM's LMCacheMPConnector at it. For
+        # vLLM >= 0.20, prefer the LMCache-shipped connector module because it
+        # tracks the latest server protocol ahead of vLLM's vendored copy.
+        #
+        # Important DSv4 caveat: LMCacheMPConnector currently only accepts the
+        # non-hybrid KV block layout. The connector raises if vLLM returns the
+        # hybrid block-id tuple used by the CSA/HCA hybrid KV manager. This
+        # mode therefore disables the hybrid manager; `none` and `cpu` keep it
+        # enabled for the normal B200 DSv4 path.
+        agentic_pip_install --quiet --no-cache-dir lmcache
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+        TOTAL_CPU_DRAM_GB=2800
+        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
+        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-200}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+
+        echo "Starting LMCache MP server..."
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --max-workers "$LMCACHE_MAX_WORKERS"
+            --eviction-policy LRU
+        )
+        printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
+        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+        LMCACHE_PID=$!
+        echo "LMCache server PID: $LMCACHE_PID"
+        wait_for_lmcache_ready
+
+        HYBRID_KV_ARGS=(--disable-hybrid-kv-cache-manager)
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+        )
         ;;
     *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
+        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu, lmcache-mp)" >&2
         exit 1
         ;;
 esac
@@ -120,25 +219,31 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 
-vllm serve "$MODEL" \
---host 0.0.0.0 \
---port "$PORT" \
---trust-remote-code \
---kv-cache-dtype fp8 \
---block-size 256 \
-"${PARALLEL_ARGS[@]}" \
-"${EP_ARGS[@]}" \
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
---attention_config.use_fp4_indexer_cache=True \
---tokenizer-mode deepseek_v4 \
---tool-call-parser deepseek_v4 \
---enable-auto-tool-choice \
---reasoning-parser deepseek_v4 \
---enable-prefix-caching \
---no-disable-hybrid-kv-cache-manager \
---max-model-len "$MAX_MODEL_LEN" \
---max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS" \
-$OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
+{ set +x; } 2>/dev/null
+VLLM_CMD=(
+    vllm serve "$MODEL"
+    --host 0.0.0.0
+    --port "$PORT"
+    --trust-remote-code
+    --kv-cache-dtype fp8
+    --block-size 256
+    "${PARALLEL_ARGS[@]}"
+    "${EP_ARGS[@]}"
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --attention_config.use_fp4_indexer_cache=True
+    --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
+    --enable-prefix-caching
+    "${HYBRID_KV_ARGS[@]}"
+    --max-model-len "$MAX_MODEL_LEN"
+    --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS"
+    "${OFFLOAD_ARGS[@]}"
+)
+printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
+printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
@@ -147,14 +252,4 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
 
-echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
-
-set -x
-$REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log" || true
-set +x
-
-write_agentic_result_json "$RESULT_DIR"
-
-# ---- Post-processing --------------------------------------------------------
-python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
-    "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
+run_agentic_replay_and_write_outputs "$RESULT_DIR"

@@ -54,8 +54,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # model.path alias in our DSV4 recipes.
         export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4"
         exit 1
     fi
 else
@@ -68,8 +71,59 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# === Cluster diagnostic probe (minimax only) ===
+# The gb200-nv_* runners may be hosted on different physical clusters
+# (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
+# Print enough info to identify the layout, then pick a writable
+# squash dir on a path that's also visible to compute nodes. Falls
+# back to the legacy sa-shared path so other configs are untouched.
+SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    echo "=== cluster diagnostic (minimax sweep) ==="
+    echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
+    echo "HOME=$HOME"
+    echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
+    echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+    echo "--- mount summary ---"
+    mount | grep -E 'lustre|nfs|home|shared|/mnt' || true
+    echo "--- /mnt contents ---"
+    ls -ld /mnt/* 2>/dev/null || true
+    echo "--- /mnt/lustre01 user dirs ---"
+    ls -ld /mnt/lustre01/users/* 2>/dev/null || true
+    ls -ld /mnt/lustre01/users-public/* 2>/dev/null || true
+    ls -ld /mnt/lustre01/groups/* 2>/dev/null || true
+    echo "--- /nfs contents (if present) ---"
+    ls -ld /nfs/* 2>/dev/null || true
+    echo "--- /home contents ---"
+    ls -ld /home/* 2>/dev/null || true
+    echo "=== end diagnostic ==="
+
+    # Probe candidate squash dirs in order, pick first writable one.
+    SQUASH_DIR=""
+    for cand in \
+        /mnt/lustre01/users/slurm-shared/squash \
+        /mnt/lustre01/users-public/slurm-shared/squash \
+        /mnt/lustre01/groups/slurm-shared/squash \
+        /mnt/lustre01/users-public/sa-shared \
+        /nfs/slurm-shared/squash \
+        /home/slurm-shared/gharunners/squash
+    do
+        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
+            rm -f "$cand/.write-probe.$$" 2>/dev/null
+            SQUASH_DIR="$cand"
+            echo "Selected SQUASH_DIR=$SQUASH_DIR (first writable candidate)"
+            break
+        else
+            echo "  not writable: $cand"
+        fi
+    done
+    if [ -z "$SQUASH_DIR" ]; then
+        echo "Error: no writable squash dir candidate found on this cluster" >&2
+        exit 1
+    fi
+fi
+SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
@@ -141,6 +195,37 @@ fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
+# On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
+# cross-mounted to compute nodes. Put the srt-slurm workspace and staged
+# InferenceX checkout on a writable shared-FS path that compute can see.
+# Per-run-unique paths avoid races between parallel sweep jobs.
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    SHARED_BASE=""
+    for cand in \
+        /mnt/lustre01/users-public/sa-shared/gha-runs \
+        /mnt/lustre01/users/slurm-shared/gha-runs \
+        /mnt/lustre01/users-public/slurm-shared/gha-runs \
+        /mnt/lustre01/groups/slurm-shared/gha-runs \
+        /nfs/slurm-shared/gha-runs \
+        /home/slurm-shared/gharunners/gha-runs
+    do
+        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
+            rm -f "$cand/.write-probe.$$" 2>/dev/null
+            SHARED_BASE="$cand"
+            echo "Selected SHARED_BASE=$SHARED_BASE (first writable candidate)"
+            break
+        else
+            echo "  not writable: $cand"
+        fi
+    done
+    if [ -z "$SHARED_BASE" ]; then
+        echo "Error: no writable shared run directory candidate found on this cluster" >&2
+        exit 1
+    fi
+    RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-gb200-nv}-$$"
+    SRT_REPO_DIR="${SHARED_BASE}/srt-slurm-${RUN_KEY}"
+    echo "Using shared-FS SRT_REPO_DIR=$SRT_REPO_DIR (compute-visible)"
+fi
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
     rm -rf "$SRT_REPO_DIR"
@@ -170,6 +255,12 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout main || exit 1
+    mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -187,7 +278,17 @@ echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 
-uv venv
+# Watchtower: the launcher runs on the head node but compute nodes
+# inherit the activated .venv (via VIRTUAL_ENV) through SRT_REPO_DIR
+# which is now on shared FS. If uv's default python install lives
+# under a head-node-only path, .venv/bin/python3 becomes a broken
+# symlink on compute. Pin the venv to /usr/bin/python3 — a system
+# path that exists at the same location on both head and compute.
+if [[ $MODEL_PREFIX == "minimaxm2.5" && -x /usr/bin/python3 ]]; then
+    uv venv --seed --python /usr/bin/python3
+else
+    uv venv --seed
+fi
 source .venv/bin/activate
 uv pip install -e .
 
@@ -200,6 +301,12 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
+# Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
+# above so srtctl's outputs/ directory (which lives under
+# SRTCTL_ROOT) is visible to compute nodes.
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    SRTCTL_ROOT="$SRT_REPO_DIR"
+fi
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB200
@@ -230,20 +337,44 @@ echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
 echo "Running make setup..."
-make setup ARCH=aarch64
+make setup ARCH=aarch64 || exit 1
 
 # Export eval-related env vars for srt-slurm post-benchmark eval
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+# Watchtower: pyxis mounts INFMAX_WORKSPACE into the container, but
+# GITHUB_WORKSPACE is under /home/slurm-shared/ which compute nodes
+# can't see. Stage the relevant subset to shared FS and repoint
+# INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
+# on shared FS) and .git (not needed in container) for speed.
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
+    mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
+    rsync -a --delete \
+        --exclude='.git/' \
+        --exclude='srt-slurm*/' \
+        --exclude='outputs/' \
+        --exclude='LOGS/' \
+        --exclude='*.sqsh' \
+        "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
+    export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
+    echo "Using shared-FS INFMAX_WORKSPACE=$INFMAX_WORKSPACE (compute-visible)"
+fi
 
 echo "Submitting job with srtctl..."
 
 # Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
+    echo "Current directory: $(pwd)" >&2
+    exit 1
+fi
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 fi
 echo "$SRTCTL_OUTPUT"
 
