@@ -2064,23 +2064,6 @@ qwen3.5-bf16-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-# agentic-coding sibling — temporarily disabled, blocked by e2e-tests.yml
-# artifact-name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads
-# as `bmk_agentic_*`). Re-enable once that workflow is aligned.
-# qwen3.5-bf16-b200-sglang-agentic:
-#   image: lmsysorg/sglang:v0.5.12-cu130
-#   model: Qwen/Qwen3.5-397B-A17B
-#   model-prefix: qwen3.5
-#   runner: b200
-#   precision: bf16
-#   framework: sglang
-#   multinode: false
-#   scenarios:
-#     agentic-coding:
-#     - duration: 1800
-#       search-space:
-#       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2331,7 +2314,6 @@ qwen3.5-fp8-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     
-
 qwen3.5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -8818,7 +8800,6 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
-
 qwen3.5-fp8-h100-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -9277,23 +9258,6 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: false
 
-# ============================================================================
-# Net-new agentic recipes from chore/agentx-v0.3 (no overlap with main entries).
-# Recipes that ALREADY existed on main were intentionally left at main's version
-# to preserve main behavior; PR-branch modifications to those recipes are NOT
-# brought in here.
-# ============================================================================
-# =============================================================================
-# Agentic configs
-# -----------------------------------------------------------------------------
-# All entries below run the agentic-coding scenario (Weka trace replay).
-# Above this divider: fixed-seq-len / synthetic / prefix-share scenarios only.
-# =============================================================================
-
-# Diverged from dsv4-fp4-b200-vllm (agentic-coding sibling). Reasons below;
-# the original dsv4-fp4-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - runner: 'b200-dsv4' -> 'b200-dgxc'
 dsv4-fp4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9312,11 +9276,6 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
 
-# Diverged from qwen3.5-fp8-b200-sglang (agentic-coding sibling). Metadata is
-# identical to origin/main's qwen3.5-fp8-b200-sglang; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original qwen3.5-fp8-b200-sglang entry stays byte-identical to origin/main.
 qwen3.5-fp8-b200-sglang-agentic:
   image: lmsysorg/sglang:nightly-dev-20260422-de962f32
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -9331,11 +9290,6 @@ qwen3.5-fp8-b200-sglang-agentic:
       search-space:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
-# Diverged from glm5-fp8-b200-sglang (agentic-coding sibling). Metadata is
-# identical to origin/main's glm5-fp8-b200-sglang; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original glm5-fp8-b200-sglang entry stays byte-identical to origin/main.
 glm5-fp8-b200-sglang-agentic:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -9351,19 +9305,7 @@ glm5-fp8-b200-sglang-agentic:
       # sglang manages its own KV eviction via radix cache, so just sweep concurrency on offloading=none
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
-# Diverged from kimik2.5-int4-b200-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-int4-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - runner: 'b200' -> 'b200-dgxc'
 kimik2.5-int4-b200-vllm-agentic:
-  # Bumped from v0.19.1 — that release tripped a bug in
-  # `flashinfer_trtllm_mxint4_moe` ('list' object has no attribute 'to')
-  # during warmup `profile_run` on the agentic-coding path
-  # (max_model_len=131072 + prefix caching enabled). v0.20.x carries the
-  # flashinfer fix.
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
@@ -9382,10 +9324,6 @@ kimik2.5-int4-b200-vllm-agentic:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
-# Diverged from kimik2.5-int4-h200-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-int4-h200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - runner: 'h200' -> 'h200-dgxc'
 kimik2.5-int4-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -9405,18 +9343,7 @@ kimik2.5-int4-h200-vllm-agentic:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
       - { tp: 8, offloading: cpu,  conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-# Diverged from kimik2.5-fp4-b200-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-fp4-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.17.0' -> 'vllm/vllm-openai:v0.20.2'
-#   - runner: 'b200' -> 'b200-dgxc'
 kimik2.5-fp4-b200-vllm-agentic:
-  # Same image as the INT4 sibling: v0.20.x carries the flashinfer fix that
-  # cleared the agentic-coding warmup crash on max_model_len=131072 +
-  # prefix caching.
   image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
@@ -9437,14 +9364,6 @@ kimik2.5-fp4-b200-vllm-agentic:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
-# Diverged from kimik2.5-fp4-b300-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-fp4-b300-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'lmsysorg/sglang:v0.5.10.post1-cu130' -> 'vllm/vllm-openai:v0.20.0-cu130'
-#   - model: 'deepseek-ai/DeepSeek-R1-0528' -> 'nvidia/Kimi-K2.5-NVFP4'
-#   - model-prefix: 'dsr1' -> 'kimik2.5'
-#   - precision: 'fp8' -> 'fp4'
-#   - framework: 'sglang' -> 'vllm'
 kimik2.5-fp4-b300-vllm-agentic:
   # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
   # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
@@ -9465,13 +9384,6 @@ kimik2.5-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, offloading: cpu,  conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
-# DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
-# Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
-# image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
-# Diverged from dsv4-fp8-h200-vllm (agentic-coding sibling). Reasons below;
-# the original dsv4-fp8-h200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.20.1@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4' -> 'vllm/vllm-openai:deepseekv4-cu129'
 dsv4-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9490,11 +9402,6 @@ dsv4-fp8-h200-vllm-agentic:
 # (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 
-# Diverged from dsv4-fp4-b300-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's dsv4-fp4-b300-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original dsv4-fp4-b300-vllm entry stays byte-identical to origin/main.
 dsv4-fp4-b300-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9514,10 +9421,6 @@ dsv4-fp4-b300-vllm-agentic:
       - { tp: 4, ep: 4, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [128, 256, 512] }
 
-# Diverged from gptoss-fp4-b200-vllm (agentic-coding sibling). Reasons below;
-# the original gptoss-fp4-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.15.1' -> 'vllm/vllm-openai:v0.19.1'
 gptoss-fp4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: openai/gpt-oss-120b
@@ -9535,11 +9438,6 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
-# Diverged from minimaxm2.5-fp8-b200-vllm (agentic-coding sibling). Reasons below;
-# the original minimaxm2.5-fp8-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
-#   - runner: 'b200' -> 'b200-dgxc'
 minimaxm2.5-fp8-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -9562,10 +9460,6 @@ minimaxm2.5-fp8-b200-vllm-agentic:
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 
-# Diverged from minimaxm2.5-fp8-b300-vllm (agentic-coding sibling). Reasons below;
-# the original minimaxm2.5-fp8-b300-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
 minimaxm2.5-fp8-b300-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -9587,11 +9481,6 @@ minimaxm2.5-fp8-b300-vllm-agentic:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
       - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
-# Diverged from minimaxm2.5-fp4-b200-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp4-b200-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp4-b200-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: nvidia/MiniMax-M2.5-NVFP4
@@ -9610,11 +9499,6 @@ minimaxm2.5-fp4-b200-vllm-agentic:
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
-# Diverged from minimaxm2.5-fp8-h100-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp8-h100-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp8-h100-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp8-h100-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -9633,11 +9517,6 @@ minimaxm2.5-fp8-h100-vllm-agentic:
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 10, 12, 16] }
       - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
 
-# Diverged from minimaxm2.5-fp8-h200-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp8-h200-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
 minimaxm2.5-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -9711,15 +9590,6 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
 # does not have a B300-specific recipe, so this config reuses the existing
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
-# Diverged from dsv4-fp4-gb300-dynamo-vllm (agentic-coding sibling). Reasons
-# below; the original dsv4-fp4-gb300-dynamo-vllm entry is left identical to
-# origin/main so its fixed-seq-len sweep is unaffected.
-#   - scenarios: replaced fixed-seq-len with agentic-coding; single 1p6d shape
-#     mirroring the conc=192 point in the base entry's fixed-seq-len sweep.
-#   - additional-settings.CONFIG_FILE: points at the new agentic recipe under
-#     recipes/vllm/deepseek-v4/agentic/, which runners/launch_gb300-nv.sh
-#     overlays into the cquil11/srt-slurm-nv fork at run time (the IS_AGENTIC
-#     branch). Local-overlay pattern mirrors the existing 8k1k overlay.
 dsv4-fp4-gb300-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9868,16 +9738,6 @@ dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
           ep: 8
           dp-attn: true
 
-# Diverged from qwen3.5-fp8-h100-sglang (agentic-coding sibling). Reasons below;
-# the original qwen3.5-fp8-h100-sglang entry stays byte-identical to origin/main
-# so its fixed-seq-len sweep is unaffected.
-#   - scenarios: replaced fixed-seq-len with agentic-coding.
-#   - runner: 'h100' -> 'h100-dgxc' (agentic runs need the dgxc-slurm cluster).
-# Image is identical to the base entry (lmsysorg/sglang:v0.5.12-cu130).
-# CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
-# subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
-# tends to flake on first runs and conc 16 covers the cliff. The bench script
-# sets WEKA_LOADER_OVERRIDE to the 256k-capped corpus variant.
 qwen3.5-fp8-h100-sglang-agentic:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
