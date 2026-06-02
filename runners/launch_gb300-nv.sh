@@ -8,6 +8,15 @@ export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
+# Host-side directory holding aiperf's content-addressed dataset mmap cache.
+# Bind-mounted into worker containers at /aiperf_mmap_cache via the
+# default_mounts: block in srtslurm.yaml below; aiperf reads it via
+# AIPERF_DATASET_MMAP_CACHE_DIR (set in each agentic recipe's benchmark.env).
+# Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
+# per dataset on first use. 777 mode so all gharunner_X SLURM users can
+# write to it.
+export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
+
 export MODEL_PATH=$MODEL
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -19,6 +28,15 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
+    # checkpoint. Faster than the Vast NFS path, but this dir only
+    # exists on compute nodes — the GHA runner pod's view does NOT
+    # have /scratch/models, so srtctl preflight (which stats the path
+    # from the runner pod) may fail with "Model alias resolved to
+    # /scratch/models/DeepSeek-V4-Pro, but that path is unavailable."
+    # If that happens, the next step is either to (a) patch srt-slurm
+    # to add a skip_model_preflight recipe field, or (b) stub a
+    # symlink on the runner pod that points at the NFS copy.
     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
@@ -34,8 +52,14 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# Squash files live on the Vast NFS storage; use the /data/ mount
+# (not /home/sa-shared/) — both are the same backing storage but the
+# /home/sa-shared/ mount has a chronic ELOOP / "Too many levels of
+# symbolic links" bug from workflow worker NFS sessions on lockfiles
+# AND data files. /data/ has a separate NFS client cache that isn't
+# poisoned. See feedback_gb300_nfs_eloop_workaround for diagnosis.
+SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Run the import on a compute node via srun, not on the login node:
 # the login node is x86_64 while the compute nodes are aarch64, so the
@@ -68,7 +92,40 @@ RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum |
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
 rm -rf "$SRT_REPO_DIR"
 
-if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
+    # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
+    # (`srtctl apply --no-preflight`) — needed because:
+    #
+    #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
+    #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
+    #   - /scratch only exists on GB300 compute nodes; it is NOT mounted
+    #     on the GHA runner pod that invokes srtctl.
+    #   - srtctl's pre-submit model check (_preflight_model in
+    #     src/srtctl/core/validation.py) does a Path.is_dir() in-process
+    #     on the invoking node — so it fails before sbatch is ever
+    #     called with "Model alias 'X' resolved to '/scratch/...',
+    #     but that path is unavailable".
+    #   - --no-preflight skips just the optional Python-level FS check.
+    #     vLLM still fails loudly at runtime if the path is genuinely
+    #     missing on the compute node.
+    #
+    # All other upstream schema features we need are inherited from
+    # NVIDIA HEAD:
+    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+    #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+    #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
+    #   - sbatch_directives / srun_options (top-level recipe fields)
+    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    # 854b3fd = --no-preflight flag
+    # 6e34b8b = benchmark_stage propagates srun_options (needed for
+    #           container-remap-root to reach the agentic_srt.sh srun)
+    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout aflowers/gb200-dsv4-recipes
@@ -93,7 +150,11 @@ export PATH="$UV_INSTALL_DIR:$PATH"
 
 VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
 rm -rf "$VENV_DIR"
-uv venv "$VENV_DIR"
+# --seed installs pip+setuptools+wheel into the venv. Without it, the
+# upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
+# recipe has dynamo.wheel set) fails with "No module named pip" because
+# uv venv defaults to no-pip.
+uv venv --seed "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 uv pip install -e .
 
@@ -121,6 +182,13 @@ network_interface: ""
 
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+
+# Cluster-level bind mounts applied to every worker container
+# (see srtctl/core/runtime.py — get_srtslurm_setting("default_mounts")).
+# Used here for aiperf's persistent mmap cache so the dataset isn't
+# re-tokenized + re-written every job.
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
 
 # Model path aliases
 model_paths:
@@ -153,7 +221,18 @@ fi
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+# --no-preflight is only safe on the agentic path, where the recipe
+# resolves model.path to /scratch (compute-node-only NVMe) and the
+# srtctl process running on the GHA runner pod can't see it. Fixed-
+# seq-len recipes still resolve model.path to an NFS-visible location
+# where the precheck is a useful sanity guard, so keep enforcement on
+# for them.
+PREFLIGHT_FLAG=""
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    PREFLIGHT_FLAG="--no-preflight"
+fi
+
+SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -171,6 +250,26 @@ echo "Extracted JOB_ID: $JOB_ID"
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+
+# Snapshot worker logs on any exit path — normal completion, error,
+# SIGTERM (gh run cancel sends this to the launcher), even SIGKILL of
+# our parent. Without this trap, the cancel-time tar lives only in the
+# main flow below (after `wait $POLL_PID`), so a manual `gh run cancel`
+# during the tail wait skips it entirely and the
+# `Upload server logs` workflow step finds nothing to upload.
+# Idempotent: the main-flow tar at the bottom of this script is now a
+# no-op because the trap already produced the artifact, but it stays
+# for narrative continuity in normal (non-cancel) runs.
+_snapshot_server_logs() {
+    if [ -n "${LOGS_DIR:-}" ] && [ -d "$LOGS_DIR" ] && [ -n "${GITHUB_WORKSPACE:-}" ]; then
+        # Copy + tar are independent best-effort; an in-flight write
+        # from a worker .out file at SIGTERM time would otherwise abort
+        # the whole script before either succeeds.
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
+    fi
+}
+trap _snapshot_server_logs EXIT
 
 # Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
@@ -205,8 +304,9 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    # Tarball + LOGS copy are produced by the EXIT trap defined near
+    # JOB_ID extraction (so cancel paths also get them); just log here.
+    echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
@@ -278,6 +378,12 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
 fi
+
+# Snapshot logs to GITHUB_WORKSPACE BEFORE cleanup, so the EXIT trap's
+# `[ -d "$LOGS_DIR" ]` guard isn't already false by the time it fires
+# (it runs AFTER the rm below, since EXIT traps are last-thing-before-exit).
+# Without this inline call, R25 lost both 1p6d shards' logs.
+_snapshot_server_logs
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
 # from blocking the next job's checkout on this runner

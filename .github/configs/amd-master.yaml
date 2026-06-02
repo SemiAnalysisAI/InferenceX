@@ -2407,3 +2407,318 @@ glm5-fp8-mi325x-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
+# ============================================================================
+# Net-new agentic recipes from chore/agentx-v0.3 (no overlap with main entries).
+# Recipes that ALREADY existed on main were intentionally left at main's version
+# to preserve main behavior; PR-branch modifications to those recipes are NOT
+# brought in here.
+# ============================================================================
+
+qwen3.5-fp8-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: mi355x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
+
+dsv4-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 24, 32, 40, 48] }
+
+dsr1-fp4-mi355x-sglang-disagg-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # MTP configurations
+      # 1P1D TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1P2D TP8
+      - spec-decoding: "mtp" 
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1P2D TP8
+      - spec-decoding: "mtp" 
+        conc-list: [ 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=2"
+
+      # 1P2D TP4
+      - spec-decoding: "mtp" 
+        conc-list: [ 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=2"
+
+      # 1*DEP4+ 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 1024, 2048, 4096 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # MTP configurations
+      # 1P1D pure TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1P2D TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=3"
+
+      # 1P2D TP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=2"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 128, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
+      # 1*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
+      # 2*DEP8 + 1*DEP8
+      - spec-decoding: "mtp"
+        conc-list: [ 1024, 2048, 4096 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+      
+
+# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
+
+# Diverged from dsv4-fp4-mi355x-sglang (agentic-coding sibling). Reasons below;
+# the original dsv4-fp4-mi355x-sglang entry is left identical to origin/main so
+# its fixed-seq-len sweep is unaffected.
+#   - scenarios: replaced fixed-seq-len with agentic-coding.
+# Image is identical to the base entry (rocm/sgl-dev DSv4 build).
+# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
+# comparability. Offload sweep is none-only (SGLang has no equivalent of
+# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
+dsv4-fp4-mi355x-sglang-agentic:
+  image: rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [16, 32, 64] }
+      - { tp: 8, dp-attn: true, offloading: none, conc-list: [64, 128, 256] }
+
+# DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
+# nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
+# on 2026-05-05, so any nightly built after that includes the
+# DeepseekV4ForCausalLM model class.
+#
+# IMPORTANT: pin to a digest-suffixed nightly tag rather than the
+# floating `:nightly`. launch_mi355x-amds.sh caches enroot squashfs
+# files keyed on the image string and short-circuits re-import if the
+# file already exists, so the floating tag silently keeps a stale build
+# even after Docker Hub updates `:nightly`.
+#
+# DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the
+# rest); InferenceX classifies this as fp4 — same as the sister sglang
+# and atom DSv4 mi355x entries below. Image and serving flags follow the
+# validated recipe from vllm-project/recipes#433: AITER+AITER_LINEAR, mp
+# executor, triton_unfused MoE (required for the FP4 expert format),
+# async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
+# gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
+# probe to validate the ROCm DP+EP path.
