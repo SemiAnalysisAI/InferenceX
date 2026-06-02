@@ -1637,6 +1637,69 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+# vLLM port of dsr1-fp4-mi355x-sglang-disagg. The SGLang/MoRI-IO disagg path
+# deadlocks for DeepSeek-R1 MXFP4 at DEP/MTP scale (upstream MoRI bug), so this
+# routes dsr1-fp4 over the same vLLM nightly + mori_low_latency backend that is
+# green for kimik2.5-fp4-mi355x-vllm-disagg. Topology mirrors that recipe: 1P2D
+# (prefill TP8/EP1 co-located with proxy + 2 decode nodes TP8/EP8). Per-worker
+# vLLM serving flags live in amd_utils/models_vllm.yaml, keyed on
+# DeepSeek-R1-0528-MXFP4-v2.
+dsr1-fp4-mi355x-vllm-disagg:
+  # Floating :nightly to match the sibling kimik2.5/minimax vllm-disagg blocks;
+  # pin to a digest once vLLM PR#40344 ships in a release (likely 0.22.0).
+  image: vllm/vllm-openai-rocm:nightly
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2

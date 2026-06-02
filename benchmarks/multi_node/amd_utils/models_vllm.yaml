@@ -42,3 +42,21 @@ gpt-oss-120b:
   prefill_flags: "--tensor-parallel-size 8"
   decode_flags: "--tensor-parallel-size 8"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0 VLLM_USE_AITER_UNIFIED_ATTENTION=1 VLLM_ROCM_USE_AITER_MHA=0 ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0"
+
+DeepSeek-R1-0528-MXFP4-v2:
+  # vLLM MoRI-low-latency disagg port of dsr1-fp4-mi355x-sglang-disagg. Mirrors
+  # the green Kimi-K2.5-MXFP4 recipe above (same amd/ MXFP4 quantizer, same
+  # mi355x-disagg 1P2D topology: prefill TP8/EP1, decode TP8/EP8 over
+  # --all2all-backend mori_low_latency). Two deltas from Kimi:
+  #   * --mm-encoder-tp-mode dropped: DeepSeek-R1 is text-only (Kimi is multimodal).
+  #   * --trust-remote-code added: required for the DeepSeek model class.
+  # env follows the dsv4_fp4_mi355x_vllm.sh DeepSeek baseline (AITER on) rather
+  # than importing Kimi's per-kernel AITER toggles, which are tuned for Kimi's
+  # attention/MoE kernels, not DeepSeek MLA.
+  # NOTE: if vLLM raises KeyError on w13_weight_scale/w2_weight_scale during
+  # weight load, the amd/ MXFP4 experts need --moe-backend triton_unfused on
+  # both prefill and decode (see benchmarks/single_node/dsv4_fp4_mi355x_vllm.sh).
+  prefill_flags: "--tensor-parallel-size 8 --trust-remote-code --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90"
+  decode_flags: "--tensor-parallel-size 8 --trust-remote-code --enable-expert-parallel --all2all-backend mori_low_latency --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--amd--DeepSeek-R1-0528-MXFP4-v2"
