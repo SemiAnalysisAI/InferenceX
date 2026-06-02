@@ -195,16 +195,33 @@ fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
-# On the watchtower (Oracle) gb200 cluster, /home/slurm-shared isn't
-# cross-mounted to compute nodes — slurm jobs cd'ing into WorkDir and
-# opening StdOut on /home/... crash with ExitCode=1:0 in 0s and the
-# log file never gets created. Move the entire srt-slurm workspace
-# (and therefore WorkDir + outputs/) to a shared-FS path under
-# /mnt/lustre01/users/slurm-shared/ that compute can read+write.
-# Per-run-unique to avoid races between parallel sweep jobs.
+# On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
+# cross-mounted to compute nodes. Put the srt-slurm workspace and staged
+# InferenceX checkout on a writable shared-FS path that compute can see.
+# Per-run-unique paths avoid races between parallel sweep jobs.
 if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    SHARED_BASE="/mnt/lustre01/users/slurm-shared/gha-runs"
-    mkdir -p "$SHARED_BASE"
+    SHARED_BASE=""
+    for cand in \
+        /mnt/lustre01/users-public/sa-shared/gha-runs \
+        /mnt/lustre01/users/slurm-shared/gha-runs \
+        /mnt/lustre01/users-public/slurm-shared/gha-runs \
+        /mnt/lustre01/groups/slurm-shared/gha-runs \
+        /nfs/slurm-shared/gha-runs \
+        /home/slurm-shared/gharunners/gha-runs
+    do
+        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
+            rm -f "$cand/.write-probe.$$" 2>/dev/null
+            SHARED_BASE="$cand"
+            echo "Selected SHARED_BASE=$SHARED_BASE (first writable candidate)"
+            break
+        else
+            echo "  not writable: $cand"
+        fi
+    done
+    if [ -z "$SHARED_BASE" ]; then
+        echo "Error: no writable shared run directory candidate found on this cluster" >&2
+        exit 1
+    fi
     RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-gb200-nv}-$$"
     SRT_REPO_DIR="${SHARED_BASE}/srt-slurm-${RUN_KEY}"
     echo "Using shared-FS SRT_REPO_DIR=$SRT_REPO_DIR (compute-visible)"
@@ -239,11 +256,11 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    mkdir -p recipes/vllm/minimax-m2.5-gb200
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout main || exit 1
+    mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -320,7 +337,7 @@ echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
 echo "Running make setup..."
-make setup ARCH=aarch64
+make setup ARCH=aarch64 || exit 1
 
 # Export eval-related env vars for srt-slurm post-benchmark eval
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -331,14 +348,14 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # on shared FS) and .git (not needed in container) for speed.
 if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
-    mkdir -p "$SHARED_INFMAX_WORKSPACE"
+    mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
         --exclude='.git/' \
         --exclude='srt-slurm*/' \
         --exclude='outputs/' \
         --exclude='LOGS/' \
         --exclude='*.sqsh' \
-        "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/"
+        "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
     export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
     echo "Using shared-FS INFMAX_WORKSPACE=$INFMAX_WORKSPACE (compute-visible)"
 fi
@@ -346,12 +363,18 @@ fi
 echo "Submitting job with srtctl..."
 
 # Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
+    echo "Current directory: $(pwd)" >&2
+    exit 1
+fi
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 fi
 echo "$SRTCTL_OUTPUT"
 
