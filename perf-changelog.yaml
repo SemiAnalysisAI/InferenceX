@@ -3395,3 +3395,12 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM MTP3 benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1627
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+    - dsr1-fp4-mi355x-sglang-mtp
+  description:
+    - "Image: lmsysorg/sglang:v0.5.12-rocm700-mi35x -> lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519 (ROCm 7.0 -> 7.2; same image already validated multi-node in PR #1566)"
+    - "Add tp:4 to search-space (8k1k for non-mtp; 1k1k+8k1k for mtp) to surface the TP4 throughput-per-GPU frontier"
+    - "Local MI355X bench (matched cfg: range-ratio 0.8 + ROCM_QUICK_REDUCE_QUANTIZATION=INT4): 8k1k decode TPOT 9-25% faster at every conc vs the rocm700 CI; c64 now leads both axes (TPOT 16.5 vs 18.1 ms, tput 2954 vs 2841 tok/s/gpu). TP4 c64 8k1k = 4254 tok/s/gpu (> TP8 2954)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1645
