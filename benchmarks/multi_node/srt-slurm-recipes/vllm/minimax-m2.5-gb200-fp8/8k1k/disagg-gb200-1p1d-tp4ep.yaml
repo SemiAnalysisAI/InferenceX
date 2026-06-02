@@ -44,6 +44,7 @@ backend:
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
       data-parallel-size: 2
+      max-num-batched-tokens: 16384
       data-parallel-rpc-port: 13346
       enable-expert-parallel: true
       safetensors-load-strategy: "prefetch"
